@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,24 +36,21 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileFormValidator
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
-/**
- * Onboarding screen with the secure server-profile form (Mission 002A).
- *
- * State is held locally in Compose state per the ticket: no ViewModel,
- * no repository, no persistence, no networking. The API key lives only
- * in a [SecretValue] and is rendered exclusively in a masked password
- * field; the raw value never reaches error texts, semantics or logs.
- */
 @Composable
 fun OnboardingScreen(
     onValidDraft: (ProfileDraft) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    connectionState: OnboardingConnectionState = OnboardingConnectionState.Idle,
+    onInputChanged: () -> Unit = {}
 ) {
     var profileName by remember { mutableStateOf("") }
     var baseUrl by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
-    var validationError by remember { mutableStateOf<ProfileFormValidator.ValidationError?>(null) }
+    var validationError by remember {
+        mutableStateOf<ProfileFormValidator.ValidationError?>(null)
+    }
     val apiKeyLabel = stringResource(R.string.onboarding_api_key_label)
+    val isConnecting = connectionState is OnboardingConnectionState.Connecting
 
     Column(
         modifier = modifier
@@ -69,13 +68,18 @@ fun OnboardingScreen(
 
         OutlinedTextField(
             value = profileName,
-            onValueChange = { profileName = it },
+            onValueChange = {
+                profileName = it
+                validationError = null
+                onInputChanged()
+            },
             label = { Text(text = stringResource(R.string.onboarding_profile_name_label)) },
             supportingText = validationError?.profileNameError
                 ?.let { code -> { Text(text = stringResource(profileNameErrorMessage(code))) } },
             isError = validationError?.profileNameError != null,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+            enabled = !isConnecting,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 24.dp)
@@ -84,13 +88,18 @@ fun OnboardingScreen(
 
         OutlinedTextField(
             value = baseUrl,
-            onValueChange = { baseUrl = it },
+            onValueChange = {
+                baseUrl = it
+                validationError = null
+                onInputChanged()
+            },
             label = { Text(text = stringResource(R.string.onboarding_base_url_label)) },
             supportingText = validationError?.baseUrlError
                 ?.let { code -> { Text(text = stringResource(baseUrlErrorMessage(code))) } },
             isError = validationError?.baseUrlError != null,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            enabled = !isConnecting,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp)
@@ -99,7 +108,11 @@ fun OnboardingScreen(
 
         OutlinedTextField(
             value = apiKey,
-            onValueChange = { apiKey = it },
+            onValueChange = {
+                apiKey = it
+                validationError = null
+                onInputChanged()
+            },
             label = { Text(text = apiKeyLabel) },
             supportingText = validationError?.apiKeyError
                 ?.let { code -> { Text(text = stringResource(apiKeyErrorMessage(code))) } },
@@ -107,6 +120,7 @@ fun OnboardingScreen(
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            enabled = !isConnecting,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp)
@@ -116,6 +130,16 @@ fun OnboardingScreen(
                     password()
                 }
         )
+
+        if (connectionState is OnboardingConnectionState.Failure) {
+            Text(
+                text = stringResource(connectionErrorMessage(connectionState.reason)),
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .testTag("onboardingConnectionError")
+            )
+        }
 
         Button(
             onClick = {
@@ -131,16 +155,27 @@ fun OnboardingScreen(
                     }
 
                     is ProfileFormValidator.ValidationError -> validationError = error
-
                     else -> Unit
                 }
             },
+            enabled = !isConnecting,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 32.dp)
                 .testTag("onboardingSubmitButton")
         ) {
-            Text(text = stringResource(R.string.onboarding_submit))
+            if (isConnecting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
+                )
+                Text(
+                    text = stringResource(R.string.onboarding_connecting),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            } else {
+                Text(text = stringResource(R.string.onboarding_submit))
+            }
         }
     }
 }
@@ -159,4 +194,16 @@ private fun baseUrlErrorMessage(code: String): Int = when (code) {
 private fun apiKeyErrorMessage(code: String): Int = when (code) {
     ProfileFormValidator.ErrorCodes.API_KEY_EMPTY -> R.string.error_api_key_empty
     else -> R.string.error_api_key_generic
+}
+
+private fun connectionErrorMessage(reason: OnboardingFailureReason): Int = when (reason) {
+    OnboardingFailureReason.INVALID_INPUT -> R.string.error_connection_invalid_input
+    OnboardingFailureReason.INVALID_CREDENTIALS -> R.string.error_connection_invalid_credentials
+    OnboardingFailureReason.RATE_LIMITED -> R.string.error_connection_rate_limited
+    OnboardingFailureReason.INCOMPATIBLE_API -> R.string.error_connection_incompatible_api
+    OnboardingFailureReason.TLS -> R.string.error_connection_tls
+    OnboardingFailureReason.TIMEOUT -> R.string.error_connection_timeout
+    OnboardingFailureReason.NETWORK -> R.string.error_connection_network
+    OnboardingFailureReason.HTTP -> R.string.error_connection_http
+    OnboardingFailureReason.PERSISTENCE -> R.string.error_connection_persistence
 }

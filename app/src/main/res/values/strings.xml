@@ -6,6 +6,7 @@
     <string name="onboarding_base_url_label">Server-Basis-URL</string>
     <string name="onboarding_api_key_label">API-Key</string>
     <string name="onboarding_submit">Verbindung vorbereiten</string>
+    <string name="onboarding_connecting">Verbindung wird geprüft…</string>
     <string name="sessions_title">Sessions</string>
     <string name="sessions_empty">Keine Sessions. Die App zeigt in diesem Schritt noch keinen Inhalt.</string>
     <string name="error_profile_name_empty">Profilname darf nicht leer sein.</string>
@@ -15,4 +16,13 @@
     <string name="error_base_url_generic">Bitte eine gültige Server-Basis-URL eingeben.</string>
     <string name="error_api_key_empty">API-Key darf nicht leer sein.</string>
     <string name="error_api_key_generic">Bitte einen gültigen API-Key eingeben.</string>
+    <string name="error_connection_invalid_input">Die Verbindungsdaten sind ungültig.</string>
+    <string name="error_connection_invalid_credentials">Der API-Key wurde abgelehnt.</string>
+    <string name="error_connection_rate_limited">Zu viele Anfragen. Bitte später erneut versuchen.</string>
+    <string name="error_connection_incompatible_api">Der Server bietet nicht die benötigten Hermes-Funktionen.</string>
+    <string name="error_connection_tls">Die sichere Serververbindung konnte nicht bestätigt werden.</string>
+    <string name="error_connection_timeout">Der Server hat nicht rechtzeitig geantwortet.</string>
+    <string name="error_connection_network">Der Hermes-Server ist derzeit nicht erreichbar.</string>
+    <string name="error_connection_http">Der Server hat die Anfrage nicht erfolgreich verarbeitet.</string>
+    <string name="error_connection_persistence">Das Serverprofil konnte nicht sicher gespeichert werden.</string>
 </resources>

@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
+import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionProbe
 import io.github.excludebarrier.orsikrelay.domain.connection.HermesConnectionResult
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import java.io.ByteArrayOutputStream
@@ -20,14 +21,14 @@ import org.json.JSONObject
 
 class HermesConnectionClient(
     okHttpClient: OkHttpClient = defaultHttpClient()
-) {
+) : ConnectionProbe {
     private val client = okHttpClient.newBuilder()
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
         .build()
 
-    fun probe(draft: ProfileDraft): HermesConnectionResult {
+    override fun probe(draft: ProfileDraft): HermesConnectionResult {
         val apiKeyIsSafe = draft.apiKey.useRaw { rawKey ->
             rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
                 rawKey.none { character ->

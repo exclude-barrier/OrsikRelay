@@ -9,17 +9,17 @@ import java.util.UUID
 /**
  * Composes non-secret profile metadata with the separate credential store.
  *
- * [saveVerified] is intentionally the only write entry point. The current
- * onboarding flow never calls it; a later connection test will do so only
- * after health and capability checks succeed.
+ * [saveVerified] is intentionally the only write entry point. The onboarding
+ * connection coordinator calls it only after health and capability checks
+ * have succeeded.
  */
 class ServerProfileRepository(
     private val metadataStore: ServerProfileMetadataStore,
     private val credentialStore: CredentialStore,
     private val idFactory: () -> String = { UUID.randomUUID().toString() }
-) {
+) : VerifiedProfileSaver {
 
-    fun saveVerified(draft: ProfileDraft): ServerProfile {
+    override fun saveVerified(draft: ProfileDraft): ServerProfile {
         val profile = try {
             ServerProfile.create(
                 id = idFactory(),

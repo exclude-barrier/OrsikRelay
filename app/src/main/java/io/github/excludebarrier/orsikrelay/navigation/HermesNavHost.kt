@@ -1,41 +1,52 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
-import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingScreen
+import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
+import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
+import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
+import io.github.excludebarrier.orsikrelay.network.HermesConnectionClient
+import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
+import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 
-/**
- * Navigation shell (Mission 002A).
- *
- * The pure state machine in [AppNavigationState] defines the transitions
- * (Onboarding -> Sessions, back via system back key) and is covered by
- * unit tests; the Compose [NavHost] back stack mirrors it at runtime.
- *
- * The validated [ProfileDraft] from Onboarding lives exclusively in
- * memory; it is neither persisted nor sent in this ticket.
- */
 @Composable
 fun HermesNavHost(
     startDestination: AppScreen,
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    connectionCoordinator: ProfileConnectionCoordinator? = null
 ) {
+    val applicationContext = LocalContext.current.applicationContext
+    val productionCoordinator = remember(applicationContext) {
+        lazy {
+            val credentialStore = AndroidKeystoreCredentialStore(applicationContext)
+            val metadataStore = SharedPreferencesServerProfileMetadataStore(applicationContext)
+            val repository = ServerProfileRepository(metadataStore, credentialStore)
+            ProfileConnectionCoordinator(
+                connectionProbe = HermesConnectionClient(),
+                profileSaver = repository
+            )
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = routeOf(startDestination)
     ) {
         composable(routeOf(AppScreen.Onboarding)) {
-            OnboardingScreen(
-                onValidDraft = { draft ->
-                    // In-memory only (Mission 002A): no persistence, no
-                    // network. The draft is discarded with this scope.
+            OnboardingRoute(
+                connect = { draft ->
+                    val activeCoordinator =
+                        connectionCoordinator ?: productionCoordinator.value
+                    activeCoordinator.connect(draft)
+                },
+                onConnected = {
                     navController.navigate(routeOf(AppScreen.Sessions)) {
-                        // Onboarding stays in the back stack so the system
-                        // back key returns to it (AppNavigationState.goBack).
                         launchSingleTop = true
                     }
                 }
