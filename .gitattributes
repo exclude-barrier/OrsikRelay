@@ -1,0 +1,35 @@
+# Plattformgerechte Zeilenenden und Binärbehandlung (REVIEW-FIX 001).
+
+# Wrapper-Skripte: Zeilenenden pro Plattform festpinnen.
+# gradlew.bat bleibt CRLF, damit es unter Windows lauffähig bleibt.
+gradlew        text eol=lf
+gradlew.bat    text eol=crlf
+*.sh           text eol=lf
+
+# Quell-, Build- und Dokumentationsdateien als Text behandeln
+# (Repository speichert kanonische LF).
+*.kt   text
+*.kts  text
+*.gradle text
+*.xml  text
+*.toml text
+*.properties text
+*.pro  text
+*.md   text
+
+# Binärdateien: nie als Text normalisieren oder umwandeln.
+*.jar binary
+*.aar binary
+*.so  binary
+*.apk binary
+*.aab binary
+*.png binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.gif binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.keystore binary
