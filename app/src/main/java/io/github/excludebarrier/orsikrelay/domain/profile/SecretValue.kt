@@ -1,19 +1,20 @@
 package io.github.excludebarrier.orsikrelay.domain.profile
 
 /**
- * In-memory holder for the API key (Mission 002A).
+ * In-memory holder for the API key.
  *
- * Deliberately not a data class and without the default `toString()`:
- * the raw value must never appear in logs, error messages, crash
- * reports, Semantics or test output. `toString()` always returns
- * `[REDACTED]`.
- *
- * No persistence and no network transport in this ticket.
+ * Deliberately not a data class: the raw value must never appear in
+ * generated string representations, equality output, or hash output.
  */
 class SecretValue(private val raw: String) {
 
-    /** True when the wrapped key is empty. */
     fun isEmpty(): Boolean = raw.isEmpty()
+
+    /**
+     * Gives module-internal code scoped access without exposing a raw-value
+     * property or returning the value directly.
+     */
+    internal fun <T> useRaw(block: (String) -> T): T = block(raw)
 
     override fun toString(): String = "[REDACTED]"
 }
