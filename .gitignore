@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+**/build/
+build/
+
+# Local Android configuration
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing and secrets
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Agent scratch space
+.tmp-agent/
+
+# Generated reports
+reports/
