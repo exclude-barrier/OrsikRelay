@@ -2,7 +2,17 @@
 <resources>
     <string name="app_name">Hermes</string>
     <string name="onboarding_title">Hermes einrichten</string>
-    <string name="onboarding_next">Weiter</string>
+    <string name="onboarding_profile_name_label">Profilname</string>
+    <string name="onboarding_base_url_label">Server-Basis-URL</string>
+    <string name="onboarding_api_key_label">API-Key</string>
+    <string name="onboarding_submit">Verbindung vorbereiten</string>
     <string name="sessions_title">Sessions</string>
     <string name="sessions_empty">Keine Sessions. Die App zeigt in diesem Schritt noch keinen Inhalt.</string>
+    <string name="error_profile_name_empty">Profilname darf nicht leer sein.</string>
+    <string name="error_profile_name_too_long">Profilname darf höchstens 64 Zeichen lang sein.</string>
+    <string name="error_profile_name_generic">Bitte einen gültigen Profilnamen eingeben.</string>
+    <string name="error_base_url_invalid">Bitte eine absolute HTTPS-URL mit Host eingeben.</string>
+    <string name="error_base_url_generic">Bitte eine gültige Server-Basis-URL eingeben.</string>
+    <string name="error_api_key_empty">API-Key darf nicht leer sein.</string>
+    <string name="error_api_key_generic">Bitte einen gültigen API-Key eingeben.</string>
 </resources>

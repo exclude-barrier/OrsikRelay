@@ -5,15 +5,19 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingScreen
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 
 /**
- * Navigation shell for the Mission 001 slice.
+ * Navigation shell (Mission 002A).
  *
  * The pure state machine in [AppNavigationState] defines the transitions
  * (Onboarding -> Sessions, back via system back key) and is covered by
  * unit tests; the Compose [NavHost] back stack mirrors it at runtime.
+ *
+ * The validated [ProfileDraft] from Onboarding lives exclusively in
+ * memory; it is neither persisted nor sent in this ticket.
  */
 @Composable
 fun HermesNavHost(
@@ -26,7 +30,9 @@ fun HermesNavHost(
     ) {
         composable(routeOf(AppScreen.Onboarding)) {
             OnboardingScreen(
-                onContinue = {
+                onValidDraft = { draft ->
+                    // In-memory only (Mission 002A): no persistence, no
+                    // network. The draft is discarded with this scope.
                     navController.navigate(routeOf(AppScreen.Sessions)) {
                         // Onboarding stays in the back stack so the system
                         // back key returns to it (AppNavigationState.goBack).
