@@ -14,6 +14,13 @@
     <string name="sessions_retry">Erneut versuchen</string>
     <string name="sessions_load_more">Mehr laden</string>
     <string name="session_fallback_title">Unbenannte Session</string>
+    <string name="new_session_title">Neue Session</string>
+    <string name="new_session_title_label">Titel (optional)</string>
+    <string name="new_session_create">Erstellen</string>
+    <string name="new_session_cancel">Abbrechen</string>
+    <string name="new_session_loading">Session wird angelegt…</string>
+    <string name="new_session_fab">Neue Session anlegen</string>
+    <string name="new_session_error_generic">Die neue Session konnte nicht angelegt werden.</string>
     <string name="session_pinned">Angepinnt</string>
     <string name="chat_title">Chat</string>
     <string name="chat_back">Zurück</string>

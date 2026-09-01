@@ -19,11 +19,13 @@ import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
 import io.github.excludebarrier.orsikrelay.data.message.MessageHistoryRepository
+import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionListRepository
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.data.session.resolveStartupProfile
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.network.HermesConnectionClient
 import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
@@ -43,6 +45,7 @@ fun HermesNavHost(
     connectionCoordinator: ProfileConnectionCoordinator? = null,
     sessionPageSource: SessionPageSource? = null,
     messageHistorySource: MessageHistorySource? = null,
+    sessionCreator: SessionCreator? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
@@ -60,6 +63,10 @@ fun HermesNavHost(
                     profileRepository = profileRepository,
                     credentialStore = credentialStore
                 ),
+                sessionCreator = SessionCreateRepository(
+                    profileRepository = profileRepository,
+                    credentialStore = credentialStore
+                ),
                 messageHistorySource = MessageHistoryRepository(
                     profileRepository = profileRepository,
                     credentialStore = credentialStore
@@ -73,6 +80,7 @@ fun HermesNavHost(
 
     var resolvedStart by remember(startDestination) { mutableStateOf<AppScreen?>(null) }
     var activeProfileId by remember { mutableStateOf<String?>(null) }
+    var pendingCreatedSessionId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(startDestination) {
         if (startDestination is AppScreen.Sessions) {
@@ -100,6 +108,14 @@ fun HermesNavHost(
                 resolvedStart = AppScreen.Sessions
             }
         }
+    }
+
+    LaunchedEffect(pendingCreatedSessionId) {
+        val sessionId = pendingCreatedSessionId ?: return@LaunchedEffect
+        navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
+            launchSingleTop = true
+        }
+        pendingCreatedSessionId = null
     }
 
     val initialScreen = resolvedStart
@@ -132,10 +148,15 @@ fun HermesNavHost(
                 pageSource = sessionPageSource
                     ?: productionDependencies.value.sessionPageSource,
                 profileId = activeProfileId.orEmpty(),
+                creator = sessionCreator
+                    ?: productionDependencies.value.sessionCreator,
                 onSessionSelected = { sessionId, _ ->
                     navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
                         launchSingleTop = true
                     }
+                },
+                onSessionCreated = { sessionId ->
+                    pendingCreatedSessionId = sessionId
                 }
             )
         }
@@ -158,6 +179,7 @@ fun HermesNavHost(
 private data class ProductionDependencies(
     val coordinator: ProfileConnectionCoordinator,
     val sessionPageSource: SessionPageSource,
+    val sessionCreator: SessionCreator,
     val messageHistorySource: MessageHistorySource,
     val startupResolver: () -> StartupProfile
 )
