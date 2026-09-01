@@ -8,7 +8,15 @@
     <string name="onboarding_submit">Verbindung vorbereiten</string>
     <string name="onboarding_connecting">Verbindung wird geprüft…</string>
     <string name="sessions_title">Sessions</string>
-    <string name="sessions_empty">Keine Sessions. Die App zeigt in diesem Schritt noch keinen Inhalt.</string>
+    <string name="sessions_loading">Sessions werden geladen…</string>
+    <string name="sessions_empty">Keine Sessions vorhanden.</string>
+    <string name="sessions_refresh">Aktualisieren</string>
+    <string name="sessions_retry">Erneut versuchen</string>
+    <string name="sessions_load_more">Mehr laden</string>
+    <string name="session_fallback_title">Unbenannte Session</string>
+    <string name="session_pinned">Angepinnt</string>
+    <string name="error_session_profile">Das Serverprofil ist unvollständig oder nicht verfügbar.</string>
+    <string name="error_session_generic">Die Sessions konnten nicht geladen werden.</string>
     <string name="error_profile_name_empty">Profilname darf nicht leer sein.</string>
     <string name="error_profile_name_too_long">Profilname darf höchstens 64 Zeichen lang sein.</string>
     <string name="error_profile_name_generic">Bitte einen gültigen Profilnamen eingeben.</string>
