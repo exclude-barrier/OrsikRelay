@@ -15,6 +15,17 @@
     <string name="sessions_load_more">Mehr laden</string>
     <string name="session_fallback_title">Unbenannte Session</string>
     <string name="session_pinned">Angepinnt</string>
+    <string name="chat_title">Chat</string>
+    <string name="chat_back">Zurück</string>
+    <string name="chat_loading">Nachrichten werden geladen…</string>
+    <string name="chat_empty">Diese Session enthält noch keine Nachrichten.</string>
+    <string name="chat_role_user">Du</string>
+    <string name="chat_role_assistant">Hermes</string>
+    <string name="chat_role_system">System</string>
+    <string name="chat_role_tool">Tool</string>
+    <string name="chat_role_tool_named">Tool: %1$s</string>
+    <string name="error_chat_not_found">Diese Session wurde nicht gefunden.</string>
+    <string name="error_chat_generic">Die Nachrichten konnten nicht geladen werden.</string>
     <string name="error_session_profile">Das Serverprofil ist unvollständig oder nicht verfügbar.</string>
     <string name="error_session_generic">Die Sessions konnten nicht geladen werden.</string>
     <string name="error_profile_name_empty">Profilname darf nicht leer sein.</string>

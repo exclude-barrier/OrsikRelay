@@ -1,0 +1,137 @@
+package io.github.excludebarrier.orsikrelay
+
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
+import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
+import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
+import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
+import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
+import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
+import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+
+class ChatScreenUiTest {
+
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    @Test
+    fun loadingIsShownUntilHistoryReturns() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        setScreen(MessageHistorySource { _, _ ->
+            started.countDown()
+            release.await(3, TimeUnit.SECONDS)
+            success(emptyList())
+        })
+
+        assertTrue(started.await(3, TimeUnit.SECONDS))
+        composeRule.onNodeWithText("Nachrichten werden geladen…").assertIsDisplayed()
+        release.countDown()
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+    }
+
+    @Test
+    fun allRolesAndToolNameAreRenderedWithText() {
+        setScreen(MessageHistorySource { _, _ ->
+            success(
+                listOf(
+                    message(1, MessageRole.USER, "Fixture-Frage"),
+                    message(2, MessageRole.ASSISTANT, "Fixture-Antwort"),
+                    message(3, MessageRole.SYSTEM, "Fixture-System"),
+                    message(4, MessageRole.TOOL, "Fixture-Ergebnis", "fixture_tool")
+                )
+            )
+        })
+
+        waitForText("Fixture-Antwort")
+        listOf("Du", "Hermes", "System", "Tool: fixture_tool").forEach {
+            composeRule.onNodeWithText(it).assertIsDisplayed()
+        }
+        listOf("Fixture-Frage", "Fixture-Antwort", "Fixture-System", "Fixture-Ergebnis").forEach {
+            composeRule.onNodeWithText(it).assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun failureIsGenericAndRetryIsManual() {
+        val calls = AtomicInteger()
+        setScreen(MessageHistorySource { _, _ ->
+            if (calls.incrementAndGet() == 1) {
+                MessageHistoryResult.Failure(MessageHistoryError.Network)
+            } else {
+                success(listOf(message(1, MessageRole.ASSISTANT, "Nach Retry")))
+            }
+        })
+
+        waitForText("Die Nachrichten konnten nicht geladen werden.")
+        assertEquals(1, calls.get())
+        composeRule.onNodeWithText("Erneut versuchen").performClick()
+        waitForText("Nach Retry")
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun backButtonInvokesBackAction() {
+        val invoked = AtomicBoolean(false)
+        setScreen(
+            source = MessageHistorySource { _, _ -> success(emptyList()) },
+            onBack = { invoked.set(true) }
+        )
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Zurück").performClick()
+        assertTrue(invoked.get())
+    }
+
+    private fun setScreen(
+        source: MessageHistorySource,
+        onBack: () -> Unit = {}
+    ) {
+        composeRule.setContent {
+            HermesTheme {
+                ChatScreen(
+                    historySource = source,
+                    profileId = "fixture-profile-id",
+                    sessionId = "fixture-session-id",
+                    onBack = onBack
+                )
+            }
+        }
+    }
+
+    private fun waitForText(text: String) {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun success(messages: List<HermesChatMessage>) =
+        MessageHistoryResult.Success(MessagePage(messages))
+
+    private fun message(
+        id: Long,
+        role: MessageRole,
+        content: String,
+        toolName: String? = null
+    ) = HermesChatMessage(
+        id = id,
+        role = role,
+        content = content,
+        timestampSeconds = null,
+        toolName = toolName
+    )
+}

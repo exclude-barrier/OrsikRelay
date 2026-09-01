@@ -146,7 +146,7 @@ class HermesSessionClientTest {
             JSONObject().put("id", "a").put("title", 4),
             JSONObject().put("id", "a").put("source", false),
             JSONObject().put("id", "a").put("last_active", -1),
-            JSONObject().put("id", "a").put("last_active", 1.5),
+            JSONObject().put("id", "a").put("last_active", "7"),
             JSONObject().put("id", "a").put("message_count", -1),
             JSONObject().put("id", "a").put("message_count", "7"),
             JSONObject().put("id", "a").put("pinned", "true")
@@ -248,6 +248,29 @@ class HermesSessionClientTest {
         assertNull(session.lastActiveEpochSeconds)
         assertNull(session.messageCount)
         assertFalse(session.pinned)
+    }
+
+    @Test
+    fun finiteFractionalLastActiveIsAcceptedAndFlooredToWholeSeconds() {
+        val body = JSONObject()
+            .put("object", "list")
+            .put(
+                "data",
+                JSONArray()
+                    .put(JSONObject().put("id", "session-a").put("last_active", 1_788_000_000.75))
+                    .put(JSONObject().put("id", "session-b").put("last_active", 0.5))
+                    .put(JSONObject().put("id", "session-c").put("last_active", 1788000000.0))
+            )
+            .put("limit", 50)
+            .put("offset", 0)
+            .put("has_more", false)
+        server.enqueue(jsonResponse(body))
+
+        val result = fetch() as SessionListResult.Success
+        assertEquals(
+            listOf(1_788_000_000L, 0L, 1788000000L),
+            result.page.sessions.map { it.lastActiveEpochSeconds }
+        )
     }
 
     @Test

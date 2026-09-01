@@ -11,6 +11,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
@@ -179,7 +180,7 @@ class HermesSessionClient(
                 id = id,
                 title = optionalString(item, TITLE_FIELD),
                 source = optionalString(item, SOURCE_FIELD),
-                lastActiveEpochSeconds = optionalNonNegativeInt(item, LAST_ACTIVE_FIELD),
+                lastActiveEpochSeconds = optionalRealSeconds(item, LAST_ACTIVE_FIELD),
                 messageCount = optionalNonNegativeInt(item, MESSAGE_COUNT_FIELD),
                 pinned = optionalBoolean(item, PINNED_FIELD)
             )
@@ -240,6 +241,31 @@ class HermesSessionClient(
         return nonNegativeLong(value)
     }
 
+    /**
+     * SQLite `REAL` epoch seconds (reviewer-confirmed for
+     * `sessions.last_active`): a finite, non-negative number is accepted
+     * and safely floored to whole seconds. Handled through [BigDecimal]
+     * so no floating-point wraparound or rounding-up can occur.
+     */
+    private fun optionalRealSeconds(json: JSONObject, key: String): Long? {
+        if (!json.has(key) || json.isNull(key)) return null
+        val value = json.opt(key) as? Number
+            ?: throw PageFailure(SessionListError.IncompatibleApi)
+        val decimal = try {
+            BigDecimal(value.toString())
+        } catch (_: NumberFormatException) {
+            throw PageFailure(SessionListError.IncompatibleApi)
+        }
+        if (decimal.signum() < 0 || decimal > LONG_MAX_DECIMAL) {
+            throw PageFailure(SessionListError.IncompatibleApi)
+        }
+        return try {
+            decimal.setScale(0, RoundingMode.FLOOR).longValueExact()
+        } catch (_: ArithmeticException) {
+            throw PageFailure(SessionListError.IncompatibleApi)
+        }
+    }
+
     private class PageFailure(val reason: SessionListError) : Exception()
 
     private companion object {
@@ -264,6 +290,7 @@ class HermesSessionClient(
         const val LAST_ACTIVE_FIELD = "last_active"
         const val MESSAGE_COUNT_FIELD = "message_count"
         const val PINNED_FIELD = "pinned"
+        val LONG_MAX_DECIMAL: BigDecimal = BigDecimal.valueOf(Long.MAX_VALUE)
 
         fun defaultSessionHttpClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)

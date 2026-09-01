@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.sessions
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,7 +56,8 @@ import java.util.Locale
 fun SessionsScreen(
     pageSource: SessionPageSource,
     profileId: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> }
 ) {
     val configuration = LocalConfiguration.current
     val locale = remember(configuration) { configuration.locales[0] }
@@ -189,7 +191,8 @@ fun SessionsScreen(
                         items(current.sessions, key = { it.id }) { session ->
                             SessionRow(
                                 session = session,
-                                locale = locale
+                                locale = locale,
+                                onClick = { onSessionSelected(session.id, session.title) }
                             )
                         }
                         if (current.hasMore) {
@@ -215,7 +218,8 @@ fun SessionsScreen(
 @Composable
 private fun SessionRow(
     session: HermesSession,
-    locale: Locale
+    locale: Locale,
+    onClick: () -> Unit
 ) {
     val title = session.title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.session_fallback_title)
@@ -237,6 +241,7 @@ private fun SessionRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
         Text(

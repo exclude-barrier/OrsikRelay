@@ -7,6 +7,7 @@ package io.github.excludebarrier.orsikrelay.navigation
 sealed interface AppScreen {
     data object Onboarding : AppScreen
     data object Sessions : AppScreen
+    data class Chat(val sessionId: String) : AppScreen
 }
 
 /**
@@ -25,8 +26,11 @@ value class AppNavigationState(val current: AppScreen) {
     fun goToSessions(): AppNavigationState =
         if (current is AppScreen.Sessions) this else AppNavigationState(AppScreen.Sessions)
 
-    fun goBack(): AppNavigationState =
-        if (current is AppScreen.Onboarding) this else AppNavigationState(AppScreen.Onboarding)
+    fun goBack(): AppNavigationState = when (current) {
+        AppScreen.Onboarding -> this
+        AppScreen.Sessions -> AppNavigationState(AppScreen.Onboarding)
+        is AppScreen.Chat -> AppNavigationState(AppScreen.Sessions)
+    }
 }
 
 /** Initial destination of the app: Onboarding. */
