@@ -31,3 +31,17 @@ Thumbs.db
 
 # Generated reports
 reports/
+
+# Additional credential and release artifacts
+*.p12
+*.pfx
+*.pem
+*.key
+key.properties
+secrets.properties
+google-services.json
+service-account*.json
+*.apk
+*.aab
+*.apks
+.kotlin/
