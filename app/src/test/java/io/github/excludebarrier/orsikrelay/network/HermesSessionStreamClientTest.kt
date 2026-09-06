@@ -775,6 +775,51 @@ class HermesSessionStreamClientTest {
     }
 
     @Test
+    fun finalDeliveryStillSignalsFinishedWhenListenerThrows() {
+        server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
+        val listener = ThrowingEventListener { it is ChatTurnEvent.TurnCompleted }
+
+        client.openTurn(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, "Hallo", listener)
+
+        assertTrue(
+            "onFinished must follow a throwing final onEvent",
+            listener.finished.await(5, TimeUnit.SECONDS)
+        )
+        assertEquals(1, listener.finishedCalls)
+    }
+
+    @Test
+    fun exceptionDeliveryStillSignalsFinishedWhenListenerThrows() {
+        server.enqueue(sseResponse(listOf(frame("unknown.event", 1))))
+        val listener = ThrowingEventListener { it is ChatTurnEvent.TurnFailed }
+
+        client.openTurn(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, "Hallo", listener)
+
+        assertTrue(
+            "onFinished must follow a throwing exception-path onEvent",
+            listener.finished.await(5, TimeUnit.SECONDS)
+        )
+        assertEquals(1, listener.finishedCalls)
+    }
+
+    @Test
+    fun immediateFailureStillSignalsFinishedWhenListenerThrows() {
+        val listener = ThrowingEventListener { true }
+
+        assertThrows(IllegalStateException::class.java) {
+            client.openTurn(
+                "http://example.invalid",
+                SecretValue(FIXTURE_KEY),
+                SESSION_ID,
+                "Hallo",
+                listener
+            )
+        }
+
+        assertEquals(1, listener.finishedCalls)
+    }
+
+    @Test
     fun closeCancelsTheCallAndSuppressesFurtherEvents() {
         server.enqueue(
             sseResponse(successfulStreamFrames(SESSION_ID))
@@ -936,6 +981,25 @@ class HermesSessionStreamClientTest {
         val exception = StreamLimitException()
         assertNull(exception.message)
         assertNull(exception.cause)
+    }
+
+    private class ThrowingEventListener(
+        private val shouldThrow: (ChatTurnEvent) -> Boolean
+    ) : ChatStreamListener {
+        val finished = CountDownLatch(1)
+        var finishedCalls = 0
+            private set
+
+        override fun onEvent(event: ChatTurnEvent) {
+            if (shouldThrow(event)) {
+                throw IllegalStateException("synthetic listener failure")
+            }
+        }
+
+        override fun onFinished() {
+            finishedCalls += 1
+            finished.countDown()
+        }
     }
 
     private class RecordingListener : ChatStreamListener {

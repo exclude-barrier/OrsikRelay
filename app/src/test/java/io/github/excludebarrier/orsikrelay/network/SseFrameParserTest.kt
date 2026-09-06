@@ -48,6 +48,24 @@ class SseFrameParserTest {
     }
 
     @Test
+    fun namelessFrameDoesNotTerminateParserWithoutConfiguredTerminalName() {
+        val parser = SseFrameParser()
+
+        val frames = parser.feed(
+            "data: first\n\n" +
+                "event: run.started\ndata: second\n\n"
+        )
+
+        assertEquals(
+            listOf(
+                ParsedSseFrame(null, "first"),
+                ParsedSseFrame("run.started", "second")
+            ),
+            frames
+        )
+    }
+
+    @Test
     fun fragmentedChunksAcrossFeedsProduceOneFrame() {
         val parser = SseFrameParser()
         val first = parser.feed("eve")

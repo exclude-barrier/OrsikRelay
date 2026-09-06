@@ -408,6 +408,55 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
+    fun completedEventReleasesComposerWithoutSourceCompletion() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Abschluss")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+
+        source.enqueue(ChatTurnEvent.RunStarted, ChatTurnEvent.TurnCompleted)
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+        assertEquals("collector must stop at TurnCompleted", 0L, source.canceled.count)
+    }
+
+    @Test
+    fun failedEventReleasesComposerWithoutSourceCompletion() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Fehler")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+
+        source.enqueue(
+            ChatTurnEvent.RunStarted,
+            ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+        )
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+        assertEquals("collector must stop at TurnFailed", 0L, source.canceled.count)
+    }
+
+    @Test
     fun sessionSwitchCancelsRunningCollectorAndResetsEphemeralState() {
         val firstSource = FakeTurnSource()
         val secondSource = FakeTurnSource()
@@ -486,7 +535,14 @@ class ChatScreenTurnUiTest {
     }
 
     private fun waitForFlowCompletion(source: FakeTurnSource) {
-        composeRule.waitUntil(timeoutMillis = 5_000) { source.completed.get() }
+        // A terminal ChatTurnEvent now stops collection immediately. For
+        // an open upstream channel, takeWhile completes downstream by
+        // cancelling that upstream collector; a naturally closed source
+        // still reports normal completion. Both mean the UI collector has
+        // actually stopped, which is what callers of this helper require.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            source.completed.get() || source.canceled.count == 0L
+        }
         composeRule.waitForIdle()
     }
 

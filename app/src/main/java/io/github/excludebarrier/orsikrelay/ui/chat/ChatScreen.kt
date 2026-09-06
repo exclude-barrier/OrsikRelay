@@ -47,6 +47,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -202,7 +203,7 @@ fun ChatScreen(
             var completed = false
             var cancelled = false
             try {
-                chatSource.streamTurn(profileId, sessionId, text).collect { event ->
+                chatSource.streamTurn(profileId, sessionId, text).takeWhile { event ->
                     when (event) {
                         is ChatTurnEvent.RunStarted -> {
                             runStarted = true
@@ -243,7 +244,9 @@ fun ChatScreen(
                             dropPrematureUserLine()
                         }
                     }
-                }
+                    event !is ChatTurnEvent.TurnCompleted &&
+                        event !is ChatTurnEvent.TurnFailed
+                }.collect { }
             } catch (error: CancellationException) {
                 cancelled = true
                 throw error

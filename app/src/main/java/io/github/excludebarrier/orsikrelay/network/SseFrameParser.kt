@@ -166,7 +166,7 @@ class SseFrameParser(
             }
             // Dispatching the terminal frame closes the turn: everything
             // after it is ignored, never validated.
-            if (frame.eventName == terminalEventName) {
+            if (terminalEventName != null && frame.eventName == terminalEventName) {
                 terminated = true
             }
             return frame

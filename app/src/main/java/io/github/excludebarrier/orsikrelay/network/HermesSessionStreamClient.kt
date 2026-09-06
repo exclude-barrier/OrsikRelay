@@ -171,8 +171,11 @@ class HermesSessionStreamClient(
                 // concurrent close. The completion signal itself is not
                 // an "event": it must fire exactly once regardless of
                 // whether the handle was closed.
-                handle.deliver { event?.let(listener::onEvent) }
-                listener.onFinished()
+                try {
+                    handle.deliver { event?.let(listener::onEvent) }
+                } finally {
+                    listener.onFinished()
+                }
             }
         }
 
@@ -366,15 +369,18 @@ class HermesSessionStreamClient(
         // `onEvent`, which would violate the "no further events after
         // close" transport contract on this exception path too.
         if (finished.compareAndSet(false, true)) {
-            handle.deliver {
-                val finalEvent = if (sawTerminalFrame) {
-                    ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
-                } else {
-                    event()
+            try {
+                handle.deliver {
+                    val finalEvent = if (sawTerminalFrame) {
+                        ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
+                    } else {
+                        event()
+                    }
+                    listener.onEvent(finalEvent)
                 }
-                listener.onEvent(finalEvent)
+            } finally {
+                listener.onFinished()
             }
-            listener.onFinished()
         }
     }
 
@@ -403,8 +409,11 @@ class HermesSessionStreamClient(
         listener: ChatStreamListener,
         error: ChatStreamError
     ): ChatStreamHandle {
-        listener.onEvent(ChatTurnEvent.TurnFailed(error))
-        listener.onFinished()
+        try {
+            listener.onEvent(ChatTurnEvent.TurnFailed(error))
+        } finally {
+            listener.onFinished()
+        }
         return NoopStreamHandle
     }
 
