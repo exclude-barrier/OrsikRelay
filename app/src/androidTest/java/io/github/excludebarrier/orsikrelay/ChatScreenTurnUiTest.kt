@@ -371,6 +371,43 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
+    fun synchronousSourceThatEndsInsideStartStillReleasesTheComposer() {
+        // Regression for the LAZY job registration: a source whose flow
+        // completes SYNCHRONOUSLY inside the collector (no Channel, no
+        // async boundary) must not orphan `turnActive`. The old
+        // eager-launch form assigned the job AFTER the collector had
+        // already finished, so the `finally` bookkeeping saw a foreign
+        // (null) job and the composer stayed locked. The existing
+        // async `FakeTurnSource` never exercises this window.
+        val synchronousSource = object : StreamingChatSource {
+            override fun streamTurn(
+                profileId: String,
+                sessionId: String,
+                message: String
+            ): Flow<ChatTurnEvent> = flow {
+                emit(ChatTurnEvent.RunStarted)
+                emit(ChatTurnEvent.AssistantStarted)
+                emit(ChatTurnEvent.AssistantCompleted("Sofort fertig"))
+                emit(ChatTurnEvent.TurnCompleted)
+            }
+        }
+        setScreen(history(emptyList()), synchronousSource)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Sofortig")
+        composeRule.onNodeWithText("Senden").performClick()
+
+        // The final text is rendered and the turn is released: the
+        // field is editable again and the (empty) draft keeps "Senden"
+        // disabled. With the bug present `turnActive` would never clear
+        // and the field would stay disabled forever.
+        waitForText("Sofort fertig")
+        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText("Senden").assertIsDisplayed()
+        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+    }
+
+    @Test
     fun sessionSwitchCancelsRunningCollectorAndResetsEphemeralState() {
         val firstSource = FakeTurnSource()
         val secondSource = FakeTurnSource()

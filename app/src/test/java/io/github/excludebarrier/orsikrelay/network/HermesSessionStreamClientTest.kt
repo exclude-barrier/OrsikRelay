@@ -785,6 +785,10 @@ class HermesSessionStreamClientTest {
         handle.close()
         assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
         assertTrue(listener.events.isEmpty())
+        // Transport contract: the completion signal fires exactly once,
+        // even though both the close path and the canceled reader thread
+        // race to finish the listener.
+        assertEquals(1, listener.finishedCalls)
     }
 
     private fun baseUrl(): String = server.url("/").toString().trimEnd('/')

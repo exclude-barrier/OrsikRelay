@@ -359,17 +359,21 @@ class HermesSessionStreamClient(
         event: () -> ChatTurnEvent
     ) {
         responseRef[0]?.close()
-        if (handle.isClosed) {
-            if (finished.compareAndSet(false, true)) {
-                listener.onFinished()
+        // The completion signal fires exactly once (CAS), and the final
+        // event is released through the SAME handle monitor as every
+        // other delivery. That removes the check-then-act window where a
+        // concurrent close() could land between an `isClosed` read and
+        // `onEvent`, which would violate the "no further events after
+        // close" transport contract on this exception path too.
+        if (finished.compareAndSet(false, true)) {
+            handle.deliver {
+                val finalEvent = if (sawTerminalFrame) {
+                    ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
+                } else {
+                    event()
+                }
+                listener.onEvent(finalEvent)
             }
-        } else if (finished.compareAndSet(false, true)) {
-            val finalEvent = if (sawTerminalFrame) {
-                ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
-            } else {
-                event()
-            }
-            listener.onEvent(finalEvent)
             listener.onFinished()
         }
     }
