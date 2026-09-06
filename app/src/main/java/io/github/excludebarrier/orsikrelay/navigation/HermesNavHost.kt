@@ -19,10 +19,12 @@ import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
 import io.github.excludebarrier.orsikrelay.data.message.MessageHistoryRepository
+import io.github.excludebarrier.orsikrelay.data.message.StreamingChatRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionListRepository
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.data.session.resolveStartupProfile
+import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
@@ -32,6 +34,7 @@ import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCr
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
+import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -46,6 +49,8 @@ fun HermesNavHost(
     sessionPageSource: SessionPageSource? = null,
     messageHistorySource: MessageHistorySource? = null,
     sessionCreator: SessionCreator? = null,
+    streamingChatSource: StreamingChatSource? = null,
+    themeController: ThemeModeController? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
@@ -68,6 +73,10 @@ fun HermesNavHost(
                     credentialStore = credentialStore
                 ),
                 messageHistorySource = MessageHistoryRepository(
+                    profileRepository = profileRepository,
+                    credentialStore = credentialStore
+                ),
+                streamingChatSource = StreamingChatRepository(
                     profileRepository = profileRepository,
                     credentialStore = credentialStore
                 ),
@@ -150,6 +159,7 @@ fun HermesNavHost(
                 profileId = activeProfileId.orEmpty(),
                 creator = sessionCreator
                     ?: productionDependencies.value.sessionCreator,
+                themeController = themeController,
                 onSessionSelected = { sessionId, _ ->
                     navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
                         launchSingleTop = true
@@ -168,6 +178,8 @@ fun HermesNavHost(
             ChatScreen(
                 historySource = messageHistorySource
                     ?: productionDependencies.value.messageHistorySource,
+                chatSource = streamingChatSource
+                    ?: productionDependencies.value.streamingChatSource,
                 profileId = activeProfileId.orEmpty(),
                 sessionId = decodeRouteArgument(encodedSessionId),
                 onBack = { navController.popBackStack() }
@@ -181,6 +193,7 @@ private data class ProductionDependencies(
     val sessionPageSource: SessionPageSource,
     val sessionCreator: SessionCreator,
     val messageHistorySource: MessageHistorySource,
+    val streamingChatSource: StreamingChatSource,
     val startupResolver: () -> StartupProfile
 )
 

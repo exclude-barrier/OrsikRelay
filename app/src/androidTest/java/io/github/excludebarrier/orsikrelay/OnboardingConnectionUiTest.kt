@@ -78,7 +78,7 @@ class OnboardingConnectionUiTest {
         submitValidForm()
         waitForText("Der API-Key wurde abgelehnt.")
 
-        composeRule.onNodeWithText("Hermes einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
         assertEquals(0, saveCalls.get())
     }
 
@@ -97,7 +97,7 @@ class OnboardingConnectionUiTest {
         submitValidForm()
         waitForText("Das Serverprofil konnte nicht sicher gespeichert werden.")
 
-        composeRule.onNodeWithText("Hermes einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
     }
 
     @Test

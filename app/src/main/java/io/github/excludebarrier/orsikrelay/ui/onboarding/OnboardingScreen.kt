@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.onboarding
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -56,17 +59,38 @@ fun OnboardingScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Top
     ) {
         Text(
             text = stringResource(R.string.onboarding_title),
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
         )
+        Text(
+            text = stringResource(R.string.onboarding_subtitle),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
+        )
 
-        OutlinedTextField(
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                OutlinedTextField(
             value = profileName,
             onValueChange = {
                 profileName = it
@@ -82,7 +106,6 @@ fun OnboardingScreen(
             enabled = !isConnecting,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp)
                 .testTag("onboardingProfileName")
         )
 
@@ -129,7 +152,9 @@ fun OnboardingScreen(
                     contentDescription = apiKeyLabel
                     password()
                 }
-        )
+                )
+            }
+        }
 
         if (connectionState is OnboardingConnectionState.Failure) {
             Text(
@@ -161,7 +186,7 @@ fun OnboardingScreen(
             enabled = !isConnecting,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 32.dp)
+                .padding(top = 24.dp)
                 .testTag("onboardingSubmitButton")
         ) {
             if (isConnecting) {

@@ -1,22 +1,32 @@
 package io.github.excludebarrier.orsikrelay.ui.sessions
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +38,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
@@ -35,6 +49,8 @@ import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
+import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
+import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,6 +81,7 @@ fun SessionsScreen(
     profileId: String,
     modifier: Modifier = Modifier,
     creator: SessionCreator? = null,
+    themeController: ThemeModeController? = null,
     onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
     onSessionCreated: (sessionId: String) -> Unit = {}
 ) {
@@ -134,18 +151,32 @@ fun SessionsScreen(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-        Text(
-            text = stringResource(R.string.sessions_title),
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(top = 16.dp)
-        )
-        Button(
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.sessions_title),
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            themeController?.let { ThemeModeMenu(it) }
+        }
+        TextButton(
             onClick = { loadPage(offset = 0, append = false) },
             modifier = Modifier
-                .padding(top = 8.dp)
-                .padding(start = 8.dp)
+                .padding(top = 0.dp)
         ) {
-            Text(text = stringResource(R.string.sessions_refresh))
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = null
+            )
+            Text(
+                text = stringResource(R.string.sessions_refresh),
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
         when (val current = state) {
             is SessionListState.Loading -> {
@@ -201,7 +232,12 @@ fun SessionsScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
+                            .weight(1f),
+                        // Bottom padding clears the floating 56dp FAB
+                        // (56 + 16 margin) so the last session or the
+                        // "load more" button is never hidden underneath.
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(current.sessions, key = { it.id }) { session ->
                             SessionRow(
@@ -259,6 +295,48 @@ fun SessionsScreen(
 }
 
 @Composable
+private fun ThemeModeMenu(controller: ThemeModeController) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentLabel = themeModeLabel(controller.mode)
+    val appearanceDescription = stringResource(R.string.theme_switcher_description)
+    Box {
+        TextButton(
+            onClick = { expanded = true },
+            modifier = Modifier.semantics {
+                contentDescription = appearanceDescription
+                stateDescription = currentLabel
+            }
+        ) {
+            Text(currentLabel)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            ThemeMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(themeModeLabel(mode)) },
+                    modifier = Modifier.semantics {
+                        selected = controller.mode == mode
+                    },
+                    onClick = {
+                        controller.select(mode)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
+    ThemeMode.System -> stringResource(R.string.theme_mode_system)
+    ThemeMode.Light -> stringResource(R.string.theme_mode_light)
+    ThemeMode.Dark -> stringResource(R.string.theme_mode_dark)
+}
+
+@Composable
 private fun SessionRow(
     session: HermesSession,
     locale: Locale,
@@ -281,30 +359,43 @@ private fun SessionRow(
         null
     }
 
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 12.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium
-        )
-        buildDetailLine(source, pinned)
-            ?.let { detail ->
-                Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        buildMetaLine(messageCount, lastActive)
-            ?.let { meta ->
-                Text(
-                    text = meta,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium
+            )
+            buildDetailLine(source, pinned)
+                ?.let { detail ->
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            buildMetaLine(messageCount, lastActive)
+                ?.let { meta ->
+                    Text(
+                        text = meta,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+        }
     }
 }
 

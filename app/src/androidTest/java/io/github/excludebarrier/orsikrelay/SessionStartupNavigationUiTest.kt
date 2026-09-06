@@ -45,8 +45,8 @@ class SessionStartupNavigationUiTest {
             startup = StartupProfile.None
         )
 
-        waitForText("Hermes einrichten")
-        composeRule.onNodeWithText("Hermes einrichten").assertIsDisplayed()
+        waitForText("Orsik Relay einrichten")
+        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
     }
 
     @Test

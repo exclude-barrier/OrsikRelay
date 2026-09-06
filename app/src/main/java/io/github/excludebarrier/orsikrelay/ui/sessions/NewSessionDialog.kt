@@ -2,13 +2,14 @@ package io.github.excludebarrier.orsikrelay.ui.sessions
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,13 +94,14 @@ fun NewSessionDialog(
                         style = MaterialTheme.typography.bodyLarge
                     )
                 } else {
-                    TextField(
+                    OutlinedTextField(
                         value = titleInput,
                         onValueChange = { titleInput = it },
                         label = {
                             Text(text = stringResource(R.string.new_session_title_label))
                         },
-                        singleLine = true
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     if (failure != null) {
                         Spacer(modifier = Modifier.height(8.dp))

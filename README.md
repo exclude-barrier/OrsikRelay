@@ -1,17 +1,20 @@
-# Hermes Android
+# Orsik Relay
 
-Native Android-App als sichere Bedienoberfläche für den Hermes Agent auf dem Hermes-Server. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; die App wird ein Kotlin-/Jetpack-Compose-Thin-Client.
+Inoffizieller, eigenständig entwickelter Android-Client für Hermes Agent. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; Orsik Relay ist ein sicherer Kotlin-/Jetpack-Compose-Thin-Client ohne offizielle Verbindung zu Nous Research.
 
 ## Projektstatus
 
-MISSION 001 (Compose-Fundament) ist abgeschlossen und real verifiziert: Die App ist der
-erste lauffähige, native Compose-Slice mit Onboarding → Sessions-Navigation, Material-3-Theme,
-Unit-Tests und einem Compose-Instrumentationstest. Details:
-`docs/completed/mission-001-compose-foundation.md`.
+MISSION 006A ist implementiert und lokal verifiziert. Die App unterstützt:
 
-Bewusst noch nicht enthalten: kein Netzwerk, kein Serverprofil, kein Keystore, keine Persistenz.
-Produktiver Android-Code folgt in kleinen, testbaren Tickets gemäß
-`internal plan`; das nächste Ticket wird erst nach Review/Commit vergeben.
+- sicheres Onboarding mit getrennt gespeicherten Profilmetadaten und Keystore-Credential,
+- Sessionliste, Session-Erstellung und Nachrichtenhistorie,
+- reine Textnachrichten mit live zusammengesetzten Hermes-SSE-Antworten,
+- geschlossene Fehlerabbildung ohne automatische Wiederholung schreibender Requests,
+- sichere Edge-to-Edge-Inhalte für Statusleisten, Display-Cutouts und Gestennavigation,
+- ein Nous-inspiriertes, eigenständiges Material-3-Design,
+- den persistenten Darstellungsmodus System, Hell oder Dunkel.
+
+Noch nicht enthalten sind insbesondere Toolcards mit Payload, Approvals, Stop/Steer, Markdown, Bilder, Sprache, Benachrichtigungen und persistente Chatentwürfe. Die nächsten Funktionen folgen in kleinen, testbaren Tickets gemäß `internal plan`.
 
 ## Lokale Entwicklungsumgebung auf build-host
 

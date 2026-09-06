@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hermes</string>
-    <string name="onboarding_title">Hermes einrichten</string>
+    <string name="app_name">Orsik Relay</string>
+    <string name="onboarding_title">Orsik Relay einrichten</string>
+    <string name="onboarding_subtitle">Sicher mit deinem Hermes-Agent-Server verbinden</string>
     <string name="onboarding_profile_name_label">Profilname</string>
     <string name="onboarding_base_url_label">Server-Basis-URL</string>
     <string name="onboarding_api_key_label">API-Key</string>
@@ -11,6 +12,10 @@
     <string name="sessions_loading">Sessions werden geladen…</string>
     <string name="sessions_empty">Keine Sessions vorhanden.</string>
     <string name="sessions_refresh">Aktualisieren</string>
+    <string name="theme_switcher_description">Darstellung</string>
+    <string name="theme_mode_system">System</string>
+    <string name="theme_mode_light">Hell</string>
+    <string name="theme_mode_dark">Dunkel</string>
     <string name="sessions_retry">Erneut versuchen</string>
     <string name="sessions_load_more">Mehr laden</string>
     <string name="session_fallback_title">Unbenannte Session</string>
@@ -31,6 +36,10 @@
     <string name="chat_role_system">System</string>
     <string name="chat_role_tool">Tool</string>
     <string name="chat_role_tool_named">Tool: %1$s</string>
+    <string name="chat_send">Senden</string>
+    <string name="chat_input_label">Nachricht</string>
+    <string name="chat_tool_activity">Tool ist aktiv…</string>
+    <string name="chat_refresh_history">Verlauf aktualisieren</string>
     <string name="error_chat_not_found">Diese Session wurde nicht gefunden.</string>
     <string name="error_chat_generic">Die Nachrichten konnten nicht geladen werden.</string>
     <string name="error_session_profile">Das Serverprofil ist unvollständig oder nicht verfügbar.</string>

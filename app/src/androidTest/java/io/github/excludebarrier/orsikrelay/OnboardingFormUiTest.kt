@@ -65,7 +65,7 @@ class OnboardingFormUiTest {
     @Test
     fun submittingEmptyFormShowsFieldErrorsAndStaysOnOnboarding() {
         // Startscreen mit Titel.
-        composeRule.onNodeWithText("Hermes einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
 
         clickSubmit()
 
@@ -79,14 +79,14 @@ class OnboardingFormUiTest {
         composeRule.onNodeWithText("API-Key darf nicht leer sein.").assertIsDisplayed()
 
         // Die App bleibt auf Onboarding und navigiert nicht zu Sessions.
-        composeRule.onNodeWithText("Hermes einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
         assertNoNodeWithText("Sessions")
     }
 
 
     @Test
     fun apiKeyIsHiddenInTheFieldAndNotShownAsPlainText() {
-        composeRule.onNodeWithText("Hermes einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
 
         composeRule
             .onNodeWithContentDescription("API-Key", useUnmergedTree = true)

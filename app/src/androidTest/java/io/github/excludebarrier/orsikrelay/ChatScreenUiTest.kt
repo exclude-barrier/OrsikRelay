@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
@@ -98,12 +99,14 @@ class ChatScreenUiTest {
 
     private fun setScreen(
         source: MessageHistorySource,
+        chatSource: StreamingChatSource = streamingSourceThatNeverEmits,
         onBack: () -> Unit = {}
     ) {
         composeRule.setContent {
             HermesTheme {
                 ChatScreen(
                     historySource = source,
+                    chatSource = chatSource,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     onBack = onBack
@@ -134,4 +137,12 @@ class ChatScreenUiTest {
         timestampSeconds = null,
         toolName = toolName
     )
+
+    private companion object {
+        // These tests exercise the history slice only; the streaming seam
+        // is a synthetic fake that never emits and never fails.
+        val streamingSourceThatNeverEmits = StreamingChatSource { _, _, _ ->
+            kotlinx.coroutines.flow.emptyFlow()
+        }
+    }
 }
