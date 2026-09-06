@@ -46,14 +46,18 @@ API 36, minSdk 26).
 ./gradlew connectedDebugAndroidTest  # Instrumentationstests (AVD nötig)
 ```
 
-## Veröffentlichungsrichtung (später, noch nicht umgesetzt)
+## Alpha-Releases
 
-Die App soll möglicherweise auf GitHub und im Google Play Store erscheinen. Davon
-bestehen **aktuell keine** Release-Komponenten; es werden keine ungeprüften
-Release-Versprechen, Signing-Details oder Lizenzannahmen getroffen.
+Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes
+[GitHub-Alpha-Release](https://github.com/exclude-barrier/hermes-android/releases).
+Alpha-Releases sind Vorabversionen für technische Tests und nicht für den
+Produktiveinsatz bestimmt. Das bereitgestellte APK ist derzeit ein lokal mit dem
+Android-Debug-Key signierter Testbuild; Updates müssen manuell installiert werden.
 
-- CI, Wrapper-Validation, Release-Build und AAB-Erstellung werden erst zu einem
-  späteren Release-Ticket aufgebaut.
+- Das Versionsschema folgt SemVer-Prereleases, beispielsweise
+  `v0.1.0-alpha.1`, `v0.1.0-alpha.2` und später `v0.1.0-beta.1`.
+- CI, Wrapper-Validation, produktives Release-Signing und AAB-Erstellung werden
+  erst in einem späteren Release-Ticket aufgebaut.
 - Der Signing-Key (keystore) kommt **niemals** ins Repository; er bleibt außerhalb
   (z. B. CI-Secrets bzw. lokale, nicht versionierte Ablage).
 - Vor einem Play-Store-Release sind erforderlich: Datenschutztext, Support- und
