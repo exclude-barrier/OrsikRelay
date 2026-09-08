@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
@@ -26,6 +27,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerError
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
+import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.CancellationException
@@ -476,6 +478,7 @@ class ChatScreenTurnUiTest {
                     chatSource = if (key.value == "first-session") firstSource else secondSource,
                     runStopRequester = FakeRunStopRequester(),
                     runSteerRequester = FakeRunSteerRequester(),
+                    chatDraftRepository = NoOpChatDraftRepository(),
                     profileId = "fixture-profile-id",
                     sessionId = key.value,
                     onBack = {}
@@ -517,7 +520,8 @@ class ChatScreenTurnUiTest {
         chatSource: StreamingChatSource,
         onBack: () -> Unit = {},
         runStopRequester: RunStopRequester = FakeRunStopRequester(),
-        runSteerRequester: RunSteerRequester = FakeRunSteerRequester()
+        runSteerRequester: RunSteerRequester = FakeRunSteerRequester(),
+        chatDraftRepository: ChatDraftRepository = NoOpChatDraftRepository()
     ) {
         composeRule.setContent {
             HermesTheme {
@@ -526,6 +530,7 @@ class ChatScreenTurnUiTest {
                     chatSource = chatSource,
                     runStopRequester = runStopRequester,
                     runSteerRequester = runSteerRequester,
+                    chatDraftRepository = chatDraftRepository,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     onBack = onBack
@@ -1588,6 +1593,7 @@ class ChatScreenTurnUiTest {
                     runStopRequester = FakeRunStopRequester(),
                     runSteerRequester =
                         if (key.value == "first-session") firstSteer else secondSteer,
+                    chatDraftRepository = NoOpChatDraftRepository(),
                     profileId = "fixture-profile-id",
                     sessionId = key.value,
                     onBack = {}

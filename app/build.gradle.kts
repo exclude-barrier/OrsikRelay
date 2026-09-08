@@ -65,6 +65,9 @@ dependencies {
     testImplementation(libs.mockwebserver)
     testImplementation(libs.okhttp.tls)
     testImplementation(libs.json)
+    // Deterministic (virtual-time) tests for the debounced chat-draft
+    // repository (Mission 009A). Test-only; no production dependency.
+    testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)

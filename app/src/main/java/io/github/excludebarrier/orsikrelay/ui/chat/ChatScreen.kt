@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
@@ -159,6 +161,22 @@ import kotlinx.coroutines.withContext
  * preserved whenever clearing them would lose user input.
  * Back and disposal cancel a running steer request; a late callback can
  * never mutate a left or switched screen.
+ *
+ * Composer-draft slice (Mission 009A): [chatDraftRepository] is the small
+ * data seam that persists ONLY the ordinary new-message [draft], keyed by
+ * the (profileId, sessionId) pair. It restores the exact stored draft for
+ * the active key after an Activity/config recreation or when returning to
+ * the same session; a keyed load effect cancels a stale, delayed old-key
+ * load before it can apply to the new screen, so text can never leak across
+ * keys. Every draft change schedules one debounced latest-value write (no
+ * unbounded write per keystroke); leaving the screen or switching keys
+ * deterministically flushes the pending write for the key being left. The
+ * stored draft is cleared exactly where the composer is cleared on a
+ * successful send (`RunStarted`); a blocked or failed submit — and any
+ * failure before the confirmed start — keeps both the composer text and the
+ * persisted draft. Run/stop/steer input, recovery items, run IDs,
+ * credentials, URLs and transient errors are never modelled by this seam
+ * and can never be persisted or restored through it.
  */
 @Composable
 fun ChatScreen(
@@ -166,6 +184,7 @@ fun ChatScreen(
     chatSource: StreamingChatSource,
     runStopRequester: RunStopRequester,
     runSteerRequester: RunSteerRequester,
+    chatDraftRepository: ChatDraftRepository,
     profileId: String,
     sessionId: String,
     onBack: () -> Unit,
@@ -176,7 +195,11 @@ fun ChatScreen(
         mutableStateOf<MessageHistoryState>(MessageHistoryState.Loading)
     }
     var loadInFlight by remember(profileId, sessionId) { mutableStateOf(false) }
-    var draft by remember(profileId, sessionId) { mutableStateOf("") }
+    var draft by rememberSaveable(profileId, sessionId) { mutableStateOf("") }
+    // Saveable and key-bound: a non-zero generation means this screen key
+    // already has newer local/restored intent, so an Activity recreation must
+    // not let an older disk value overwrite the Bundle-restored composer.
+    var draftGeneration by rememberSaveable(profileId, sessionId) { mutableIntStateOf(0) }
     var localLines by remember(profileId, sessionId) {
         mutableStateOf<List<TimelineRow>>(emptyList())
     }
@@ -289,6 +312,60 @@ fun ChatScreen(
         loadHistory()
     }
 
+    // Restore the persisted ordinary draft for the active key (Mission 009A).
+    // Keyed by (profileId, sessionId): on a switch or an Activity/config
+    // recreation the previous effect is canceled before this one applies, so
+    // a stale, delayed old-key load can never overwrite the new screen's
+    // composer. A canceled load throws and applies nothing; a failed load
+    // degrades to an empty draft (the repository never throws dynamic
+    // detail).
+    // Same-key and recreation protection: zero is the only state with no
+    // newer local or Bundle-restored intent. Any local mutation bumps the
+    // saveable generation, so a delayed disk load cannot overwrite typing,
+    // a successful-send clear, or a composer restored by saved instance state.
+    LaunchedEffect(profileId, sessionId) {
+        val loadedKey = profileId to sessionId
+        val generationAtLoadStart = draftGeneration
+        val restored = chatDraftRepository.loadDraft(profileId, sessionId)
+        if (
+            restored != null &&
+            loadedKey == (profileId to sessionId) &&
+            generationAtLoadStart == 0 &&
+            generationAtLoadStart == draftGeneration
+        ) {
+            draft = restored
+            draftGeneration += 1
+        }
+    }
+
+    /**
+     * Records one ordinary-draft change and schedules its debounced,
+     * latest-value persist for the active key (Mission 009A). An empty value
+     * removes the stored state rather than retaining a blank record.
+     */
+    fun updateDraft(value: String) {
+        draft = value
+        // Every local ordinary-draft mutation invalidates in-flight same-key
+        // restore loads (see the keyed load effect above): a delayed stored
+        // value must never overwrite this newer local intent.
+        draftGeneration += 1
+        chatDraftRepository.persistDraft(profileId, sessionId, value)
+    }
+
+    /**
+     * Clears the ordinary draft and its stored state together (Mission
+     * 009A). Used exactly where the composer is cleared on a successful send
+     * (`RunStarted`) and on a back that leaves a running turn, so the
+     * just-sent text is never re-persisted as a draft.
+     */
+    fun clearDraftState() {
+        draft = ""
+        // A clear is local intent too: a delayed same-key load must never
+        // resurrect the just-sent (or just-cleared) stored value.
+        draftGeneration += 1
+        chatDraftRepository.clearDraft(profileId, sessionId)
+    }
+
     fun submit() {
         if (turnActive) return
         if (state !is MessageHistoryState.Ready) return
@@ -358,7 +435,12 @@ fun ChatScreen(
                             // value the stop control may use; it is
                             // bound here and never rendered or logged.
                             boundRunId = event.runId
-                            draft = ""
+                            // Successful send handoff: clear the composer AND
+                            // its stored state together (Mission 009A), so
+                            // the just-sent text is not re-persisted as a
+                            // draft. A failure before `run.started` keeps the
+                            // draft (see `dropPrematureUserLine`).
+                            clearDraftState()
                         }
                         is ChatTurnEvent.AssistantStarted -> {
                             localLines = localLines + TimelineRow(
@@ -701,7 +783,7 @@ fun ChatScreen(
     fun sendRecoveryAsNewMessage(index: Int) {
         if (draft.isNotBlank()) return
         val item = steerRecovery.getOrNull(index) ?: return
-        draft = item
+        updateDraft(item)
         steerRecovery = steerRecovery.filterIndexed { i, _ -> i != index }
     }
 
@@ -717,6 +799,13 @@ fun ChatScreen(
             turnRuntime.job?.cancel()
             turnRuntime.stopJob?.cancel()
             turnRuntime.steerJob?.cancel()
+            // Deterministic flush (Mission 009A): persist the pending
+            // ordinary draft for the key being left, so a profile/session
+            // switch or leaving the screen never loses an in-progress draft
+            // and a delayed old-key write can never cross into the new key.
+            // (A back that leaves a RUNNING turn has already cleared the
+            // draft above, so there is nothing pending to flush.)
+            chatDraftRepository.flushPendingDraft()
         }
     }
 
@@ -754,7 +843,10 @@ fun ChatScreen(
                     stopFailed = false
                     localLines = emptyList()
                     turnFailure = null
-                    draft = ""
+                    // Back leaves the screen: clear the composer AND its
+                    // stored state so the in-turn draft is not re-persisted
+                    // as a draft for the left session (Mission 009A).
+                    clearDraftState()
                     // The run-specific steer state (incl. the recoverable
                     // items) belongs to the left run; the screen leaves
                     // composition, so the keyed slots reset anyway.
@@ -950,7 +1042,7 @@ fun ChatScreen(
                 }
                 ComposerBar(
                     draft = draft,
-                    onDraftChange = { if (!turnActive) draft = it },
+                    onDraftChange = { if (!turnActive) updateDraft(it) },
                     sendEnabled = !turnActive &&
                         (turnFailure == null || !runStarted) &&
                         ChatMessageValidator.validate(draft).isSuccess,

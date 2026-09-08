@@ -12,8 +12,10 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
+import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CountDownLatch
@@ -104,7 +106,8 @@ class ChatScreenUiTest {
         chatSource: StreamingChatSource = streamingSourceThatNeverEmits,
         onBack: () -> Unit = {},
         runStopRequester: RunStopRequester = runStopRequesterThatIsNeverReached,
-        runSteerRequester: RunSteerRequester = runSteerRequesterThatIsNeverReached
+        runSteerRequester: RunSteerRequester = runSteerRequesterThatIsNeverReached,
+        chatDraftRepository: ChatDraftRepository = NoOpChatDraftRepository()
     ) {
         composeRule.setContent {
             HermesTheme {
@@ -113,6 +116,7 @@ class ChatScreenUiTest {
                     chatSource = chatSource,
                     runStopRequester = runStopRequester,
                     runSteerRequester = runSteerRequester,
+                    chatDraftRepository = chatDraftRepository,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     onBack = onBack
