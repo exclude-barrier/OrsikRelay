@@ -16,7 +16,7 @@ class ChatStreamEventPipelineTest {
     @Test
     fun fullSuccessPathWithDeltasAndFinalContent() {
         assertEquals(
-            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted),
+            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted(RUN_ID)),
             pipeline.process(frame("run.started", 1))
         )
         assertEquals(
@@ -165,7 +165,7 @@ class ChatStreamEventPipelineTest {
     @Test
     fun duplicateRunIdSeqPairIsDroppedNotAppliedTwice() {
         assertEquals(
-            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted),
+            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted(RUN_ID)),
             pipeline.process(frame("run.started", 1))
         )
         assertTrue(pipeline.process(frame("run.started", 1)).isEmpty())
@@ -205,7 +205,7 @@ class ChatStreamEventPipelineTest {
         // `seq = 1` is the only valid start.
         val valid = ChatStreamEventPipeline(SESSION_ID)
         assertEquals(
-            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted),
+            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted(RUN_ID)),
             valid.process(frame("run.started", 1))
         )
     }

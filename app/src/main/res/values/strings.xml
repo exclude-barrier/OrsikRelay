@@ -40,6 +40,9 @@
     <string name="chat_input_label">Nachricht</string>
     <string name="chat_tool_activity">Tool ist aktiv…</string>
     <string name="chat_refresh_history">Verlauf aktualisieren</string>
+    <string name="chat_stop">Stoppen</string>
+    <string name="chat_stopping">Wird gestoppt …</string>
+    <string name="error_run_stop_generic">Der laufende Run konnte nicht gestoppt werden.</string>
     <string name="error_chat_not_found">Diese Session wurde nicht gefunden.</string>
     <string name="error_chat_generic">Die Nachrichten konnten nicht geladen werden.</string>
     <string name="error_session_profile">Das Serverprofil ist unvollständig oder nicht verfügbar.</string>

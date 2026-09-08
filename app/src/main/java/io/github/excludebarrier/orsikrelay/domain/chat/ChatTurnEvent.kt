@@ -13,8 +13,11 @@ package io.github.excludebarrier.orsikrelay.domain.chat
  * [TurnCompleted] on success or [TurnFailed] on failure.
  */
 sealed interface ChatTurnEvent {
-    /** The server confirmed the run start; the sent message is accepted. */
-    data object RunStarted : ChatTurnEvent
+    /**
+     * The server confirmed the run start; [runId] is the validated ID
+     * required by later control requests such as stop.
+     */
+    data class RunStarted(val runId: String) : ChatTurnEvent
 
     /** The assistant started exactly one message for this turn. */
     data object AssistantStarted : ChatTurnEvent

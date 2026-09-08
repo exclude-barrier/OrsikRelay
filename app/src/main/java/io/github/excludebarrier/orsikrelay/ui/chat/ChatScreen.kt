@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +42,9 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.ui.theme.brandSurface
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -94,11 +98,33 @@ import kotlinx.coroutines.withContext
  * - timeline keys are stable, collision-free strings per screen:
  *   `server:<Long-ID>` for history rows and `local:<per-screen counter>`
  *   for ephemeral turn lines.
+ *
+ * Run-stop slice (Mission 007B): [runStopRequester] is the small
+ * domain seam; production injects the repository via
+ * [io.github.excludebarrier.orsikrelay.navigation.HermesNavHost], Compose tests
+ * inject synthetic fakes. The stop control is only visible while a
+ * turn is active AND a non-blank server-confirmed run ID from
+ * `RunStarted` is bound; no stop POST is possible before `run.started`.
+ * The first tap sends exactly one stop request; the control is then
+ * disabled with the "stopping" label. `Accepted` only marks that the
+ * stop was accepted: no optimistic terminal state, the composer stays
+ * blocked and the stream is never interrupted locally — the existing
+ * terminal stream state ends the turn. `AlreadyTerminal` is an
+ * idempotent success that triggers only the existing history
+ * reconciliation path and never resends the chat POST. `Failure` shows
+ * one closed, generic message (no dynamic server detail, no run ID),
+ * keeps the running stream collection untouched and allows one
+ * deliberate manual retry. Back, disposal and a profile/session switch
+ * cancel a running stop coroutine; a late callback can never mutate a
+ * left or switched screen. The run ID is bound per screen and cleared
+ * on submit and on every terminal reset; it never enters a log,
+ * error message or test diagnostic.
  */
 @Composable
 fun ChatScreen(
     historySource: MessageHistorySource,
     chatSource: StreamingChatSource,
+    runStopRequester: RunStopRequester,
     profileId: String,
     sessionId: String,
     onBack: () -> Unit,
@@ -116,14 +142,26 @@ fun ChatScreen(
     var turnFailure by remember(profileId, sessionId) { mutableStateOf<ChatStreamError?>(null) }
     var turnActive by remember(profileId, sessionId) { mutableStateOf(false) }
     var runStarted by remember(profileId, sessionId) { mutableStateOf(false) }
+    // The server-confirmed run ID of the active turn (Mission 007B).
+    // Bound from `RunStarted`, cleared on submit and on every terminal
+    // reset; never rendered, logged or embedded in an error message.
+    var boundRunId by remember(profileId, sessionId) { mutableStateOf<String?>(null) }
+    // True while exactly one stop request is in flight.
+    var stopInFlight by remember(profileId, sessionId) { mutableStateOf(false) }
+    // True after a closed, generic stop failure: the control re-enables
+    // for one deliberate manual retry and shows the generic message.
+    var stopFailed by remember(profileId, sessionId) { mutableStateOf(false) }
     var backPending by remember(profileId, sessionId) { mutableStateOf(false) }
     var localKeyCounter by remember(profileId, sessionId) { mutableIntStateOf(0) }
     val timelineListState = remember(profileId, sessionId) { LazyListState() }
     val toolActivityLabel = stringResource(R.string.chat_tool_activity)
+    val stopLabel = stringResource(R.string.chat_stop)
+    val stoppingLabel = stringResource(R.string.chat_stopping)
+    val stopErrorLabel = stringResource(R.string.error_run_stop_generic)
 
     // Not keyed by profile/session: a switch disposes the old effect
     // after the keyed slots above are already reset, but the dispose
-    // callback must still reach the collector of the previous session.
+    // callback must still reach the collectors of the previous session.
     // The holder itself resets when the screen leaves composition.
     val turnRuntime = remember { TurnRuntime() }
 
@@ -178,6 +216,12 @@ fun ChatScreen(
         turnActive = true
         turnFailure = null
         runStarted = false
+        // A new turn starts with a fresh stop state: the previous run ID
+        // and any in-flight stop belong to the finished turn and must
+        // not leak into this one (Mission 007B).
+        boundRunId = null
+        stopInFlight = false
+        stopFailed = false
         // The local user line appears immediately after the accepted
         // submit; the draft is cleared only on `RunStarted`.
         val userLineKey = nextLocalKey()
@@ -207,6 +251,10 @@ fun ChatScreen(
                     when (event) {
                         is ChatTurnEvent.RunStarted -> {
                             runStarted = true
+                            // The server-confirmed run ID is the only
+                            // value the stop control may use; it is
+                            // bound here and never rendered or logged.
+                            boundRunId = event.runId
                             draft = ""
                         }
                         is ChatTurnEvent.AssistantStarted -> {
@@ -268,6 +316,17 @@ fun ChatScreen(
                     turnRuntime.job = null
                     turnActive = false
                     backPending = false
+                    if (!cancelled) {
+                        // The turn settled: a stop request that is still
+                        // in flight belongs to the finished run and is
+                        // canceled so no late callback can mutate the
+                        // screen state (Mission 007B).
+                        turnRuntime.stopJob?.cancel()
+                    }
+                    turnRuntime.stopJob = null
+                    stopInFlight = false
+                    stopFailed = false
+                    boundRunId = null
                 }
             }
         }
@@ -278,14 +337,88 @@ fun ChatScreen(
         job.start()
     }
 
+    /**
+     * Starts exactly one stop request for the server-confirmed run of
+     * the active turn (Mission 007B). The control is only visible and
+     * tappable while [turnActive] and a non-blank [boundRunId] exist, so
+     * no stop POST is possible before `run.started`. The in-flight flag
+     * is set before the request starts: fast multi-taps and the
+     * double-tap window never open a second request.
+     */
+    fun requestStop() {
+        if (!turnActive) return
+        if (stopInFlight) return
+        val runId = boundRunId?.takeIf { it.isNotBlank() } ?: return
+        stopInFlight = true
+        stopFailed = false
+        val job = coroutineScope.launch {
+            val result = try {
+                runStopRequester.stopRun(profileId, runId)
+            } catch (error: CancellationException) {
+                // Propagate: the coroutine is being torn down (back or
+                // disposal) while the stop request is in flight. No state
+                // is published after cancellation.
+                throw error
+            } catch (_: Exception) {
+                // The repository never throws in production; a throwing
+                // fake or unexpected error degrades to the same closed,
+                // generic state.
+                RunStopResult.Failure(RunStopError.Network)
+            }
+            // A late result must never mutate a screen that was already
+            // left (back) or disposed: the cancellation is observed before
+            // any state write (Mission 007B).
+            if (coroutineContext[Job]?.isCancelled == true) return@launch
+            when (result) {
+                is RunStopResult.Accepted -> {
+                    // Accepted only means the server took the stop.
+                    // Nothing is set optimistically: the composer stays
+                    // blocked and the stream runs on until its own
+                    // terminal event settles the turn.
+                    Unit
+                }
+                is RunStopResult.AlreadyTerminal -> {
+                    // The run is already terminal: idempotent success.
+                    // Trigger the existing reconciliation path — reset
+                    // the ephemeral turn state and re-run the
+                    // idempotent history read — and cancel the now
+                    // stale stream collection. The chat POST is never
+                    // resent.
+                    stopInFlight = false
+                    stopFailed = false
+                    boundRunId = null
+                    turnFailure = null
+                    runStarted = false
+                    localLines = emptyList()
+                    turnRuntime.job?.cancel()
+                    loadHistory()
+                }
+                is RunStopResult.Failure -> {
+                    // The running stream collection is left untouched.
+                    // One deliberate manual retry is allowed: the
+                    // control re-enables with the generic message.
+                    stopInFlight = false
+                    stopFailed = true
+                }
+            }
+        }
+        // The job is registered BEFORE it can finish, so a
+        // synchronous fake result still reaches this slot and the
+        // disposal / terminal `finally` can cancel it.
+        turnRuntime.stopJob = job
+    }
+
     // A profile/session switch (or leaving composition) cancels the
-    // running collector. No compose state writes happen in the disposal
-    // callback: the keyed `remember` slots above reset every ephemeral
-    // state on a switch, and the collector's `finally` clears its own
-    // bookkeeping on the main scope.
+    // running collector AND a running stop request. No compose state
+    // writes happen in the disposal callback: the keyed `remember` slots
+    // above reset every ephemeral state on a switch, the collector's
+    // `finally` clears its own bookkeeping on the main scope, and the
+    // canceled stop coroutine observes its cancellation before any
+    // state write (Mission 007B).
     DisposableEffect(profileId, sessionId) {
         onDispose {
             turnRuntime.job?.cancel()
+            turnRuntime.stopJob?.cancel()
         }
     }
 
@@ -298,12 +431,25 @@ fun ChatScreen(
                 // gesture): wait for the collector cancellation on the
                 // main scope (which closes the repository/client
                 // handle) before [onBack] is invoked exactly once; fast
-                // double taps are ignored while that is in flight.
+                // double taps are ignored while that is in flight. A
+                // running stop request is canceled and joined too, so
+                // no late callback can mutate the screen after it is
+                // left (Mission 007B).
                 backPending = true
+                // Capture the in-flight stop job NOW: joining the collector
+                // below runs its `finally`, which nulls `turnRuntime.stopJob`
+                // in the cancelled branch without canceling it — the
+                // reference must be held here or the stop coroutine would
+                // survive the back (Mission 007B).
+                val pendingStop = turnRuntime.stopJob
                 coroutineScope.launch {
                     turnRuntime.job?.cancelAndJoin()
+                    pendingStop?.cancelAndJoin()
                     turnActive = false
                     runStarted = false
+                    boundRunId = null
+                    stopInFlight = false
+                    stopFailed = false
                     localLines = emptyList()
                     turnFailure = null
                     draft = ""
@@ -405,12 +551,33 @@ fun ChatScreen(
                             // to local duplicates. The POST is never
                             // resent, and the in-flight guard is left
                             // untouched: only `loadHistory()` releases
-                            // it, once, on the main scope.
+                            // it, once, on the main scope. The run stop
+                            // state of the finished turn is cleared too
+                            // (Mission 007B).
                             localLines = emptyList()
                             turnFailure = null
                             runStarted = false
+                            boundRunId = null
+                            stopInFlight = false
                             loadHistory()
                         }
+                    )
+                }
+                // Stop control (Mission 007B): visible only for an
+                // active turn whose server-confirmed, non-blank run ID
+                // is bound from `RunStarted` — before `run.started` the
+                // control is invisible and no stop POST is possible.
+                // While a stop request is in flight it is disabled and
+                // shows the "stopping" label. After a closed, generic
+                // failure it re-enables for one deliberate manual retry.
+                if (turnActive && boundRunId?.isNotBlank() == true) {
+                    StopControl(
+                        label = if (stopInFlight) stoppingLabel else stopLabel,
+                        enabled = !stopInFlight,
+                        showStopError = stopFailed && !stopInFlight,
+                        stopErrorLabel = stopErrorLabel,
+                        onStop = { requestStop() },
+                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
                 ComposerBar(
@@ -428,12 +595,14 @@ fun ChatScreen(
 }
 
 /**
- * Holder for the running turn collector. It is deliberately not keyed by
- * profile/session (see [ChatScreen]) so a disposed effect can still
- * cancel the collector of the previous session.
+ * Holder for the running turn collector and the in-flight stop request.
+ * It is deliberately not keyed by profile/session (see [ChatScreen]) so
+ * a disposed effect can still cancel the collector and stop request of
+ * the previous session.
  */
 private class TurnRuntime {
     var job: Job? = null
+    var stopJob: Job? = null
 }
 
 /**
@@ -506,6 +675,43 @@ private fun TurnFailureBlock(
             ) {
                 Text(stringResource(R.string.chat_refresh_history))
             }
+        }
+    }
+}
+
+/**
+ * The run-stop control (Mission 007B). [label] is the "Stop" label or,
+ * while a stop request is in flight, the "stopping" label; [enabled] is
+ * false while the request is in flight or while no server-confirmed run
+ * ID is bound yet. [showStopError] renders the one closed, generic stop
+ * failure message (no dynamic server detail, no run ID).
+ */
+@Composable
+private fun StopControl(
+    label: String,
+    enabled: Boolean,
+    showStopError: Boolean,
+    stopErrorLabel: String,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (showStopError) {
+            Text(
+                text = stopErrorLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
+        }
+        OutlinedButton(
+            onClick = onStop,
+            enabled = enabled
+        ) {
+            Text(label)
         }
     }
 }

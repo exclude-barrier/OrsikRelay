@@ -132,7 +132,7 @@ class StreamingChatRepositoryTest {
 
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted("run_synthetic"),
                 ChatTurnEvent.TurnCompleted
             ),
             events
@@ -319,7 +319,7 @@ class StreamingChatRepositoryTest {
         )
         val transport = DeferredTransport(
             listOf(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted("run_synthetic"),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
@@ -333,7 +333,7 @@ class StreamingChatRepositoryTest {
 
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted("run_synthetic"),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
@@ -459,7 +459,7 @@ class StreamingChatRepositoryTest {
             this.apiKey = apiKey
             this.sessionId = sessionId
             this.message = message
-            listener.onEvent(ChatTurnEvent.RunStarted)
+            listener.onEvent(ChatTurnEvent.RunStarted("run_synthetic"))
             listener.onEvent(ChatTurnEvent.TurnCompleted)
             listener.onFinished()
             return NoopHandle

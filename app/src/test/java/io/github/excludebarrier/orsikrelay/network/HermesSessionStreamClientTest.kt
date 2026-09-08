@@ -104,7 +104,7 @@ class HermesSessionStreamClientTest {
         assertFalse(request.requestUrl!!.toString().contains(FIXTURE_KEY))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
@@ -340,7 +340,7 @@ class HermesSessionStreamClientTest {
         assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.TurnFailed(ChatStreamError.Http)
             ),
@@ -387,7 +387,7 @@ class HermesSessionStreamClientTest {
         assertTrue("stream did not finish", listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
@@ -441,7 +441,7 @@ class HermesSessionStreamClientTest {
         )
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
@@ -479,7 +479,7 @@ class HermesSessionStreamClientTest {
         assertTrue("stream did not finish", listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
@@ -514,7 +514,7 @@ class HermesSessionStreamClientTest {
         assertTrue("stream did not finish", listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
@@ -616,7 +616,7 @@ class HermesSessionStreamClientTest {
         // missing, duplicated or reordered event anywhere in the
         // 200-delta burst.
         val expected = mutableListOf<ChatTurnEvent>(
-            ChatTurnEvent.RunStarted,
+            ChatTurnEvent.RunStarted(RUN_ID),
             ChatTurnEvent.AssistantStarted
         )
         expected += deltas.map { delta -> ChatTurnEvent.AssistantDelta(delta) }
@@ -654,7 +654,7 @@ class HermesSessionStreamClientTest {
         assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
                 ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
@@ -680,7 +680,7 @@ class HermesSessionStreamClientTest {
         assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
             ),
@@ -704,7 +704,7 @@ class HermesSessionStreamClientTest {
         assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
             ),
             listener.events
@@ -764,7 +764,7 @@ class HermesSessionStreamClientTest {
         assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
         assertEquals(
             listOf<ChatTurnEvent>(
-                ChatTurnEvent.RunStarted,
+                ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),

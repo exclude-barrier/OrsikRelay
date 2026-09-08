@@ -12,6 +12,7 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CountDownLatch
@@ -100,13 +101,15 @@ class ChatScreenUiTest {
     private fun setScreen(
         source: MessageHistorySource,
         chatSource: StreamingChatSource = streamingSourceThatNeverEmits,
-        onBack: () -> Unit = {}
+        onBack: () -> Unit = {},
+        runStopRequester: RunStopRequester = runStopRequesterThatIsNeverReached
     ) {
         composeRule.setContent {
             HermesTheme {
                 ChatScreen(
                     historySource = source,
                     chatSource = chatSource,
+                    runStopRequester = runStopRequester,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     onBack = onBack
@@ -140,9 +143,18 @@ class ChatScreenUiTest {
 
     private companion object {
         // These tests exercise the history slice only; the streaming seam
-        // is a synthetic fake that never emits and never fails.
+        // is a synthetic fake that never emits and never fails, and the
+        // run-stop seam is a synthetic fake that must never be reached
+        // (no turn is ever started here).
         val streamingSourceThatNeverEmits = StreamingChatSource { _, _, _ ->
             kotlinx.coroutines.flow.emptyFlow()
+        }
+        // RunStopRequester is a plain interface (no fun interface), so the
+        // never-reached fake is a small object implementation.
+        val runStopRequesterThatIsNeverReached = object : RunStopRequester {
+            override suspend fun stopRun(profileId: String, runId: String): Nothing {
+                throw AssertionError("run-stop must not be reachable in history-slice tests")
+            }
         }
     }
 }

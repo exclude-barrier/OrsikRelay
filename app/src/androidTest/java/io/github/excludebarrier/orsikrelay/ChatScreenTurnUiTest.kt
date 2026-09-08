@@ -18,6 +18,9 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.CancellationException
@@ -84,7 +87,7 @@ class ChatScreenTurnUiTest {
         // Vor RunStarted bleibt der Entwurf im Feld erhalten.
         assertEquals("  Doppelte Eingabe  ", draftText())
 
-        source.enqueue(ChatTurnEvent.RunStarted)
+        source.enqueue(ChatTurnEvent.RunStarted("run_synthetic"))
         // Erst RunStarted leert den Entwurf.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             draftText().isNullOrBlank()
@@ -117,7 +120,7 @@ class ChatScreenTurnUiTest {
         // fortgesetzt, weil das finale Ereignis die zusammengesetzte
         // Zeile ersetzt.
         source.enqueue(
-            ChatTurnEvent.RunStarted,
+            ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.AssistantStarted,
             ChatTurnEvent.AssistantDelta("Delta-1"),
             ChatTurnEvent.AssistantDelta("Delta-2")
@@ -165,7 +168,7 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText("Senden").performClick()
 
         source.enqueue(
-            ChatTurnEvent.RunStarted,
+            ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.AssistantStarted,
             ChatTurnEvent.ToolActivity
         )
@@ -252,7 +255,7 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText("Senden").performClick()
 
         source.enqueue(
-            ChatTurnEvent.RunStarted,
+            ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.TurnFailed(ChatStreamError.Network)
         )
         source.complete()
@@ -350,7 +353,7 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText("Senden").performClick()
 
         source.enqueue(
-            ChatTurnEvent.RunStarted,
+            ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.AssistantStarted
         )
         // Der Stream endet normal, ohne `TurnCompleted` und ohne
@@ -385,7 +388,7 @@ class ChatScreenTurnUiTest {
                 sessionId: String,
                 message: String
             ): Flow<ChatTurnEvent> = flow {
-                emit(ChatTurnEvent.RunStarted)
+                emit(ChatTurnEvent.RunStarted("run_synthetic"))
                 emit(ChatTurnEvent.AssistantStarted)
                 emit(ChatTurnEvent.AssistantCompleted("Sofort fertig"))
                 emit(ChatTurnEvent.TurnCompleted)
@@ -417,7 +420,7 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
-        source.enqueue(ChatTurnEvent.RunStarted, ChatTurnEvent.TurnCompleted)
+        source.enqueue(ChatTurnEvent.RunStarted("run_synthetic"), ChatTurnEvent.TurnCompleted)
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
@@ -441,7 +444,7 @@ class ChatScreenTurnUiTest {
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         source.enqueue(
-            ChatTurnEvent.RunStarted,
+            ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.TurnFailed(ChatStreamError.Network)
         )
 
@@ -466,6 +469,7 @@ class ChatScreenTurnUiTest {
                 ChatScreen(
                     historySource = history(emptyList()),
                     chatSource = if (key.value == "first-session") firstSource else secondSource,
+                    runStopRequester = FakeRunStopRequester(),
                     profileId = "fixture-profile-id",
                     sessionId = key.value,
                     onBack = {}
@@ -505,13 +509,15 @@ class ChatScreenTurnUiTest {
     private fun setScreen(
         source: MessageHistorySource,
         chatSource: StreamingChatSource,
-        onBack: () -> Unit = {}
+        onBack: () -> Unit = {},
+        runStopRequester: RunStopRequester = FakeRunStopRequester()
     ) {
         composeRule.setContent {
             HermesTheme {
                 ChatScreen(
                     historySource = source,
                     chatSource = chatSource,
+                    runStopRequester = runStopRequester,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     onBack = onBack
@@ -602,6 +608,396 @@ class ChatScreenTurnUiTest {
 
         fun complete() {
             activeChannel?.close()
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Mission 007B: the run-stop slice of the chat screen. All IDs are
+    // synthetic; no network, no credentials, no real server.
+    // ------------------------------------------------------------------
+
+    @Test
+    fun stopControlIsInvisibleBeforeRunStartedAndGoneAfterTerminalEvent() {
+        val stopper = FakeRunStopRequester()
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source, runStopRequester = stopper)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Test")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+
+        // Vor run.started ist der Stop-Control unsichtbar; ein Tipp
+        // kann den Stop-POST nicht erreichen.
+        assertTrue(
+            "stop control must be invisible before RunStarted",
+            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
+        )
+        assertEquals(0, stopper.calls.get())
+
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Stoppen").assertIsEnabled()
+
+        // Der terminale Streamzustand beendet den Turn; danach ist der
+        // Stop-Control wieder unsichtbar.
+        source.enqueue(ChatTurnEvent.TurnCompleted)
+        source.complete()
+        waitForFlowCompletion(source)
+        assertTrue(
+            "stop control must be invisible after the terminal event",
+            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
+        )
+    }
+
+    @Test
+    fun doubleTapOnStopSendsExactlyOneRequestAndShowsStopping() {
+        val stopper = FakeRunStopRequester()
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source, runStopRequester = stopper)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Doppeltipp")
+        composeRule.onNodeWithText("Senden").performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Stoppen")
+
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue("stop request must start", stopper.started.await(3, TimeUnit.SECONDS))
+        // Schneller zweiter Tipp während der laufenden Anfrage: der
+        // Control ist deaktiviert und es gibt genau einen Aufruf.
+        composeRule
+            .onNodeWithText("Wird gestoppt …")
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+        composeRule.onNodeWithText("Wird gestoppt …").performClick()
+        assertEquals("exactly one stop request", 1, stopper.calls.get())
+        assertEquals(RUN_ID, stopper.runId.get())
+        assertEquals("fixture-profile-id", stopper.profileId.get())
+
+        // Der Stream läuft weiter (kein lokaler Abbruch): der Abbruch-Latch
+        // ist noch intakt (1); erst das terminale Event beendet den Collector.
+        assertEquals("stream not interrupted by the stop", 1L, source.canceled.count)
+        stopper.release(RunStopResult.Accepted(RUN_ID))
+        source.enqueue(ChatTurnEvent.TurnCompleted)
+        source.complete()
+        waitForFlowCompletion(source)
+        assertTrue(
+            "stop control must be gone after the terminal event",
+            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
+        )
+        assertEquals(1, stopper.calls.get())
+    }
+
+    @Test
+    fun acceptedKeepsStoppingLabelUntilTheTerminalStreamEvent() {
+        val stopper = FakeRunStopRequester()
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source, runStopRequester = stopper)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Accepted")
+        composeRule.onNodeWithText("Senden").performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Stoppen")
+
+        stopper.gate = Channel(Channel.UNLIMITED)
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                composeRule.onNodeWithText("Wird gestoppt …").assertIsDisplayed()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+
+        // Accepted: nur "Stop angenommen" — kein optimistischer
+        // Terminalzustand, Composer bleibt blockiert, der Stream wird
+        // nicht lokal abgebrochen.
+        stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Wird gestoppt …").assertIsDisplayed()
+        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
+        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        // Der Collector läuft unverändert weiter (Abbruch-Latch intakt = 1);
+        // erst das terminale Stream-Event beendet ihn.
+        assertEquals("stream must not be interrupted locally", 1L, source.canceled.count)
+        assertEquals(1, source.calls.get())
+        assertEquals(1, stopper.calls.get())
+
+        // Erst der vorhandene terminale Streamzustand beendet den Turn
+        // und entfernt den Stop-Control.
+        source.enqueue(ChatTurnEvent.TurnCompleted)
+        source.complete()
+        waitForFlowCompletion(source)
+        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        assertTrue(
+            "stop control must be gone after the terminal event",
+            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
+        )
+        // Die Run-ID erscheint nie in der UI.
+        assertTrue(
+            "run id must not be rendered",
+            composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
+        )
+    }
+
+    @Test
+    fun stopFailureShowsGenericMessageAndAllowsOneManualRetry() {
+        val stopper = FakeRunStopRequester()
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source, runStopRequester = stopper)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Fehler")
+        composeRule.onNodeWithText("Senden").performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Stoppen")
+
+        stopper.gate = Channel(Channel.UNLIMITED)
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
+        // Generische lokale Meldung ohne dynamische Details; die
+        // laufende Streamsammlung bleibt unverändert; ein manueller
+        // erneuter Versuch ist wieder möglich.
+        stopper.gate!!.trySend(RunStopResult.Failure(RunStopError.Network))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                composeRule
+                    .onNodeWithText("Der laufende Run konnte nicht gestoppt werden.")
+                    .assertIsDisplayed()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+        assertTrue(
+            "no dynamic detail or run id in the failure message",
+            composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
+        )
+        assertEquals("running stream must stay untouched", 1L, source.canceled.count)
+        assertEquals(1, stopper.calls.get())
+        composeRule.onNodeWithText("Stoppen").assertIsEnabled()
+
+        // Der bewusste manuelle Retry sendet genau einen weiteren
+        // Request.
+        stopper.gate = Channel(Channel.UNLIMITED)
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
+        assertEquals("manual retry sends one further request", 2, stopper.calls.get())
+        stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
+
+        source.enqueue(ChatTurnEvent.TurnCompleted)
+        source.complete()
+        waitForFlowCompletion(source)
+        assertEquals("no further stop request after the terminal event", 2, stopper.calls.get())
+    }
+
+    @Test
+    fun alreadyTerminalTriggersHistoryRefreshOnlyAndNeverResendsTheChatPost() {
+        val historyCalls = AtomicInteger()
+        val stopper = FakeRunStopRequester()
+        val source = FakeTurnSource()
+        setScreen(
+            MessageHistorySource { _, _ ->
+                historyCalls.incrementAndGet()
+                MessageHistoryResult.Success(MessagePage(emptyList()))
+            },
+            source,
+            runStopRequester = stopper
+        )
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-AlreadyTerminal")
+        composeRule.onNodeWithText("Senden").performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Stoppen")
+        assertEquals(1, historyCalls.get())
+
+        stopper.gate = Channel(Channel.UNLIMITED)
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
+        stopper.gate!!.trySend(RunStopResult.AlreadyTerminal(RUN_ID))
+
+        // Der bestehende History-Refresh/Reconciliation-Pfad wird
+        // ausgelöst: genau ein zusätzlicher idempotenter History-Read;
+        // der Chat-POST wird niemals erneut gesendet.
+        composeRule.waitUntil(timeoutMillis = 5_000) { historyCalls.get() == 2 }
+        assertEquals(2, historyCalls.get())
+        assertEquals("no chat resending", 1, source.calls.get())
+        assertEquals("no second stop request", 1, stopper.calls.get())
+        composeRule.waitForIdle()
+        // Kein Stop-Control mehr; der Composer ist für einen neuen Run
+        // frei.
+        assertTrue(
+            "stop control must be gone after reconciliation",
+            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
+        )
+        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+    }
+
+    @Test
+    fun newRunResetsStopStateAndBindsOnlyItsOwnRunId() {
+        val stopper = FakeRunStopRequester()
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source, runStopRequester = stopper)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        // Erster Run: Stop schlägt fehl (generisch). Der Fake hat hier
+        // kein Gate, daher wird das Ergebnis vor dem Tipp synchron
+        // vorbereitet, damit der (ungegatede) Aufruf es zurückgibt.
+        composeRule.onNodeWithText("Nachricht").performTextInput("Erster Lauf")
+        composeRule.onNodeWithText("Senden").performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Stoppen")
+        stopper.release(RunStopResult.Failure(RunStopError.Network))
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                composeRule
+                    .onNodeWithText("Der laufende Run konnte nicht gestoppt werden.")
+                    .assertIsDisplayed()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+        assertEquals(1, stopper.calls.get())
+
+        // Sauberer terminaler Abschluss des ersten Runs: Stop-Zustand
+        // (incl. Failure) und gebundene Run-ID werden zurückgesetzt und
+        // der Composer wird frei.
+        source.enqueue(ChatTurnEvent.TurnCompleted)
+        source.complete()
+        waitForFlowCompletion(source)
+        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+
+        // Zweiter Run: der Stop-Zustand des ersten Runs ist weg und es
+        // wird nur die Run-ID des neuen Runs gebunden.
+        stopper.release(RunStopResult.Accepted(NEW_RUN_ID))
+        composeRule.onNodeWithText("Nachricht").performTextInput("Zweiter Lauf")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertEquals(2, source.calls.get())
+        source.enqueue(ChatTurnEvent.RunStarted(NEW_RUN_ID))
+        waitForText("Stoppen")
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
+        assertEquals("new run binds only its own run id", NEW_RUN_ID, stopper.runId.get())
+        assertEquals("second stop is exactly one further call", 2, stopper.calls.get())
+        // Die alte Run-ID darf nirgends (mehr) auftauchen.
+        assertTrue(
+            "old run id must not appear anywhere",
+            composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
+        )
+
+        source.enqueue(ChatTurnEvent.TurnCompleted)
+        source.complete()
+        waitForFlowCompletion(source)
+        assertEquals("no further stop after the second terminal event", 2, stopper.calls.get())
+    }
+
+    @Test
+    fun backWhileStopRequestIsInFlightCancelsItSafelyBeforeOnBack() {
+        val stopper = FakeRunStopRequester()
+        val source = FakeTurnSource()
+        val backInvoked = CountDownLatch(1)
+        setScreen(
+            history(emptyList()),
+            source,
+            onBack = { backInvoked.countDown() },
+            runStopRequester = stopper
+        )
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Back")
+        composeRule.onNodeWithText("Senden").performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Stoppen")
+
+        // Der Stop-Aufruf bleibt in der Anfrage hängen.
+        stopper.gate = Channel(Channel.UNLIMITED)
+        composeRule.onNodeWithText("Stoppen").performClick()
+        assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                composeRule.onNodeWithText("Wird gestoppt …").assertIsDisplayed()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+
+        // Back muss auch die laufende Stop-Coroutine abbrechen und
+        // sicher zurückkehren.
+        composeRule.onNodeWithText("Zurück").performClick()
+        assertTrue("onBack was not invoked", backInvoked.await(3, TimeUnit.SECONDS))
+        assertTrue(
+            "the in-flight stop coroutine must be canceled by back",
+            stopper.canceled.await(3, TimeUnit.SECONDS)
+        )
+        assertEquals("no state write may follow after the screen was left", 1, stopper.calls.get())
+        assertEquals(1, source.calls.get())
+        assertTrue(
+            "stop control must be gone after back",
+            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
+        )
+        // Ein später Callback (Resultat nach dem Verlassen) darf den
+        // verlassenen Screen nicht mehr mutieren: der Screen ist
+        // zurückgesetzt, der Composer ist frei.
+        stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
+        composeRule.waitForIdle()
+        assertTrue(
+            "late result must not resurrect the stop control",
+            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
+        )
+        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+    }
+
+    private companion object {
+        const val RUN_ID = "run_synthetic"
+        const val NEW_RUN_ID = "run_synthetic_2"
+    }
+
+    /**
+     * Synthetic stop fake (Mission 007B): no network, no credentials.
+     * [gate] (when set) suspends the request until the test sends the
+     * result; [release] returns a pre-set result immediately.
+     */
+    private class FakeRunStopRequester : RunStopRequester {
+        val calls = AtomicInteger()
+        val profileId = AtomicReference<String>()
+        val runId = AtomicReference<String>()
+        val started = CountDownLatch(1)
+        // Counts down exactly once if the stop coroutine is canceled while
+        // suspended on the gate (back / disposal). Never fires when a
+        // result is delivered normally.
+        val canceled = CountDownLatch(1)
+        @Volatile
+        var gate: Channel<RunStopResult>? = null
+        @Volatile
+        var immediateResult: RunStopResult = RunStopResult.Accepted("run_synthetic")
+
+        override suspend fun stopRun(profileId: String, runId: String): RunStopResult {
+            calls.incrementAndGet()
+            this.profileId.set(profileId)
+            this.runId.set(runId)
+            started.countDown()
+            val gate = this.gate
+            return try {
+                if (gate == null) immediateResult else gate.receive()
+            } catch (error: CancellationException) {
+                canceled.countDown()
+                throw error
+            }
+        }
+
+        fun release(result: RunStopResult) {
+            immediateResult = result
         }
     }
 }

@@ -154,7 +154,7 @@ class ChatStreamEventPipeline(
                     throw protocol()
                 }
                 runStarted = true
-                return listOf(ChatTurnEvent.RunStarted)
+                return listOf(ChatTurnEvent.RunStarted(boundRunId ?: throw protocol()))
             }
             MESSAGE_STARTED -> {
                 if (!runStarted || messageStarted || runCompleted || sawError) {
