@@ -16,10 +16,20 @@ import org.junit.runner.RunWith
 
 /**
  * Instrumentation tests for the app-private [SharedPreferencesChatDraftStore]
- * (Mission 009A) against the real production persistence implementation
- * (SharedPreferences). Covers exact round-trip, replacement, empty-delete,
- * composite-key collision resistance and the closed failure surface (no
- * input echo).
+ * (Mission 009A, profile cleanup 009B) against the real production
+ * persistence implementation (SharedPreferences). Covers exact round-trip,
+ * replacement, empty-delete, composite-key collision resistance, the closed
+ * failure surface (no input echo) and [SharedPreferencesChatDraftStore.clearProfile]:
+ * multi-session removal for exactly one profile, isolation of reserved,
+ * delimiter, whitespace, plus/minus, prefix-like and Unicode IDs, and
+ * idempotency.
+ *
+ * Note on the failure surface: a forced `commit()` failure of the real
+ * SharedPreferences is not deterministically reachable in instrumentation
+ * (the durable write renames over the target file and the app-private
+ * directory stays writable), so the store's closed mapping is proven by the
+ * constructor-failure tests below (same `call` wrapper path) and by the JVM
+ * repository tests against a failing store.
  */
 @RunWith(AndroidJUnit4::class)
 class SharedPreferencesChatDraftStoreTest {
@@ -123,6 +133,92 @@ class SharedPreferencesChatDraftStoreTest {
         assertClosed(error, listOf(PROFILE, SESSION, "seed-value"))
     }
 
+    // -- profile cleanup (Mission 009B) --------------------------------------
+
+    @Test
+    fun clearProfileRemovesEverySessionDraftOfExactlyThatProfile() {
+        store.save(PROFILE, "session-1", "Entwurf 1")
+        store.save(PROFILE, "session-2", "Entwurf 2")
+        store.save(PROFILE, "session-with.dot", "Entwurf 3")
+        store.save(OTHER_PROFILE, "session-1", "Fremd 1")
+        store.save(OTHER_PROFILE, "session-2", "Fremd 2")
+
+        store.clearProfile(PROFILE)
+
+        assertNull(store.load(PROFILE, "session-1"))
+        assertNull(store.load(PROFILE, "session-2"))
+        assertNull(store.load(PROFILE, "session-with.dot"))
+        assertEquals("Fremd 1", store.load(OTHER_PROFILE, "session-1"))
+        assertEquals("Fremd 2", store.load(OTHER_PROFILE, "session-2"))
+    }
+
+    @Test
+    fun clearProfileKeepsReservedDelimiterWhitespacePlusMinusAndUnicodeProfilesIsolated() {
+        // IDs that would alias each other under a naive key scheme must stay
+        // isolated through a whole-profile clear.
+        store.save("a", "b.c", "A")
+        store.save("a.b", "c", "B")
+        store.save("ab", "c", "AB")
+        store.save("profile", "s", "P")
+        store.save("profile-id", "s", "P-ID")
+        store.save("profileX", "s", "P-X")
+        store.save("pro file", "s", "P-WS")
+        store.save("läuft", "s", "P-UNI")
+        store.save("x+y", "s", "P-PLUS")
+        store.save("x-y", "s", "P-MINUS")
+        store.save("a/b", "s", "P-SLASH")
+        store.save("a.b/c", "s", "P-SLASH-2")
+
+        store.clearProfile("a.b")
+
+        assertNull("only the requested profile is removed", store.load("a.b", "c"))
+        assertEquals("A", store.load("a", "b.c"))
+        assertEquals("AB", store.load("ab", "c"))
+        assertEquals("P", store.load("profile", "s"))
+        assertEquals("P-ID", store.load("profile-id", "s"))
+        assertEquals("P-X", store.load("profileX", "s"))
+        assertEquals("P-WS", store.load("pro file", "s"))
+        assertEquals("P-UNI", store.load("läuft", "s"))
+        assertEquals("P-PLUS", store.load("x+y", "s"))
+        assertEquals("P-MINUS", store.load("x-y", "s"))
+        assertEquals("P-SLASH", store.load("a/b", "s"))
+        assertEquals("P-SLASH-2", store.load("a.b/c", "s"))
+    }
+
+    @Test
+    fun clearProfileRemovesEveryRawKeyOfTheProfileInOneCommit() {
+        store.save(PROFILE, "session-1", "Entwurf 1")
+        store.save(PROFILE, "session-2", "Entwurf 2")
+
+        store.clearProfile(PROFILE)
+
+        val raw = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
+        val remaining = raw.all.keys.filter { it.startsWith(KEY_PREFIX) }
+        assertTrue(
+            "no key of the deleted profile may remain",
+            remaining.none { it.startsWith(profilePrefix(PROFILE)) }
+        )
+    }
+
+    @Test
+    fun repeatedClearProfileIsIdempotent() {
+        store.save(PROFILE, SESSION, "Entwurf")
+        store.clearProfile(PROFILE)
+        store.clearProfile(PROFILE)
+        store.clearProfile(PROFILE) // no drafts at all anymore
+
+        assertNull(store.load(PROFILE, SESSION))
+    }
+
+    @Test
+    fun clearProfileOfUnknownProfileIsIdempotentAndRemovesNothing() {
+        store.save(PROFILE, SESSION, "Entwurf")
+
+        store.clearProfile("unbekanntes-profil")
+
+        assertEquals("Entwurf", store.load(PROFILE, SESSION))
+    }
+
     // -- helpers -------------------------------------------------------------
 
     private fun assertDraftFailure(action: () -> Unit): ChatDraftStoreException {
@@ -147,9 +243,13 @@ class SharedPreferencesChatDraftStoreTest {
         }
     }
 
+    private fun profilePrefix(profileId: String): String =
+        KEY_PREFIX + encodeKeyComponent(profileId) + "."
+
     private companion object {
         const val PROFILE = "fixture-profile"
         const val SESSION = "fixture-session"
+        const val OTHER_PROFILE = "other-profile"
         const val KEY_PREFIX = "chat.draft.v1."
     }
 }

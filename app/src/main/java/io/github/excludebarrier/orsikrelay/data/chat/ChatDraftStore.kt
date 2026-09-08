@@ -33,6 +33,14 @@ interface ChatDraftStore {
      * already-absent pair succeeds silently.
      */
     fun delete(profileId: String, sessionId: String)
+
+    /**
+     * Removes every stored draft belonging to [profileId] (all sessions) in
+     * one idempotent operation (Mission 009B). Clearing a profile that has
+     * no stored drafts succeeds silently and never affects other profiles'
+     * drafts.
+     */
+    fun clearProfile(profileId: String)
 }
 
 /**
@@ -50,6 +58,10 @@ interface ChatDraftStore {
 internal fun chatDraftKey(profileId: String, sessionId: String): String =
     encodeKeyComponent(profileId) + "." + encodeKeyComponent(sessionId)
 
-private fun encodeKeyComponent(value: String): String =
+// Internal (not private) so the production store can build the exact
+// `KEY_PREFIX + encodedProfile + "."` prefix for [ChatDraftStore.clearProfile]
+// without duplicating the encoding. The alphabet never contains `.`, which is
+// what keeps the prefix match exact.
+internal fun encodeKeyComponent(value: String): String =
     Base64.getUrlEncoder().withoutPadding()
         .encodeToString(value.toByteArray(StandardCharsets.UTF_8))

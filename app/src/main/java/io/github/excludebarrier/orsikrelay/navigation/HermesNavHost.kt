@@ -70,9 +70,17 @@ fun HermesNavHost(
         lazy {
             val credentialStore = AndroidKeystoreCredentialStore(applicationContext)
             val metadataStore = SharedPreferencesServerProfileMetadataStore(applicationContext)
-            val profileRepository = ServerProfileRepository(metadataStore, credentialStore)
+            // One production ChatDraftRepository instance shared by the chat
+            // screen and the profile repository (Mission 009B): profile
+            // deletion clears the drafts through this same instance, so no
+            // second, independent store is created.
             val chatDraftRepository = SharedPreferencesChatDraftRepository(
                 store = SharedPreferencesChatDraftStore(applicationContext)
+            )
+            val profileRepository = ServerProfileRepository(
+                metadataStore = metadataStore,
+                credentialStore = credentialStore,
+                profileDraftClearer = chatDraftRepository
             )
             ProductionDependencies(
                 coordinator = ProfileConnectionCoordinator(

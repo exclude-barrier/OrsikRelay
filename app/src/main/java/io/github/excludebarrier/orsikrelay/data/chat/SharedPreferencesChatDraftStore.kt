@@ -63,6 +63,24 @@ class SharedPreferencesChatDraftStore(
         }
     }
 
+    override fun clearProfile(profileId: String) {
+        call {
+            // Every key of the profile is `KEY_PREFIX + <b64url(profile)> + "."
+            // + <b64url(session)>; the base64url alphabet never contains ".",
+            // so exactly this prefix marks the profile's keys — and nothing
+            // else's (prefix-like or delimiter-carrying IDs cannot alias it).
+            val prefix = KEY_PREFIX + encodeKeyComponent(profileId) + "."
+            val editor = preferences.edit()
+            for (key in preferences.all.keys) {
+                if (key.startsWith(prefix)) editor.remove(key)
+            }
+            // Idempotent: committing with nothing to remove still succeeds.
+            if (!editor.commit()) {
+                throw ChatDraftStoreException()
+            }
+        }
+    }
+
     private fun draftKey(profileId: String, sessionId: String): String =
         KEY_PREFIX + chatDraftKey(profileId, sessionId)
 

@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.data.chat
 
+import io.github.excludebarrier.orsikrelay.data.profile.ProfileDraftClearer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -31,11 +32,16 @@ import kotlinx.coroutines.withContext
  *   stored state (used after a successful send handoff).
  * - [flushPendingDraft] writes the currently pending value immediately
  *   (deterministic flush on leaving the screen / a key switch).
+ * - [clearProfile] removes every stored draft of one profile (all sessions)
+ *   after the profile has been deleted (Mission 009B). It cancels any
+ *   pending debounced write for that profile, serializes the deletion
+ *   behind writes already entered into the store, and leaves pending writes
+ *   for other profiles intact.
  *
  * Implementations must keep the composer usable on any storage failure and
  * must never surface draft text in an error or log.
  */
-interface ChatDraftRepository {
+interface ChatDraftRepository : ProfileDraftClearer {
     suspend fun loadDraft(profileId: String, sessionId: String): String?
     fun persistDraft(profileId: String, sessionId: String, text: String)
     fun clearDraft(profileId: String, sessionId: String)
@@ -62,6 +68,12 @@ interface ChatDraftRepository {
  * [Dispatchers.IO] and are exempt from the write order — the store's own
  * `commit()` semantics guarantee read-your-writes for an already-committed
  * value.
+ *
+ * Profile deletion ([clearProfile], Mission 009B) cancels the profile's
+ * pending write and runs the store-wide removal through the same [Mutex]: a
+ * save already entered `commit()` for that profile can never resurrect an
+ * orphan after the profile is gone, and pending writes for other profiles
+ * are left untouched.
  *
  * Every storage failure is absorbed by the closed [ChatDraftStoreException]
  * in the store; this repository swallows it so the composer stays usable and
@@ -141,6 +153,17 @@ class SharedPreferencesChatDraftRepository(
         scope.launch { saveNow(current) }
     }
 
+    override fun clearProfile(profileId: String) {
+        val current = pending
+        // Cancel only this profile's pending write; a pending write for a
+        // different profile is left to be flushed on its own boundary.
+        if (current != null && current.profileId == profileId) {
+            current.job?.cancel()
+            pending = null
+        }
+        scope.launch { clearProfileNow(profileId) }
+    }
+
     private suspend fun saveNow(write: PendingWrite) {
         writeMutex.withLock {
             withContext(Dispatchers.IO) {
@@ -165,6 +188,22 @@ class SharedPreferencesChatDraftRepository(
                     throw error
                 } catch (_: Exception) {
                     // Swallowed, same reason as [saveNow].
+                }
+            }
+        }
+    }
+
+    private suspend fun clearProfileNow(profileId: String) {
+        writeMutex.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    store.clearProfile(profileId)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // Swallowed, same reason as [saveNow]: profile deletion
+                    // must keep its existing generic failure boundary and the
+                    // composer usable, exposing no profile ID or draft text.
                 }
             }
         }

@@ -99,7 +99,8 @@ class ServerProfileRepositoryTest {
         val credentials = FakeCredentialStore(events).apply {
             values[FIXED_ID] = SecretValue(FIXTURE_SECRET)
         }
-        val repository = repository(metadata, credentials)
+        val clearer = RecordingProfileDraftClearer(events)
+        val repository = repository(metadata, credentials, clearer)
 
         repository.delete(FIXED_ID)
         repository.delete(FIXED_ID)
@@ -108,11 +109,88 @@ class ServerProfileRepositoryTest {
             listOf(
                 "credential.delete",
                 "metadata.delete",
+                "draft.clearProfile",
                 "credential.delete",
-                "metadata.delete"
+                "metadata.delete",
+                "draft.clearProfile"
             ),
             events
         )
+        assertNull(metadata.profiles[FIXED_ID])
+        assertNull(credentials.values[FIXED_ID])
+        assertEquals(2, clearer.clearCalls)
+        assertEquals(listOf(FIXED_ID, FIXED_ID), clearer.clearedProfileIds)
+    }
+
+    @Test
+    fun `credential delete failure preserves drafts and uses the fixed boundary`() {
+        val events = mutableListOf<String>()
+        val metadata = FakeMetadataStore(events).apply { profiles[FIXED_ID] = profile() }
+        val credentials = FakeCredentialStore(events).apply { failDelete = true }
+        val clearer = RecordingProfileDraftClearer(events)
+        val repository = repository(metadata, credentials, clearer)
+
+        val error = assertRepositoryFailure { repository.delete(FIXED_ID) }
+
+        assertEquals(listOf("credential.delete"), events)
+        assertTrue("metadata stays on a credential failure", metadata.profiles.containsKey(FIXED_ID))
+        assertTrue("drafts stay on a credential failure", clearer.clearCalls == 0)
+        assertEquals(
+            ServerProfileRepositoryException.MESSAGE,
+            error.message
+        )
+        assertFalse(error.toString().contains(FIXED_ID))
+    }
+
+    @Test
+    fun `metadata delete failure preserves drafts and uses the fixed boundary`() {
+        val events = mutableListOf<String>()
+        val metadata = FakeMetadataStore(events).apply {
+            profiles[FIXED_ID] = profile()
+            failDelete = true
+        }
+        val credentials = FakeCredentialStore(events).apply {
+            values[FIXED_ID] = SecretValue(FIXTURE_SECRET)
+        }
+        val clearer = RecordingProfileDraftClearer(events)
+        val repository = repository(metadata, credentials, clearer)
+
+        val error = assertRepositoryFailure { repository.delete(FIXED_ID) }
+
+        assertEquals(listOf("credential.delete", "metadata.delete"), events)
+        assertTrue("drafts stay on a metadata failure", clearer.clearCalls == 0)
+        assertEquals(ServerProfileRepositoryException.MESSAGE, error.message)
+        assertFalse(error.toString().contains(FIXED_ID))
+    }
+
+    @Test
+    fun `failing draft cleaner never turns a successful deletion into a failure`() {
+        val metadata = FakeMetadataStore(mutableListOf()).apply { profiles[FIXED_ID] = profile() }
+        val credentials = FakeCredentialStore(mutableListOf()).apply {
+            values[FIXED_ID] = SecretValue(FIXTURE_SECRET)
+        }
+        val repository = repository(metadata, credentials, FailingProfileDraftClearer())
+
+        // Must not throw: the profile is already deleted, and no underlying
+        // exception detail may leak through the repository boundary.
+        repository.delete(FIXED_ID)
+
+        assertNull(metadata.profiles[FIXED_ID])
+        assertNull(credentials.values[FIXED_ID])
+    }
+
+    @Test
+    fun `delete without a draft cleaner keeps the previous behavior`() {
+        val events = mutableListOf<String>()
+        val metadata = FakeMetadataStore(events).apply { profiles[FIXED_ID] = profile() }
+        val credentials = FakeCredentialStore(events).apply {
+            values[FIXED_ID] = SecretValue(FIXTURE_SECRET)
+        }
+        val repository = repository(metadata, credentials)
+
+        repository.delete(FIXED_ID)
+
+        assertEquals(listOf("credential.delete", "metadata.delete"), events)
         assertNull(metadata.profiles[FIXED_ID])
         assertNull(credentials.values[FIXED_ID])
     }
@@ -145,11 +223,13 @@ class ServerProfileRepositoryTest {
 
     private fun repository(
         metadata: FakeMetadataStore,
-        credentials: FakeCredentialStore
+        credentials: FakeCredentialStore,
+        profileDraftClearer: ProfileDraftClearer? = null
     ) = ServerProfileRepository(
         metadataStore = metadata,
         credentialStore = credentials,
-        idFactory = { FIXED_ID }
+        idFactory = { FIXED_ID },
+        profileDraftClearer = profileDraftClearer
     )
 
     private fun draft() = ProfileDraft(
@@ -178,6 +258,7 @@ class ServerProfileRepositoryTest {
     ) : ServerProfileMetadataStore {
         val profiles = linkedMapOf<String, ServerProfile>()
         var failSave = false
+        var failDelete = false
 
         override fun save(profile: ServerProfile) {
             events += "metadata.save"
@@ -197,6 +278,7 @@ class ServerProfileRepositoryTest {
 
         override fun delete(profileId: String) {
             events += "metadata.delete"
+            if (failDelete) throw IllegalStateException("synthetic metadata delete failure")
             profiles.remove(profileId)
         }
     }
@@ -206,6 +288,7 @@ class ServerProfileRepositoryTest {
     ) : CredentialStore {
         val values = linkedMapOf<String, SecretValue>()
         var failPut = false
+        var failDelete = false
         var getCalls = 0
 
         override fun put(profileId: String, secret: SecretValue) {
@@ -222,7 +305,27 @@ class ServerProfileRepositoryTest {
 
         override fun delete(profileId: String) {
             events += "credential.delete"
+            if (failDelete) throw IllegalStateException("synthetic credential delete failure")
             values.remove(profileId)
+        }
+    }
+
+    private class RecordingProfileDraftClearer(
+        private val events: MutableList<String>
+    ) : ProfileDraftClearer {
+        var clearCalls = 0
+        val clearedProfileIds = mutableListOf<String>()
+
+        override fun clearProfile(profileId: String) {
+            clearCalls++
+            clearedProfileIds += profileId
+            events += "draft.clearProfile"
+        }
+    }
+
+    private class FailingProfileDraftClearer : ProfileDraftClearer {
+        override fun clearProfile(profileId: String) {
+            throw IllegalStateException("synthetic draft cleanup failure")
         }
     }
 

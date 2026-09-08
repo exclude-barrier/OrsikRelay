@@ -293,6 +293,106 @@ class ChatDraftRepositoryTest {
         assertTrue("both keys were written", store.saveCalls >= 2)
     }
 
+    // -- profile cleanup (Mission 009B) --------------------------------------
+
+    @Test
+    fun clearProfileCancelsPendingWriteForThatProfile() = runTest {
+        val store = RecordingStore()
+        val repo = repository(this, store)
+
+        repo.persistDraft(PROFILE, SESSION, "wird gelöscht")
+        repo.clearProfile(PROFILE) // before the debounce fires
+        advance(this)
+        this.testScheduler.advanceUntilIdle()
+        awaitTrue({ store.clearProfileCalls >= 1 }, "profile clear reached the store")
+
+        assertNull(
+            "a pending write of the deleted profile must not land on disk",
+            store.valueFor(PROFILE, SESSION)
+        )
+        assertEquals("no save of the cleared profile may reach the store", 0, store.saveCalls)
+    }
+
+    @Test
+    fun blockedSaveOfDeletedProfileThenClearProfileEndsAbsent() = runTest {
+        // A save already entered into the store for the profile to be deleted
+        // must be serialized: the profile clear runs BEHIND it on the
+        // repository's single writer, so the late save can never resurrect an
+        // orphan after the profile deletion.
+        val store = BlockingStore()
+        val repo = repository(this, store)
+
+        repo.persistDraft(PROFILE, SESSION, "späterer save")
+        advance(this)
+        assertTrue(
+            "the save must reach the store before the profile deletion",
+            store.saveEntered.await(10, TimeUnit.SECONDS)
+        )
+        // The save is blocked inside the store call; its value is not yet
+        // committed.
+        assertNull(store.valueFor(PROFILE, SESSION))
+
+        // A later profile deletion (e.g. the user deletes the profile while a
+        // write is in flight) is queued BEHIND the in-flight save on the
+        // repository's single writer.
+        repo.clearProfile(PROFILE)
+        store.releaseSave() // release the blocked save
+        // Let the queued clear job start: it reaches the real (non-
+        // virtualized) IO store call while the save finishes.
+        advance(this)
+        // Wait until the clearProfile store call has COMPLETED, then assert
+        // the final state.
+        assertTrue(
+            "the profile clear must complete",
+            store.clearFinished.await(10, TimeUnit.SECONDS)
+        )
+
+        assertNull(
+            "the later profile clear must win over the earlier save: no orphan",
+            store.valueFor(PROFILE, SESSION)
+        )
+    }
+
+    @Test
+    fun clearProfileLeavesPendingWriteOfAnotherProfileIntact() = runTest {
+        val store = RecordingStore()
+        val repo = repository(this, store)
+
+        repo.persistDraft(OTHER_PROFILE, SESSION, "Fremdprofil-Entwurf")
+        repo.clearProfile(PROFILE) // deletes a DIFFERENT profile
+        advance(this)
+        awaitTrue(
+            { store.valueFor(OTHER_PROFILE, SESSION) == "Fremdprofil-Entwurf" },
+            "other profile's pending write saved"
+        )
+
+        assertEquals("Fremdprofil-Entwurf", store.valueFor(OTHER_PROFILE, SESSION))
+    }
+
+    @Test
+    fun failingClearProfileIsSwallowedAndExposesNoInput() = runTest {
+        val store = FailingStore()
+        val repo = repository(this, store)
+
+        // A failing profile clear must be absorbed: the caller (profile
+        // deletion) completes, no exception escapes, and no profile ID or
+        // draft text is surfaced.
+        repo.clearProfile(PROFILE)
+        advance(this)
+        awaitTrue({ store.failedClearProfileCalls >= 1 }, "failing clear attempted")
+    }
+
+    @Test
+    fun clearProfileIsIdempotentAtTheStoreLevel() = runTest {
+        val store = RecordingStore()
+        val repo = repository(this, store)
+
+        repo.clearProfile(PROFILE)
+        repo.clearProfile(PROFILE)
+        // The store I/O runs on the real IO dispatcher, so wait for it.
+        awaitTrue({ store.clearProfileCalls >= 2 }, "both clears reached the store")
+    }
+
     // -- composite key -------------------------------------------------------
 
     @Test
@@ -360,6 +460,7 @@ class ChatDraftRepositoryTest {
 
     private companion object {
         const val PROFILE = "fixture-profile"
+        const val OTHER_PROFILE = "other-profile"
         const val SESSION = "fixture-session"
         const val DEBOUNCE = 400L
         const val AWAIT_DEADLINE_SECONDS = 5L
@@ -377,6 +478,9 @@ private class RecordingStore : ChatDraftStore {
         private set
     @Volatile
     var loadCalls = 0
+        private set
+    @Volatile
+    var clearProfileCalls = 0
         private set
 
     private val saved = HashMap<String, String>()
@@ -398,6 +502,15 @@ private class RecordingStore : ChatDraftStore {
         deleteCalls++
         synchronized(saved) { saved.remove(chatDraftKey(profileId, sessionId)) }
     }
+
+    override fun clearProfile(profileId: String) {
+        val prefix = encodeKeyComponent(profileId) + "."
+        synchronized(saved) {
+            saved.keys.filterTo(mutableListOf()) { it.startsWith(prefix) }
+                .forEach { saved.remove(it) }
+            clearProfileCalls++
+        }
+    }
 }
 
 /** [ChatDraftStore] that always fails with the closed exception. */
@@ -410,6 +523,9 @@ private class FailingStore : ChatDraftStore {
         private set
     @Volatile
     var failedDeleteCalls = 0
+        private set
+    @Volatile
+    var failedClearProfileCalls = 0
         private set
 
     override fun load(profileId: String, sessionId: String): String? {
@@ -426,6 +542,11 @@ private class FailingStore : ChatDraftStore {
         failedDeleteCalls++
         throw ChatDraftStoreException()
     }
+
+    override fun clearProfile(profileId: String) {
+        failedClearProfileCalls++
+        throw ChatDraftStoreException()
+    }
 }
 
 /**
@@ -433,18 +554,25 @@ private class FailingStore : ChatDraftStore {
  * via [releaseSave]. It makes the store I/O of an already-dispatched write
  * observably in flight, so a test can queue a later clear/delete behind it
  * and prove the repository's single writer keeps the ACTUAL store calls in
- * invocation order.
+ * invocation order. [clearFinished] is counted down after the (real,
+ * non-virtualized) `clearProfile` store call completed, so a test can wait
+ * for the clear to be done — not merely entered.
  */
 private class BlockingStore : ChatDraftStore {
     /** Counted down once per save call, right before the (blocking) write. */
     val saveEntered = CountDownLatch(1)
     private val release = CountDownLatch(1)
+    /** Counted down once per [clearProfile] call, right after it completed. */
+    val clearFinished = CountDownLatch(1)
 
     @Volatile
     var saveCalls = 0
         private set
     @Volatile
     var deleteCalls = 0
+        private set
+    @Volatile
+    var clearProfileCalls = 0
         private set
 
     private val saved = HashMap<String, String>()
@@ -468,6 +596,17 @@ private class BlockingStore : ChatDraftStore {
     override fun delete(profileId: String, sessionId: String) {
         deleteCalls++
         synchronized(saved) { saved.remove(chatDraftKey(profileId, sessionId)) }
+    }
+
+    override fun clearProfile(profileId: String) {
+        val prefix = encodeKeyComponent(profileId) + "."
+        synchronized(saved) {
+            saved.keys.filterTo(mutableListOf()) { it.startsWith(prefix) }
+                .forEach { saved.remove(it) }
+            clearProfileCalls++
+        }
+        // Signal AFTER the removal: the test waits for completion, not entry.
+        clearFinished.countDown()
     }
 
     /** Releases the blocked [save]. */

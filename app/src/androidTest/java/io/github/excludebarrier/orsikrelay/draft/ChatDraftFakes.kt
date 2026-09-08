@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.draft
 
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.chatDraftKey
+import io.github.excludebarrier.orsikrelay.data.chat.encodeKeyComponent
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -36,6 +37,14 @@ class InMemoryChatDraftRepository : ChatDraftRepository {
     override fun clearDraft(profileId: String, sessionId: String) {
         map.remove(chatDraftKey(profileId, sessionId))
         lastPersistedText = null
+    }
+
+    override fun clearProfile(profileId: String) {
+        // Removes every draft of [profileId] (all sessions), exactly like the
+        // production repository after a profile deletion (Mission 009B).
+        val prefix = encodeKeyComponent(profileId) + "."
+        map.keys.filterTo(mutableListOf()) { it.startsWith(prefix) }
+            .forEach { map.remove(it) }
     }
 
     override fun flushPendingDraft() {
@@ -96,6 +105,10 @@ class ControllableDraftRepository : ChatDraftRepository {
     fun wasCleared(profileId: String, sessionId: String): Boolean =
         clearedKeysSnapshot.contains(chatDraftKey(profileId, sessionId))
 
+    override fun clearProfile(profileId: String) {
+        // no-op: the stale-load test never deletes a profile
+    }
+
     override fun flushPendingDraft() {
         // no-op
     }
@@ -126,5 +139,6 @@ class NoOpChatDraftRepository : ChatDraftRepository {
     override suspend fun loadDraft(profileId: String, sessionId: String): String? = null
     override fun persistDraft(profileId: String, sessionId: String, text: String) {}
     override fun clearDraft(profileId: String, sessionId: String) {}
+    override fun clearProfile(profileId: String) {}
     override fun flushPendingDraft() {}
 }
