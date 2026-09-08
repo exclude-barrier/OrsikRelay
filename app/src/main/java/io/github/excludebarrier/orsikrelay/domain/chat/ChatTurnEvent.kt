@@ -31,8 +31,15 @@ sealed interface ChatTurnEvent {
     /** Generic tool activity; never includes tool name, args or preview. */
     data object ToolActivity : ChatTurnEvent
 
-    /** The run completed successfully. */
-    data object TurnCompleted : ChatTurnEvent
+    /**
+     * The run completed successfully. [pendingSteer] carries the server's
+     * `pending_steer` field of `run.completed`, preserved exactly (Mission
+     * 008B): a steer that was queued but not yet applied by the run comes
+     * back here. It is `null` when the field was absent, blank, or not a
+     * string. The UI must only offer to send it as a NEW message — never
+     * automatically — and it is not a steer request itself.
+     */
+    data class TurnCompleted(val pendingSteer: String? = null) : ChatTurnEvent
 
     /** Closed generic failure; nothing is retried automatically. */
     data class TurnFailed(val error: ChatStreamError) : ChatTurnEvent

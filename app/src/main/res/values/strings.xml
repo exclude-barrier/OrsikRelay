@@ -43,6 +43,13 @@
     <string name="chat_stop">Stoppen</string>
     <string name="chat_stopping">Wird gestoppt …</string>
     <string name="error_run_stop_generic">Der laufende Run konnte nicht gestoppt werden.</string>
+    <string name="chat_steer">Steuern</string>
+    <string name="chat_steer_input_label">Kurskorrektur</string>
+    <string name="chat_steering">Wird gesteuert …</string>
+    <string name="chat_steer_queued">Steuerung eingereiht.</string>
+    <string name="error_run_steer_generic">Die Steuerung konnte nicht gesendet werden.</string>
+    <string name="chat_steer_recovery_note">Die Steuerung wurde nicht übernommen und kann als neue Nachricht gesendet werden.</string>
+    <string name="chat_steer_send_as_new_message">Als neue Nachricht senden</string>
     <string name="error_chat_not_found">Diese Session wurde nicht gefunden.</string>
     <string name="error_chat_generic">Die Nachrichten konnten nicht geladen werden.</string>
     <string name="error_session_profile">Das Serverprofil ist unvollständig oder nicht verfügbar.</string>

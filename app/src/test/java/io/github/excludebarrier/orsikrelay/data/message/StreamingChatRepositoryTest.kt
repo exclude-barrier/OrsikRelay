@@ -133,7 +133,7 @@ class StreamingChatRepositoryTest {
         assertEquals(
             listOf<ChatTurnEvent>(
                 ChatTurnEvent.RunStarted("run_synthetic"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             events
         )
@@ -323,7 +323,7 @@ class StreamingChatRepositoryTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             )
         )
 
@@ -337,7 +337,7 @@ class StreamingChatRepositoryTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             events
         )
@@ -413,7 +413,7 @@ class StreamingChatRepositoryTest {
                 message: String,
                 listener: ChatStreamListener
             ): ChatStreamHandle {
-                listener.onEvent(ChatTurnEvent.TurnCompleted)
+                listener.onEvent(ChatTurnEvent.TurnCompleted())
                 listener.onFinished()
                 return NoopHandle
             }
@@ -460,7 +460,7 @@ class StreamingChatRepositoryTest {
             this.sessionId = sessionId
             this.message = message
             listener.onEvent(ChatTurnEvent.RunStarted("run_synthetic"))
-            listener.onEvent(ChatTurnEvent.TurnCompleted)
+            listener.onEvent(ChatTurnEvent.TurnCompleted())
             listener.onFinished()
             return NoopHandle
         }

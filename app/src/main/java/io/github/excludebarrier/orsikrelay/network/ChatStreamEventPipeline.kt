@@ -37,8 +37,12 @@ import org.json.JSONObject
  *   before `assistant.completed`); outside that window every tool and
  *   reasoning event is rejected closed;
  * - no server field except the closed, UI-safe parts is propagated:
- *   no `user_message`, `runtime`, `usage`, `pending_steer`, tool
- *   names, arguments, previews, error messages or raw payloads.
+ *   no `user_message`, `runtime`, `usage`, tool names, arguments,
+ *   previews, error messages or raw payloads. The single exception is
+ *   `pending_steer` on `run.completed` (Mission 008B): a non-blank
+ *   string value is preserved exactly on
+ *   [ChatTurnEvent.TurnCompleted]; absent, null, non-string or blank
+ *   values stay `null`.
  *
  * Every protocol violation raises [ChatTurnProtocolException] with the
  * closed reason [ChatStreamError.IncompatibleApi]. The exception
@@ -226,10 +230,15 @@ class ChatStreamEventPipeline(
                 if (runCompleted || sawError || !assistantCompleted) {
                     throw protocol()
                 }
-                // `messages`, `usage`, `runtime`, `pending_steer` are
-                // deliberately neither parsed nor logged.
+                // `messages`, `usage`, `runtime` are deliberately neither
+                // parsed nor logged. `pending_steer` is the only field
+                // that crosses the boundary (Mission 008B): a non-blank
+                // string is preserved exactly; every other shape (absent,
+                // null, non-string, blank) yields `null`.
+                val pendingSteer = (payload.opt(PENDING_STEER_FIELD) as? String)
+                    ?.takeIf { it.isNotBlank() }
                 runCompleted = true
-                return listOf(ChatTurnEvent.TurnCompleted)
+                return listOf(ChatTurnEvent.TurnCompleted(pendingSteer))
             }
             DONE -> {
                 if (!runCompleted && !sawError) {
@@ -412,6 +421,7 @@ class ChatStreamEventPipeline(
         const val ROLE_FIELD = "role"
         const val DELTA_FIELD = "delta"
         const val CONTENT_FIELD = "content"
+        const val PENDING_STEER_FIELD = "pending_steer"
         const val ROLE_ASSISTANT = "assistant"
 
         const val RUN_STARTED = "run.started"

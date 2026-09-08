@@ -108,7 +108,7 @@ class HermesSessionStreamClientTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             listener.events
         )
@@ -378,7 +378,7 @@ class HermesSessionStreamClientTest {
         val eventsBeforeDone = synchronized(listener.events) { listener.events.toList() }
         assertFalse(
             "TurnCompleted released before `done`",
-            eventsBeforeDone.contains(ChatTurnEvent.TurnCompleted)
+            eventsBeforeDone.contains(ChatTurnEvent.TurnCompleted())
         )
         assertTrue(
             "TurnFailed released before `done`",
@@ -391,7 +391,7 @@ class HermesSessionStreamClientTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             listener.events
         )
@@ -445,7 +445,7 @@ class HermesSessionStreamClientTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             listener.events
         )
@@ -483,7 +483,7 @@ class HermesSessionStreamClientTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             listener.events
         )
@@ -518,7 +518,7 @@ class HermesSessionStreamClientTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             listener.events
         )
@@ -622,7 +622,7 @@ class HermesSessionStreamClientTest {
         expected += deltas.map { delta -> ChatTurnEvent.AssistantDelta(delta) }
         expected += listOf(
             ChatTurnEvent.AssistantCompleted("burst-final"),
-            ChatTurnEvent.TurnCompleted
+            ChatTurnEvent.TurnCompleted()
         )
         assertEquals(
             "burst lost, reordered or duplicated events",
@@ -661,7 +661,7 @@ class HermesSessionStreamClientTest {
             ),
             listener.events
         )
-        assertFalse(listener.events.contains(ChatTurnEvent.TurnCompleted))
+        assertFalse(listener.events.contains(ChatTurnEvent.TurnCompleted()))
     }
 
     @Test
@@ -768,7 +768,7 @@ class HermesSessionStreamClientTest {
                 ChatTurnEvent.AssistantStarted,
                 ChatTurnEvent.AssistantDelta("Hallo"),
                 ChatTurnEvent.AssistantCompleted("Hallo Welt"),
-                ChatTurnEvent.TurnCompleted
+                ChatTurnEvent.TurnCompleted()
             ),
             listener.events
         )

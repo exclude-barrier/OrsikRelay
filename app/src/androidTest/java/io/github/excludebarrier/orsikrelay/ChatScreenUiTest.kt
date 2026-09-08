@@ -13,6 +13,7 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CountDownLatch
@@ -102,7 +103,8 @@ class ChatScreenUiTest {
         source: MessageHistorySource,
         chatSource: StreamingChatSource = streamingSourceThatNeverEmits,
         onBack: () -> Unit = {},
-        runStopRequester: RunStopRequester = runStopRequesterThatIsNeverReached
+        runStopRequester: RunStopRequester = runStopRequesterThatIsNeverReached,
+        runSteerRequester: RunSteerRequester = runSteerRequesterThatIsNeverReached
     ) {
         composeRule.setContent {
             HermesTheme {
@@ -110,6 +112,7 @@ class ChatScreenUiTest {
                     historySource = source,
                     chatSource = chatSource,
                     runStopRequester = runStopRequester,
+                    runSteerRequester = runSteerRequester,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     onBack = onBack
@@ -154,6 +157,15 @@ class ChatScreenUiTest {
         val runStopRequesterThatIsNeverReached = object : RunStopRequester {
             override suspend fun stopRun(profileId: String, runId: String): Nothing {
                 throw AssertionError("run-stop must not be reachable in history-slice tests")
+            }
+        }
+        val runSteerRequesterThatIsNeverReached = object : RunSteerRequester {
+            override suspend fun steerRun(
+                profileId: String,
+                runId: String,
+                text: String
+            ): Nothing {
+                throw AssertionError("run-steer must not be reachable in history-slice tests")
             }
         }
     }

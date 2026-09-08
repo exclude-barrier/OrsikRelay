@@ -21,6 +21,7 @@ import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerP
 import io.github.excludebarrier.orsikrelay.data.message.MessageHistoryRepository
 import io.github.excludebarrier.orsikrelay.data.message.StreamingChatRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunStopRepository
+import io.github.excludebarrier.orsikrelay.data.run.RunSteerRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionListRepository
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
@@ -29,10 +30,12 @@ import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.network.HermesConnectionClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunStopClient
+import io.github.excludebarrier.orsikrelay.network.HermesRunSteerClient
 import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
@@ -54,6 +57,7 @@ fun HermesNavHost(
     sessionCreator: SessionCreator? = null,
     streamingChatSource: StreamingChatSource? = null,
     runStopRequester: RunStopRequester? = null,
+    runSteerRequester: RunSteerRequester? = null,
     themeController: ThemeModeController? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null
 ) {
@@ -88,6 +92,11 @@ fun HermesNavHost(
                     profileRepository = profileRepository,
                     credentialStore = credentialStore,
                     runStopTransport = HermesRunStopClient()
+                ),
+                runSteerRequester = RunSteerRepository(
+                    profileRepository = profileRepository,
+                    credentialStore = credentialStore,
+                    runSteerTransport = HermesRunSteerClient()
                 ),
                 startupResolver = {
                     resolveStartupProfile(metadataStore, credentialStore)
@@ -191,6 +200,8 @@ fun HermesNavHost(
                     ?: productionDependencies.value.streamingChatSource,
                 runStopRequester = runStopRequester
                     ?: productionDependencies.value.runStopRequester,
+                runSteerRequester = runSteerRequester
+                    ?: productionDependencies.value.runSteerRequester,
                 profileId = activeProfileId.orEmpty(),
                 sessionId = decodeRouteArgument(encodedSessionId),
                 onBack = { navController.popBackStack() }
@@ -206,6 +217,7 @@ private data class ProductionDependencies(
     val messageHistorySource: MessageHistorySource,
     val streamingChatSource: StreamingChatSource,
     val runStopRequester: RunStopRequester,
+    val runSteerRequester: RunSteerRequester,
     val startupResolver: () -> StartupProfile
 )
 

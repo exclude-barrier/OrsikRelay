@@ -36,7 +36,7 @@ class ChatStreamEventPipelineTest {
             pipeline.process(completedFrame(5, MSG_ID, "Hallo Welt"))
         )
         assertEquals(
-            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted),
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
             pipeline.process(
                 frame(
                     "run.completed",
@@ -45,11 +45,59 @@ class ChatStreamEventPipelineTest {
                         .put("messages", org.json.JSONArray())
                         .put("usage", JSONObject().put("hidden", "hidden-usage"))
                         .put("runtime", 12.5)
-                        .put("pending_steer", "hidden-redirect")
                 )
             )
         )
         assertTrue(pipeline.process(frame("done", 7)).isEmpty())
+    }
+
+    @Test
+    fun runCompletedPreservesNonBlankPendingSteerExactly() {
+        feedRunStarted()
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        pipeline.process(completedFrame(3, MSG_ID, "Hallo Welt"))
+
+        // Mission 008B: a non-blank `pending_steer` string is the only
+        // `run.completed` field that crosses the pipeline boundary, and it
+        // is preserved exactly (no trimming, no escaping, no limit).
+        val raw = "  führe  um \n\tweiter  "
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted(raw)),
+            pipeline.process(
+                frame(
+                    "run.completed",
+                    4,
+                    JSONObject()
+                        .put("messages", org.json.JSONArray())
+                        .put("usage", JSONObject().put("hidden", "hidden-usage"))
+                        .put("pending_steer", raw)
+                )
+            )
+        )
+        assertTrue(pipeline.process(frame("done", 5)).isEmpty())
+    }
+
+    @Test
+    fun runCompletedPendingSteerEdgeCasesYieldNull() {
+        // Absent, null, non-string and blank `pending_steer` all map to a
+        // plain terminal success (no pending steer carried).
+        listOf<JSONObject>(
+            JSONObject(), // absent
+            JSONObject().put("pending_steer", org.json.JSONObject.NULL), // null
+            JSONObject().put("pending_steer", 42), // non-string
+            JSONObject().put("pending_steer", "   "), // blank
+            JSONObject().put("pending_steer", "\n\t") // blank (whitespace)
+        ).forEachIndexed { index, extra ->
+            val fresh = ChatStreamEventPipeline(SESSION_ID)
+            fresh.process(frame("run.started", 1))
+            fresh.process(messageStartedFrame(2, MSG_ID))
+            fresh.process(completedFrame(3, MSG_ID, "Hallo"))
+            assertEquals(
+                "edge case $index must not carry a pending steer",
+                listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
+                fresh.process(frame("run.completed", 4, extra))
+            )
+        }
     }
 
     @Test
@@ -322,7 +370,7 @@ class ChatStreamEventPipelineTest {
         assertProtocolViolation(pipeline, frame("run.completed", 3))
         pipeline.process(completedFrame(3, MSG_ID, "Hallo"))
         assertEquals(
-            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted),
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
             pipeline.process(frame("run.completed", 4))
         )
         assertProtocolViolation(pipeline, frame("run.completed", 5))
@@ -464,7 +512,7 @@ class ChatStreamEventPipelineTest {
         // With `assistant.completed` the same frame is accepted.
         pipeline.process(completedFrame(3, MSG_ID, "Hallo"))
         assertEquals(
-            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted),
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
             pipeline.process(frame("run.completed", 4))
         )
     }
