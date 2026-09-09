@@ -20,8 +20,10 @@ import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftStore
+import io.github.excludebarrier.orsikrelay.data.profile.ActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileAdmin
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
+import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
 import io.github.excludebarrier.orsikrelay.data.message.MessageHistoryRepository
 import io.github.excludebarrier.orsikrelay.data.message.StreamingChatRepository
@@ -69,13 +71,19 @@ fun HermesNavHost(
     chatDraftRepository: ChatDraftRepository? = null,
     profileAdmin: ProfileAdmin? = null,
     themeController: ThemeModeController? = null,
-    startupProfileResolver: (suspend () -> StartupProfile)? = null
+    startupProfileResolver: (suspend () -> StartupProfile)? = null,
+    selectionStore: ActiveServerSelectionStore? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
     val productionDependencies = remember(applicationContext) {
         lazy {
             val credentialStore = AndroidKeystoreCredentialStore(applicationContext)
             val metadataStore = SharedPreferencesServerProfileMetadataStore(applicationContext)
+            // Mission 012: one app-private selection store shared by the
+            // repository (select/delete) and the startup resolver. It holds
+            // exactly one profile ID — no credential, URL, draft or chat data.
+            val selectionStore = selectionStore
+                ?: SharedPreferencesActiveServerSelectionStore(applicationContext)
             // One production ChatDraftRepository instance shared by the chat
             // screen and the profile repository (Mission 009B): profile
             // deletion clears the drafts through this same instance, so no
@@ -86,7 +94,8 @@ fun HermesNavHost(
             val profileRepository = ServerProfileRepository(
                 metadataStore = metadataStore,
                 credentialStore = credentialStore,
-                profileDraftClearer = chatDraftRepository
+                profileDraftClearer = chatDraftRepository,
+                selectionStore = selectionStore
             )
             ProductionDependencies(
                 profileAdmin = ServerProfileAdmin(profileRepository),
@@ -121,8 +130,17 @@ fun HermesNavHost(
                     runSteerTransport = HermesRunSteerClient()
                 ),
                 chatDraftRepository = chatDraftRepository,
+                selectionStore = selectionStore,
                 startupResolver = {
-                    resolveStartupProfile(metadataStore, credentialStore)
+                    // Mission 012: the startup resolution validates the
+                    // persisted active server selection against the metadata
+                    // AND credential stores; every invalid selection falls
+                    // back to the existing deterministic resolution.
+                    resolveStartupProfile(
+                        metadataStore = metadataStore,
+                        credentialStore = credentialStore,
+                        selectionStore = selectionStore
+                    )
                 }
             )
         }
@@ -232,10 +250,33 @@ fun HermesNavHost(
                         ?: productionDependencies.value.coordinator
                     coordinator.connect(draft)
                 },
+                // Mission 012: a freshly verified server becomes the ACTIVE
+                // server. The selection is persisted FIRST (metadata-only
+                // write). The navigation to the verified server keeps the
+                // existing, verified behavior — the user must never be stuck
+                // on Onboarding after a successful connection — but a failed
+                // selection persist is never applied optimistically: the
+                // in-memory switch is the Mission 011 pattern and the
+                // selection itself stays as it was on disk; the next
+                // startup deterministically falls back to the existing
+                // resolution. No error details are surfaced.
                 onConnected = { success ->
-                    activeProfileId = success.profileId
-                    navController.navigate(routeOf(AppScreen.Sessions)) {
-                        launchSingleTop = true
+                    navHostCoroutineScope.launch {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                (profileAdmin
+                                    ?: productionDependencies.value.profileAdmin)
+                                    .selectActiveServer(success.profileId)
+                            }
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            // Selection persist failed: see the comment above.
+                        }
+                        activeProfileId = success.profileId
+                        navController.navigate(routeOf(AppScreen.Sessions)) {
+                            launchSingleTop = true
+                        }
                     }
                 }
             )
@@ -309,6 +350,7 @@ private data class ProductionDependencies(
     val runStopRequester: RunStopRequester,
     val runSteerRequester: RunSteerRequester,
     val chatDraftRepository: ChatDraftRepository,
+    val selectionStore: ActiveServerSelectionStore,
     val startupResolver: () -> StartupProfile
 )
 

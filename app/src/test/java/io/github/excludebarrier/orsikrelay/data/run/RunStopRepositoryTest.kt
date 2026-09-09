@@ -229,7 +229,8 @@ class RunStopRepositoryTest {
             RunStopResult.Accepted(RUN_ID)
         }
     ): RunStopRepository {
-        val profileRepository = ServerProfileRepository(metadata, credentials) { "unused-id" }
+        val profileRepository =
+            ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
         return RunStopRepository(profileRepository, credentials, transport)
     }
 

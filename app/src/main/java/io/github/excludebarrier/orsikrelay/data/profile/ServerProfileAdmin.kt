@@ -4,9 +4,9 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 
 /**
- * Production [ProfileAdmin] (Mission 010): delegates 1:1 to the existing
- * verified [ServerProfileRepository] list/delete path. No second deletion
- * implementation.
+ * Production [ProfileAdmin] (Mission 010, extended in Mission 012):
+ * delegates 1:1 to the existing verified [ServerProfileRepository]
+ * list/delete/select path. No second deletion or selection implementation.
  */
 class ServerProfileAdmin(
     private val profileRepository: ServerProfileRepository
@@ -16,5 +16,9 @@ class ServerProfileAdmin(
 
     override fun deleteProfile(profileId: String) {
         profileRepository.delete(profileId)
+    }
+
+    override fun selectActiveServer(profileId: String) {
+        profileRepository.selectActiveServer(profileId)
     }
 }

@@ -250,7 +250,8 @@ class RunSteerRepositoryTest {
             RunSteerResult.Queued(RUN_ID)
         }
     ): RunSteerRepository {
-        val profileRepository = ServerProfileRepository(metadata, credentials) { "unused-id" }
+        val profileRepository =
+            ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
         return RunSteerRepository(profileRepository, credentials, transport)
     }
 

@@ -140,7 +140,8 @@ class MessageHistoryRepositoryTest {
             MessageHistoryResult.Success(MessagePage(emptyList()))
         }
     ): MessageHistoryRepository {
-        val profileRepository = ServerProfileRepository(metadata, credentials) { "unused-id" }
+        val profileRepository =
+            ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
         return MessageHistoryRepository(profileRepository, credentials, fetcher)
     }
 

@@ -121,7 +121,8 @@ class SessionListRepositoryTest {
             SessionListResult.Success(SessionPage(emptyList(), false))
         }
     ): SessionListRepository {
-        val profileRepository = ServerProfileRepository(metadata, credentials) { "unused-id" }
+        val profileRepository =
+            ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
         return SessionListRepository(profileRepository, credentials, fetcher)
     }
 

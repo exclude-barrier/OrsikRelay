@@ -41,14 +41,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Server management screen (Mission 010, extended in Mission 011).
+ * Server management screen (Mission 010, extended in Missions 011/012).
  *
  * - Lists the stored servers exactly as [ProfileAdmin.listProfiles]
  *   reports them (name plus base URL); no network request is made here.
  * - The currently active server is marked; the unambiguous action
- *   [R.string.profiles_select_active] switches the in-memory active server
- *   via [onServerSelected]. Selection is pure metadata — it reads no
+ *   [R.string.profiles_select_active] switches the active server via
+ *   [onServerSelected]. Selection is pure metadata — it reads no
  *   credential and makes no request on this path.
+ * - (Mission 012) The selection is PERSISTED first
+ *   ([ProfileAdmin.selectActiveServer]) and the safe navigation switch
+ *   ([onServerSelected]) is triggered only after the persist succeeded.
+ *   A failed or in-flight persist never triggers the switch, so a failed
+ *   selection is never applied optimistically. While a selection is in
+ *   flight the button is disabled so a double tap cannot start a second
+ *   one.
  * - Deletion stays a separate, confirmed action (tap the row to open the
  *   dialog) through the verified [ProfileAdmin.deleteProfile] path
  *   (credential, metadata, drafts); tapping outside cancels.
@@ -74,6 +81,10 @@ fun ProfilesScreen(
     var deleteTarget by remember { mutableStateOf<ServerProfile?>(null) }
     var deleting by remember { mutableStateOf(false) }
     var deleteFailed by remember { mutableStateOf(false) }
+    // Mission 012: exactly one selection may be in flight; the button is
+    // disabled while it runs and the navigation switch is triggered only
+    // after the persist has succeeded.
+    var selecting by remember { mutableStateOf<String?>(null) }
 
     fun loadProfiles() {
         coroutineScope.launch {
@@ -110,6 +121,34 @@ fun ProfilesScreen(
                 deleteTarget = null
                 loadProfiles()
                 onProfileDeleted(target.id)
+            }
+        }
+    }
+
+    // Mission 012: persist first, navigate second. The safe navigation
+    // switch ([onServerSelected]) is triggered only after
+    // [ProfileAdmin.selectActiveServer] succeeded, so a failed selection is
+    // never applied optimistically. A store failure keeps the previous
+    // selection on disk AND on screen: no state is changed and the user can
+    // retry. No error details or IDs are surfaced on this path.
+    fun confirmSelect(target: ServerProfile) {
+        if (selecting != null) return
+        selecting = target.id
+        coroutineScope.launch {
+            val persisted = try {
+                withContext(Dispatchers.IO) { admin.selectActiveServer(target.id) }
+                true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Persist failed: the switch is NOT triggered and the
+                // previous selection (in memory and on disk) is unchanged.
+                false
+            } finally {
+                selecting = null
+            }
+            if (persisted) {
+                onServerSelected(target.id)
             }
         }
     }
@@ -170,13 +209,14 @@ fun ProfilesScreen(
                             ProfileRow(
                                 profile = profile,
                                 isActive = profile.id == activeProfileId,
+                                isSelecting = selecting != null,
                                 onClick = {
                                     if (deleteTarget == null) {
                                         deleteTarget = profile
                                         deleteFailed = false
                                     }
                                 },
-                                onUseAsActive = { onServerSelected(profile.id) }
+                                onUseAsActive = { confirmSelect(profile) }
                             )
                         }
                     }
@@ -246,6 +286,7 @@ fun ProfilesScreen(
 private fun ProfileRow(
     profile: ServerProfile,
     isActive: Boolean,
+    isSelecting: Boolean,
     onClick: () -> Unit,
     onUseAsActive: () -> Unit
 ) {
@@ -302,6 +343,7 @@ private fun ProfileRow(
                 // path. The inner button intercepts taps on its own area.
                 TextButton(
                     onClick = onUseAsActive,
+                    enabled = !isSelecting,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp)

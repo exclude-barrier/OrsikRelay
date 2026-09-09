@@ -141,6 +141,9 @@ class ProfileManagementNavigationUiTest {
             override fun deleteProfile(profileId: String) {
                 throw IllegalStateException("synthetic deletion failure")
             }
+
+            // Mission 012: no-op selection persist in this test's fake admin.
+            override fun selectActiveServer(profileId: String) = Unit
         }
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID), admin = failingAdmin)
 
@@ -198,6 +201,9 @@ class ProfileManagementNavigationUiTest {
             deleted += profileId
             remaining.removeAll { it.id == profileId }
         }
+
+        // Mission 012: no-op selection persist in this test's fake admin.
+        override fun selectActiveServer(profileId: String) = Unit
     }
 
     private companion object {

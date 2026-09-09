@@ -1,20 +1,29 @@
 # Orsik Relay
 
-Inoffizieller, eigenständig entwickelter Android-Client für Hermes Agent. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; Orsik Relay ist ein sicherer Kotlin-/Jetpack-Compose-Thin-Client ohne offizielle Verbindung zu Nous Research.
+Inoffizieller, eigenständig entwickelter Android-Client für Hermes Agent. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; Orsik Relay ist ein Kotlin-/Jetpack-Compose-Thin-Client ohne offizielle Verbindung zu Nous Research.
 
-## Projektstatus
+## Projektstatus – v0.1.0-alpha.2
 
-MISSION 006A ist implementiert und lokal verifiziert. Die App unterstützt:
+Der aktuelle Alpha-Stand ist lokal und auf dem Emulator verifiziert. Enthalten sind:
 
-- sicheres Onboarding mit getrennt gespeicherten Profilmetadaten und Keystore-Credential,
+- sicheres Onboarding mit getrennten Server-Metadaten und Android-Keystore-Credentials,
+- Serververwaltung: gespeicherte Server auflisten, aktiv markieren, auswählen und nach Bestätigung löschen,
+- persistente Auswahl des aktiven Servers mit sicherer Validierung beim Neustart und Bereinigung nach erfolgreicher Serverlöschung,
 - Sessionliste, Session-Erstellung und Nachrichtenhistorie,
 - reine Textnachrichten mit live zusammengesetzten Hermes-SSE-Antworten,
+- laufende Runs stoppen und per Steer-Nachricht steuern,
+- persistente normale Chat-Entwürfe mit profil- und sessiongetrennter Speicherung,
 - geschlossene Fehlerabbildung ohne automatische Wiederholung schreibender Requests,
-- sichere Edge-to-Edge-Inhalte für Statusleisten, Display-Cutouts und Gestennavigation,
-- ein Nous-inspiriertes, eigenständiges Material-3-Design,
-- den persistenten Darstellungsmodus System, Hell oder Dunkel.
+- ein eigenständiges Material-3-Design mit persistentem Modus System, Hell oder Dunkel,
+- sichere Edge-to-Edge-Inhalte für Statusleisten, Display-Cutouts und Gestennavigation.
 
-Noch nicht enthalten sind insbesondere Toolcards mit Payload, Approvals, Stop/Steer, Markdown, Bilder, Sprache, Benachrichtigungen und persistente Chatentwürfe. Die nächsten Funktionen folgen in kleinen, testbaren Tickets gemäß `internal plan`.
+Der Stand wurde ohne Live-Server, echte Credentials oder Netzwerkmutation getestet. Noch nicht enthalten sind insbesondere Toolcards mit Payload, Approvals, Markdown/Code-Rendering, Bilder, Sprache, Benachrichtigungen sowie Bot-Verwaltung. Diese Funktionen folgen in kleinen, testbaren Tickets gemäß `internal plan`.
+
+## Verifikation des Alpha-2-Stands
+
+- 379 Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
+- 145 Connected-/Compose-Tests auf `Hermes_API_36`: 0 Fehler, 0 Errors, 0 Skips
+- `lintDebug`, `assembleDebug`, Android-Test-Kompilation und `git diff --check` erfolgreich
 
 ## Lokale Entwicklungsumgebung auf build-host
 
@@ -23,7 +32,7 @@ Noch nicht enthalten sind insbesondere Toolcards mit Payload, Approvals, Stop/St
 - Android Build Tools 36.1.0
 - Android Platform Tools
 - Android Emulator mit AVD `Hermes_API_36`
-- Gradle 9.7.1 (nur für den initialen Bootstrap des Wrappers)
+- Gradle 9.7.1 nur für den initialen Bootstrap des Wrappers
 - Hermes-Profil `dev-profile` ohne Cloud-Fallback
 
 Prüfung:
@@ -34,10 +43,7 @@ scripts/verify-environment.sh
 
 ## Entwicklung
 
-Maßgeblich für alle Builds und Tests ist der im Repository versionierte
-**Gradle Wrapper 8.14.5** (`./gradlew`). Der Version Catalog liegt in
-`gradle/libs.versions.toml` (aktuell AGP 8.13.2, Kotlin 2.2.10, Compose BOM 2025.08.00,
-API 36, minSdk 26).
+Maßgeblich für alle Builds und Tests ist der versionierte **Gradle Wrapper 8.14.5** (`./gradlew`). Der Version Catalog liegt in `gradle/libs.versions.toml`.
 
 ```bash
 ./gradlew test                       # Unit-Tests (JVM)
@@ -48,24 +54,13 @@ API 36, minSdk 26).
 
 ## Alpha-Releases
 
-Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes
-[GitHub-Alpha-Release](https://github.com/exclude-barrier/hermes-android/releases).
-Alpha-Releases sind Vorabversionen für technische Tests und nicht für den
-Produktiveinsatz bestimmt. Das bereitgestellte APK ist derzeit ein lokal mit dem
-Android-Debug-Key signierter Testbuild; Updates müssen manuell installiert werden.
+Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/hermes-android/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
 
-- Das Versionsschema folgt SemVer-Prereleases, beispielsweise
-  `v0.1.0-alpha.1`, `v0.1.0-alpha.2` und später `v0.1.0-beta.1`.
-- CI, Wrapper-Validation, produktives Release-Signing und AAB-Erstellung werden
-  erst in einem späteren Release-Ticket aufgebaut.
-- Der Signing-Key (keystore) kommt **niemals** ins Repository; er bleibt außerhalb
-  (z. B. CI-Secrets bzw. lokale, nicht versionierte Ablage).
-- Vor einem Play-Store-Release sind erforderlich: Datenschutztext, Support- und
-  Updatekonzept sowie vollständige Store-Metadaten.
-- Die Lizenz ist noch nicht entschieden; es wird bewusst keine Lizenz angenommen
-  oder ausgeschrieben.
-
-Qwen wird bei Bedarf lokal gestartet. Wenn ein anderes Modell Port 8081 belegt, bricht der Starter ab, statt es ungefragt zu beenden.
+- Das APK ist aktuell ein lokal mit Android-Debug-Key signierter Testbuild und muss manuell installiert werden.
+- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.2`, später `v0.1.0-beta.1`.
+- CI, Wrapper-Validation, produktives Release-Signing und AAB-Erstellung folgen in einem separaten Release-Ticket.
+- Der Signing-Key kommt niemals ins Repository.
+- Vor einem Play-Store-Release sind Datenschutztext, Support- und Updatekonzept sowie vollständige Store-Metadaten erforderlich.
 
 ## Verbindliche Dokumente
 

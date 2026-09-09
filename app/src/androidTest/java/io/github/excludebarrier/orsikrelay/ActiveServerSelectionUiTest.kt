@@ -218,6 +218,14 @@ class ActiveServerSelectionUiTest {
             deleted += profileId
             remaining.removeAll { it.id == profileId }
         }
+
+        // Mission 012: the fake selection store — metadata only, no secret.
+        val selectedActive = CopyOnWriteArrayList<String>()
+
+        override fun selectActiveServer(profileId: String) {
+            selectedActive.clear()
+            selectedActive += profileId
+        }
     }
 
     private companion object {

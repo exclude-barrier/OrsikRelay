@@ -419,7 +419,8 @@ class StreamingChatRepositoryTest {
             }
         }
     ): StreamingChatRepository {
-        val profileRepository = ServerProfileRepository(metadata, credentials) { "unused-id" }
+        val profileRepository =
+            ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
         return StreamingChatRepository(profileRepository, credentials, transport)
     }
 

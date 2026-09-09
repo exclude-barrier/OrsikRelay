@@ -192,7 +192,8 @@ class SessionCreateRepositoryTest {
             SessionCreateResult.Success(CREATED_ID, null)
         }
     ): SessionCreateRepository {
-        val profileRepository = ServerProfileRepository(metadata, credentials) { "unused-id" }
+        val profileRepository =
+            ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
         return SessionCreateRepository(profileRepository, credentials, fetcher)
     }
 

@@ -20,12 +20,19 @@ import java.util.UUID
  * holds. The optional [profileDraftClearer] is the narrow seam the chat-draft
  * repository plugs into without the profile repository depending on the UI
  * layer.
+ *
+ * (Mission 012) [selectActiveServer] persists the active server selection
+ * only for a profile whose metadata AND credential both exist, and [delete]
+ * clears the persisted selection of the deleted profile only after
+ * credential deletion, metadata deletion and the draft cleanup have all
+ * succeeded — any earlier failure preserves the selection.
  */
 class ServerProfileRepository(
     private val metadataStore: ServerProfileMetadataStore,
     private val credentialStore: CredentialStore,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
-    private val profileDraftClearer: ProfileDraftClearer? = null
+    private val profileDraftClearer: ProfileDraftClearer? = null,
+    private val selectionStore: ActiveServerSelectionStore? = null
 ) : VerifiedProfileSaver {
 
     override fun saveVerified(draft: ProfileDraft): ServerProfile {
@@ -75,18 +82,62 @@ class ServerProfileRepository(
             credentialStore.delete(profileId)
             metadataStore.delete(profileId)
         }
-        val clearer = profileDraftClearer ?: return
-        try {
-            // Only reachable after BOTH deletions succeeded: the profile is
-            // gone, so its drafts may be removed. A failure in either
-            // deletion already threw above and the drafts are preserved.
-            clearer.clearProfile(profileId)
+        // Only reachable after BOTH deletions succeeded: the profile is
+        // gone, so its drafts may be removed. A failure in either deletion
+        // already threw above and the drafts are preserved.
+        val draftCleanupFailed = if (profileDraftClearer == null) {
+            false
+        } else {
+            try {
+                profileDraftClearer!!.clearProfile(profileId)
+                false
+            } catch (_: Exception) {
+                // Best-effort cleanup (Mission 009B contract): the profile is
+                // already deleted, so a cleanup problem must not turn the
+                // deletion into a failure or expose an underlying exception.
+                // A failed cleanup counts as a Vorfehler: the selection of
+                // the deleted profile is NOT removed below (see Mission 012),
+                // so the next startup deterministically falls back to the
+                // safe startup resolution instead of a stale pointer.
+                true
+            }
+        }
+        // Mission 012: the persisted selection of the DELETED profile is
+        // removed only after credential, metadata AND draft cleanup have all
+        // succeeded. Deleting a profile that is not the selected one leaves
+        // the selection untouched; the startup validation covers every other
+        // case. A draft-cleanup failure preserves the selection.
+        if (draftCleanupFailed) return
+        val selectionStore = this.selectionStore ?: return
+        val storedSelection = try {
+            selectionStore.read()
         } catch (_: Exception) {
-            // Best-effort cleanup: the profile is already deleted, so a
-            // cleanup problem must not turn the deletion into a failure or
-            // expose an underlying exception. The production clearer absorbs
-            // its own failures into its closed boundary; this keeps the
-            // contract even for a non-conforming implementation.
+            null
+        }
+        if (storedSelection != profileId) return
+        repositoryCall {
+            selectionStore.clear()
+        }
+    }
+
+    /**
+     * Persists [profileId] as the active server selection (Mission 012).
+     *
+     * The selection is private local metadata: exactly the profile ID. It is
+     * persisted only when the profile exists (metadata) AND has a
+     * credential, checked in that fixed order before any write. The
+     * selection path reads no secret value and writes none.
+     */
+    fun selectActiveServer(profileId: String) {
+        repositoryCall {
+            if (metadataStore.get(profileId) == null) {
+                throw ServerProfileRepositoryException()
+            }
+            if (credentialStore.get(profileId) == null) {
+                throw ServerProfileRepositoryException()
+            }
+            val store = selectionStore ?: throw ServerProfileRepositoryException()
+            store.write(profileId)
         }
     }
 
