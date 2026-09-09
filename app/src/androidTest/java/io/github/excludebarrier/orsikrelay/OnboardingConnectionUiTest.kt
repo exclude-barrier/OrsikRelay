@@ -78,7 +78,7 @@ class OnboardingConnectionUiTest {
         submitValidForm()
         waitForText("Der API-Key wurde abgelehnt.")
 
-        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
         assertEquals(0, saveCalls.get())
     }
 
@@ -95,9 +95,9 @@ class OnboardingConnectionUiTest {
         setRoute(coordinator)
 
         submitValidForm()
-        waitForText("Das Serverprofil konnte nicht sicher gespeichert werden.")
+        waitForText("Der Server konnte nicht sicher gespeichert werden.")
 
-        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
     }
 
     @Test

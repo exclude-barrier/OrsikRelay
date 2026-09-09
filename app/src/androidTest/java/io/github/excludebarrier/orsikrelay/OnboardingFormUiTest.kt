@@ -65,13 +65,13 @@ class OnboardingFormUiTest {
     @Test
     fun submittingEmptyFormShowsFieldErrorsAndStaysOnOnboarding() {
         // Startscreen mit Titel.
-        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
 
         clickSubmit()
 
         // Feldbezogene Validierungsfehler werden angezeigt.
         composeRule
-            .onNodeWithText("Profilname darf nicht leer sein.")
+            .onNodeWithText("Servername darf nicht leer sein.")
             .assertIsDisplayed()
         composeRule
             .onNodeWithText("Bitte eine absolute HTTPS-URL mit Host eingeben.")
@@ -79,14 +79,14 @@ class OnboardingFormUiTest {
         composeRule.onNodeWithText("API-Key darf nicht leer sein.").assertIsDisplayed()
 
         // Die App bleibt auf Onboarding und navigiert nicht zu Sessions.
-        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
         assertNoNodeWithText("Sessions")
     }
 
 
     @Test
     fun apiKeyIsHiddenInTheFieldAndNotShownAsPlainText() {
-        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
+        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
 
         composeRule
             .onNodeWithContentDescription("API-Key", useUnmergedTree = true)

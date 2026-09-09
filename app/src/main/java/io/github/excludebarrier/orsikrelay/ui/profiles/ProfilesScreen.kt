@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,13 +41,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Server profile management screen (Mission 010).
+ * Server management screen (Mission 010, extended in Mission 011).
  *
- * - Lists the stored profiles exactly as [ProfileAdmin.listProfiles]
+ * - Lists the stored servers exactly as [ProfileAdmin.listProfiles]
  *   reports them (name plus base URL); no network request is made here.
- * - Deletion goes through the verified [ProfileAdmin.deleteProfile] path
- *   (credential, metadata, drafts) and requires an explicit confirmation
- *   dialog; tapping outside cancels.
+ * - The currently active server is marked; the unambiguous action
+ *   [R.string.profiles_select_active] switches the in-memory active server
+ *   via [onServerSelected]. Selection is pure metadata — it reads no
+ *   credential and makes no request on this path.
+ * - Deletion stays a separate, confirmed action (tap the row to open the
+ *   dialog) through the verified [ProfileAdmin.deleteProfile] path
+ *   (credential, metadata, drafts); tapping outside cancels.
  * - While a deletion is in flight, the confirm button is disabled so a
  *   double tap can never start a second deletion; the dialog stays open.
  * - A failure is reported with a fixed, generic German message that
@@ -58,8 +63,10 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ProfilesScreen(
     admin: ProfileAdmin,
+    activeProfileId: String? = null,
     onBack: () -> Unit,
-    onProfileDeleted: (profileId: String) -> Unit,
+    onProfileDeleted: (profileId: String) -> Unit = {},
+    onServerSelected: (profileId: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -162,12 +169,14 @@ fun ProfilesScreen(
                         items(current, key = { it.id }) { profile ->
                             ProfileRow(
                                 profile = profile,
+                                isActive = profile.id == activeProfileId,
                                 onClick = {
                                     if (deleteTarget == null) {
                                         deleteTarget = profile
                                         deleteFailed = false
                                     }
-                                }
+                                },
+                                onUseAsActive = { onServerSelected(profile.id) }
                             )
                         }
                     }
@@ -236,7 +245,9 @@ fun ProfilesScreen(
 @Composable
 private fun ProfileRow(
     profile: ServerProfile,
-    onClick: () -> Unit
+    isActive: Boolean,
+    onClick: () -> Unit,
+    onUseAsActive: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -245,23 +256,60 @@ private fun ProfileRow(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        border = if (isActive) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            Text(
-                text = profile.profileName,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = profile.baseUrl,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = profile.profileName,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = profile.baseUrl,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                if (isActive) {
+                    // Visible marker only; it carries no testTag because the
+                    // clickable Card is a semantics merge boundary, so a tag
+                    // on this inner Text is not addressable by itself. The
+                    // test asserts the marker by its unique visible text.
+                    Text(
+                        text = stringResource(R.string.profiles_active),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            if (!isActive) {
+                // Separate, unambiguous action (Mission 011): tapping the row
+                // opens the deletion confirmation, while only this button
+                // selects the server. Selection reads no credential on this
+                // path. The inner button intercepts taps on its own area.
+                TextButton(
+                    onClick = onUseAsActive,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .testTag("selectActiveServer:${profile.id}")
+                ) {
+                    Text(text = stringResource(R.string.profiles_select_active))
+                }
+            }
         }
     }
 }

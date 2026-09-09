@@ -157,6 +157,28 @@ fun HermesNavHost(
         }
     }
 
+    // Safe switch of the active server (Mission 011). Reuses exactly the
+    // [profileDeleted] pattern, but sets [activeProfileId] to the chosen
+    // server instead of clearing it. Popping from the first Sessions entry
+    // upward (inclusive) removes the Profiles entry AND every existing Chat
+    // destination, so no chat can keep living under the previous server; the
+    // single new Sessions entry re-derives its list from the new ID. The
+    // selection path itself reads no credential — only the (re)loaded
+    // Sessions list does, under the new server.
+    suspend fun serverSelected(profileId: String) {
+        // The caller invokes this from the ProfilesScreen select button,
+        // which runs on the main thread, but the NavController mutation and
+        // the state write are still guarded the same way as [profileDeleted]
+        // so the transition is always main-thread safe.
+        withContext(Dispatchers.Main) {
+            activeProfileId = profileId
+            navController.navigate(routeOf(AppScreen.Sessions)) {
+                popUpTo(routeOf(AppScreen.Sessions)) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     LaunchedEffect(startDestination) {
         if (startDestination is AppScreen.Sessions) {
             resolvedStart = AppScreen.Sessions
@@ -243,9 +265,13 @@ fun HermesNavHost(
             ProfilesScreen(
                 admin = profileAdmin
                     ?: productionDependencies.value.profileAdmin,
+                activeProfileId = activeProfileId,
                 onBack = { navController.popBackStack() },
                 onProfileDeleted = { profileId ->
                     navHostCoroutineScope.launch { profileDeleted(profileId) }
+                },
+                onServerSelected = { profileId ->
+                    navHostCoroutineScope.launch { serverSelected(profileId) }
                 }
             )
         }

@@ -45,9 +45,9 @@ class ProfileManagementNavigationUiTest {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
         waitForText("Sessions")
-        composeRule.onNodeWithText("Profile").performClick()
+        composeRule.onNodeWithText("Server verwalten").performClick()
 
-        waitForText("Serverprofile")
+        waitForText("Server")
         composeRule.onNodeWithText("Alpha").assertExists()
         composeRule.onNodeWithText("https://alpha.local").assertExists()
         composeRule.onNodeWithText("Beta").assertExists()
@@ -89,17 +89,17 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.onNodeWithText("Zurück").performClick()
         waitForText("Session Alpha")
-        composeRule.onNodeWithText("Profile").performClick()
-        waitForText("Serverprofile")
+        composeRule.onNodeWithText("Server verwalten").performClick()
+        waitForText("Server")
 
         composeRule.onNodeWithText("Alpha").performClick()
-        waitForText("Profil löschen?")
+        waitForText("Server löschen?")
         // Pre-deletion loads (Sessions + Chat) legitimately queried the
         // active profile; only post-deletion loads must not.
         val queriesBeforeDeletion = profileIdsQueried.size
         composeRule.onNodeWithText("Löschen").performClick()
 
-        waitForText("Das Serverprofil ist unvollständig oder nicht verfügbar.")
+        waitForText("Der Server ist unvollständig oder nicht verfügbar.")
         // The safe state: no chat entry is alive any more.
         assertTrue(
             composeRule.onAllNodesWithText("Chat").fetchSemanticsNodes().isEmpty()
@@ -120,10 +120,10 @@ class ProfileManagementNavigationUiTest {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
         waitForText("Sessions")
-        composeRule.onNodeWithText("Profile").performClick()
-        waitForText("Serverprofile")
+        composeRule.onNodeWithText("Server verwalten").performClick()
+        waitForText("Server")
         composeRule.onNodeWithText("Beta").performClick()
-        waitForText("Profil löschen?")
+        waitForText("Server löschen?")
         composeRule.onNodeWithText("Abbrechen").performClick()
 
         waitForText("Beta")
@@ -145,13 +145,13 @@ class ProfileManagementNavigationUiTest {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID), admin = failingAdmin)
 
         waitForText("Sessions")
-        composeRule.onNodeWithText("Profile").performClick()
-        waitForText("Serverprofile")
+        composeRule.onNodeWithText("Server verwalten").performClick()
+        waitForText("Server")
         composeRule.onNodeWithText("Alpha").performClick()
-        waitForText("Profil löschen?")
+        waitForText("Server löschen?")
         composeRule.onNodeWithText("Löschen").performClick()
 
-        waitForText("Das Profil konnte nicht gelöscht werden.")
+        waitForText("Der Server konnte nicht gelöscht werden.")
         composeRule.onNodeWithText("Alpha").assertExists()
         // The retry action replaces the confirm label after the failure.
         composeRule.onNodeWithText("Erneut versuchen").assertExists()

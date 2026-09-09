@@ -45,8 +45,8 @@ class SessionStartupNavigationUiTest {
             startup = StartupProfile.None
         )
 
-        waitForText("Orsik Relay einrichten")
-        composeRule.onNodeWithText("Orsik Relay einrichten").assertIsDisplayed()
+        waitForText("Server hinzufügen")
+        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
     }
 
     @Test
@@ -60,9 +60,9 @@ class SessionStartupNavigationUiTest {
         }
         setHost(source, startup = StartupProfile.Unavailable)
 
-        waitForText("Das Serverprofil ist unvollständig oder nicht verfügbar.")
+        waitForText("Der Server ist unvollständig oder nicht verfügbar.")
         composeRule.onNodeWithText(
-            "Das Serverprofil ist unvollständig oder nicht verfügbar."
+            "Der Server ist unvollständig oder nicht verfügbar."
         ).assertIsDisplayed()
     }
 

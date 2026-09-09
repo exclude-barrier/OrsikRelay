@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Orsik Relay</string>
-    <string name="onboarding_title">Orsik Relay einrichten</string>
+    <string name="onboarding_title">Server hinzufügen</string>
     <string name="onboarding_subtitle">Sicher mit deinem Hermes-Agent-Server verbinden</string>
-    <string name="onboarding_profile_name_label">Profilname</string>
+    <string name="onboarding_profile_name_label">Servername</string>
     <string name="onboarding_base_url_label">Server-Basis-URL</string>
     <string name="onboarding_api_key_label">API-Key</string>
     <string name="onboarding_submit">Verbindung vorbereiten</string>
@@ -52,11 +52,11 @@
     <string name="chat_steer_send_as_new_message">Als neue Nachricht senden</string>
     <string name="error_chat_not_found">Diese Session wurde nicht gefunden.</string>
     <string name="error_chat_generic">Die Nachrichten konnten nicht geladen werden.</string>
-    <string name="error_session_profile">Das Serverprofil ist unvollständig oder nicht verfügbar.</string>
+    <string name="error_session_profile">Der Server ist unvollständig oder nicht verfügbar.</string>
     <string name="error_session_generic">Die Sessions konnten nicht geladen werden.</string>
-    <string name="error_profile_name_empty">Profilname darf nicht leer sein.</string>
-    <string name="error_profile_name_too_long">Profilname darf höchstens 64 Zeichen lang sein.</string>
-    <string name="error_profile_name_generic">Bitte einen gültigen Profilnamen eingeben.</string>
+    <string name="error_profile_name_empty">Servername darf nicht leer sein.</string>
+    <string name="error_profile_name_too_long">Servername darf höchstens 64 Zeichen lang sein.</string>
+    <string name="error_profile_name_generic">Bitte einen gültigen Servernamen eingeben.</string>
     <string name="error_base_url_invalid">Bitte eine absolute HTTPS-URL mit Host eingeben.</string>
     <string name="error_base_url_generic">Bitte eine gültige Server-Basis-URL eingeben.</string>
     <string name="error_api_key_empty">API-Key darf nicht leer sein.</string>
@@ -69,14 +69,16 @@
     <string name="error_connection_timeout">Der Server hat nicht rechtzeitig geantwortet.</string>
     <string name="error_connection_network">Der Hermes-Server ist derzeit nicht erreichbar.</string>
     <string name="error_connection_http">Der Server hat die Anfrage nicht erfolgreich verarbeitet.</string>
-    <string name="error_connection_persistence">Das Serverprofil konnte nicht sicher gespeichert werden.</string>
-    <string name="profiles_manage">Profile</string>
-    <string name="profiles_title">Serverprofile</string>
-    <string name="profiles_loading">Profile werden geladen…</string>
-    <string name="profiles_empty">Keine Serverprofile gespeichert.</string>
-    <string name="profiles_delete_title">Profil löschen?</string>
+    <string name="error_connection_persistence">Der Server konnte nicht sicher gespeichert werden.</string>
+    <string name="profiles_manage">Server verwalten</string>
+    <string name="profiles_title">Server</string>
+    <string name="profiles_loading">Server werden geladen…</string>
+    <string name="profiles_empty">Keine Server gespeichert.</string>
+    <string name="profiles_select_active">Als aktiven Server verwenden</string>
+    <string name="profiles_active">Aktiver Server</string>
+    <string name="profiles_delete_title">Server löschen?</string>
     <string name="profiles_delete_message">„%1$s“ wird dauerhaft entfernt, inklusive API-Key und gespeicherter Chat-Entwürfe.</string>
     <string name="profiles_delete_confirm">Löschen</string>
     <string name="profiles_deleting">Wird gelöscht …</string>
-    <string name="profiles_delete_error_generic">Das Profil konnte nicht gelöscht werden.</string>
+    <string name="profiles_delete_error_generic">Der Server konnte nicht gelöscht werden.</string>
 </resources>
