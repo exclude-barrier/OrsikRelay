@@ -83,7 +83,8 @@ fun SessionsScreen(
     creator: SessionCreator? = null,
     themeController: ThemeModeController? = null,
     onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
-    onSessionCreated: (sessionId: String) -> Unit = {}
+    onSessionCreated: (sessionId: String) -> Unit = {},
+    onOpenProfileManagement: () -> Unit = {}
 ) {
     val configuration = LocalConfiguration.current
     val locale = remember(configuration) { configuration.locales[0] }
@@ -162,6 +163,13 @@ fun SessionsScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
             Spacer(modifier = Modifier.weight(1f))
+            TextButton(
+                onClick = onOpenProfileManagement
+            ) {
+                Text(
+                    text = stringResource(R.string.profiles_manage)
+                )
+            }
             themeController?.let { ThemeModeMenu(it) }
         }
         TextButton(

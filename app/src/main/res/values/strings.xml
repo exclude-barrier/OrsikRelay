@@ -70,4 +70,13 @@
     <string name="error_connection_network">Der Hermes-Server ist derzeit nicht erreichbar.</string>
     <string name="error_connection_http">Der Server hat die Anfrage nicht erfolgreich verarbeitet.</string>
     <string name="error_connection_persistence">Das Serverprofil konnte nicht sicher gespeichert werden.</string>
+    <string name="profiles_manage">Profile</string>
+    <string name="profiles_title">Serverprofile</string>
+    <string name="profiles_loading">Profile werden geladen…</string>
+    <string name="profiles_empty">Keine Serverprofile gespeichert.</string>
+    <string name="profiles_delete_title">Profil löschen?</string>
+    <string name="profiles_delete_message">„%1$s“ wird dauerhaft entfernt, inklusive API-Key und gespeicherter Chat-Entwürfe.</string>
+    <string name="profiles_delete_confirm">Löschen</string>
+    <string name="profiles_deleting">Wird gelöscht …</string>
+    <string name="profiles_delete_error_generic">Das Profil konnte nicht gelöscht werden.</string>
 </resources>

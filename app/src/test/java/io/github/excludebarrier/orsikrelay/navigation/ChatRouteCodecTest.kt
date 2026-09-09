@@ -23,4 +23,9 @@ class ChatRouteCodecTest {
     fun malformedArgumentDecodesToInvalidEmptyId() {
         assertEquals("", decodeRouteArgument("%%%"))
     }
+
+    @Test
+    fun profilesRouteIsAStableSingleSegment() {
+        assertEquals("profiles", routeOf(AppScreen.Profiles))
+    }
 }
