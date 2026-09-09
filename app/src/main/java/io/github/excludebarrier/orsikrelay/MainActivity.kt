@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.activity.compose.LocalActivity
 import androidx.core.view.WindowCompat
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
+import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.navigation.initialDestination
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
@@ -41,11 +43,26 @@ class MainActivity : ComponentActivity() {
                 HermesAppSurface {
                     HermesNavHost(
                         startDestination = initialDestination(),
+                        sessionPageSource = sessionPageSourceForTests,
                         themeController = themeController
                     )
                 }
             }
         }
+    }
+
+    companion object {
+        /**
+         * Test-only seam for instrumented tests that drive the real
+         * [MainActivity] without a network (e.g. an [androidx.test.core.app.ActivityScenario]
+         * recreation test). When non-null, [HermesNavHost] serves the session
+         * list from this synthetic source instead of the production
+         * [io.github.excludebarrier.orsikrelay.data.session.SessionListRepository]; when
+         * `null` (the default, always in production) the production
+         * repository is used and behavior is unchanged.
+         */
+        @VisibleForTesting
+        internal var sessionPageSourceForTests: SessionPageSource? = null
     }
 }
 
