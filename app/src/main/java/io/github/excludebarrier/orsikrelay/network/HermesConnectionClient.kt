@@ -54,11 +54,12 @@ class HermesConnectionClient(
                     .build(),
                 draft = draft
             )
-            parseCapabilities(capabilities)
+            val runApprovalResponse = parseCapabilities(capabilities)
             HermesConnectionResult.Success(
                 version = version,
                 sessionsSupported = true,
-                sessionStreamingSupported = true
+                sessionStreamingSupported = true,
+                runApprovalResponse = runApprovalResponse
             )
         } catch (error: ProbeFailure) {
             failure(error.reason)
@@ -160,7 +161,18 @@ class HermesConnectionClient(
             ?: throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
     }
 
-    private fun parseCapabilities(json: JSONObject) {
+    /**
+     * Validates the capabilities contract and returns the
+     * `features.run_approval_response` flag (Mission 014).
+     *
+     * The flag is read fail-closed and INDEPENDENTLY of the hard contract:
+     * an absent value or a non-boolean value yields `false` and never
+     * fails the probe — only the required fields below may raise
+     * [ConnectionFailureReason.INCOMPATIBLE_API]. This keeps the approval
+     * UI disabled for any server that does not affirmatively advertise the
+     * capability, without breaking the connection for servers that omit it.
+     */
+    private fun parseCapabilities(json: JSONObject): Boolean {
         if (
             strictString(json, OBJECT_FIELD) != CAPABILITIES_OBJECT ||
             strictString(json, PLATFORM_FIELD) != HERMES_PLATFORM
@@ -189,6 +201,10 @@ class HermesConnectionClient(
             POST_METHOD,
             SESSION_CHAT_STREAM_PATH
         )
+        // Fail-closed capability read (Mission 014): only an explicit
+        // JSON `true` enables the approval UI; absent or non-boolean is
+        // `false`. This is a soft read and must not throw.
+        return softBoolean(features, RUN_APPROVAL_RESPONSE_FIELD)
     }
 
     private fun validateEndpoint(
@@ -217,6 +233,15 @@ class HermesConnectionClient(
     private fun strictBoolean(json: JSONObject, key: String): Boolean =
         json.opt(key) as? Boolean
             ?: throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
+
+    /**
+     * Fail-closed capability read (Mission 014): a present JSON boolean is
+     * returned as-is; an absent value, `null` or any non-boolean value
+     * yields `false` and never throws. Used only for optional feature
+     * flags, never for the required capabilities contract.
+     */
+    private fun softBoolean(json: JSONObject, key: String): Boolean =
+        json.opt(key) as? Boolean ?: false
 
     private fun failure(reason: ConnectionFailureReason) =
         HermesConnectionResult.Failure(reason)
@@ -255,6 +280,9 @@ class HermesConnectionClient(
         const val TOOL_EXECUTION_FIELD = "tool_execution"
         const val SESSION_RESOURCES_FIELD = "session_resources"
         const val SESSION_CHAT_STREAMING_FIELD = "session_chat_streaming"
+        // Optional, fail-closed capability (Mission 014): the server's
+        // static `features.run_approval_response` flag.
+        const val RUN_APPROVAL_RESPONSE_FIELD = "run_approval_response"
         const val METHOD_FIELD = "method"
         const val PATH_FIELD = "path"
         const val HEALTH_ENDPOINT = "health"

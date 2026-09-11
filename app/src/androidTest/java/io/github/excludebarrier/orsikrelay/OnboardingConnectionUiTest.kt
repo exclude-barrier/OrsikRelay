@@ -43,7 +43,7 @@ class OnboardingConnectionUiTest {
         val coordinator = coordinator(
             probe = {
                 probeCalls.incrementAndGet()
-                HermesConnectionResult.Success("0.20-test", true, true)
+                HermesConnectionResult.Success("0.20-test", true, true, true)
             },
             saver = {
                 saveCalls.incrementAndGet()
@@ -86,7 +86,7 @@ class OnboardingConnectionUiTest {
     fun persistenceFailureStaysOnOnboarding() {
         val coordinator = coordinator(
             probe = {
-                HermesConnectionResult.Success("0.20-test", true, true)
+                HermesConnectionResult.Success("0.20-test", true, true, true)
             },
             saver = {
                 throw IllegalStateException("synthetic persistence failure")
@@ -110,7 +110,7 @@ class OnboardingConnectionUiTest {
                 probeCalls.incrementAndGet()
                 started.countDown()
                 release.await(3, TimeUnit.SECONDS)
-                HermesConnectionResult.Success("0.20-test", true, true)
+                HermesConnectionResult.Success("0.20-test", true, true, true)
             },
             saver = { profile() }
         )

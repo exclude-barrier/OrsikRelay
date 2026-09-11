@@ -44,6 +44,8 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunApprovalRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
@@ -185,6 +187,8 @@ fun ChatScreen(
     runStopRequester: RunStopRequester,
     runSteerRequester: RunSteerRequester,
     chatDraftRepository: ChatDraftRepository,
+    runApprovalRequester: RunApprovalRequester = NoOpRunApprovalRequester,
+    approvalUiEnabled: Boolean = false,
     profileId: String,
     sessionId: String,
     onBack: () -> Unit,
@@ -1052,6 +1056,22 @@ fun ChatScreen(
             }
         }
     }
+    // Run-approval slice (Mission 014): the capability gate + dialog hang in
+    // the composition tree as a window overlay. The gate is [approvalUiEnabled]
+    // (the fail-closed, onboarding-confirmed `features.run_approval_response`
+    // capability) AND a non-null [ApprovalRequest]. There is currently NO live
+    // source for an `approval.request` (it is only ever sent on the run
+    // event stream the app does not consume), so [pendingApproval] is passed
+    // as null: the dialog is therefore invisible today, and NOTHING can be
+    // rendered without both a confirmed capability and a pending request.
+    // No network or SSE wiring is introduced here.
+    ApprovalUi(
+        approvalUiEnabled = approvalUiEnabled,
+        pendingApproval = null,
+        profileId = profileId,
+        requester = runApprovalRequester,
+        onDismiss = { }
+    )
 }
 
 /**

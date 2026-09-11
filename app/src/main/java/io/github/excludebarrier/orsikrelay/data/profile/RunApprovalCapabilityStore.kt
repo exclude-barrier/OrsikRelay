@@ -1,0 +1,28 @@
+package io.github.excludebarrier.orsikrelay.data.profile
+
+/**
+ * Synchronous, app-private storage seam for the per-profile run-approval
+ * capability (Mission 014).
+ *
+ * The capability is private local metadata derived from the server's
+ * `features.run_approval_response` flag at onboarding time. For one profile
+ * it stores exactly ONE non-secret boolean — whether the server behind that
+ * profile affirmed the approval capability. It never stores an API key, a
+ * URL, a draft or any chat/session data, and it never stores approval
+ * content (no command, request, run ID or payload).
+ *
+ * - [write] persists [enabled] for [profileId]; a blank ID is rejected.
+ * - [clear] removes the record for [profileId]; it is idempotent.
+ * - [read] returns the stored value for [profileId]; an absent or invalid
+ *   record reads `false` (fail-closed), so a corrupt value can never enable
+ *   the approval UI.
+ *
+ * Implementations must commit synchronously (the caller runs off the main
+ * thread) and must fail with the closed, input-free
+ * [RunApprovalCapabilityStoreException].
+ */
+interface RunApprovalCapabilityStore {
+    fun read(profileId: String): Boolean
+    fun write(profileId: String, enabled: Boolean)
+    fun clear(profileId: String)
+}

@@ -70,6 +70,56 @@ class HermesConnectionClientTest {
     }
 
     @Test
+    fun runApprovalResponseTrueIsRecognisedInTheResult() {
+        enqueueCapabilitiesWithFlag(true)
+
+        val result = client.probe(draft())
+
+        assertTrue(result is HermesConnectionResult.Success)
+        result as HermesConnectionResult.Success
+        assertTrue(result.runApprovalResponse)
+    }
+
+    @Test
+    fun runApprovalResponseFalseStaysClosed() {
+        enqueueCapabilitiesWithFlag(false)
+
+        val result = client.probe(draft())
+
+        assertTrue(result is HermesConnectionResult.Success)
+        result as HermesConnectionResult.Success
+        assertFalse(result.runApprovalResponse)
+    }
+
+    @Test
+    fun missingRunApprovalResponseFlagStaysClosed() {
+        server.enqueue(validHealthResponse())
+        server.enqueue(jsonResponse(validCapabilitiesJson()))
+
+        val result = client.probe(draft())
+
+        assertTrue(result is HermesConnectionResult.Success)
+        result as HermesConnectionResult.Success
+        assertFalse(result.runApprovalResponse)
+    }
+
+    @Test
+    fun nonBooleanRunApprovalResponseFlagStaysClosed() {
+        listOf("true", 1, "once").forEach { value ->
+            enqueueCapabilitiesWithFlag(value)
+
+            val result = client.probe(draft())
+
+            assertTrue(result is HermesConnectionResult.Success)
+            result as HermesConnectionResult.Success
+            assertFalse(
+                "value $value must stay closed",
+                result.runApprovalResponse
+            )
+        }
+    }
+
+    @Test
     fun bearerHeaderIsSentOnBothRequestsAndNeverInUrls() {
         enqueueValidResponses()
 
@@ -279,6 +329,13 @@ class HermesConnectionClientTest {
     private fun enqueueValidResponses() {
         server.enqueue(validHealthResponse())
         server.enqueue(jsonResponse(validCapabilitiesJson()))
+    }
+
+    private fun enqueueCapabilitiesWithFlag(value: Any) {
+        val capabilities = validCapabilitiesJson()
+        capabilities.getJSONObject("features").put("run_approval_response", value)
+        server.enqueue(validHealthResponse())
+        server.enqueue(jsonResponse(capabilities))
     }
 
     private fun validHealthResponse() = jsonResponse(

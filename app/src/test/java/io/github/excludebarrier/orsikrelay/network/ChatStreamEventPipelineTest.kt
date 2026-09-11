@@ -292,6 +292,36 @@ class ChatStreamEventPipelineTest {
     }
 
     @Test
+    fun approvalRequestEventIsRejectedClosedOnSessionStream() {
+        // Mission 015 boundary: `approval.request` is a real server event, but it
+        // exists ONLY on the run-event stream (`GET /v1/runs/{id}/events`), which
+        // this app does not consume (documented in internal task log, Mission 015). The app's
+        // only stream parser therefore must treat `approval.request` as an unknown
+        // event and reject it closed — it can never turn such a frame into a
+        // `pendingApproval`. The payload below is the exact, redacted field set the
+        // installed server emits (gateway/platforms/api_server_runs.py
+        // `_make_approval_notify`), carried in the session-chat envelope.
+        pipeline.process(frame("run.started", 1))
+        assertProtocolViolation(
+            pipeline,
+            ParsedSseFrame(
+                "approval.request",
+                baseFrame(2)
+                    .put("command", "redacted-command")
+                    .put("description", "redacted-description")
+                    .put("request_id", "0123456789abcdef0123456789abcdef")
+                    .put("pattern_key", "synthetic-pattern")
+                    .put("allow_permanent", false)
+                    .put("allow_session", true)
+                    .put("smart_denied", true)
+                    .put("timestamp", 1700000000.0)
+                    .toString()
+            ),
+            "approval.request must be rejected closed on the session stream"
+        )
+    }
+
+    @Test
     fun messageStartedBeforeRunStartedIsRejected() {
         assertProtocolViolation(pipeline, messageStartedFrame(1, MSG_ID))
     }

@@ -16,7 +16,8 @@ class ProfileConnectionCoordinator(
                 val profile = profileSaver.saveVerified(draft)
                 ProfileConnectionOutcome.Success(
                     version = probeResult.version,
-                    profileId = profile.id
+                    profileId = profile.id,
+                    runApprovalResponse = probeResult.runApprovalResponse
                 )
             } catch (_: Exception) {
                 ProfileConnectionOutcome.PersistenceFailure

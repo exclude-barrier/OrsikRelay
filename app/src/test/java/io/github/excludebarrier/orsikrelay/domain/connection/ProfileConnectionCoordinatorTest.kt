@@ -18,7 +18,7 @@ class ProfileConnectionCoordinatorTest {
         var saveCount = 0
         val probe = ConnectionProbe {
             events += "probe"
-            HermesConnectionResult.Success("0.20-test", true, true)
+            HermesConnectionResult.Success("0.20-test", true, true, true)
         }
         val saver = VerifiedProfileSaver {
             events += "save"
@@ -31,7 +31,7 @@ class ProfileConnectionCoordinatorTest {
         assertEquals(listOf("probe", "save"), events)
         assertEquals(1, saveCount)
         assertEquals(
-            ProfileConnectionOutcome.Success("0.20-test", PROFILE_ID),
+            ProfileConnectionOutcome.Success("0.20-test", PROFILE_ID, true),
             outcome
         )
     }
@@ -61,7 +61,7 @@ class ProfileConnectionCoordinatorTest {
     fun `persistence exception becomes data-free persistence failure`() {
         val coordinator = ProfileConnectionCoordinator(
             connectionProbe = ConnectionProbe {
-                HermesConnectionResult.Success("0.20-test", true, true)
+                HermesConnectionResult.Success("0.20-test", true, true, true)
             },
             profileSaver = VerifiedProfileSaver {
                 throw IllegalStateException("synthetic persistence failure")
@@ -77,7 +77,7 @@ class ProfileConnectionCoordinatorTest {
     @Test
     fun `all outcomes remain free of the raw credential`() {
         val outcomes = buildList {
-            add(ProfileConnectionOutcome.Success("0.20-test", PROFILE_ID))
+            add(ProfileConnectionOutcome.Success("0.20-test", PROFILE_ID, true))
             ConnectionFailureReason.entries.forEach { reason ->
                 add(ProfileConnectionOutcome.Failure(reason))
             }

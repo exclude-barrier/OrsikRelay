@@ -1,0 +1,298 @@
+package io.github.excludebarrier.orsikrelay
+
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalChoice
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalError
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalResult
+import io.github.excludebarrier.orsikrelay.ui.chat.ApprovalDialog
+import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+
+/**
+ * Compose tests for the run-approval decision dialog (Mission 014).
+ *
+ * All values are synthetic fixtures; the requester seam is a fake, so no
+ * network, no real hosts, no credentials and no real Hermes approvals are
+ * involved. The dialog is the ONLY approval UI and must render exactly the
+ * harmless, evidenced fields (action / target / reason / risk note) and
+ * nothing else.
+ */
+class ApprovalDialogUiTest {
+
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    @Test
+    fun rendersOnlyActionTargetReasonAndRiskNoteNotIds() {
+        setDialog(fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }))
+
+        // Title + the four evidenced, displayable fields are present ...
+        composeRule.onNodeWithText(TITLE).assertIsDisplayed()
+        composeRule.onNodeWithText(ACTION_LABEL).assertIsDisplayed()
+        composeRule.onNodeWithText(ACTION_VALUE).assertIsDisplayed()
+        composeRule.onNodeWithText(TARGET_LABEL).assertIsDisplayed()
+        composeRule.onNodeWithText(COMMAND).assertIsDisplayed()
+        composeRule.onNodeWithText(REASON_LABEL).assertIsDisplayed()
+        composeRule.onNodeWithText(DESCRIPTION).assertIsDisplayed()
+        composeRule.onNodeWithText(RISK_NOTE).assertIsDisplayed()
+
+        // ... while the identifiers are never displayed.
+        assertTrue("run id must never be shown", composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty())
+        assertTrue("request id must never be shown", composeRule.onAllNodesWithText(REQUEST_ID).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun denyIsFirstButtonAndLeftOfAllow() {
+        setDialog(fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }))
+
+        val denyBounds = composeRule.onNodeWithTag(TAG_DENY).assertIsDisplayed().getBoundsInRoot()
+        val allowBounds = composeRule.onNodeWithTag(TAG_ALLOW).assertIsDisplayed().getBoundsInRoot()
+
+        // Both live in one horizontal Row; Deny (the filled, primary, safe
+        // default) is the FIRST element, i.e. strictly left of Allow.
+        assertTrue(
+            "Deny must be left of Allow (first in the row)",
+            denyBounds.right.value <= allowBounds.left.value
+        )
+    }
+
+    @Test
+    fun outsideTapDoesNotCloseTheDialog() {
+        var dismissed = false
+        setDialog(
+            fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }),
+            onDismiss = { dismissed = true }
+        )
+
+        composeRule.onNodeWithText(TITLE).assertIsDisplayed()
+        // A tap in the top-left window corner (far outside the centered
+        // dialog) must not dismiss: onDismissRequest is a no-op, so it can
+        // neither approve, deny nor close the pending decision.
+        //
+        // Anchor the injection on the single title node (onRoot() resolves to
+        // TWO roots under createComposeRule, and this ui-test version has no
+        // onFirst/onLast); the coordinates below are absolute root coords, so
+        // the tap still lands on the window corner — outside the dialog.
+        composeRule.onNodeWithText(TITLE).performTouchInput {
+            // Tap = down(Offset) then up(pointerId). No prior moveTo: a
+            // gesture is only "in progress" after down.
+            val corner = Offset(1f, 1f)
+            down(corner)
+            up(0)
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(TITLE).assertIsDisplayed()
+        assertFalse(dismissed)
+    }
+
+    @Test
+    fun doubleTapOnAllowStartsExactlyOneRespond() {
+        val calls = AtomicInteger()
+        // The first decision suspends INDEFINITELY (but non-blocking, on the
+        // compose main thread) so it is still in flight when the second tap
+        // lands. The in-flight lock is set synchronously in decide(), so the
+        // second tap must be ignored and never open a second request.
+        setDialog(
+            fake(
+                requester = { _, _, _, _ ->
+                    calls.incrementAndGet()
+                    suspendCancellableCoroutine<Unit> { /* park; never resumes */ }
+                    RunApprovalResult.Resolved(RUN_ID, RunApprovalChoice.ONCE)
+                }
+            )
+        )
+
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        // Let the first (now parked) request start so the lock is engaged.
+        composeRule.waitForIdle()
+        assertTrue("first tap must start exactly one request", calls.get() >= 1)
+
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        composeRule.waitForIdle()
+
+        // Exactly one request was ever started, despite two taps.
+        assertEquals(1, calls.get())
+    }
+
+    @Test
+    fun failureShowsGenericMessageAndButtonsAreEnabledAgain() {
+        val calls = AtomicInteger()
+        setDialog(
+            fake(
+                requester = { _, _, _, _ ->
+                    calls.incrementAndGet()
+                    RunApprovalResult.Failure(RunApprovalError.Network)
+                }
+            )
+        )
+
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(ERROR_GENERIC).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        assertEquals(1, calls.get())
+
+        // The dialog stays open, the generic message is shown and BOTH
+        // buttons are enabled again for exactly one deliberate manual retry.
+        composeRule.onNodeWithText(TITLE).assertIsDisplayed()
+        composeRule.onNodeWithText(ERROR_GENERIC).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_DENY).assertIsEnabled()
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsEnabled()
+    }
+
+    @Test
+    fun noPendingShowsNoteAndDisablesButtons() {
+        var dismissed = false
+        setDialog(
+            fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }),
+            onDismiss = { dismissed = true }
+        )
+
+        composeRule.onNodeWithTag(TAG_DENY).performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(ALREADY_RESOLVED).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(ALREADY_RESOLVED).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_DENY).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsNotEnabled()
+        // NoPending is a terminal outcome, not a dismissal: the dialog is
+        // not closed and onDismiss is not invoked.
+        composeRule.onNodeWithText(TITLE).assertIsDisplayed()
+        assertFalse(dismissed)
+    }
+
+    @Test
+    fun resolvedClosesViaOnDismissCallback() {
+        var dismissed = false
+        setDialog(
+            fake(requester = { _, _, _, _ ->
+                RunApprovalResult.Resolved(RUN_ID, RunApprovalChoice.ONCE)
+            }),
+            onDismiss = { dismissed = true }
+        )
+
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        waitForGone()
+        assertTrue(dismissed)
+    }
+
+    @Test
+    fun denyChoiceIsForwardedToTheRequesterWithExactArgs() {
+        val seenProfile = mutableListOf<String>()
+        val seenRun = mutableListOf<String>()
+        val seenRequest = mutableListOf<String>()
+        val seenChoice = mutableListOf<RunApprovalChoice>()
+        setDialog(
+            fake(
+                requester = { profileId, runId, requestId, choice ->
+                    seenProfile += profileId
+                    seenRun += runId
+                    seenRequest += requestId
+                    seenChoice += choice
+                    RunApprovalResult.Resolved(runId, choice)
+                }
+            )
+        )
+
+        composeRule.onNodeWithTag(TAG_DENY).performClick()
+        waitForGone()
+
+        assertEquals(listOf(PROFILE_ID), seenProfile)
+        assertEquals(listOf(RUN_ID), seenRun)
+        assertEquals(listOf(REQUEST_ID), seenRequest)
+        assertEquals(listOf(RunApprovalChoice.DENY), seenChoice)
+    }
+
+    private fun setDialog(requester: RunApprovalRequester, onDismiss: () -> Unit = {}) {
+        composeRule.setContent {
+            var show by remember { mutableStateOf(true) }
+            if (show) {
+                HermesTheme {
+                    ApprovalDialog(
+                        request = REQUEST,
+                        profileId = PROFILE_ID,
+                        requester = requester,
+                        onDismiss = {
+                            show = false
+                            onDismiss()
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun fake(
+        requester: suspend (String, String, String, RunApprovalChoice) -> RunApprovalResult
+    ): RunApprovalRequester =
+        object : RunApprovalRequester {
+            override suspend fun respond(
+                profileId: String,
+                runId: String,
+                requestId: String,
+                choice: RunApprovalChoice
+            ): RunApprovalResult = requester(profileId, runId, requestId, choice)
+        }
+
+    private fun waitForGone() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(TITLE).fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+    }
+
+    private companion object {
+        const val PROFILE_ID = "fixture-profile-id"
+        const val RUN_ID = "run_synthetic"
+        const val REQUEST_ID = "request_synthetic"
+        const val COMMAND = "synthetic-command"
+        const val DESCRIPTION = "synthetic-reason"
+
+        const val TITLE = "Freigabe anfragen"
+        const val ACTION_LABEL = "Aktion"
+        const val ACTION_VALUE = "Hermes-Run"
+        const val TARGET_LABEL = "Ziel"
+        const val REASON_LABEL = "Begründung"
+        const val RISK_NOTE =
+            "Sicherheitsmodul empfiehlt Ablehnung. Erlauben nur, wenn du die Aktion bewusst freigibst."
+        const val ERROR_GENERIC = "Die Entscheidung konnte nicht übermittelt werden."
+        const val ALREADY_RESOLVED = "Diese Freigabe wurde bereits beantwortet."
+
+        const val TAG_DENY = "approval_deny"
+        const val TAG_ALLOW = "approval_allow"
+
+        val REQUEST = ApprovalRequest(
+            runId = RUN_ID,
+            requestId = REQUEST_ID,
+            command = COMMAND,
+            description = DESCRIPTION,
+            smartDenied = true
+        )
+    }
+}

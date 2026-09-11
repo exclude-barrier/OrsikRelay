@@ -23,10 +23,14 @@ import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftS
 import io.github.excludebarrier.orsikrelay.data.profile.ActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileAdmin
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
+import io.github.excludebarrier.orsikrelay.data.profile.RunApprovalCapabilityStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesActiveServerSelectionStore
+import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesRunApprovalCapabilityStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
 import io.github.excludebarrier.orsikrelay.data.message.MessageHistoryRepository
 import io.github.excludebarrier.orsikrelay.data.message.StreamingChatRepository
+import io.github.excludebarrier.orsikrelay.data.run.RunApprovalCapabilityRepository
+import io.github.excludebarrier.orsikrelay.data.run.RunApprovalRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunStopRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunSteerRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
@@ -37,11 +41,14 @@ import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalCapabilitySource
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.network.HermesConnectionClient
+import io.github.excludebarrier.orsikrelay.network.HermesRunApprovalClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunStopClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunSteerClient
 import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
@@ -68,11 +75,14 @@ fun HermesNavHost(
     streamingChatSource: StreamingChatSource? = null,
     runStopRequester: RunStopRequester? = null,
     runSteerRequester: RunSteerRequester? = null,
+    runApprovalRequester: RunApprovalRequester? = null,
+    runApprovalCapabilitySource: RunApprovalCapabilitySource? = null,
     chatDraftRepository: ChatDraftRepository? = null,
     profileAdmin: ProfileAdmin? = null,
     themeController: ThemeModeController? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
-    selectionStore: ActiveServerSelectionStore? = null
+    selectionStore: ActiveServerSelectionStore? = null,
+    capabilityStore: RunApprovalCapabilityStore? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
     val productionDependencies = remember(applicationContext) {
@@ -84,6 +94,12 @@ fun HermesNavHost(
             // exactly one profile ID — no credential, URL, draft or chat data.
             val selectionStore = selectionStore
                 ?: SharedPreferencesActiveServerSelectionStore(applicationContext)
+            // Mission 014: the per-profile run-approval capability store.
+            // It holds exactly one non-secret boolean per profile (the
+            // onboarding-confirmed `features.run_approval_response` flag);
+            // no credential, URL, draft, chat or approval content.
+            val capabilityStore = capabilityStore
+                ?: SharedPreferencesRunApprovalCapabilityStore(applicationContext)
             // One production ChatDraftRepository instance shared by the chat
             // screen and the profile repository (Mission 009B): profile
             // deletion clears the drafts through this same instance, so no
@@ -129,8 +145,17 @@ fun HermesNavHost(
                     credentialStore = credentialStore,
                     runSteerTransport = HermesRunSteerClient()
                 ),
+                runApprovalRequester = RunApprovalRepository(
+                    profileRepository = profileRepository,
+                    credentialStore = credentialStore,
+                    runApprovalTransport = HermesRunApprovalClient()
+                ),
+                runApprovalCapabilitySource = RunApprovalCapabilityRepository(
+                    capabilityStore = capabilityStore
+                ),
                 chatDraftRepository = chatDraftRepository,
                 selectionStore = selectionStore,
+                capabilityStore = capabilityStore,
                 startupResolver = {
                     // Mission 012: the startup resolution validates the
                     // persisted active server selection against the metadata
@@ -150,6 +175,12 @@ fun HermesNavHost(
     var resolvedStart by remember(startDestination) { mutableStateOf<AppScreen?>(null) }
     var activeProfileId by remember { mutableStateOf<String?>(null) }
     var pendingCreatedSessionId by remember { mutableStateOf<String?>(null) }
+    // Mission 014: the fail-closed run-approval capability gate for the
+    // currently active profile. Default `false`; resolved from the
+    // onboarding-confirmed, persisted capability whenever the active
+    // profile changes. Without a confirmed `true` the approval UI is
+    // invisible, so a stale or unreadable value can never enable it.
+    var approvalUiEnabled by remember { mutableStateOf(false) }
 
     // Safe return after a profile deletion (Mission 010): the Profiles
     // destination is only reachable from Sessions, so popping everything
@@ -233,6 +264,29 @@ fun HermesNavHost(
         pendingCreatedSessionId = null
     }
 
+    // Mission 014: resolve the fail-closed run-approval capability for the
+    // active profile off the main thread. A blank/absent/corrupt value, a
+    // storage failure or a missing source all resolve to `false`, so the
+    // gate only ever opens for an onboarding-confirmed, persisted `true`.
+    // Re-run on every profile change (startup, onboarding, switch, delete).
+    LaunchedEffect(activeProfileId) {
+        val profileId = activeProfileId.orEmpty()
+        val enabled = try {
+            withContext(Dispatchers.IO) {
+                (runApprovalCapabilitySource
+                    ?: productionDependencies.value.runApprovalCapabilitySource)
+                    .isEnabled(profileId)
+            }
+        } catch (_: Exception) {
+            false
+        }
+        // Only publish when the profile has not changed in the meantime, so
+        // a slow read for a left profile can never re-enable a switched one.
+        if (activeProfileId?.orEmpty() == profileId) {
+            approvalUiEnabled = enabled
+        }
+    }
+
     val initialScreen = resolvedStart
     if (initialScreen == null) {
         Text(text = stringResource(R.string.sessions_loading))
@@ -272,6 +326,25 @@ fun HermesNavHost(
                             throw error
                         } catch (_: Exception) {
                             // Selection persist failed: see the comment above.
+                        }
+                        // Mission 014: persist the onboarding-confirmed
+                        // approval capability for the verified profile
+                        // (metadata only, no credential). Best-effort and
+                        // independent of the selection persist above: a
+                        // failure never blocks the already-verified
+                        // navigation; the capability stays fail-closed
+                        // (absent -> false) until the next onboarding.
+                        try {
+                            withContext(Dispatchers.IO) {
+                                productionDependencies.value.capabilityStore.write(
+                                    success.profileId,
+                                    success.runApprovalResponse
+                                )
+                            }
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            // Capability persist failed: stays fail-closed.
                         }
                         activeProfileId = success.profileId
                         navController.navigate(routeOf(AppScreen.Sessions)) {
@@ -332,6 +405,9 @@ fun HermesNavHost(
                     ?: productionDependencies.value.runSteerRequester,
                 chatDraftRepository = chatDraftRepository
                     ?: productionDependencies.value.chatDraftRepository,
+                runApprovalRequester = runApprovalRequester
+                    ?: productionDependencies.value.runApprovalRequester,
+                approvalUiEnabled = approvalUiEnabled,
                 profileId = activeProfileId.orEmpty(),
                 sessionId = decodeRouteArgument(encodedSessionId),
                 onBack = { navController.popBackStack() }
@@ -349,6 +425,9 @@ private data class ProductionDependencies(
     val streamingChatSource: StreamingChatSource,
     val runStopRequester: RunStopRequester,
     val runSteerRequester: RunSteerRequester,
+    val runApprovalRequester: RunApprovalRequester,
+    val runApprovalCapabilitySource: RunApprovalCapabilitySource,
+    val capabilityStore: RunApprovalCapabilityStore,
     val chatDraftRepository: ChatDraftRepository,
     val selectionStore: ActiveServerSelectionStore,
     val startupResolver: () -> StartupProfile

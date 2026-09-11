@@ -314,7 +314,8 @@ class ActiveServerSelectionRestartUiTest {
             HermesConnectionResult.Success(
                 version = "1",
                 sessionsSupported = true,
-                sessionStreamingSupported = true
+                sessionStreamingSupported = true,
+                runApprovalResponse = true
             )
         }
         val coordinator = ProfileConnectionCoordinator(
