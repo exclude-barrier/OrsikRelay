@@ -247,8 +247,9 @@ class ChatStreamEventPipeline(
                 if (!messageStarted || assistantCompleted || runCompleted || sawError) {
                     throw protocol()
                 }
-                // Closed generic activity: no payload detail is read.
-                return listOf(ChatTurnEvent.ToolActivity)
+                // Only a conservative tool identifier crosses this boundary;
+                // args, commands, previews and output remain private.
+                return listOf(ChatTurnEvent.ToolActivity(safeToolName(payload)))
             }
             RUN_COMPLETED -> {
                 if (runCompleted || sawError || !assistantCompleted) {
@@ -409,6 +410,13 @@ class ChatStreamEventPipeline(
         return value
     }
 
+    private fun safeToolName(json: JSONObject): String? {
+        val value = json.opt(TOOL_NAME_FIELD) as? String ?: return null
+        if (value.isBlank() || value.length > MAX_TOOL_NAME_LENGTH) return null
+        if (!TOOL_NAME_REGEX.matches(value)) return null
+        return value
+    }
+
     private fun strictApprovalText(json: JSONObject, key: String): String {
         val value = json.opt(key) as? String ?: throw protocol()
         if (value.isBlank() || value.length > MAX_APPROVAL_TEXT_LENGTH) {
@@ -448,6 +456,7 @@ class ChatStreamEventPipeline(
         const val MAX_DELTA_LENGTH = 32 * 1024
         const val MAX_COMPOSED_LENGTH = 1024 * 1024
         const val MAX_APPROVAL_TEXT_LENGTH = 32 * 1024
+        const val MAX_TOOL_NAME_LENGTH = 80
         val APPROVAL_ALLOWED_CONTROLS = setOf('\n', '\r', '\t')
 
         const val SESSION_ID_FIELD = "session_id"
@@ -465,6 +474,7 @@ class ChatStreamEventPipeline(
         const val COMMAND_FIELD = "command"
         const val DESCRIPTION_FIELD = "description"
         const val SMART_DENIED_FIELD = "smart_denied"
+        const val TOOL_NAME_FIELD = "tool_name"
         const val ROLE_ASSISTANT = "assistant"
 
         const val RUN_STARTED = "run.started"
@@ -482,6 +492,7 @@ class ChatStreamEventPipeline(
         const val APPROVAL_REQUEST = "approval.request"
         const val DONE = "done"
         const val ERROR = "error"
+        val TOOL_NAME_REGEX = Regex("[A-Za-z][A-Za-z0-9_-]*")
         val LONG_MAX_DECIMAL: BigDecimal = BigDecimal.valueOf(Long.MAX_VALUE)
     }
 }

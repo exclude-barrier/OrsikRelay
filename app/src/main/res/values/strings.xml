@@ -39,6 +39,7 @@
     <string name="chat_send">Senden</string>
     <string name="chat_input_label">Nachricht</string>
     <string name="chat_tool_activity">Tool ist aktiv…</string>
+    <string name="chat_tool_activity_named">Tool aktiv: %1$s</string>
     <string name="chat_refresh_history">Verlauf aktualisieren</string>
     <string name="chat_stop">Stoppen</string>
     <string name="chat_stopping">Wird gestoppt …</string>

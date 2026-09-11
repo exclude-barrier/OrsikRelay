@@ -30,8 +30,8 @@ sealed interface ChatTurnEvent {
     /** The authoritative final assistant text of this turn. */
     data class AssistantCompleted(val finalText: String) : ChatTurnEvent
 
-    /** Generic tool activity; never includes tool name, args or preview. */
-    data object ToolActivity : ChatTurnEvent
+    /** Tool activity with an optional safe identifier only; never args, previews or output. */
+    data class ToolActivity(val toolName: String? = null) : ChatTurnEvent
 
     /**
      * One server-redacted, exact pending approval for this active turn.

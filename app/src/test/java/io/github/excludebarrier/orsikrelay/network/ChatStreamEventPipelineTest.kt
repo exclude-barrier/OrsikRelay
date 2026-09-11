@@ -171,7 +171,7 @@ class ChatStreamEventPipelineTest {
                 .put("name", "hidden-tool")
                 .put("args", JSONObject().put("preview", "hidden-preview"))
             val events = pipeline.process(ParsedSseFrame(name, payload.toString()))
-            assertEquals(listOf<ChatTurnEvent>(ChatTurnEvent.ToolActivity), events)
+            assertEquals(listOf<ChatTurnEvent>(ChatTurnEvent.ToolActivity()), events)
             assertFalse(events.toString().contains("hidden-tool"))
             assertFalse(events.toString().contains("hidden-preview"))
         }
@@ -625,7 +625,7 @@ class ChatStreamEventPipelineTest {
                 .put("args", JSONObject().put("preview", "hidden-preview"))
                 .toString()
         )
-        assertEquals(listOf<ChatTurnEvent>(ChatTurnEvent.ToolActivity), pipeline.process(tool))
+        assertEquals(listOf<ChatTurnEvent>(ChatTurnEvent.ToolActivity()), pipeline.process(tool))
 
         listOf("tool.progress", "reasoning.started", "reasoning.delta", "reasoning.completed")
             .forEachIndexed { index, name ->

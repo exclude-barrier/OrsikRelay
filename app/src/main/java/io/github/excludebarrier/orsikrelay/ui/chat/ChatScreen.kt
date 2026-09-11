@@ -256,6 +256,7 @@ fun ChatScreen(
     var localKeyCounter by remember(profileId, sessionId) { mutableIntStateOf(0) }
     val timelineListState = remember(profileId, sessionId) { LazyListState() }
     val toolActivityLabel = stringResource(R.string.chat_tool_activity)
+    val namedToolActivityLabel = stringResource(R.string.chat_tool_activity_named)
     val stopLabel = stringResource(R.string.chat_stop)
     val stoppingLabel = stringResource(R.string.chat_stopping)
     val stopErrorLabel = stringResource(R.string.error_run_stop_generic)
@@ -479,7 +480,8 @@ fun ChatScreen(
                             localLines = localLines + TimelineRow(
                                 key = nextLocalKey(),
                                 role = MessageRole.TOOL,
-                                content = toolActivityLabel,
+                                content = event.toolName?.let { namedToolActivityLabel.format(it) }
+                                    ?: toolActivityLabel,
                                 localTool = true
                             )
                         }

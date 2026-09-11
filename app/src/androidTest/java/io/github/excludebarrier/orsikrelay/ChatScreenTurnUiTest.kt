@@ -177,7 +177,7 @@ class ChatScreenTurnUiTest {
         source.enqueue(
             ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.AssistantStarted,
-            ChatTurnEvent.ToolActivity
+            ChatTurnEvent.ToolActivity()
         )
         // Nur der generische Status ist sichtbar. Der Stream wird erst
         // nach der Beobachtung fortgesetzt, weil die finale Zeile die
