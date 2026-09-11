@@ -292,32 +292,52 @@ class ChatStreamEventPipelineTest {
     }
 
     @Test
-    fun approvalRequestEventIsRejectedClosedOnSessionStream() {
-        // Mission 015 boundary: `approval.request` is a real server event, but it
-        // exists ONLY on the run-event stream (`GET /v1/runs/{id}/events`), which
-        // this app does not consume (documented in internal task log, Mission 015). The app's
-        // only stream parser therefore must treat `approval.request` as an unknown
-        // event and reject it closed — it can never turn such a frame into a
-        // `pendingApproval`. The payload below is the exact, redacted field set the
-        // installed server emits (gateway/platforms/api_server_runs.py
-        // `_make_approval_notify`), carried in the session-chat envelope.
+    fun interactiveApprovalRequestMapsOnlyTheRedactedClosedFields() {
+        // The server's authenticated, explicit interactive gateway bridge
+        // uses the same notify/queue mechanism as Telegram and puts this
+        // event into the session-chat SSE envelope. Fields outside the
+        // closed four-field contract are deliberately ignored.
         pipeline.process(frame("run.started", 1))
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        val events = pipeline.process(
+            ParsedSseFrame(
+                "approval.request",
+                baseFrame(3)
+                    .put("command", "redacted-command")
+                    .put("description", "redacted-description")
+                    .put("request_id", "0123456789abcdef0123456789abcdef")
+                    .put("smart_denied", true)
+                    .put("pattern_key", "must-not-cross-ui-boundary")
+                    .put("allow_permanent", false)
+                    .toString()
+            )
+        )
+
+        assertEquals(1, events.size)
+        val event = events.single() as ChatTurnEvent.ApprovalRequested
+        assertEquals(RUN_ID, event.request.runId)
+        assertEquals("0123456789abcdef0123456789abcdef", event.request.requestId)
+        assertEquals("redacted-command", event.request.command)
+        assertEquals("redacted-description", event.request.description)
+        assertTrue(event.request.smartDenied)
+    }
+
+    @Test
+    fun malformedInteractiveApprovalRequestIsRejectedClosed() {
+        pipeline.process(frame("run.started", 1))
+        pipeline.process(messageStartedFrame(2, MSG_ID))
         assertProtocolViolation(
             pipeline,
             ParsedSseFrame(
                 "approval.request",
-                baseFrame(2)
+                baseFrame(3)
                     .put("command", "redacted-command")
                     .put("description", "redacted-description")
-                    .put("request_id", "0123456789abcdef0123456789abcdef")
-                    .put("pattern_key", "synthetic-pattern")
-                    .put("allow_permanent", false)
-                    .put("allow_session", true)
-                    .put("smart_denied", true)
-                    .put("timestamp", 1700000000.0)
+                    // Missing request_id and non-boolean smart_denied: no
+                    // potentially actionable UI can be produced.
+                    .put("smart_denied", "true")
                     .toString()
-            ),
-            "approval.request must be rejected closed on the session stream"
+            )
         )
     }
 

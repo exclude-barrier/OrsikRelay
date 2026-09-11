@@ -45,6 +45,7 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunApprovalRequester
+import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
@@ -214,6 +215,9 @@ fun ChatScreen(
     // Bound from `RunStarted`, cleared on submit and on every terminal
     // reset; never rendered, logged or embedded in an error message.
     var boundRunId by remember(profileId, sessionId) { mutableStateOf<String?>(null) }
+    // Never persisted: a pending decision belongs only to this active SSE
+    // turn and must disappear on navigation, recreation or terminal state.
+    var pendingApproval by remember(profileId, sessionId) { mutableStateOf<ApprovalRequest?>(null) }
     // True while exactly one stop request is in flight.
     var stopInFlight by remember(profileId, sessionId) { mutableStateOf(false) }
     // True after a closed, generic stop failure: the control re-enables
@@ -461,6 +465,12 @@ fun ChatScreen(
                                 localLines,
                                 event.finalText
                             )
+                        }
+                        is ChatTurnEvent.ApprovalRequested -> {
+                            // The pipeline bound both IDs to this exact run
+                            // and validated the redacted display fields. One
+                            // agent turn waits for at most one gateway prompt.
+                            pendingApproval = event.request
                         }
                         is ChatTurnEvent.ToolActivity -> {
                             // Generic status only: never a tool name or
@@ -969,6 +979,7 @@ fun ChatScreen(
                             turnFailure = null
                             runStarted = false
                             boundRunId = null
+                            pendingApproval = null
                             stopInFlight = false
                             steerInFlight = false
                             steerQueued = false
@@ -1067,10 +1078,10 @@ fun ChatScreen(
     // No network or SSE wiring is introduced here.
     ApprovalUi(
         approvalUiEnabled = approvalUiEnabled,
-        pendingApproval = null,
+        pendingApproval = pendingApproval,
         profileId = profileId,
         requester = runApprovalRequester,
-        onDismiss = { }
+        onDismiss = { pendingApproval = null }
     )
 }
 

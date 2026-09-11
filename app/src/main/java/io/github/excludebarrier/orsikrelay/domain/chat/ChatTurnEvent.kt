@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.chat
 
+import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
+
 /**
  * Closed set of lifecycle-safe events of one streaming chat turn
  * (Mission 006A).
@@ -30,6 +32,12 @@ sealed interface ChatTurnEvent {
 
     /** Generic tool activity; never includes tool name, args or preview. */
     data object ToolActivity : ChatTurnEvent
+
+    /**
+     * One server-redacted, exact pending approval for this active turn.
+     * The request is resolved only by the existing once/deny requester.
+     */
+    data class ApprovalRequested(val request: ApprovalRequest) : ChatTurnEvent
 
     /**
      * The run completed successfully. [pendingSteer] carries the server's

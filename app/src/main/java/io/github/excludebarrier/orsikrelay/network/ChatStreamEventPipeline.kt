@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
+import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -219,6 +220,29 @@ class ChatStreamEventPipeline(
                     )
                 )
             }
+            APPROVAL_REQUEST -> {
+                // The request originates only from the explicit interactive
+                // gateway bridge. It is valid during the active assistant
+                // window and carries exactly the redacted response/display
+                // fields; unknown fields remain unread.
+                if (!runStarted || !messageStarted || assistantCompleted || runCompleted || sawError) {
+                    throw protocol()
+                }
+                val requestId = strictId(payload, REQUEST_ID_FIELD)
+                val command = strictApprovalText(payload, COMMAND_FIELD)
+                val description = strictApprovalText(payload, DESCRIPTION_FIELD)
+                val smartDenied = payload.opt(SMART_DENIED_FIELD) as? Boolean
+                    ?: throw protocol()
+                return listOf(ChatTurnEvent.ApprovalRequested(
+                    ApprovalRequest(
+                        runId = boundRunId ?: throw protocol(),
+                        requestId = requestId,
+                        command = command,
+                        description = description,
+                        smartDenied = smartDenied
+                    )
+                ))
+            }
             TOOL_STARTED, TOOL_COMPLETED, TOOL_FAILED -> {
                 if (!messageStarted || assistantCompleted || runCompleted || sawError) {
                     throw protocol()
@@ -385,6 +409,19 @@ class ChatStreamEventPipeline(
         return value
     }
 
+    private fun strictApprovalText(json: JSONObject, key: String): String {
+        val value = json.opt(key) as? String ?: throw protocol()
+        if (value.isBlank() || value.length > MAX_APPROVAL_TEXT_LENGTH) {
+            throw protocol()
+        }
+        // Preserve normal text layout but reject all other C0/C1 control
+        // characters before Compose ever renders the server-provided text.
+        if (value.any { it.isISOControl() && it !in APPROVAL_ALLOWED_CONTROLS }) {
+            throw protocol()
+        }
+        return value
+    }
+
     private fun strictPositiveInt(json: JSONObject, key: String): Long {
         val value = json.opt(key) as? Number
             ?: throw protocol()
@@ -410,6 +447,8 @@ class ChatStreamEventPipeline(
         const val MAX_ID_LENGTH = 256
         const val MAX_DELTA_LENGTH = 32 * 1024
         const val MAX_COMPOSED_LENGTH = 1024 * 1024
+        const val MAX_APPROVAL_TEXT_LENGTH = 32 * 1024
+        val APPROVAL_ALLOWED_CONTROLS = setOf('\n', '\r', '\t')
 
         const val SESSION_ID_FIELD = "session_id"
         const val RUN_ID_FIELD = "run_id"
@@ -422,6 +461,10 @@ class ChatStreamEventPipeline(
         const val DELTA_FIELD = "delta"
         const val CONTENT_FIELD = "content"
         const val PENDING_STEER_FIELD = "pending_steer"
+        const val REQUEST_ID_FIELD = "request_id"
+        const val COMMAND_FIELD = "command"
+        const val DESCRIPTION_FIELD = "description"
+        const val SMART_DENIED_FIELD = "smart_denied"
         const val ROLE_ASSISTANT = "assistant"
 
         const val RUN_STARTED = "run.started"
@@ -436,6 +479,7 @@ class ChatStreamEventPipeline(
         const val REASONING_DELTA = "reasoning.delta"
         const val REASONING_COMPLETED = "reasoning.completed"
         const val RUN_COMPLETED = "run.completed"
+        const val APPROVAL_REQUEST = "approval.request"
         const val DONE = "done"
         const val ERROR = "error"
         val LONG_MAX_DECIMAL: BigDecimal = BigDecimal.valueOf(Long.MAX_VALUE)

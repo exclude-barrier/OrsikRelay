@@ -135,6 +135,9 @@ class HermesSessionStreamClient(
                 .header(AUTHORIZATION_HEADER, "$BEARER_PREFIX$rawKey")
                 .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_VALUE)
                 .header(ACCEPT_HEADER, SSE_CONTENT_TYPE)
+                // Explicitly opt into the same gateway approval queue used
+                // by Telegram. Servers without the bridge ignore this header.
+                .header(INTERACTIVE_APPROVALS_HEADER, "1")
                 .build()
         }
 
@@ -538,6 +541,7 @@ class HermesSessionStreamClient(
         const val CONTENT_TYPE_HEADER = "Content-Type"
         const val CONTENT_TYPE_HEADER_VALUE = "application/json"
         const val ACCEPT_HEADER = "Accept"
+        const val INTERACTIVE_APPROVALS_HEADER = "X-Hermes-Interactive-Approvals"
         const val SSE_CONTENT_TYPE = "text/event-stream"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
         const val MESSAGE_FIELD = "message"
