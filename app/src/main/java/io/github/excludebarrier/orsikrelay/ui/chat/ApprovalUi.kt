@@ -8,23 +8,17 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 /**
  * Capability gate for the run-approval UI (Mission 014).
  *
- * This is the single switch that keeps the approval UI invisible unless
- * the server CONFIRMED the approval capability AND a pending, UI-safe
- * [ApprovalRequest] is present:
+ * A strictly validated, pending [ApprovalRequest] is sufficient to render
+ * the dialog. The event is server-authoritative: it arrived on the active,
+ * authenticated SSE turn and carries the exact run/request identifiers the
+ * response endpoint requires. Requiring a separately persisted capability
+ * flag here would deadlock a newly upgraded server: the server waits for a
+ * decision while an old app profile hides the valid request.
  *
- * - [approvalUiEnabled] must be `true`. It is derived ONLY from the
- *   server's `features.run_approval_response` capability flag (read
- *   fail-closed: absent or non-boolean means `false`). Without a
- *   confirmed capability, NOTHING is rendered — even if a request is
- *   supplied — so no approval UI can ever appear for a server that does
- *   not advertise the capability.
- * - [pendingApproval] must be non-null. It is the closed, UI-safe model
- *   of exactly one pending approval; with no request there is nothing to
- *   show.
- *
- * Both conditions are AND-ed: the gate is `enabled && request != null`.
- * This composable holds no state and performs no I/O; the actual dialog
- * is [ApprovalDialog]. No approval content is persisted here.
+ * [approvalUiEnabled] remains a compatibility hint for callers, but it must
+ * never suppress a valid pending request. With no request, nothing renders.
+ * This composable holds no state and performs no I/O; the actual dialog is
+ * [ApprovalDialog]. No approval content is persisted here.
  */
 @Composable
 fun ApprovalUi(
@@ -35,7 +29,8 @@ fun ApprovalUi(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (!approvalUiEnabled) return
+    // A pending request itself is the fail-closed delivery proof. Do not
+    // gate it on stale capability metadata (see KDoc above).
     val request = pendingApproval ?: return
     ApprovalDialog(
         request = request,

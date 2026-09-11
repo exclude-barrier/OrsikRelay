@@ -25,12 +25,9 @@ import org.junit.Test
 /**
  * Compose tests for the run-approval GATE (Mission 014).
  *
- * The gate renders nothing unless the server capability flag is confirmed
- * AND a pending approval request is present. There is no live
- * approval.request source in the chat stream (documented in internal task log
- * Mission 014), so in production pendingApproval stays null and the gate
- * renders nothing. These tests pin both fail-closed directions with
- * synthetic fixtures only.
+ * A live, strictly validated pending approval always renders: the event is
+ * stronger evidence than cached capability metadata. Without a pending
+ * request the UI still renders nothing. Tests use synthetic fixtures only.
  */
 class ApprovalUiGateTest {
 
@@ -38,7 +35,7 @@ class ApprovalUiGateTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun capabilityFalseRendersNothing() {
+    fun capabilityFalseStillRendersAValidatedPendingRequest() {
         val calls = AtomicInteger()
         setGate(
             approvalUiEnabled = false,
@@ -51,8 +48,8 @@ class ApprovalUiGateTest {
 
         composeRule.waitForIdle()
         assertTrue(
-            "no dialog content may render when the capability is not confirmed",
-            composeRule.onAllNodesWithText(TITLE).fetchSemanticsNodes().isEmpty()
+            "a valid pending request must not be hidden by stale capability metadata",
+            composeRule.onAllNodesWithText(TITLE).fetchSemanticsNodes().isNotEmpty()
         )
         assertEquals(0, calls.get())
     }
