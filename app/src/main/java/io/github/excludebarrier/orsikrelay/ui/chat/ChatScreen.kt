@@ -86,9 +86,9 @@ import kotlinx.coroutines.withContext
  *   before that keeps the draft and removes the premature user line;
  * - submit/send is blocked only during an active turn or after a failure
  *   that happened after the confirmed start;
- * - `AssistantStarted` creates exactly one temporary assistant line;
- *   deltas grow it; `AssistantCompleted` replaces it with the
- *   authoritative final text; `TurnCompleted` frees the composer;
+ * - `AssistantStarted` does not create an empty placeholder; the first
+ *   delta/final text creates an assistant row at its actual stream position,
+ *   so tool activity and final content remain chronological;
  * - a flow that ends without `TurnCompleted` or `TurnFailed` is treated
  *   as a generic network failure, never as a silent success;
  * - a failure after the run started shows only a generic message plus a
@@ -452,20 +452,36 @@ fun ChatScreen(
                             clearDraftState()
                         }
                         is ChatTurnEvent.AssistantStarted -> {
-                            localLines = localLines + TimelineRow(
-                                key = nextLocalKey(),
-                                role = MessageRole.ASSISTANT,
-                                content = ""
-                            )
+                            // Do not render an empty bubble. A tool may run
+                            // before the first assistant token; rendering one
+                            // here would later move the final answer above its
+                            // tool cards and break the event chronology.
                         }
                         is ChatTurnEvent.AssistantDelta -> {
-                            localLines = appendToLastAssistantLine(localLines, event.text)
+                            val last = localLines.lastOrNull()
+                            localLines = if (last?.role == MessageRole.ASSISTANT) {
+                                appendToLastAssistantLine(localLines, event.text)
+                            } else {
+                                localLines + TimelineRow(
+                                    key = nextLocalKey(),
+                                    role = MessageRole.ASSISTANT,
+                                    content = event.text
+                                )
+                            }
                         }
                         is ChatTurnEvent.AssistantCompleted -> {
-                            localLines = replaceLastAssistantLine(
-                                localLines,
-                                event.finalText
-                            )
+                            val last = localLines.lastOrNull()
+                            localLines = if (last?.role == MessageRole.ASSISTANT) {
+                                replaceLastAssistantLine(localLines, event.finalText)
+                            } else {
+                                // A tool-only turn: the authoritative final
+                                // answer is appended after its final tool row.
+                                localLines + TimelineRow(
+                                    key = nextLocalKey(),
+                                    role = MessageRole.ASSISTANT,
+                                    content = event.finalText
+                                )
+                            }
                         }
                         is ChatTurnEvent.ApprovalRequested -> {
                             // The pipeline bound both IDs to this exact run
