@@ -92,11 +92,28 @@ class HermesSessionStreamClient(
         .retryOnConnectionFailure(false)
         .build()
 
+    /** Backward-compatible fail-closed entry point for non-negotiated callers. */
+    fun openTurn(
+        baseUrl: String,
+        apiKey: SecretValue,
+        sessionId: String,
+        message: String,
+        listener: ChatStreamListener
+    ): ChatStreamHandle = openTurn(
+        baseUrl = baseUrl,
+        apiKey = apiKey,
+        sessionId = sessionId,
+        message = message,
+        interactiveApprovals = false,
+        listener = listener
+    )
+
     override fun openTurn(
         baseUrl: String,
         apiKey: SecretValue,
         sessionId: String,
         message: String,
+        interactiveApprovals: Boolean,
         listener: ChatStreamListener
     ): ChatStreamHandle {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
@@ -129,27 +146,34 @@ class HermesSessionStreamClient(
             .addPathSegment(STREAM_SEGMENT)
             .build()
         val request = apiKey.useRaw { rawKey ->
-            Request.Builder()
+            val builder = Request.Builder()
                 .url(url)
                 .post(bodyJson.toByteArray(Charsets.UTF_8).toRequestBody(JSON_MEDIA_TYPE))
                 .header(AUTHORIZATION_HEADER, "$BEARER_PREFIX$rawKey")
                 .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_VALUE)
                 .header(ACCEPT_HEADER, SSE_CONTENT_TYPE)
-                // Explicitly opt into the same gateway approval queue used
-                // by Telegram. Servers without the bridge ignore this header.
-                .header(INTERACTIVE_APPROVALS_HEADER, "1")
-                .build()
+            if (interactiveApprovals) {
+                // Transport opt-in is emitted only after the complete
+                // protocol-v1 contract was authenticated and persisted.
+                builder.header(INTERACTIVE_APPROVALS_HEADER, "1")
+            }
+            builder.build()
         }
 
         val handle = StreamHandle()
         handle.bind(client.newCall(request))
         Thread({
-            runTurn(handle, sessionId, listener)
+            runTurn(handle, sessionId, interactiveApprovals, listener)
         }, "hermes-chat-stream").start()
         return handle
     }
 
-    private fun runTurn(handle: StreamHandle, sessionId: String, listener: ChatStreamListener) {
+    private fun runTurn(
+        handle: StreamHandle,
+        sessionId: String,
+        interactiveApprovals: Boolean,
+        listener: ChatStreamListener
+    ) {
         val finished = AtomicBoolean()
         val responseRef = arrayOfNulls<Response>(1)
 
@@ -207,7 +231,11 @@ class HermesSessionStreamClient(
                 return
             }
             val parser = SseFrameParser(terminalEventName = DONE_FRAME)
-            val pipeline = ChatStreamEventPipeline(sessionId, requireDoneAfterTerminal = true)
+            val pipeline = ChatStreamEventPipeline(
+                expectedSessionId = sessionId,
+                requireDoneAfterTerminal = true,
+                interactiveApprovals = interactiveApprovals
+            )
             // Hard bound: at most [MAX_STREAM_BYTES] body bytes ever
             // reach the decoder or the parser. A further read past the
             // limit fails closed with [StreamLimitException] if any

@@ -28,6 +28,7 @@ interface ChatStreamTransport {
         apiKey: SecretValue,
         sessionId: String,
         message: String,
+        interactiveApprovals: Boolean = false,
         listener: ChatStreamListener
     ): ChatStreamHandle
 }

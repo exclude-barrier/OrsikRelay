@@ -21,6 +21,7 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
@@ -515,6 +516,68 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText("Nachricht").assertIsEnabled()
     }
 
+    @Test
+    fun pendingApprovalDisappearsOnTurnCompleted() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+        openApproval(source, APPROVAL_REQUEST)
+
+        source.enqueue(ChatTurnEvent.TurnCompleted())
+        source.complete()
+        waitForFlowCompletion(source)
+
+        assertTrue(composeRule.onAllNodesWithText(APPROVAL_TITLE).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun pendingApprovalDisappearsOnTurnFailure() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+        openApproval(source, APPROVAL_REQUEST)
+
+        source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        source.complete()
+        waitForFlowCompletion(source)
+
+        assertTrue(composeRule.onAllNodesWithText(APPROVAL_TITLE).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun pendingApprovalDisappearsWhenStreamEndsWithoutTerminalEvent() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+        openApproval(source, APPROVAL_REQUEST)
+
+        source.complete()
+        waitForFlowCompletion(source)
+
+        assertTrue(composeRule.onAllNodesWithText(APPROVAL_TITLE).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun secondConcurrentApprovalNeverOverwritesThePendingRequest() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+        openApproval(source, APPROVAL_REQUEST)
+
+        source.enqueue(ChatTurnEvent.ApprovalRequested(SECOND_APPROVAL_REQUEST))
+        waitForFlowCompletion(source)
+
+        assertTrue(composeRule.onAllNodesWithText(APPROVAL_TITLE).fetchSemanticsNodes().isEmpty())
+    }
+
+    private fun openApproval(source: FakeTurnSource, request: ApprovalRequest) {
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Approval lifecycle")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+        source.enqueue(
+            ChatTurnEvent.RunStarted(request.runId),
+            ChatTurnEvent.ApprovalRequested(request)
+        )
+        waitForText(APPROVAL_TITLE)
+    }
+
     private fun setScreen(
         source: MessageHistorySource,
         chatSource: StreamingChatSource,
@@ -974,6 +1037,18 @@ class ChatScreenTurnUiTest {
     private companion object {
         const val RUN_ID = "run_synthetic"
         const val NEW_RUN_ID = "run_synthetic_2"
+        const val APPROVAL_TITLE = "Freigabe anfragen"
+        const val APPROVAL_RUN_ID = "run_0123456789abcdef0123456789abcdef"
+        val APPROVAL_REQUEST = ApprovalRequest(
+            runId = APPROVAL_RUN_ID,
+            requestId = "fedcba9876543210fedcba9876543210",
+            description = ApprovalRequest.SAFE_DESCRIPTION
+        )
+        val SECOND_APPROVAL_REQUEST = ApprovalRequest(
+            runId = APPROVAL_RUN_ID,
+            requestId = "00112233445566778899aabbccddeeff",
+            description = ApprovalRequest.SAFE_DESCRIPTION
+        )
     }
 
     // ------------------------------------------------------------------

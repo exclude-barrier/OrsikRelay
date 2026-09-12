@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -35,10 +36,9 @@ class ApprovalUiGateTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun capabilityFalseStillRendersAValidatedPendingRequest() {
+    fun validatedPendingRequestRendersWithoutASecondUiFlag() {
         val calls = AtomicInteger()
         setGate(
-            approvalUiEnabled = false,
             pendingApproval = REQUEST,
             requester = fake { _, _, _, _ ->
                 calls.incrementAndGet()
@@ -55,10 +55,9 @@ class ApprovalUiGateTest {
     }
 
     @Test
-    fun nullRequestRendersNothingEvenWithCapabilityTrue() {
+    fun nullRequestRendersNothing() {
         val calls = AtomicInteger()
         setGate(
-            approvalUiEnabled = true,
             pendingApproval = null,
             requester = fake { _, _, _, _ ->
                 calls.incrementAndGet()
@@ -75,23 +74,51 @@ class ApprovalUiGateTest {
     }
 
     @Test
-    fun capabilityTrueAndRequestRendersDialog() {
+    fun validatedRequestRendersDialog() {
         setGate(
-            approvalUiEnabled = true,
             pendingApproval = REQUEST,
             requester = fake { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }
         )
 
         composeRule.waitForIdle()
         composeRule.onNodeWithText(TITLE).assertIsDisplayed()
-        composeRule.onNodeWithText(TARGET_LABEL).assertIsDisplayed()
+        composeRule.onNodeWithText(HINT_LABEL).assertIsDisplayed()
+    }
+
+    @Test
+    fun changingRequestIdResetsTerminalDialogState() {
+        val calls = AtomicInteger()
+        lateinit var replaceRequest: () -> Unit
+        composeRule.setContent {
+            var request by remember { mutableStateOf(REQUEST) }
+            replaceRequest = { request = SECOND_REQUEST }
+            HermesTheme {
+                ApprovalUi(
+                    pendingApproval = request,
+                    profileId = PROFILE_ID,
+                    requester = fake { _, runId, _, _ ->
+                        calls.incrementAndGet()
+                        RunApprovalResult.NoPending(runId)
+                    },
+                    onDismiss = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, calls.get())
+
+        composeRule.runOnIdle { replaceRequest() }
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsEnabled().performClick()
+        composeRule.waitForIdle()
+        assertEquals(2, calls.get())
     }
 
     @Test
     fun tappingAllowOnceForwardsTheRequestExactlyOnce() {
         val calls = AtomicInteger()
         setGate(
-            approvalUiEnabled = true,
             pendingApproval = REQUEST,
             requester = fake { _, _, _, _ ->
                 calls.incrementAndGet()
@@ -110,7 +137,6 @@ class ApprovalUiGateTest {
     }
 
     private fun setGate(
-        approvalUiEnabled: Boolean,
         pendingApproval: ApprovalRequest?,
         requester: RunApprovalRequester
     ) {
@@ -121,7 +147,6 @@ class ApprovalUiGateTest {
             if (show) {
                 HermesTheme {
                     ApprovalUi(
-                        approvalUiEnabled = approvalUiEnabled,
                         pendingApproval = pendingApproval,
                         profileId = PROFILE_ID,
                         requester = requester,
@@ -146,20 +171,23 @@ class ApprovalUiGateTest {
 
     private companion object {
         const val PROFILE_ID = "fixture-profile-id"
-        const val RUN_ID = "run_synthetic"
-        const val REQUEST_ID = "request_synthetic"
+        const val RUN_ID = "run_0123456789abcdef0123456789abcdef"
+        const val REQUEST_ID = "fedcba9876543210fedcba9876543210"
 
         const val TITLE = "Freigabe anfragen"
-        const val TARGET_LABEL = "Ziel"
+        const val HINT_LABEL = "Hinweis"
 
         const val TAG_ALLOW = "approval_allow"
 
         val REQUEST = ApprovalRequest(
             runId = RUN_ID,
             requestId = REQUEST_ID,
-            command = "synthetic-command",
-            description = "synthetic-reason",
-            smartDenied = true
+            description = ApprovalRequest.SAFE_DESCRIPTION
+        )
+        val SECOND_REQUEST = ApprovalRequest(
+            runId = RUN_ID,
+            requestId = "00112233445566778899aabbccddeeff",
+            description = ApprovalRequest.SAFE_DESCRIPTION
         )
     }
 }

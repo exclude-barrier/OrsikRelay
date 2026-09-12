@@ -1,7 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -35,9 +34,9 @@ import org.junit.Test
  *
  * All values are synthetic fixtures; the requester seam is a fake, so no
  * network, no real hosts, no credentials and no real Hermes approvals are
- * involved. The dialog is the ONLY approval UI and must render exactly the
- * harmless, evidenced fields (action / target / reason / risk note) and
- * nothing else.
+ * involved. The dialog renders only the protocol-defined neutral approval
+ * prompt and explicit deny/allow-once controls; no dynamic action detail can
+ * be represented by [ApprovalRequest].
  */
 class ApprovalDialogUiTest {
 
@@ -45,22 +44,21 @@ class ApprovalDialogUiTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun rendersOnlyActionTargetReasonAndRiskNoteNotIds() {
+    fun rendersOnlyNeutralApprovalPromptNotIdsOrDynamicActionDetails() {
         setDialog(fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }))
 
-        // Title + the four evidenced, displayable fields are present ...
         composeRule.onNodeWithText(TITLE).assertIsDisplayed()
         composeRule.onNodeWithText(ACTION_LABEL).assertIsDisplayed()
         composeRule.onNodeWithText(ACTION_VALUE).assertIsDisplayed()
-        composeRule.onNodeWithText(TARGET_LABEL).assertIsDisplayed()
-        composeRule.onNodeWithText(COMMAND).assertIsDisplayed()
         composeRule.onNodeWithText(REASON_LABEL).assertIsDisplayed()
-        composeRule.onNodeWithText(DESCRIPTION).assertIsDisplayed()
-        composeRule.onNodeWithText(RISK_NOTE).assertIsDisplayed()
+        composeRule.onNodeWithText(SAFE_DESCRIPTION).assertIsDisplayed()
 
-        // ... while the identifiers are never displayed.
-        assertTrue("run id must never be shown", composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty())
-        assertTrue("request id must never be shown", composeRule.onAllNodesWithText(REQUEST_ID).fetchSemanticsNodes().isEmpty())
+        listOf(RUN_ID, REQUEST_ID, COMMAND, TARGET_LABEL, RISK_NOTE).forEach { forbidden ->
+            assertTrue(
+                "$forbidden must never be shown",
+                composeRule.onAllNodesWithText(forbidden).fetchSemanticsNodes().isEmpty()
+            )
+        }
     }
 
     @Test
@@ -138,7 +136,7 @@ class ApprovalDialogUiTest {
     }
 
     @Test
-    fun failureShowsGenericMessageAndButtonsAreEnabledAgain() {
+    fun failureShowsGenericMessageAndPermanentlyDisablesBothChoices() {
         val calls = AtomicInteger()
         setDialog(
             fake(
@@ -156,12 +154,15 @@ class ApprovalDialogUiTest {
         composeRule.waitForIdle()
         assertEquals(1, calls.get())
 
-        // The dialog stays open, the generic message is shown and BOTH
-        // buttons are enabled again for exactly one deliberate manual retry.
+        // An ambiguous result is terminal: neither decision can be sent
+        // again, because the first POST may already have been applied.
         composeRule.onNodeWithText(TITLE).assertIsDisplayed()
         composeRule.onNodeWithText(ERROR_GENERIC).assertIsDisplayed()
-        composeRule.onNodeWithTag(TAG_DENY).assertIsEnabled()
-        composeRule.onNodeWithTag(TAG_ALLOW).assertIsEnabled()
+        composeRule.onNodeWithTag(TAG_DENY).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, calls.get())
     }
 
     @Test
@@ -269,16 +270,17 @@ class ApprovalDialogUiTest {
 
     private companion object {
         const val PROFILE_ID = "fixture-profile-id"
-        const val RUN_ID = "run_synthetic"
-        const val REQUEST_ID = "request_synthetic"
+        const val RUN_ID = "run_0123456789abcdef0123456789abcdef"
+        const val REQUEST_ID = "fedcba9876543210fedcba9876543210"
         const val COMMAND = "synthetic-command"
-        const val DESCRIPTION = "synthetic-reason"
 
         const val TITLE = "Freigabe anfragen"
         const val ACTION_LABEL = "Aktion"
         const val ACTION_VALUE = "Hermes-Run"
         const val TARGET_LABEL = "Ziel"
-        const val REASON_LABEL = "Begründung"
+        const val REASON_LABEL = "Hinweis"
+        const val SAFE_DESCRIPTION =
+            "Eine potenziell gefährliche Aktion benötigt deine Freigabe."
         const val RISK_NOTE =
             "Sicherheitsmodul empfiehlt Ablehnung. Erlauben nur, wenn du die Aktion bewusst freigibst."
         const val ERROR_GENERIC = "Die Entscheidung konnte nicht übermittelt werden."
@@ -290,9 +292,7 @@ class ApprovalDialogUiTest {
         val REQUEST = ApprovalRequest(
             runId = RUN_ID,
             requestId = REQUEST_ID,
-            command = COMMAND,
-            description = DESCRIPTION,
-            smartDenied = true
+            description = ApprovalRequest.SAFE_DESCRIPTION
         )
     }
 }

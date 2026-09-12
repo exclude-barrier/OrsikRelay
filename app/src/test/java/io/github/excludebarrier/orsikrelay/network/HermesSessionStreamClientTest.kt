@@ -98,6 +98,7 @@ class HermesSessionStreamClientTest {
         assertEquals("Bearer $FIXTURE_KEY", request.getHeader("Authorization"))
         assertEquals("application/json", request.getHeader("Content-Type"))
         assertEquals("text/event-stream", request.getHeader("Accept"))
+        assertNull(request.getHeader("X-Hermes-Interactive-Approvals"))
         val body = JSONObject(request.body.readUtf8())
         assertEquals(1, body.length())
         assertEquals("Hallo Welt", body.getString("message"))
@@ -112,6 +113,25 @@ class HermesSessionStreamClientTest {
             ),
             listener.events
         )
+    }
+
+    @Test
+    fun negotiatedApprovalCapabilityAddsOptInHeader() {
+        server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
+        val listener = RecordingListener()
+
+        client.openTurn(
+            baseUrl = baseUrl(),
+            apiKey = SecretValue(FIXTURE_KEY),
+            sessionId = SESSION_ID,
+            message = "Hallo",
+            interactiveApprovals = true,
+            listener = listener
+        )
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+
+        val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        assertEquals("1", request.getHeader("X-Hermes-Interactive-Approvals"))
     }
 
     @Test

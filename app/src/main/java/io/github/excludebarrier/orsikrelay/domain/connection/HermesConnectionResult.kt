@@ -4,17 +4,16 @@ sealed interface HermesConnectionResult {
     /**
      * A successful health + capabilities probe.
      *
-     * [runApprovalResponse] (Mission 014) carries the server's
-     * `features.run_approval_response` capability flag, read fail-closed
-     * from the capabilities response: an absent or non-boolean value is
-     * `false`, so the approval UI can never be enabled for a server that
-     * does not affirmatively advertise the capability.
+     * [sessionChatInteractiveApprovals] is `true` only when the probe
+     * validates the complete versioned mobile session-chat approval
+     * contract. Missing, partial, malformed, unknown-version or legacy-only
+     * advertisements stay fail-closed.
      */
     data class Success(
         val version: String,
         val sessionsSupported: Boolean,
         val sessionStreamingSupported: Boolean,
-        val runApprovalResponse: Boolean
+        val sessionChatInteractiveApprovals: Boolean
     ) : HermesConnectionResult
 
     data class Failure(

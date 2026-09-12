@@ -189,7 +189,6 @@ fun ChatScreen(
     runSteerRequester: RunSteerRequester,
     chatDraftRepository: ChatDraftRepository,
     runApprovalRequester: RunApprovalRequester = NoOpRunApprovalRequester,
-    approvalUiEnabled: Boolean = false,
     profileId: String,
     sessionId: String,
     onBack: () -> Unit,
@@ -484,9 +483,13 @@ fun ChatScreen(
                             }
                         }
                         is ChatTurnEvent.ApprovalRequested -> {
-                            // The pipeline bound both IDs to this exact run
-                            // and validated the redacted display fields. One
-                            // agent turn waits for at most one gateway prompt.
+                            // Sequential approvals are allowed after the prior
+                            // dialog resolves. A second request while one is
+                            // still pending is contradictory and must never
+                            // overwrite the actionable request.
+                            if (pendingApproval != null) {
+                                throw ConcurrentApprovalException()
+                            }
                             pendingApproval = event.request
                         }
                         is ChatTurnEvent.ToolActivity -> {
@@ -502,6 +505,7 @@ fun ChatScreen(
                             )
                         }
                         is ChatTurnEvent.TurnCompleted -> {
+                            pendingApproval = null
                             completed = true
                             val pending = event.pendingSteer
                             if (pending != null) {
@@ -517,6 +521,7 @@ fun ChatScreen(
                             }
                         }
                         is ChatTurnEvent.TurnFailed -> {
+                            pendingApproval = null
                             turnFailure = event.error
                             dropPrematureUserLine()
                         }
@@ -527,6 +532,10 @@ fun ChatScreen(
             } catch (error: CancellationException) {
                 cancelled = true
                 throw error
+            } catch (_: ConcurrentApprovalException) {
+                pendingApproval = null
+                turnFailure = ChatStreamError.IncompatibleApi
+                dropPrematureUserLine()
             } catch (_: Exception) {
                 turnFailure = ChatStreamError.Network
                 dropPrematureUserLine()
@@ -544,6 +553,7 @@ fun ChatScreen(
                 if (turnRuntime.job === self) {
                     turnRuntime.job = null
                     turnActive = false
+                    pendingApproval = null
                     backPending = false
                     if (!cancelled) {
                         // The turn settled: a stop request that is still
@@ -1085,23 +1095,19 @@ fun ChatScreen(
             }
         }
     }
-    // Run-approval slice (Mission 014): the capability gate + dialog hang in
-    // the composition tree as a window overlay. The gate is [approvalUiEnabled]
-    // (the fail-closed, onboarding-confirmed `features.run_approval_response`
-    // capability) AND a non-null [ApprovalRequest]. There is currently NO live
-    // source for an `approval.request` (it is only ever sent on the run
-    // event stream the app does not consume), so [pendingApproval] is passed
-    // as null: the dialog is therefore invisible today, and NOTHING can be
-    // rendered without both a confirmed capability and a pending request.
-    // No network or SSE wiring is introduced here.
+    // A strictly validated protocol-v1 `approval.request` is emitted by the
+    // authenticated chat stream only after the complete capability contract
+    // was negotiated. The event itself is stronger evidence than potentially
+    // stale UI metadata, so ApprovalUi renders a non-null validated request.
     ApprovalUi(
-        approvalUiEnabled = approvalUiEnabled,
         pendingApproval = pendingApproval,
         profileId = profileId,
         requester = runApprovalRequester,
         onDismiss = { pendingApproval = null }
     )
 }
+
+private class ConcurrentApprovalException : Exception()
 
 /**
  * Holder for the running turn collector and the in-flight stop and steer

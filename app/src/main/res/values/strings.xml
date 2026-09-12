@@ -85,9 +85,8 @@
     <string name="approval_title">Freigabe anfragen</string>
     <string name="approval_action_label">Aktion</string>
     <string name="approval_action_value">Hermes-Run</string>
-    <string name="approval_target_label">Ziel</string>
-    <string name="approval_reason_label">Begründung</string>
-    <string name="approval_risk_note">Sicherheitsmodul empfiehlt Ablehnung. Erlauben nur, wenn du die Aktion bewusst freigibst.</string>
+    <string name="approval_reason_label">Hinweis</string>
+    <string name="approval_safe_description">Eine potenziell gefährliche Aktion benötigt deine Freigabe.</string>
     <string name="approval_allow">Erlauben</string>
     <string name="approval_deny">Ablehnen</string>
     <string name="approval_in_flight">Entscheidung wird gesendet …</string>

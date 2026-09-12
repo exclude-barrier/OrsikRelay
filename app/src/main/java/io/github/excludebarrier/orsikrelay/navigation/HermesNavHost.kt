@@ -41,7 +41,6 @@ import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
-import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalCapabilitySource
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
@@ -76,7 +75,6 @@ fun HermesNavHost(
     runStopRequester: RunStopRequester? = null,
     runSteerRequester: RunSteerRequester? = null,
     runApprovalRequester: RunApprovalRequester? = null,
-    runApprovalCapabilitySource: RunApprovalCapabilitySource? = null,
     chatDraftRepository: ChatDraftRepository? = null,
     profileAdmin: ProfileAdmin? = null,
     themeController: ThemeModeController? = null,
@@ -94,10 +92,9 @@ fun HermesNavHost(
             // exactly one profile ID — no credential, URL, draft or chat data.
             val selectionStore = selectionStore
                 ?: SharedPreferencesActiveServerSelectionStore(applicationContext)
-            // Mission 014: the per-profile run-approval capability store.
-            // It holds exactly one non-secret boolean per profile (the
-            // onboarding-confirmed `features.run_approval_response` flag);
-            // no credential, URL, draft, chat or approval content.
+            // Per-profile boolean confirming strict validation of the complete
+            // `session_chat_interactive_approvals` protocol-v1 contract.
+            // It contains no credential, URL, draft, chat or approval content.
             val capabilityStore = capabilityStore
                 ?: SharedPreferencesRunApprovalCapabilityStore(applicationContext)
             // One production ChatDraftRepository instance shared by the chat
@@ -133,7 +130,10 @@ fun HermesNavHost(
                 ),
                 streamingChatSource = StreamingChatRepository(
                     profileRepository = profileRepository,
-                    credentialStore = credentialStore
+                    credentialStore = credentialStore,
+                    runApprovalCapabilitySource = RunApprovalCapabilityRepository(
+                        capabilityStore = capabilityStore
+                    )
                 ),
                 runStopRequester = RunStopRepository(
                     profileRepository = profileRepository,
@@ -149,9 +149,6 @@ fun HermesNavHost(
                     profileRepository = profileRepository,
                     credentialStore = credentialStore,
                     runApprovalTransport = HermesRunApprovalClient()
-                ),
-                runApprovalCapabilitySource = RunApprovalCapabilityRepository(
-                    capabilityStore = capabilityStore
                 ),
                 chatDraftRepository = chatDraftRepository,
                 selectionStore = selectionStore,
@@ -175,12 +172,6 @@ fun HermesNavHost(
     var resolvedStart by remember(startDestination) { mutableStateOf<AppScreen?>(null) }
     var activeProfileId by remember { mutableStateOf<String?>(null) }
     var pendingCreatedSessionId by remember { mutableStateOf<String?>(null) }
-    // Mission 014: the fail-closed run-approval capability gate for the
-    // currently active profile. Default `false`; resolved from the
-    // onboarding-confirmed, persisted capability whenever the active
-    // profile changes. Without a confirmed `true` the approval UI is
-    // invisible, so a stale or unreadable value can never enable it.
-    var approvalUiEnabled by remember { mutableStateOf(false) }
 
     // Safe return after a profile deletion (Mission 010): the Profiles
     // destination is only reachable from Sessions, so popping everything
@@ -264,29 +255,6 @@ fun HermesNavHost(
         pendingCreatedSessionId = null
     }
 
-    // Mission 014: resolve the fail-closed run-approval capability for the
-    // active profile off the main thread. A blank/absent/corrupt value, a
-    // storage failure or a missing source all resolve to `false`, so the
-    // gate only ever opens for an onboarding-confirmed, persisted `true`.
-    // Re-run on every profile change (startup, onboarding, switch, delete).
-    LaunchedEffect(activeProfileId) {
-        val profileId = activeProfileId.orEmpty()
-        val enabled = try {
-            withContext(Dispatchers.IO) {
-                (runApprovalCapabilitySource
-                    ?: productionDependencies.value.runApprovalCapabilitySource)
-                    .isEnabled(profileId)
-            }
-        } catch (_: Exception) {
-            false
-        }
-        // Only publish when the profile has not changed in the meantime, so
-        // a slow read for a left profile can never re-enable a switched one.
-        if (activeProfileId?.orEmpty() == profileId) {
-            approvalUiEnabled = enabled
-        }
-    }
-
     val initialScreen = resolvedStart
     if (initialScreen == null) {
         Text(text = stringResource(R.string.sessions_loading))
@@ -338,7 +306,7 @@ fun HermesNavHost(
                             withContext(Dispatchers.IO) {
                                 productionDependencies.value.capabilityStore.write(
                                     success.profileId,
-                                    success.runApprovalResponse
+                                    success.sessionChatInteractiveApprovals
                                 )
                             }
                         } catch (error: CancellationException) {
@@ -407,7 +375,6 @@ fun HermesNavHost(
                     ?: productionDependencies.value.chatDraftRepository,
                 runApprovalRequester = runApprovalRequester
                     ?: productionDependencies.value.runApprovalRequester,
-                approvalUiEnabled = approvalUiEnabled,
                 profileId = activeProfileId.orEmpty(),
                 sessionId = decodeRouteArgument(encodedSessionId),
                 onBack = { navController.popBackStack() }
@@ -426,7 +393,6 @@ private data class ProductionDependencies(
     val runStopRequester: RunStopRequester,
     val runSteerRequester: RunSteerRequester,
     val runApprovalRequester: RunApprovalRequester,
-    val runApprovalCapabilitySource: RunApprovalCapabilitySource,
     val capabilityStore: RunApprovalCapabilityStore,
     val chatDraftRepository: ChatDraftRepository,
     val selectionStore: ActiveServerSelectionStore,

@@ -292,23 +292,20 @@ class ChatStreamEventPipelineTest {
     }
 
     @Test
-    fun interactiveApprovalRequestMapsOnlyTheRedactedClosedFields() {
-        // The server's authenticated, explicit interactive gateway bridge
-        // uses the same notify/queue mechanism as Telegram and puts this
-        // event into the session-chat SSE envelope. Fields outside the
-        // closed four-field contract are deliberately ignored.
-        pipeline.process(frame("run.started", 1))
-        pipeline.process(messageStartedFrame(2, MSG_ID))
-        val events = pipeline.process(
+    fun interactiveApprovalRequestMapsOnlyProtocolDefinedFields() {
+        val approvalPipeline = ChatStreamEventPipeline(
+            expectedSessionId = SESSION_ID,
+            interactiveApprovals = true
+        )
+        approvalPipeline.process(frame("run.started", 1))
+        approvalPipeline.process(messageStartedFrame(2, MSG_ID))
+        val events = approvalPipeline.process(
             ParsedSseFrame(
                 "approval.request",
                 baseFrame(3)
-                    .put("command", "redacted-command")
-                    .put("description", "redacted-description")
+                    .put("description", "A dangerous action requires your approval.")
                     .put("request_id", "0123456789abcdef0123456789abcdef")
-                    .put("smart_denied", true)
-                    .put("pattern_key", "must-not-cross-ui-boundary")
-                    .put("allow_permanent", false)
+                    .put("choices", org.json.JSONArray().put("once").put("deny"))
                     .toString()
             )
         )
@@ -317,13 +314,14 @@ class ChatStreamEventPipelineTest {
         val event = events.single() as ChatTurnEvent.ApprovalRequested
         assertEquals(RUN_ID, event.request.runId)
         assertEquals("0123456789abcdef0123456789abcdef", event.request.requestId)
-        assertEquals("redacted-command", event.request.command)
-        assertEquals("redacted-description", event.request.description)
-        assertTrue(event.request.smartDenied)
+        assertEquals(
+            "A dangerous action requires your approval.",
+            event.request.description
+        )
     }
 
     @Test
-    fun malformedInteractiveApprovalRequestIsRejectedClosed() {
+    fun approvalRequestWithoutNegotiatedCapabilityIsRejectedClosed() {
         pipeline.process(frame("run.started", 1))
         pipeline.process(messageStartedFrame(2, MSG_ID))
         assertProtocolViolation(
@@ -331,14 +329,88 @@ class ChatStreamEventPipelineTest {
             ParsedSseFrame(
                 "approval.request",
                 baseFrame(3)
-                    .put("command", "redacted-command")
-                    .put("description", "redacted-description")
-                    // Missing request_id and non-boolean smart_denied: no
-                    // potentially actionable UI can be produced.
-                    .put("smart_denied", "true")
+                    .put("description", "A dangerous action requires your approval.")
+                    .put("request_id", "0123456789abcdef0123456789abcdef")
+                    .put("choices", org.json.JSONArray().put("once").put("deny"))
                     .toString()
             )
         )
+    }
+
+    @Test
+    fun approvalRequestWithDynamicOrPermanentFieldsIsRejectedClosed() {
+        listOf(
+            "command" to "synthetic-command",
+            "pattern_key" to "synthetic-pattern",
+            "output" to "synthetic-output",
+            "always" to true
+        ).forEach { (field, value) ->
+            val approvalPipeline = ChatStreamEventPipeline(
+                expectedSessionId = SESSION_ID,
+                interactiveApprovals = true
+            )
+            approvalPipeline.process(frame("run.started", 1))
+            approvalPipeline.process(messageStartedFrame(2, MSG_ID))
+            assertProtocolViolation(
+                approvalPipeline,
+                ParsedSseFrame(
+                    "approval.request",
+                    baseFrame(3)
+                        .put("description", "A dangerous action requires your approval.")
+                        .put("request_id", "0123456789abcdef0123456789abcdef")
+                        .put("choices", org.json.JSONArray().put("once").put("deny"))
+                        .put(field, value)
+                        .toString()
+                )
+            )
+        }
+    }
+
+    @Test
+    fun malformedInteractiveApprovalRequestIsRejectedClosed() {
+        val approvalPipeline = ChatStreamEventPipeline(
+            expectedSessionId = SESSION_ID,
+            interactiveApprovals = true
+        )
+        approvalPipeline.process(frame("run.started", 1))
+        approvalPipeline.process(messageStartedFrame(2, MSG_ID))
+        assertProtocolViolation(
+            approvalPipeline,
+            ParsedSseFrame(
+                "approval.request",
+                baseFrame(3)
+                    .put("description", "dynamic server text")
+                    .put("choices", org.json.JSONArray().put("once").put("always"))
+                    .toString()
+            )
+        )
+    }
+
+    @Test
+    fun approvalIdentifiersRejectPathsUrlsKeysAndWrongUuidShapes() {
+        val invalidRequestIds = listOf(
+            "/etc/passwd",
+            "https://example.invalid/path",
+            "Bearer-synthetic-key",
+            "A".repeat(32),
+            "a".repeat(31)
+        )
+        invalidRequestIds.forEach { invalidId ->
+            val target = approvalPipeline(RUN_ID)
+            assertProtocolViolation(target, approvalFrame(3, RUN_ID, invalidId))
+        }
+
+        val invalidRunIds = listOf(
+            "/tmp/run",
+            "https://example.invalid/run",
+            "Bearer-synthetic-key",
+            "run_" + "A".repeat(32),
+            "run_" + "a".repeat(31)
+        )
+        invalidRunIds.forEach { invalidId ->
+            val target = approvalPipeline(invalidId)
+            assertProtocolViolation(target, approvalFrame(3, invalidId, REQUEST_ID))
+        }
     }
 
     @Test
@@ -639,6 +711,29 @@ class ChatStreamEventPipelineTest {
         )
     }
 
+    private fun approvalPipeline(runId: String): ChatStreamEventPipeline {
+        val target = ChatStreamEventPipeline(
+            expectedSessionId = SESSION_ID,
+            interactiveApprovals = true
+        )
+        target.process(frame("run.started", 1, JSONObject().put("run_id", runId)))
+        target.process(messageStartedFrame(2, MSG_ID, runId))
+        return target
+    }
+
+    private fun approvalFrame(
+        seq: Long,
+        runId: String,
+        requestId: String
+    ): ParsedSseFrame = ParsedSseFrame(
+        "approval.request",
+        baseFrame(seq, runId)
+            .put("description", "A dangerous action requires your approval.")
+            .put("request_id", requestId)
+            .put("choices", org.json.JSONArray().put("once").put("deny"))
+            .toString()
+    )
+
     private fun feedRunStarted() {
         pipeline.process(frame("run.started", 1))
     }
@@ -651,9 +746,9 @@ class ChatStreamEventPipelineTest {
         return ParsedSseFrame(name, payload.toString())
     }
 
-    private fun baseFrame(seq: Long): JSONObject = JSONObject()
+    private fun baseFrame(seq: Long, runId: String = RUN_ID): JSONObject = JSONObject()
         .put("session_id", SESSION_ID)
-        .put("run_id", RUN_ID)
+        .put("run_id", runId)
         .put("seq", seq)
         .put("ts", 1000.25)
 
@@ -664,10 +759,14 @@ class ChatStreamEventPipelineTest {
     private fun deltaFrame(seq: Long, messageId: String, delta: String): ParsedSseFrame =
         frame("assistant.delta", seq, deltaExtra(messageId, delta))
 
-    private fun messageStartedFrame(seq: Long, messageId: String): ParsedSseFrame =
+    private fun messageStartedFrame(
+        seq: Long,
+        messageId: String,
+        runId: String = RUN_ID
+    ): ParsedSseFrame =
         ParsedSseFrame(
             "message.started",
-            baseFrame(seq)
+            baseFrame(seq, runId)
                 .put("message", JSONObject().put("id", messageId).put("role", "assistant"))
                 .toString()
         )
@@ -699,7 +798,8 @@ class ChatStreamEventPipelineTest {
 
     private companion object {
         const val SESSION_ID = "synthetic-session"
-        const val RUN_ID = "run_synthetic"
+        const val RUN_ID = "run_0123456789abcdef0123456789abcdef"
+        const val REQUEST_ID = "fedcba9876543210fedcba9876543210"
         const val MSG_ID = "msg_synthetic"
     }
 }

@@ -315,7 +315,7 @@ class ActiveServerSelectionRestartUiTest {
                 version = "1",
                 sessionsSupported = true,
                 sessionStreamingSupported = true,
-                runApprovalResponse = true
+                sessionChatInteractiveApprovals = true
             )
         }
         val coordinator = ProfileConnectionCoordinator(

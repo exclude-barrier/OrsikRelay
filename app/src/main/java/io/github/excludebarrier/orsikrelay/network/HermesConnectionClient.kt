@@ -54,12 +54,12 @@ class HermesConnectionClient(
                     .build(),
                 draft = draft
             )
-            val runApprovalResponse = parseCapabilities(capabilities)
+            val sessionChatInteractiveApprovals = parseCapabilities(capabilities)
             HermesConnectionResult.Success(
                 version = version,
                 sessionsSupported = true,
                 sessionStreamingSupported = true,
-                runApprovalResponse = runApprovalResponse
+                sessionChatInteractiveApprovals = sessionChatInteractiveApprovals
             )
         } catch (error: ProbeFailure) {
             failure(error.reason)
@@ -162,15 +162,11 @@ class HermesConnectionClient(
     }
 
     /**
-     * Validates the capabilities contract and returns the
-     * `features.run_approval_response` flag (Mission 014).
-     *
-     * The flag is read fail-closed and INDEPENDENTLY of the hard contract:
-     * an absent value or a non-boolean value yields `false` and never
-     * fails the probe — only the required fields below may raise
-     * [ConnectionFailureReason.INCOMPATIBLE_API]. This keeps the approval
-     * UI disabled for any server that does not affirmatively advertise the
-     * capability, without breaking the connection for servers that omit it.
+     * Validates the hard capabilities contract and then negotiates the
+     * complete versioned session-chat approval contract. Approval remains a
+     * soft, fail-closed capability: an absent, partial, malformed, legacy-only
+     * or unknown-version advertisement returns `false` without breaking the
+     * otherwise compatible connection.
      */
     private fun parseCapabilities(json: JSONObject): Boolean {
         if (
@@ -201,10 +197,42 @@ class HermesConnectionClient(
             POST_METHOD,
             SESSION_CHAT_STREAM_PATH
         )
-        // Fail-closed capability read (Mission 014): only an explicit
-        // JSON `true` enables the approval UI; absent or non-boolean is
-        // `false`. This is a soft read and must not throw.
-        return softBoolean(features, RUN_APPROVAL_RESPONSE_FIELD)
+        return supportsSessionChatInteractiveApprovals(features, endpoints)
+    }
+
+    private fun supportsSessionChatInteractiveApprovals(
+        features: JSONObject,
+        endpoints: JSONObject
+    ): Boolean {
+        if (features.opt(RUN_APPROVAL_RESPONSE_FIELD) != true) return false
+        val contract = features.opt(SESSION_CHAT_APPROVALS_FIELD) as? JSONObject
+            ?: return false
+        if (objectKeys(contract) != APPROVAL_CONTRACT_FIELDS) return false
+        val choices = contract.opt(CHOICES_FIELD) as? org.json.JSONArray
+            ?: return false
+        if (
+            contract.opt(ENABLED_FIELD) != true ||
+            contract.opt(PROTOCOL_VERSION_FIELD) != APPROVAL_PROTOCOL_VERSION ||
+            contract.opt(EVENT_FIELD) != APPROVAL_EVENT ||
+            contract.opt(RESPONSE_ENDPOINT_FIELD) != RUN_APPROVAL_ENDPOINT ||
+            choices.length() != 2 ||
+            choices.opt(0) != APPROVAL_ONCE ||
+            choices.opt(1) != APPROVAL_DENY
+        ) {
+            return false
+        }
+        val endpoint = endpoints.opt(RUN_APPROVAL_ENDPOINT) as? JSONObject
+            ?: return false
+        return objectKeys(endpoint) == APPROVAL_ENDPOINT_FIELDS &&
+            endpoint.opt(METHOD_FIELD) == POST_METHOD &&
+            endpoint.opt(PATH_FIELD) == RUN_APPROVAL_PATH
+    }
+
+    private fun objectKeys(json: JSONObject): Set<String> {
+        val keys = mutableSetOf<String>()
+        val iterator = json.keys()
+        while (iterator.hasNext()) keys += iterator.next()
+        return keys
     }
 
     private fun validateEndpoint(
@@ -233,15 +261,6 @@ class HermesConnectionClient(
     private fun strictBoolean(json: JSONObject, key: String): Boolean =
         json.opt(key) as? Boolean
             ?: throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
-
-    /**
-     * Fail-closed capability read (Mission 014): a present JSON boolean is
-     * returned as-is; an absent value, `null` or any non-boolean value
-     * yields `false` and never throws. Used only for optional feature
-     * flags, never for the required capabilities contract.
-     */
-    private fun softBoolean(json: JSONObject, key: String): Boolean =
-        json.opt(key) as? Boolean ?: false
 
     private fun failure(reason: ConnectionFailureReason) =
         HermesConnectionResult.Failure(reason)
@@ -280,19 +299,37 @@ class HermesConnectionClient(
         const val TOOL_EXECUTION_FIELD = "tool_execution"
         const val SESSION_RESOURCES_FIELD = "session_resources"
         const val SESSION_CHAT_STREAMING_FIELD = "session_chat_streaming"
-        // Optional, fail-closed capability (Mission 014): the server's
-        // static `features.run_approval_response` flag.
         const val RUN_APPROVAL_RESPONSE_FIELD = "run_approval_response"
+        const val SESSION_CHAT_APPROVALS_FIELD = "session_chat_interactive_approvals"
+        const val ENABLED_FIELD = "enabled"
+        const val PROTOCOL_VERSION_FIELD = "protocol_version"
+        const val EVENT_FIELD = "event"
+        const val CHOICES_FIELD = "choices"
+        const val RESPONSE_ENDPOINT_FIELD = "response_endpoint"
+        const val APPROVAL_PROTOCOL_VERSION = 1
+        const val APPROVAL_EVENT = "approval.request"
+        const val APPROVAL_ONCE = "once"
+        const val APPROVAL_DENY = "deny"
+        val APPROVAL_CONTRACT_FIELDS = setOf(
+            ENABLED_FIELD,
+            PROTOCOL_VERSION_FIELD,
+            EVENT_FIELD,
+            CHOICES_FIELD,
+            RESPONSE_ENDPOINT_FIELD
+        )
+        val APPROVAL_ENDPOINT_FIELDS = setOf(METHOD_FIELD, PATH_FIELD)
         const val METHOD_FIELD = "method"
         const val PATH_FIELD = "path"
         const val HEALTH_ENDPOINT = "health"
         const val SESSIONS_ENDPOINT = "sessions"
         const val SESSION_CHAT_STREAM_ENDPOINT = "session_chat_stream"
+        const val RUN_APPROVAL_ENDPOINT = "run_approval"
         const val GET_METHOD = "GET"
         const val POST_METHOD = "POST"
         const val HEALTH_PATH = "/health"
         const val SESSIONS_PATH = "/api/sessions"
         const val SESSION_CHAT_STREAM_PATH = "/api/sessions/{session_id}/chat/stream"
+        const val RUN_APPROVAL_PATH = "/v1/runs/{run_id}/approval"
 
         fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)

@@ -10,6 +10,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamTransport
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalCapabilitySource
 import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -39,6 +40,7 @@ class StreamingChatRepositoryTest {
                     apiKey: SecretValue,
                     sessionId: String,
                     message: String,
+                    interactiveApprovals: Boolean,
                     listener: ChatStreamListener
                 ): ChatStreamHandle {
                     transportCalls += 1
@@ -98,6 +100,7 @@ class StreamingChatRepositoryTest {
                         apiKey: SecretValue,
                         sessionId: String,
                         message: String,
+                        interactiveApprovals: Boolean,
                         listener: ChatStreamListener
                     ): ChatStreamHandle {
                         transportCalls += 1
@@ -144,9 +147,50 @@ class StreamingChatRepositoryTest {
         assertEquals(FIXTURE_KEY, transport.apiKey?.useRaw { it })
         assertEquals(SESSION_ID, transport.sessionId)
         assertEquals("Hallo Welt", transport.message)
+        assertFalse(transport.interactiveApprovals ?: true)
         events.forEach { event ->
             assertFalse(event.toString().contains(FIXTURE_KEY))
         }
+    }
+
+    @Test
+    fun confirmedCapabilityIsPassedToTransport() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = CapturingTransport()
+        val repository = repository(
+            metadata = metadata,
+            credentials = credentials,
+            transport = transport,
+            capabilitySource = RunApprovalCapabilitySource { true }
+        )
+
+        collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertTrue(transport.interactiveApprovals == true)
+    }
+
+    @Test
+    fun capabilityReadFailureKeepsTransportFailClosed() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = CapturingTransport()
+        val repository = repository(
+            metadata = metadata,
+            credentials = credentials,
+            transport = transport,
+            capabilitySource = RunApprovalCapabilitySource {
+                throw IllegalStateException("synthetic-sensitive-detail")
+            }
+        )
+
+        collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertFalse(transport.interactiveApprovals ?: true)
     }
 
     @Test
@@ -165,6 +209,7 @@ class StreamingChatRepositoryTest {
                     apiKey: SecretValue,
                     sessionId: String,
                     message: String,
+                    interactiveApprovals: Boolean,
                     listener: ChatStreamListener
                 ): ChatStreamHandle {
                     transportCalls += 1
@@ -202,6 +247,7 @@ class StreamingChatRepositoryTest {
                         apiKey: SecretValue,
                         sessionId: String,
                         message: String,
+                        interactiveApprovals: Boolean,
                         listener: ChatStreamListener
                     ): ChatStreamHandle {
                         transportCalls += 1
@@ -263,6 +309,7 @@ class StreamingChatRepositoryTest {
                     apiKey: SecretValue,
                     sessionId: String,
                     message: String,
+                    interactiveApprovals: Boolean,
                     listener: ChatStreamListener
                 ): ChatStreamHandle {
                     throw IllegalStateException("synthetic-sensitive-detail")
@@ -294,6 +341,7 @@ class StreamingChatRepositoryTest {
                     apiKey: SecretValue,
                     sessionId: String,
                     message: String,
+                    interactiveApprovals: Boolean,
                     listener: ChatStreamListener
                 ): ChatStreamHandle {
                     listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.InvalidInput))
@@ -411,17 +459,24 @@ class StreamingChatRepositoryTest {
                 apiKey: SecretValue,
                 sessionId: String,
                 message: String,
+                interactiveApprovals: Boolean,
                 listener: ChatStreamListener
             ): ChatStreamHandle {
                 listener.onEvent(ChatTurnEvent.TurnCompleted())
                 listener.onFinished()
                 return NoopHandle
             }
-        }
+        },
+        capabilitySource: RunApprovalCapabilitySource = RunApprovalCapabilitySource { false }
     ): StreamingChatRepository {
         val profileRepository =
             ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
-        return StreamingChatRepository(profileRepository, credentials, transport)
+        return StreamingChatRepository(
+            profileRepository,
+            credentials,
+            transport,
+            capabilitySource
+        )
     }
 
     private fun collect(
@@ -447,12 +502,14 @@ class StreamingChatRepositoryTest {
         var apiKey: SecretValue? = null
         var sessionId: String? = null
         var message: String? = null
+        var interactiveApprovals: Boolean? = null
 
         override fun openTurn(
             baseUrl: String,
             apiKey: SecretValue,
             sessionId: String,
             message: String,
+            interactiveApprovals: Boolean,
             listener: ChatStreamListener
         ): ChatStreamHandle {
             calls += 1
@@ -460,6 +517,7 @@ class StreamingChatRepositoryTest {
             this.apiKey = apiKey
             this.sessionId = sessionId
             this.message = message
+            this.interactiveApprovals = interactiveApprovals
             listener.onEvent(ChatTurnEvent.RunStarted("run_synthetic"))
             listener.onEvent(ChatTurnEvent.TurnCompleted())
             listener.onFinished()
@@ -481,6 +539,7 @@ class StreamingChatRepositoryTest {
             apiKey: SecretValue,
             sessionId: String,
             message: String,
+            interactiveApprovals: Boolean,
             listener: ChatStreamListener
         ): ChatStreamHandle {
             Thread {
@@ -509,6 +568,7 @@ class StreamingChatRepositoryTest {
             apiKey: SecretValue,
             sessionId: String,
             message: String,
+            interactiveApprovals: Boolean,
             listener: ChatStreamListener
         ): ChatStreamHandle {
             opened.countDown()

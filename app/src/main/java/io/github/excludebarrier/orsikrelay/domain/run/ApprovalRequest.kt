@@ -1,43 +1,34 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Closed, UI-safe model of one pending run approval (Mission 014).
+ * Closed UI model for one protocol-v1 mobile session-chat approval.
  *
- * This is the ONLY shape the UI may render. It carries exactly the
- * fields that (a) are evidenced in the installed server contract and
- * (b) are harmless to display. Nothing else from the wire event may be
- * modelled or shown.
- *
- * Contract (derived read-only from the installed server code,
- * `gateway/platforms/api_server_runs.py` `_make_approval_notify` and
- * `tools/approval.py` / `tools/approval_gateway_wait.py`):
- * - the server emits one `approval.request` event per pending approval;
- * - `command` and `description` are REDACTED by the server before the
- *   event leaves the process (`redact_sensitive_text` /
- *   `_redact_approval_command`), so they are the only command/description
- *   text a client ever sees;
- * - `request_id` is a server-generated UUID hex that identifies exactly
- *   this pending request; the server resolves a response by it when it
- *   is sent. It is an identifier, not a secret, but it is never shown.
- * - `smart_denied` is a server risk flag: when true the guardian model
- *   denied the operation and the user is being asked to consciously
- *   override — the UI must surface a risk note.
- *
- * Deliberately NOT modelled (never shown, never needed for the
- * response): `pattern_key`, `pattern_keys`, `allow_permanent`,
- * `allow_session`, `choices`, `timestamp`. `runId` and `requestId` are
- * carried only so the exact pending request can be resolved; they are
- * not displayed.
+ * Only the routing identifiers needed to answer the exact pending request and
+ * the protocol-defined neutral description cross this boundary. The identifier
+ * formats are the exact server-generated forms (`run_` + UUID hex and UUID
+ * hex). Commands, arguments, paths, URLs, tool output, pattern keys, API keys
+ * and arbitrary dynamic text are therefore impossible to represent.
  */
 data class ApprovalRequest(
-    /** Server-confirmed run ID; required to build the response URL. */
+    /** Exact server-generated run ID; used only to build the response URL. */
     val runId: String,
-    /** Server-confirmed exact pending request ID (UUID hex); sent in the response body. */
+    /** Exact server-generated pending request ID; sent only in the body. */
     val requestId: String,
-    /** Redacted command text (the flagged action). Displayed as "Ziel". */
-    val command: String,
-    /** Redacted human-readable reason. Displayed as "Begründung". */
-    val description: String,
-    /** Server risk flag: when true a risk note must be shown. */
-    val smartDenied: Boolean
-)
+    /** Fixed protocol-defined text, never tool- or command-derived. */
+    val description: String
+) {
+    init {
+        require(isSafeRunId(runId))
+        require(isSafeRequestId(requestId))
+        require(description == SAFE_DESCRIPTION)
+    }
+
+    companion object {
+        const val SAFE_DESCRIPTION = "A dangerous action requires your approval."
+        private val RUN_ID = Regex("run_[0-9a-f]{32}")
+        private val REQUEST_ID = Regex("[0-9a-f]{32}")
+
+        internal fun isSafeRunId(value: String): Boolean = RUN_ID.matches(value)
+        internal fun isSafeRequestId(value: String): Boolean = REQUEST_ID.matches(value)
+    }
+}

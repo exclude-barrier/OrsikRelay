@@ -4,10 +4,9 @@ package io.github.excludebarrier.orsikrelay.data.profile
  * Synchronous, app-private storage seam for the per-profile run-approval
  * capability (Mission 014).
  *
- * The capability is private local metadata derived from the server's
- * `features.run_approval_response` flag at onboarding time. For one profile
- * it stores exactly ONE non-secret boolean — whether the server behind that
- * profile affirmed the approval capability. It never stores an API key, a
+ * The capability is private local metadata derived from strict validation of
+ * the complete `session_chat_interactive_approvals` protocol-v1 contract.
+ * For one profile it stores exactly one non-secret boolean. It never stores
  * URL, a draft or any chat/session data, and it never stores approval
  * content (no command, request, run ID or payload).
  *

@@ -17,7 +17,7 @@ class ProfileConnectionCoordinator(
                 ProfileConnectionOutcome.Success(
                     version = probeResult.version,
                     profileId = profile.id,
-                    runApprovalResponse = probeResult.runApprovalResponse
+                    sessionChatInteractiveApprovals = probeResult.sessionChatInteractiveApprovals
                 )
             } catch (_: Exception) {
                 ProfileConnectionOutcome.PersistenceFailure

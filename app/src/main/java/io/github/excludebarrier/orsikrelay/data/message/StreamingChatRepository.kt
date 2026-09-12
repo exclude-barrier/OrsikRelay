@@ -7,6 +7,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamTransport
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
+import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalCapabilitySource
 import io.github.excludebarrier.orsikrelay.network.HermesSessionStreamClient
 import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +49,9 @@ import kotlinx.coroutines.flow.flowOn
 class StreamingChatRepository(
     private val profileRepository: ServerProfileRepository,
     private val credentialStore: CredentialStore,
-    private val streamTransport: ChatStreamTransport = HermesSessionStreamClient()
+    private val streamTransport: ChatStreamTransport = HermesSessionStreamClient(),
+    private val runApprovalCapabilitySource: RunApprovalCapabilitySource =
+        RunApprovalCapabilitySource { false }
 ) : StreamingChatSource {
 
     override fun streamTurn(
@@ -91,12 +94,18 @@ class StreamingChatRepository(
             close()
             return@callbackFlow
         }
+        val interactiveApprovals = try {
+            runApprovalCapabilitySource.isEnabled(profileId)
+        } catch (_: Exception) {
+            false
+        }
         val handle = try {
             streamTransport.openTurn(
                 baseUrl = profile.baseUrl,
                 apiKey = credential,
                 sessionId = sessionId,
                 message = message,
+                interactiveApprovals = interactiveApprovals,
                 listener = object : ChatStreamListener {
                     override fun onEvent(event: ChatTurnEvent) {
                         // `trySendBlocking` (kotlinx.coroutines.channels)

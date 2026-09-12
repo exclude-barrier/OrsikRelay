@@ -8,12 +8,12 @@ import android.content.SharedPreferences
  * App-private [RunApprovalCapabilityStore] on top of [SharedPreferences]
  * (Mission 014).
  *
- * Stores exactly ONE plain boolean per profile — the server-confirmed
- * `features.run_approval_response` capability — in a dedicated versioned
- * key per profile ID. Nothing else is stored: no API key, no URL, no draft
- * or chat data, and no approval content. A missing key reads `false`
- * (fail-closed) and a blank profile ID is rejected, so a corrupt value can
- * never enable the approval UI.
+ * Stores exactly one plain boolean per profile: whether the complete
+ * `session_chat_interactive_approvals` protocol-v1 contract was validated.
+ * The v2 key namespace intentionally does not trust legacy v1 booleans that
+ * represented only `features.run_approval_response`. Nothing else is stored:
+ * no API key, URL, draft, chat data or approval content. Missing/corrupt data
+ * reads `false` (fail-closed).
  *
  * Every operation uses `commit()` (durable, synchronous) and must run off
  * the main thread; every failure maps to the closed
@@ -78,6 +78,6 @@ class SharedPreferencesRunApprovalCapabilityStore(
         // Versioned key prefix so a future format change can be migrated
         // without colliding with the current records (same scheme as the
         // active-server selection store's key).
-        internal const val KEY_PREFIX = "run_approval.v1:"
+        internal const val KEY_PREFIX = "run_approval.v2:"
     }
 }

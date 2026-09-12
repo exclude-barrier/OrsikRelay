@@ -36,10 +36,9 @@ import kotlinx.coroutines.launch
  *
  * This composable is the ONLY approval UI in the app. It renders exactly
  * the harmless, evidenced [ApprovalRequest] fields and nothing else —
- * no run ID, no request ID, no pattern key, no tool name, no raw log,
- * no environment output and no exception detail. The command and
- * description it shows are the SERVER-REDACTED values carried by the
- * model, so no secret text can reach the UI.
+ * no run ID, request ID, command, arguments, path, URL, pattern key,
+ * tool output, environment output or exception detail. The only descriptive
+ * text in the model is the exact protocol-defined neutral sentence.
  *
  * Safety rules (Mission 014):
  * - "Ablehnen" is the first, filled (primary) button: it is the safe
@@ -60,8 +59,9 @@ import kotlinx.coroutines.launch
  *   (409) means the request was already answered elsewhere or timed out;
  *   the dialog shows a short note and the buttons are disabled — no
  *   further decision is possible. `Failure` keeps the dialog open with
- *   the generic error and re-enables both buttons for ONE deliberate
- *   manual retry; there is no automatic retry.
+ *   the generic error and leaves both actions terminally disabled. Because a
+ *   failed response may already have been applied server-side, the app never
+ *   retries automatically or manually.
  *
  * [requester] is the small domain seam; production injects the
  * repository, Compose tests inject a synthetic fake. Nothing here is
@@ -84,10 +84,10 @@ fun ApprovalDialog(
     var outcome by remember { mutableStateOf<ApprovalOutcome?>(null) }
 
     fun decide(choice: RunApprovalChoice) {
-        // The in-flight lock: a decision already in progress (or already
-        // settled as NoPending) must never open a second request.
-        if (inFlight) return
-        if (outcome == ApprovalOutcome.AlreadyResolved) return
+        // Any completed attempt is terminal. A transport failure is
+        // ambiguous, so sending the same non-idempotent decision again is
+        // forbidden just like an already-resolved response.
+        if (inFlight || outcome != null) return
         inFlight = true
         outcome = null
         scope.launch {
@@ -113,7 +113,7 @@ fun ApprovalDialog(
         }
     }
 
-    val buttonsEnabled = !inFlight && outcome != ApprovalOutcome.AlreadyResolved
+    val buttonsEnabled = !inFlight && outcome == null
 
     // Mission 014 (hard gate): the content-lambda `AlertDialog` overload is
     // @Deprecated in material3 1.3.2 ("Use BasicAlertDialog instead", proven
@@ -137,24 +137,11 @@ fun ApprovalDialog(
                 style = MaterialTheme.typography.bodyLarge
             )
             Spacer(modifier = Modifier.height(8.dp))
-            FieldLabel(label = stringResource(R.string.approval_target_label))
-            Text(
-                text = request.command,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Spacer(modifier = Modifier.height(8.dp))
             FieldLabel(label = stringResource(R.string.approval_reason_label))
             Text(
-                text = request.description,
+                text = stringResource(R.string.approval_safe_description),
                 style = MaterialTheme.typography.bodyLarge
             )
-            if (request.smartDenied) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.approval_risk_note),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
             when (outcome) {
                 ApprovalOutcome.Failed -> {
                     Spacer(modifier = Modifier.height(8.dp))

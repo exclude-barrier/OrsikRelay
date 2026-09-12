@@ -1,28 +1,22 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 
 /**
- * Capability gate for the run-approval UI (Mission 014).
+ * Presentation boundary for a validated pending approval.
  *
- * A strictly validated, pending [ApprovalRequest] is sufficient to render
- * the dialog. The event is server-authoritative: it arrived on the active,
- * authenticated SSE turn and carries the exact run/request identifiers the
- * response endpoint requires. Requiring a separately persisted capability
- * flag here would deadlock a newly upgraded server: the server waits for a
- * decision while an old app profile hides the valid request.
- *
- * [approvalUiEnabled] remains a compatibility hint for callers, but it must
- * never suppress a valid pending request. With no request, nothing renders.
- * This composable holds no state and performs no I/O; the actual dialog is
- * [ApprovalDialog]. No approval content is persisted here.
+ * Capability negotiation and strict protocol-v1 validation happen before the
+ * event enters the UI. Therefore this composable has no second capability
+ * flag: a non-null [ApprovalRequest] is the single typed delivery proof, and
+ * no request renders nothing. It holds no state, performs no I/O and persists
+ * no approval content.
  */
 @Composable
 fun ApprovalUi(
-    approvalUiEnabled: Boolean,
     pendingApproval: ApprovalRequest?,
     profileId: String,
     requester: RunApprovalRequester,
@@ -32,11 +26,13 @@ fun ApprovalUi(
     // A pending request itself is the fail-closed delivery proof. Do not
     // gate it on stale capability metadata (see KDoc above).
     val request = pendingApproval ?: return
-    ApprovalDialog(
-        request = request,
-        profileId = profileId,
-        requester = requester,
-        onDismiss = onDismiss,
-        modifier = modifier
-    )
+    key(request.runId, request.requestId) {
+        ApprovalDialog(
+            request = request,
+            profileId = profileId,
+            requester = requester,
+            onDismiss = onDismiss,
+            modifier = modifier
+        )
+    }
 }

@@ -70,25 +70,25 @@ class HermesConnectionClientTest {
     }
 
     @Test
-    fun runApprovalResponseTrueIsRecognisedInTheResult() {
+    fun sessionChatInteractiveApprovalsTrueIsRecognisedInTheResult() {
         enqueueCapabilitiesWithFlag(true)
 
         val result = client.probe(draft())
 
         assertTrue(result is HermesConnectionResult.Success)
         result as HermesConnectionResult.Success
-        assertTrue(result.runApprovalResponse)
+        assertTrue(result.sessionChatInteractiveApprovals)
     }
 
     @Test
-    fun runApprovalResponseFalseStaysClosed() {
+    fun sessionChatInteractiveApprovalsFalseStaysClosed() {
         enqueueCapabilitiesWithFlag(false)
 
         val result = client.probe(draft())
 
         assertTrue(result is HermesConnectionResult.Success)
         result as HermesConnectionResult.Success
-        assertFalse(result.runApprovalResponse)
+        assertFalse(result.sessionChatInteractiveApprovals)
     }
 
     @Test
@@ -100,7 +100,7 @@ class HermesConnectionClientTest {
 
         assertTrue(result is HermesConnectionResult.Success)
         result as HermesConnectionResult.Success
-        assertFalse(result.runApprovalResponse)
+        assertFalse(result.sessionChatInteractiveApprovals)
     }
 
     @Test
@@ -114,8 +114,65 @@ class HermesConnectionClientTest {
             result as HermesConnectionResult.Success
             assertFalse(
                 "value $value must stay closed",
-                result.runApprovalResponse
+                result.sessionChatInteractiveApprovals
             )
+        }
+    }
+
+    @Test
+    fun legacyRunApprovalFlagWithoutVersionedContractStaysClosed() {
+        val capabilities = validCapabilitiesJson()
+        capabilities.getJSONObject("features").put("run_approval_response", true)
+        server.enqueue(validHealthResponse())
+        server.enqueue(jsonResponse(capabilities))
+
+        val result = client.probe(draft()) as HermesConnectionResult.Success
+
+        assertFalse(result.sessionChatInteractiveApprovals)
+    }
+
+    @Test
+    fun unknownOrUnsafeApprovalContractStaysClosed() {
+        val mutations: List<(JSONObject) -> Unit> = listOf(
+            { it.getJSONObject("features")
+                .getJSONObject("session_chat_interactive_approvals")
+                .put("protocol_version", 2) },
+            { it.getJSONObject("features")
+                .getJSONObject("session_chat_interactive_approvals")
+                .put("choices", org.json.JSONArray().put("once").put("always")) },
+            { it.getJSONObject("features")
+                .getJSONObject("session_chat_interactive_approvals")
+                .put("retry", true) },
+            { it.getJSONObject("endpoints")
+                .getJSONObject("run_approval")
+                .put("redirect", true) },
+            { it.getJSONObject("endpoints").remove("run_approval") }
+        )
+        mutations.forEach { mutate ->
+            val capabilities = validCapabilitiesJson()
+            val features = capabilities.getJSONObject("features")
+            features.put("run_approval_response", true)
+            features.put(
+                "session_chat_interactive_approvals",
+                JSONObject()
+                    .put("enabled", true)
+                    .put("protocol_version", 1)
+                    .put("event", "approval.request")
+                    .put("choices", org.json.JSONArray().put("once").put("deny"))
+                    .put("response_endpoint", "run_approval")
+            )
+            capabilities.getJSONObject("endpoints").put(
+                "run_approval",
+                JSONObject().put("method", "POST")
+                    .put("path", "/v1/runs/{run_id}/approval")
+            )
+            mutate(capabilities)
+            server.enqueue(validHealthResponse())
+            server.enqueue(jsonResponse(capabilities))
+
+            val result = client.probe(draft()) as HermesConnectionResult.Success
+
+            assertFalse(result.sessionChatInteractiveApprovals)
         }
     }
 
@@ -333,7 +390,23 @@ class HermesConnectionClientTest {
 
     private fun enqueueCapabilitiesWithFlag(value: Any) {
         val capabilities = validCapabilitiesJson()
-        capabilities.getJSONObject("features").put("run_approval_response", value)
+        val features = capabilities.getJSONObject("features")
+        features.put("run_approval_response", value)
+        features.put(
+            "session_chat_interactive_approvals",
+            JSONObject()
+                .put("enabled", true)
+                .put("protocol_version", 1)
+                .put("event", "approval.request")
+                .put("choices", org.json.JSONArray().put("once").put("deny"))
+                .put("response_endpoint", "run_approval")
+        )
+        capabilities.getJSONObject("endpoints").put(
+            "run_approval",
+            JSONObject()
+                .put("method", "POST")
+                .put("path", "/v1/runs/{run_id}/approval")
+        )
         server.enqueue(validHealthResponse())
         server.enqueue(jsonResponse(capabilities))
     }
