@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.network
 
+import io.github.excludebarrier.orsikrelay.domain.device.DeviceCredentialKey
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceSelfRevokeError
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceSelfRevokeResult
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceSelfRevokeTransport
@@ -74,10 +75,7 @@ class HermesDeviceSelfRevokeClient(
     ): DeviceSelfRevokeResult {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
             ?: return DeviceSelfRevokeResult.Failure(DeviceSelfRevokeError.InvalidInput)
-        val keyIsSafe = deviceKey.useRaw { rawKey ->
-            DEVICE_KEY_PATTERN.matches(rawKey)
-        }
-        if (!keyIsSafe) {
+        if (!DeviceCredentialKey.isValid(deviceKey)) {
             return DeviceSelfRevokeResult.Failure(DeviceSelfRevokeError.InvalidInput)
         }
 
@@ -226,7 +224,6 @@ class HermesDeviceSelfRevokeClient(
         const val BEARER_PREFIX = "Bearer "
         const val CONTENT_TYPE_HEADER = "Content-Type"
         const val JSON_MEDIA_TYPE_VALUE = "application/json"
-        val DEVICE_KEY_PATTERN = Regex("^hd_[A-Za-z0-9_-]{43}$")
         const val REVOKED_FIELD = "revoked"
         const val DEVICE_ID_FIELD = "device_id"
         val REVOKED_FIELDS = setOf(REVOKED_FIELD, DEVICE_ID_FIELD)

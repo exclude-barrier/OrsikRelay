@@ -27,4 +27,16 @@ interface ProfileAdmin {
      * stores none.
      */
     fun selectActiveServer(profileId: String)
+
+    /**
+     * Non-secret credential kind of a stored profile (Mission 017B):
+     * [ProfileCredentialKind.DEVICE_CREDENTIAL] when the profile holds a
+     * paired device credential (device metadata present), otherwise
+     * [ProfileCredentialKind.API_KEY]. The status path reads ONLY the
+     * non-secret device metadata — it never reads, copies or exposes the
+     * credential itself. Unknown profile IDs report [API_KEY] (fail-closed
+     * for the UI: no device action is offered). Implementations must be
+     * safe to call from `Dispatchers.IO`.
+     */
+    fun credentialKind(profileId: String): ProfileCredentialKind
 }

@@ -54,12 +54,13 @@ class HermesConnectionClient(
                     .build(),
                 draft = draft
             )
-            val sessionChatInteractiveApprovals = parseCapabilities(capabilities)
+            val negotiated = parseCapabilities(capabilities)
             HermesConnectionResult.Success(
                 version = version,
                 sessionsSupported = true,
                 sessionStreamingSupported = true,
-                sessionChatInteractiveApprovals = sessionChatInteractiveApprovals
+                sessionChatInteractiveApprovals = negotiated.sessionChatInteractiveApprovals,
+                deviceCredentialsSupported = negotiated.deviceCredentials
             )
         } catch (error: ProbeFailure) {
             failure(error.reason)
@@ -168,7 +169,7 @@ class HermesConnectionClient(
      * or unknown-version advertisement returns `false` without breaking the
      * otherwise compatible connection.
      */
-    private fun parseCapabilities(json: JSONObject): Boolean {
+    private fun parseCapabilities(json: JSONObject): NegotiatedCapabilities {
         if (
             strictString(json, OBJECT_FIELD) != CAPABILITIES_OBJECT ||
             strictString(json, PLATFORM_FIELD) != HERMES_PLATFORM
@@ -197,7 +198,34 @@ class HermesConnectionClient(
             POST_METHOD,
             SESSION_CHAT_STREAM_PATH
         )
-        return supportsSessionChatInteractiveApprovals(features, endpoints)
+        return NegotiatedCapabilities(
+            sessionChatInteractiveApprovals =
+                supportsSessionChatInteractiveApprovals(features, endpoints),
+            deviceCredentials = supportsDeviceCredentials(features, endpoints)
+        )
+    }
+
+    private fun supportsDeviceCredentials(
+        features: JSONObject,
+        endpoints: JSONObject
+    ): Boolean {
+        val contract = features.opt(DEVICE_CREDENTIALS_FIELD) as? JSONObject
+            ?: return false
+        if (objectKeys(contract) != DEVICE_CREDENTIAL_CONTRACT_FIELDS) return false
+        if (
+            contract.opt(ENABLED_FIELD) != true ||
+            contract.opt(PROTOCOL_VERSION_FIELD) != DEVICE_CREDENTIAL_PROTOCOL_VERSION ||
+            contract.opt(PAIR_ENDPOINT_FIELD) != DEVICE_PAIR_ENDPOINT ||
+            contract.opt(SELF_REVOKE_ENDPOINT_FIELD) != DEVICE_SELF_REVOKE_ENDPOINT
+        ) return false
+        val pairEndpoint = endpoints.opt(DEVICE_PAIR_ENDPOINT) as? JSONObject ?: return false
+        val revokeEndpoint = endpoints.opt(DEVICE_SELF_REVOKE_ENDPOINT) as? JSONObject ?: return false
+        return objectKeys(pairEndpoint) == APPROVAL_ENDPOINT_FIELDS &&
+            pairEndpoint.opt(METHOD_FIELD) == POST_METHOD &&
+            pairEndpoint.opt(PATH_FIELD) == DEVICE_PAIR_PATH &&
+            objectKeys(revokeEndpoint) == APPROVAL_ENDPOINT_FIELDS &&
+            revokeEndpoint.opt(METHOD_FIELD) == POST_METHOD &&
+            revokeEndpoint.opt(PATH_FIELD) == DEVICE_SELF_REVOKE_PATH
     }
 
     private fun supportsSessionChatInteractiveApprovals(
@@ -265,6 +293,11 @@ class HermesConnectionClient(
     private fun failure(reason: ConnectionFailureReason) =
         HermesConnectionResult.Failure(reason)
 
+    private data class NegotiatedCapabilities(
+        val sessionChatInteractiveApprovals: Boolean,
+        val deviceCredentials: Boolean
+    )
+
     private class ProbeFailure(
         val reason: ConnectionFailureReason
     ) : Exception()
@@ -301,6 +334,9 @@ class HermesConnectionClient(
         const val SESSION_CHAT_STREAMING_FIELD = "session_chat_streaming"
         const val RUN_APPROVAL_RESPONSE_FIELD = "run_approval_response"
         const val SESSION_CHAT_APPROVALS_FIELD = "session_chat_interactive_approvals"
+        const val DEVICE_CREDENTIALS_FIELD = "device_credentials"
+        const val PAIR_ENDPOINT_FIELD = "pair_endpoint"
+        const val SELF_REVOKE_ENDPOINT_FIELD = "self_revoke_endpoint"
         const val ENABLED_FIELD = "enabled"
         const val PROTOCOL_VERSION_FIELD = "protocol_version"
         const val EVENT_FIELD = "event"
@@ -318,6 +354,15 @@ class HermesConnectionClient(
             RESPONSE_ENDPOINT_FIELD
         )
         val APPROVAL_ENDPOINT_FIELDS = setOf(METHOD_FIELD, PATH_FIELD)
+        const val DEVICE_CREDENTIAL_PROTOCOL_VERSION = 1
+        const val DEVICE_PAIR_ENDPOINT = "device_pair"
+        const val DEVICE_SELF_REVOKE_ENDPOINT = "device_self_revoke"
+        val DEVICE_CREDENTIAL_CONTRACT_FIELDS = setOf(
+            ENABLED_FIELD,
+            PROTOCOL_VERSION_FIELD,
+            PAIR_ENDPOINT_FIELD,
+            SELF_REVOKE_ENDPOINT_FIELD
+        )
         const val METHOD_FIELD = "method"
         const val PATH_FIELD = "path"
         const val HEALTH_ENDPOINT = "health"
@@ -330,6 +375,8 @@ class HermesConnectionClient(
         const val SESSIONS_PATH = "/api/sessions"
         const val SESSION_CHAT_STREAM_PATH = "/api/sessions/{session_id}/chat/stream"
         const val RUN_APPROVAL_PATH = "/v1/runs/{run_id}/approval"
+        const val DEVICE_PAIR_PATH = "/v1/devices/pair"
+        const val DEVICE_SELF_REVOKE_PATH = "/v1/devices/self/revoke"
 
         fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)

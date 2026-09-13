@@ -20,6 +20,8 @@ import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftStore
+import io.github.excludebarrier.orsikrelay.data.device.CredentialStoreDeviceCredentialSaver
+import io.github.excludebarrier.orsikrelay.data.device.SharedPreferencesDeviceCredentialMetadataStore
 import io.github.excludebarrier.orsikrelay.data.profile.ActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileAdmin
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
@@ -39,6 +41,8 @@ import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.data.session.resolveStartupProfile
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
+import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectCoordinator
+import io.github.excludebarrier.orsikrelay.domain.device.DevicePairingCoordinator
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
@@ -47,6 +51,8 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.network.HermesConnectionClient
+import io.github.excludebarrier.orsikrelay.network.HermesDevicePairClient
+import io.github.excludebarrier.orsikrelay.network.HermesDeviceSelfRevokeClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunApprovalClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunStopClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunSteerClient
@@ -104,17 +110,47 @@ fun HermesNavHost(
             val chatDraftRepository = SharedPreferencesChatDraftRepository(
                 store = SharedPreferencesChatDraftStore(applicationContext)
             )
+            // Mission 017B: the device-pairing production dependencies.
+            // The device metadata store holds ONLY non-secret metadata; the
+            // device key is stored by the saver through the same
+            // [credentialStore] (Keystore-wrapped) as the API key. The
+            // pairing coordinator verifies a freshly issued key through the
+            // normal authenticated probe BEFORE persistence and performs
+            // exactly one best-effort self-revoke on every post-pair
+            // failure — no retries, no anonymous preflight.
+            val deviceMetadataStore =
+                SharedPreferencesDeviceCredentialMetadataStore(applicationContext)
+            val deviceCredentialSaver = CredentialStoreDeviceCredentialSaver(
+                credentialStore = credentialStore,
+                metadataStore = deviceMetadataStore
+            )
+            val devicePairTransport = HermesDevicePairClient()
+            val deviceSelfRevokeTransport = HermesDeviceSelfRevokeClient()
             val profileRepository = ServerProfileRepository(
                 metadataStore = metadataStore,
                 credentialStore = credentialStore,
                 profileDraftClearer = chatDraftRepository,
-                selectionStore = selectionStore
+                selectionStore = selectionStore,
+                deviceCredentialSaver = deviceCredentialSaver,
+                deviceCredentialMetadataStore = deviceMetadataStore
             )
+            val profileAdmin = ServerProfileAdmin(profileRepository)
             ProductionDependencies(
-                profileAdmin = ServerProfileAdmin(profileRepository),
+                profileAdmin = profileAdmin,
                 coordinator = ProfileConnectionCoordinator(
                     connectionProbe = HermesConnectionClient(),
                     profileSaver = profileRepository
+                ),
+                pairingCoordinator = DevicePairingCoordinator(
+                    pairTransport = devicePairTransport,
+                    connectionProbe = HermesConnectionClient(),
+                    pairedProfileSaver = profileRepository,
+                    selfRevokeTransport = deviceSelfRevokeTransport
+                ),
+                deviceDisconnectCoordinator = DeviceDisconnectCoordinator(
+                    disconnectSource = profileAdmin,
+                    selfRevokeTransport = deviceSelfRevokeTransport,
+                    profileAdmin = profileAdmin
                 ),
                 sessionPageSource = SessionListRepository(
                     profileRepository = profileRepository,
@@ -272,6 +308,15 @@ fun HermesNavHost(
                         ?: productionDependencies.value.coordinator
                     coordinator.connect(draft)
                 },
+                // Mission 017B: the pairing path (recommended default in the
+                // UI). Unauthenticated pair POST, authenticated probe with
+                // strict device-credential capability check, persistence only
+                // after verification, exactly one best-effort self-revoke on
+                // every post-pair failure.
+                connectPairing = { profileName, baseUrl, pairingCode ->
+                    productionDependencies.value.pairingCoordinator
+                        .connect(profileName, baseUrl, pairingCode)
+                },
                 // Mission 012: a freshly verified server becomes the ACTIVE
                 // server. The selection is persisted FIRST (metadata-only
                 // write). The navigation to the verified server keeps the
@@ -354,6 +399,17 @@ fun HermesNavHost(
                 },
                 onServerSelected = { profileId ->
                     navHostCoroutineScope.launch { serverSelected(profileId) }
+                },
+                // Mission 017B: a confirmed, server-acknowledged disconnect
+                // removes the local profile connection; the navigation is
+                // exactly the verified profile-deletion path, so no chat or
+                // session can keep living under the disconnected profile.
+                onDeviceDisconnected = { profileId ->
+                    navHostCoroutineScope.launch { profileDeleted(profileId) }
+                },
+                disconnect = { profileId ->
+                    productionDependencies.value.deviceDisconnectCoordinator
+                        .disconnect(profileId)
                 }
             )
         }
@@ -386,6 +442,10 @@ fun HermesNavHost(
 private data class ProductionDependencies(
     val profileAdmin: ProfileAdmin,
     val coordinator: ProfileConnectionCoordinator,
+    // Mission 017B: the pairing onboarding path and the "Gerät trennen"
+    // disconnect path of the server management screen.
+    val pairingCoordinator: DevicePairingCoordinator,
+    val deviceDisconnectCoordinator: DeviceDisconnectCoordinator,
     val sessionPageSource: SessionPageSource,
     val sessionCreator: SessionCreator,
     val messageHistorySource: MessageHistorySource,

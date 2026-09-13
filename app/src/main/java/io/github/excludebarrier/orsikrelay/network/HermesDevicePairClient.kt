@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceCredential
+import io.github.excludebarrier.orsikrelay.domain.device.DeviceCredentialKey
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairCode
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairError
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairResult
@@ -215,7 +216,7 @@ class HermesDevicePairClient(
         }
         val deviceKey = root.opt(DEVICE_KEY_FIELD) as? String
             ?: throw PairFailure(DevicePairError.IncompatibleApi)
-        if (!DEVICE_KEY_PATTERN.matches(deviceKey)) {
+        if (!DeviceCredentialKey.isValid(deviceKey)) {
             throw PairFailure(DevicePairError.IncompatibleApi)
         }
         val profile = root.opt(PROFILE_FIELD) as? String
@@ -313,7 +314,6 @@ class HermesDevicePairClient(
         const val PERMISSIONS_FIELD = "permissions"
         const val ISSUED_AT_FIELD = "issued_at"
         const val CREDENTIAL_OBJECT = "hermes.device.credential"
-        val DEVICE_KEY_PATTERN = Regex("^hd_[A-Za-z0-9_-]{43}$")
         val CREDENTIAL_FIELDS = setOf(
             OBJECT_FIELD,
             DEVICE_ID_FIELD,

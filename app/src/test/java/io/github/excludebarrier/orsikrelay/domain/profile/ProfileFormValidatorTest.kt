@@ -123,6 +123,39 @@ class ProfileFormValidatorTest {
         assertEquals("https://example.org/p/android", draft.baseUrl)
     }
 
+    // Mission 017B: the pairing mode validates only the shared connection
+    // fields and must never be blocked by the API-key rule.
+    @Test
+    fun `connection fields validate without the api key rule`() {
+        val result = ProfileFormValidator.validateConnectionFields(validName, validUrl)
+
+        assertTrue(result.isSuccess)
+        val draft = result.getOrThrow()
+        assertEquals(validName, draft.profileName)
+        assertEquals(validUrl, draft.baseUrl)
+        // The pairing mode stores no credential; the slot stays empty.
+        assertTrue(draft.apiKey.isEmpty())
+    }
+
+    @Test
+    fun `connection fields still reject invalid name and url`() {
+        val nameError = ProfileFormValidator
+            .validateConnectionFields("", validUrl)
+            .error()
+        assertTrue(nameError?.profileNameError != null)
+
+        val urlError = ProfileFormValidator
+            .validateConnectionFields(validName, "http://example.org")
+            .error()
+        assertEquals(
+            ProfileFormValidator.ErrorCodes.BASE_URL_INVALID,
+            urlError?.baseUrlError
+        )
+        assertNull(urlError?.profileNameError)
+        // The pairing mode has no API-key field, so no key error.
+        assertNull(urlError?.apiKeyError)
+    }
+
     // Sicherheitsdesign: kein toString, der den API-Key ausgibt.
     @Test
     fun `draft toString never exposes the raw api key`() {

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
@@ -144,6 +145,10 @@ class ProfileManagementNavigationUiTest {
 
             // Mission 012: no-op selection persist in this test's fake admin.
             override fun selectActiveServer(profileId: String) = Unit
+
+            // Mission 017B: this test has no device profiles.
+            override fun credentialKind(profileId: String): ProfileCredentialKind =
+                ProfileCredentialKind.API_KEY
         }
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID), admin = failingAdmin)
 
@@ -204,6 +209,10 @@ class ProfileManagementNavigationUiTest {
 
         // Mission 012: no-op selection persist in this test's fake admin.
         override fun selectActiveServer(profileId: String) = Unit
+
+        // Mission 017B: this test has no device profiles.
+        override fun credentialKind(profileId: String): ProfileCredentialKind =
+            ProfileCredentialKind.API_KEY
     }
 
     private companion object {

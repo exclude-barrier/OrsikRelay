@@ -103,6 +103,55 @@ class DeviceCredentialStoreIntegrationTest {
     }
 
     @Test
+    fun metadataCommitThenThrowDeletesMetadataAndRestoresPreviousCredential() {
+        val events = mutableListOf<String>()
+        val previous = SecretValue(OLD_API_KEY)
+        val credentials = FakeCredentialStore(
+            values = mutableMapOf(PROFILE_ID to previous),
+            events = events
+        )
+        val metadata = InMemoryDeviceCredentialMetadataStore(events = events).apply {
+            failAfterNextPut = true
+        }
+        val saver = CredentialStoreDeviceCredentialSaver(credentials, metadata)
+
+        try {
+            saver.saveDeviceCredential(profile(), credential(DEVICE_KEY_RAW))
+            fail("Expected DeviceCredentialStoreException")
+        } catch (_: DeviceCredentialStoreException) {
+            // expected closed failure
+        }
+
+        assertNull("committed device metadata is removed", metadata.get(PROFILE_ID))
+        val restored = credentials.get(PROFILE_ID)
+        assertTrue("exact prior credential restored", restored === previous)
+        assertTrue(restored!!.useRaw { it == OLD_API_KEY })
+        assertTrue(
+            "device metadata is removed before the API key is restored",
+            events.indexOf("device.delete") < events.lastIndexOf("credential.put")
+        )
+    }
+
+    @Test
+    fun credentialCommitThenThrowDeletesTheHalfPersistedCredential() {
+        val credentials = FakeCredentialStore().apply {
+            failAfterNextPut = true
+        }
+        val metadata = InMemoryDeviceCredentialMetadataStore()
+        val saver = CredentialStoreDeviceCredentialSaver(credentials, metadata)
+
+        try {
+            saver.saveDeviceCredential(profile(), credential(DEVICE_KEY_RAW))
+            fail("Expected DeviceCredentialStoreException")
+        } catch (_: DeviceCredentialStoreException) {
+            // expected closed failure
+        }
+
+        assertNull("half-persisted credential is removed", credentials.get(PROFILE_ID))
+        assertNull("device metadata was never committed", metadata.get(PROFILE_ID))
+    }
+
+    @Test
     fun metadataFailureRestoresThePreviousProfileCredential() {
         val previous = SecretValue(OLD_API_KEY)
         val credentials = FakeCredentialStore(mutableMapOf(PROFILE_ID to previous))
@@ -256,10 +305,18 @@ class DeviceCredentialStoreIntegrationTest {
 
     private class FakeCredentialStore(
         val values: MutableMap<String, SecretValue> = mutableMapOf(),
-        val failDeletes: Boolean = false
+        val failDeletes: Boolean = false,
+        private val events: MutableList<String>? = null
     ) : CredentialStore {
+        var failAfterNextPut = false
+
         override fun put(profileId: String, secret: SecretValue) {
+            events?.add("credential.put")
             values[profileId] = secret
+            if (failAfterNextPut) {
+                failAfterNextPut = false
+                throw IllegalStateException("synthetic post-commit put failure")
+            }
         }
 
         override fun get(profileId: String): SecretValue? = values[profileId]
@@ -289,18 +346,26 @@ class DeviceCredentialStoreIntegrationTest {
     }
 
     private class InMemoryDeviceCredentialMetadataStore(
-        private val values: MutableMap<String, DeviceCredentialMetadata> = mutableMapOf()
+        private val values: MutableMap<String, DeviceCredentialMetadata> = mutableMapOf(),
+        private val events: MutableList<String>? = null
     ) : DeviceCredentialMetadataStore {
         var failPuts = false
+        var failAfterNextPut = false
 
         override fun put(profileId: String, metadata: DeviceCredentialMetadata) {
+            events?.add("device.put")
             if (failPuts) throw DeviceCredentialStoreException()
             values[profileId] = metadata
+            if (failAfterNextPut) {
+                failAfterNextPut = false
+                throw DeviceCredentialStoreException()
+            }
         }
 
         override fun get(profileId: String): DeviceCredentialMetadata? = values[profileId]
 
         override fun delete(profileId: String) {
+            events?.add("device.delete")
             values.remove(profileId)
         }
     }

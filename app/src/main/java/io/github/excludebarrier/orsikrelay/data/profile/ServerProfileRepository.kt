@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.data.profile
 
+import io.github.excludebarrier.orsikrelay.data.device.DeviceCredentialMetadataStore
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceCredential
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
@@ -34,8 +35,9 @@ class ServerProfileRepository(
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     private val profileDraftClearer: ProfileDraftClearer? = null,
     private val selectionStore: ActiveServerSelectionStore? = null,
-    private val deviceCredentialSaver: DeviceCredentialSaver? = null
-) : VerifiedProfileSaver {
+    private val deviceCredentialSaver: DeviceCredentialSaver? = null,
+    private val deviceCredentialMetadataStore: DeviceCredentialMetadataStore? = null
+) : VerifiedProfileSaver, PairedProfileSaver {
 
     override fun saveVerified(draft: ProfileDraft): ServerProfile {
         val profile = try {
@@ -67,6 +69,47 @@ class ServerProfileRepository(
         return profile
     }
 
+    override fun saveVerifiedPaired(
+        draft: ProfileDraft,
+        credential: DeviceCredential
+    ): ServerProfile {
+        val saver = deviceCredentialSaver ?: throw ServerProfileRepositoryException()
+        val deviceMetadata = deviceCredentialMetadataStore
+            ?: throw ServerProfileRepositoryException()
+        val profile = try {
+            ServerProfile.create(
+                id = idFactory(),
+                profileName = draft.profileName,
+                baseUrl = draft.baseUrl
+            )
+        } catch (_: Exception) {
+            throw ServerProfileRepositoryException()
+        }
+
+        try {
+            saver.saveDeviceCredential(profile, credential)
+            metadataStore.save(profile)
+        } catch (_: Exception) {
+            try {
+                credentialStore.delete(profile.id)
+            } catch (_: Exception) {
+                // Best effort; retain the generic transaction failure.
+            }
+            try {
+                deviceMetadata.delete(profile.id)
+            } catch (_: Exception) {
+                // Best effort; retain the generic transaction failure.
+            }
+            try {
+                metadataStore.delete(profile.id)
+            } catch (_: Exception) {
+                // Handles stores that committed and then reported failure.
+            }
+            throw ServerProfileRepositoryException()
+        }
+        return profile
+    }
+
     fun get(profileId: String): ServerProfile? = repositoryCall {
         metadataStore.get(profileId)
     }
@@ -79,10 +122,31 @@ class ServerProfileRepository(
         credentialStore.get(profileId)
     }
 
+    /**
+     * Non-secret credential-kind probe (Mission 017B).
+     *
+     * Returns true iff the profile exists AND a non-secret device
+     * metadata record exists for it. It NEVER reads the credential:
+     * the device key stays sealed in the credential store. A missing
+     * device metadata store (no pairing support wired) or any store
+     * failure reports false, so the UI simply offers no device action.
+     */
+    fun hasDeviceCredential(profileId: String): Boolean = repositoryCall {
+        if (metadataStore.get(profileId) == null) return@repositoryCall false
+        val deviceMetadata = deviceCredentialMetadataStore
+            ?: return@repositoryCall false
+        deviceMetadata.get(profileId) != null
+    }
+
     fun delete(profileId: String) {
         repositoryCall {
             credentialStore.delete(profileId)
             metadataStore.delete(profileId)
+        }
+        try {
+            deviceCredentialMetadataStore?.delete(profileId)
+        } catch (_: Exception) {
+            // Best-effort cleanup of non-secret metadata after profile deletion.
         }
         // Only reachable after BOTH deletions succeeded: the profile is
         // gone, so its drafts may be removed. A failure in either deletion

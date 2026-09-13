@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -41,6 +42,15 @@ class OnboardingFormUiTest {
         composeRule.onNodeWithText("Verbindung vorbereiten").performClick()
     }
 
+    /**
+     * Mission 017B: onboarding now defaults to the pairing mode. The
+     * API-key assertions of this test therefore switch back to the
+     * unchanged API-Key mode first.
+     */
+    private fun switchToApiKeyMode() {
+        composeRule.onNodeWithTag("onboardingModeApiKey").performClick()
+    }
+
 
     private fun assertNoNodeWithText(text: String) {
         val matches = composeRule.onAllNodes(hasText(text)).fetchSemanticsNodes()
@@ -67,6 +77,9 @@ class OnboardingFormUiTest {
         // Startscreen mit Titel.
         composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
 
+        // Die API-Key-Aussagen gelten für den unveränderten API-Key-Modus;
+        // der Default-Modus ist seit Mission 017B das Pairing.
+        switchToApiKeyMode()
         clickSubmit()
 
         // Feldbezogene Validierungsfehler werden angezeigt.
@@ -88,6 +101,7 @@ class OnboardingFormUiTest {
     fun apiKeyIsHiddenInTheFieldAndNotShownAsPlainText() {
         composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
 
+        switchToApiKeyMode()
         composeRule
             .onNodeWithContentDescription("API-Key", useUnmergedTree = true)
             .performTextInput(syntheticApiKey)

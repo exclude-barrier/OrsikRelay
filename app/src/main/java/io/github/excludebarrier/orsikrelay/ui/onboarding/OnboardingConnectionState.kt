@@ -23,7 +23,15 @@ enum class OnboardingFailureReason {
     TIMEOUT,
     NETWORK,
     HTTP,
-    PERSISTENCE
+    PERSISTENCE,
+    // Mission 017B: closed reasons of the device pairing path.
+    PAIRING_CODE_INVALID,
+    PAIRING_DEVICE_LIMIT,
+    PAIRING_RATE_LIMITED,
+    PAIRING_INVALID_REQUEST,
+    PAIRING_INCOMPATIBLE,
+    PAIRING_FAILED,
+    PAIRING_CREDENTIAL_REJECTED
 }
 
 internal fun ConnectionFailureReason.toOnboardingFailureReason(): OnboardingFailureReason =

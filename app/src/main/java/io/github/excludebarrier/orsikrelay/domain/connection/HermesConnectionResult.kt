@@ -13,7 +13,9 @@ sealed interface HermesConnectionResult {
         val version: String,
         val sessionsSupported: Boolean,
         val sessionStreamingSupported: Boolean,
-        val sessionChatInteractiveApprovals: Boolean
+        val sessionChatInteractiveApprovals: Boolean,
+        /** Strict validation of the complete device-credential protocol-v1 contract. */
+        val deviceCredentialsSupported: Boolean = false
     ) : HermesConnectionResult
 
     data class Failure(

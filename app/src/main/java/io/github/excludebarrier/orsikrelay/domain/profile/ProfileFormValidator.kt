@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.profile
 
+import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
+
 /**
  * Pure, local validation of the onboarding form (Mission 002A).
  *
@@ -49,6 +51,48 @@ object ProfileFormValidator {
         baseUrl: String,
         apiKey: SecretValue
     ): Result<ProfileDraft> {
+        val fields = validateConnectionFields(profileName, baseUrl)
+        var keyError: String? = null
+        if (apiKey.isEmpty()) {
+            keyError = ErrorCodes.API_KEY_EMPTY
+        }
+
+        val failure = fields.exceptionOrNull() as? ValidationError
+        if (failure != null || keyError != null) {
+            return Result.failure(
+                ValidationError(
+                    profileNameError = failure?.profileNameError,
+                    baseUrlError = failure?.baseUrlError,
+                    apiKeyError = keyError
+                )
+            )
+        }
+        return Result.success(
+            ProfileDraft(
+                profileName = fields.getOrThrow().profileName,
+                baseUrl = fields.getOrThrow().baseUrl,
+                apiKey = apiKey
+            )
+        )
+    }
+
+    /**
+     * Validates ONLY the shared connection fields (profile name + HTTPS
+     * base URL) without any credential rule.
+     *
+     * Mission 017B: the device-pairing mode has no API-key field, so it
+     * must not be rejected by the `API_KEY_EMPTY` rule. The pairing code
+     * is validated separately by the UI against the closed
+     * `DevicePairCode.normalize` contract. The API-key mode keeps the
+     * full [validate] behaviour, unchanged.
+     *
+     * @return success with the normalized profile name and base URL or a
+     * failure carrying [ValidationError] with the failed fields.
+     */
+    fun validateConnectionFields(
+        profileName: String,
+        baseUrl: String
+    ): Result<ProfileDraft> {
         val trimmedName = profileName.trim()
         var nameError: String? = null
         if (trimmedName.isEmpty()) {
@@ -63,17 +107,11 @@ object ProfileFormValidator {
             urlError = ErrorCodes.BASE_URL_INVALID
         }
 
-        var keyError: String? = null
-        if (apiKey.isEmpty()) {
-            keyError = ErrorCodes.API_KEY_EMPTY
-        }
-
-        if (nameError != null || urlError != null || keyError != null) {
+        if (nameError != null || urlError != null) {
             return Result.failure(
                 ValidationError(
                     profileNameError = nameError,
-                    baseUrlError = urlError,
-                    apiKeyError = keyError
+                    baseUrlError = urlError
                 )
             )
         }
@@ -81,7 +119,9 @@ object ProfileFormValidator {
             ProfileDraft(
                 profileName = trimmedName,
                 baseUrl = urlResult.getOrThrow(),
-                apiKey = apiKey
+                // No credential is present in this mode; the draft's
+                // credential slot stays empty by design.
+                apiKey = SecretValue("")
             )
         )
     }

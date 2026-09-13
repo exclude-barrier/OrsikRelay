@@ -16,6 +16,7 @@ import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionProbe
 import io.github.excludebarrier.orsikrelay.domain.connection.HermesConnectionResult
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
@@ -301,6 +302,10 @@ class ActiveServerSelectionRestartUiTest {
                 throw IllegalStateException("synthetic selection store failure")
             }
         }
+
+        // Mission 017B: the selection tests have no device profiles.
+        override fun credentialKind(profileId: String): ProfileCredentialKind =
+            ProfileCredentialKind.API_KEY
     }
 
     private fun draft() = ProfileDraft(

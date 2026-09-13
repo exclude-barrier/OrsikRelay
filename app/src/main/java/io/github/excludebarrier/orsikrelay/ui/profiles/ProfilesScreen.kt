@@ -33,7 +33,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectResult
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,43 +43,53 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Server management screen (Mission 010, extended in Missions 011/012).
+ * Server management screen (Mission 010, extended in Missions 011/012
+ * and 017B).
  *
  * - Lists the stored servers exactly as [ProfileAdmin.listProfiles]
  *   reports them (name plus base URL); no network request is made here.
  * - The currently active server is marked; the unambiguous action
  *   [R.string.profiles_select_active] switches the active server via
- *   [onServerSelected]. Selection is pure metadata — it reads no
- *   credential and makes no request on this path.
- * - (Mission 012) The selection is PERSISTED first
- *   ([ProfileAdmin.selectActiveServer]) and the safe navigation switch
- *   ([onServerSelected]) is triggered only after the persist succeeded.
- *   A failed or in-flight persist never triggers the switch, so a failed
- *   selection is never applied optimistically. While a selection is in
- *   flight the button is disabled so a double tap cannot start a second
- *   one.
+ *   [onServerSelected]. Selection is pure metadata.
  * - Deletion stays a separate, confirmed action (tap the row to open the
- *   dialog) through the verified [ProfileAdmin.deleteProfile] path
- *   (credential, metadata, drafts); tapping outside cancels.
- * - While a deletion is in flight, the confirm button is disabled so a
- *   double tap can never start a second deletion; the dialog stays open.
- * - A failure is reported with a fixed, generic German message that
- *   contains no profile ID, URL or exception detail; the dialog stays
- *   open for a manual retry.
+ *   dialog) through the verified [ProfileAdmin.deleteProfile] path.
+ * - (Mission 017B) A profile whose credential kind is
+ *   [ProfileCredentialKind.DEVICE_CREDENTIAL] (derived from NON-SECRET
+ *   device metadata only) shows the additional "Gerät trennen" action.
+ *   It is a TWO-STEP action: the row action opens a dedicated dialog,
+ *   whose confirm button performs the disconnect. API-key profiles never
+ *   offer this action and can never trigger a self-revoke.
+ * - While a disconnect is in flight the confirm button is disabled so a
+ *   double tap cannot start a second revocation; a remote failure deletes
+ *   nothing locally and shows a fixed, generic German message with no
+ *   profile ID, URL or exception detail.
  *
- * [admin] is the test seam; production injects [io.github.excludebarrier.orsikrelay.data.profile.ServerProfileAdmin].
+ * [admin] is the test seam; production injects
+ * [io.github.excludebarrier.orsikrelay.data.profile.ServerProfileAdmin].
+ * [onDeviceDisconnected] (default no-op) is the safe-navigation hook
+ * (Mission 017B), triggered exactly like [onProfileDeleted] after a
+ * successful disconnect.
  */
 @Composable
 fun ProfilesScreen(
     admin: ProfileAdmin,
-    activeProfileId: String? = null,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    activeProfileId: String? = null,
     onProfileDeleted: (profileId: String) -> Unit = {},
     onServerSelected: (profileId: String) -> Unit = {},
-    modifier: Modifier = Modifier
+    onDeviceDisconnected: (profileId: String) -> Unit = {},
+    disconnect: (profileId: String) -> DeviceDisconnectResult = {
+        DeviceDisconnectResult.Failure(
+            io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectError.InvalidState
+        )
+    }
 ) {
     val coroutineScope = rememberCoroutineScope()
     var profiles by remember { mutableStateOf<List<ServerProfile>?>(null) }
+    // Mission 017B: profile ID -> non-secret credential kind, loaded
+    // together with the list (device metadata only, no credential read).
+    var credentialKinds by remember { mutableStateOf<Map<String, ProfileCredentialKind>>(emptyMap()) }
     var deleteTarget by remember { mutableStateOf<ServerProfile?>(null) }
     var deleting by remember { mutableStateOf(false) }
     var deleteFailed by remember { mutableStateOf(false) }
@@ -85,6 +97,13 @@ fun ProfilesScreen(
     // disabled while it runs and the navigation switch is triggered only
     // after the persist has succeeded.
     var selecting by remember { mutableStateOf<String?>(null) }
+    // Mission 017B: the two-step "Gerät trennen" state. [disconnectTarget]
+    // is the profile whose confirmation dialog is open; [disconnecting]
+    // guards the single in-flight revocation; [disconnectFailed] drives
+    // the fixed, generic error text.
+    var disconnectTarget by remember { mutableStateOf<ServerProfile?>(null) }
+    var disconnecting by remember { mutableStateOf(false) }
+    var disconnectFailed by remember { mutableStateOf(false) }
 
     fun loadProfiles() {
         coroutineScope.launch {
@@ -97,6 +116,21 @@ fun ProfilesScreen(
             }
             if (list != null) {
                 profiles = list
+                // Mission 017B: the credential kind is NON-SECRET metadata
+                // (device metadata presence only; no credential is read).
+                // It is loaded together with the list; a query failure or a
+                // non-device kind simply means the action is not offered —
+                // fail-closed.
+                credentialKinds = withContext(Dispatchers.IO) {
+                    list.associate { profile ->
+                        profile.id to
+                            try {
+                                admin.credentialKind(profile.id)
+                            } catch (_: Exception) {
+                                ProfileCredentialKind.API_KEY
+                            }
+                    }
+                }
             }
         }
     }
@@ -149,6 +183,40 @@ fun ProfilesScreen(
             }
             if (persisted) {
                 onServerSelected(target.id)
+            }
+        }
+    }
+
+    // Mission 017B: exactly one disconnect may be in flight. Only the
+    // confirmed path runs [disconnect]; the revocation happens exactly
+    // once inside it and a failure deletes nothing locally.
+    fun confirmDisconnect(target: ServerProfile) {
+        if (disconnecting) return
+        disconnecting = true
+        disconnectFailed = false
+        coroutineScope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) { disconnect(target.id) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                DeviceDisconnectResult.Failure(
+                    io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectError.RevokeFailed
+                )
+            }
+            disconnecting = false
+            if (result is DeviceDisconnectResult.Disconnected) {
+                disconnectTarget = null
+                // The verified deletion already removed the profile from
+                // the stores; refresh the list so the row disappears, then
+                // trigger the safe navigation hook (same order as the
+                // deletion path).
+                loadProfiles()
+                onDeviceDisconnected(target.id)
+            } else {
+                // Fixed generic error; the dialog stays open, nothing
+                // local was deleted.
+                disconnectFailed = true
             }
         }
     }
@@ -210,13 +278,21 @@ fun ProfilesScreen(
                                 profile = profile,
                                 isActive = profile.id == activeProfileId,
                                 isSelecting = selecting != null,
+                                isDeviceProfile = credentialKinds[profile.id] ==
+                                    ProfileCredentialKind.DEVICE_CREDENTIAL,
                                 onClick = {
                                     if (deleteTarget == null) {
                                         deleteTarget = profile
                                         deleteFailed = false
                                     }
                                 },
-                                onUseAsActive = { confirmSelect(profile) }
+                                onUseAsActive = { confirmSelect(profile) },
+                                onDisconnectDevice = {
+                                    if (disconnectTarget == null) {
+                                        disconnectTarget = profile
+                                        disconnectFailed = false
+                                    }
+                                }
                             )
                         }
                     }
@@ -280,6 +356,67 @@ fun ProfilesScreen(
             }
         )
     }
+
+    // Mission 017B: second, dedicated confirmation step of the
+    // "Gerät trennen" action. Opening the dialog costs nothing; only the
+    // confirm button triggers the single revocation.
+    val disconnectingTarget = disconnectTarget
+    if (disconnectingTarget != null) {
+        AlertDialog(
+            onDismissRequest = { if (!disconnecting) disconnectTarget = null },
+            title = { Text(text = stringResource(R.string.profiles_device_disconnect_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(
+                            R.string.profiles_device_disconnect_message,
+                            disconnectingTarget.profileName
+                        ),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    if (disconnecting) {
+                        Text(
+                            text = stringResource(R.string.profiles_device_disconnecting),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    if (disconnectFailed) {
+                        Text(
+                            text = stringResource(R.string.profiles_device_disconnect_error_generic),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { confirmDisconnect(disconnectingTarget) },
+                    enabled = !disconnecting,
+                    modifier = Modifier.testTag("deviceDisconnectConfirm")
+                ) {
+                    Text(
+                        text = if (disconnectFailed) {
+                            stringResource(R.string.sessions_retry)
+                        } else {
+                            stringResource(R.string.profiles_device_disconnect_confirm)
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { disconnectTarget = null },
+                    enabled = !disconnecting,
+                    modifier = Modifier.testTag("deviceDisconnectDismiss")
+                ) {
+                    Text(text = stringResource(R.string.new_session_cancel))
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -287,8 +424,10 @@ private fun ProfileRow(
     profile: ServerProfile,
     isActive: Boolean,
     isSelecting: Boolean,
+    isDeviceProfile: Boolean,
     onClick: () -> Unit,
-    onUseAsActive: () -> Unit
+    onUseAsActive: () -> Unit,
+    onDisconnectDevice: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -350,6 +489,23 @@ private fun ProfileRow(
                         .testTag("selectActiveServer:${profile.id}")
                 ) {
                     Text(text = stringResource(R.string.profiles_select_active))
+                }
+            }
+            // Mission 017B: offered ONLY for device-credential profiles.
+            // API-key profiles never render this button and can therefore
+            // never start a self-revoke. The row action only OPENS the
+            // dedicated confirmation dialog; the revocation itself happens
+            // exclusively on the dialog's confirm button.
+            if (isDeviceProfile) {
+                TextButton(
+                    onClick = onDisconnectDevice,
+                    enabled = !isSelecting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .testTag("disconnectDevice:${profile.id}")
+                ) {
+                    Text(text = stringResource(R.string.profiles_device_disconnect_action))
                 }
             }
         }

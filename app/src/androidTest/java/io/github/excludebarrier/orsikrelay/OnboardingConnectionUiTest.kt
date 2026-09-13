@@ -144,6 +144,9 @@ class OnboardingConnectionUiTest {
     }
 
     private fun submitValidForm() {
+        // Mission 017B: onboarding now defaults to the pairing mode; these
+        // API-key tests switch back to the unchanged API-Key mode first.
+        composeRule.onNodeWithTag("onboardingModeApiKey").performClick()
         composeRule.onNodeWithTag("onboardingProfileName")
             .performTextInput("Fixture")
         composeRule.onNodeWithTag("onboardingBaseUrl")

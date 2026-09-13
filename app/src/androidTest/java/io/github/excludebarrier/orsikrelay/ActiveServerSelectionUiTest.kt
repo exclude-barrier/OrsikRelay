@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
@@ -226,6 +227,10 @@ class ActiveServerSelectionUiTest {
             selectedActive.clear()
             selectedActive += profileId
         }
+
+        // Mission 017B: the selection tests have no device profiles.
+        override fun credentialKind(profileId: String): ProfileCredentialKind =
+            ProfileCredentialKind.API_KEY
     }
 
     private companion object {

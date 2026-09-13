@@ -51,8 +51,13 @@ class CredentialStoreDeviceCredentialSaver(
                 )
             )
         } catch (_: Exception) {
-            // Restore the exact prior credential when one existed; only
-            // delete when this pairing created the first credential.
+            // A store may commit and still report failure; remove any orphaned
+            // metadata before restoring the exact previous credential.
+            try {
+                metadataStore.delete(profile.id)
+            } catch (_: Exception) {
+                // Best effort; the caller's closed boundary applies.
+            }
             try {
                 if (previousCredential == null) {
                     credentialStore.delete(profile.id)
