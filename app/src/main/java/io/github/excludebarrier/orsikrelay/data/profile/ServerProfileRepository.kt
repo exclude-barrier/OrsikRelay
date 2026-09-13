@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.data.profile
 
+import io.github.excludebarrier.orsikrelay.domain.device.DeviceCredential
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
@@ -32,7 +33,8 @@ class ServerProfileRepository(
     private val credentialStore: CredentialStore,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     private val profileDraftClearer: ProfileDraftClearer? = null,
-    private val selectionStore: ActiveServerSelectionStore? = null
+    private val selectionStore: ActiveServerSelectionStore? = null,
+    private val deviceCredentialSaver: DeviceCredentialSaver? = null
 ) : VerifiedProfileSaver {
 
     override fun saveVerified(draft: ProfileDraft): ServerProfile {
@@ -138,6 +140,27 @@ class ServerProfileRepository(
             }
             val store = selectionStore ?: throw ServerProfileRepositoryException()
             store.write(profileId)
+        }
+    }
+
+    /**
+     * Persists a paired-device credential for an existing profile
+     * (Mission 017A) through the optional [deviceCredentialSaver].
+     *
+     * The saver stores the device key through the same credential store
+     * as the API key (the device key REPLACES the profile credential
+     * after pairing) and the non-secret metadata through the device
+     * metadata store. The profile must exist; a missing profile, a
+     * missing saver, or a saver failure all report the existing closed,
+     * input-free [ServerProfileRepositoryException]. The existing
+     * API-key-only path is untouched when no saver is installed.
+     */
+    fun saveDeviceCredential(profileId: String, credential: DeviceCredential) {
+        repositoryCall {
+            val saver = deviceCredentialSaver ?: throw ServerProfileRepositoryException()
+            val profile = metadataStore.get(profileId)
+                ?: throw ServerProfileRepositoryException()
+            saver.saveDeviceCredential(profile, credential)
         }
     }
 
