@@ -163,10 +163,13 @@ class HermesConnectionClient(
     }
 
     /**
-     * Validates the hard capabilities contract and then negotiates the
-     * complete versioned session-chat approval contract. Approval remains a
-     * soft, fail-closed capability: an absent, partial, malformed, legacy-only
-     * or unknown-version advertisement returns `false` without breaking the
+     * Validates the hard capabilities contract and then negotiates the two
+     * soft, mobile-specific capabilities (session-chat interactive approvals
+     * and device credentials). Both are versioned by the single explicit
+     * mobile-protocol contract: this client speaks [MOBILE_PROTOCOL_VERSION]
+     * and accepts only [SUPPORTED_MOBILE_PROTOCOL_VERSIONS]. Each capability
+     * remains fail-closed: an absent, partial, malformed, legacy-only or
+     * unknown-version advertisement returns `false` without breaking the
      * otherwise compatible connection.
      */
     private fun parseCapabilities(json: JSONObject): NegotiatedCapabilities {
@@ -214,7 +217,7 @@ class HermesConnectionClient(
         if (objectKeys(contract) != DEVICE_CREDENTIAL_CONTRACT_FIELDS) return false
         if (
             contract.opt(ENABLED_FIELD) != true ||
-            contract.opt(PROTOCOL_VERSION_FIELD) != DEVICE_CREDENTIAL_PROTOCOL_VERSION ||
+            !isSupportedMobileProtocolVersion(contract.opt(PROTOCOL_VERSION_FIELD)) ||
             contract.opt(PAIR_ENDPOINT_FIELD) != DEVICE_PAIR_ENDPOINT ||
             contract.opt(SELF_REVOKE_ENDPOINT_FIELD) != DEVICE_SELF_REVOKE_ENDPOINT
         ) return false
@@ -240,7 +243,7 @@ class HermesConnectionClient(
             ?: return false
         if (
             contract.opt(ENABLED_FIELD) != true ||
-            contract.opt(PROTOCOL_VERSION_FIELD) != APPROVAL_PROTOCOL_VERSION ||
+            !isSupportedMobileProtocolVersion(contract.opt(PROTOCOL_VERSION_FIELD)) ||
             contract.opt(EVENT_FIELD) != APPROVAL_EVENT ||
             contract.opt(RESPONSE_ENDPOINT_FIELD) != RUN_APPROVAL_ENDPOINT ||
             choices.length() != 2 ||
@@ -262,6 +265,17 @@ class HermesConnectionClient(
         while (iterator.hasNext()) keys += iterator.next()
         return keys
     }
+
+    /**
+     * The explicit, value-strict mobile-protocol version gate. Returns
+     * `true` only when [value] is an integer member of
+     * [SUPPORTED_MOBILE_PROTOCOL_VERSIONS]. A missing version (`null`), a
+     * non-integer (string, float, array) or an out-of-range integer all
+     * fail closed, so no unknown or legacy version can ever enable a
+     * mobile capability implicitly.
+     */
+    private fun isSupportedMobileProtocolVersion(value: Any?): Boolean =
+        value is Int && value in SUPPORTED_MOBILE_PROTOCOL_VERSIONS
 
     private fun validateEndpoint(
         endpoints: JSONObject,
@@ -342,7 +356,17 @@ class HermesConnectionClient(
         const val EVENT_FIELD = "event"
         const val CHOICES_FIELD = "choices"
         const val RESPONSE_ENDPOINT_FIELD = "response_endpoint"
-        const val APPROVAL_PROTOCOL_VERSION = 1
+        /**
+         * The single, explicit mobile-protocol version this client speaks.
+         * Every soft mobile capability (session-chat approvals, device
+         * credentials) is versioned by this one contract. [SUPPORTED_MOBILE_PROTOCOL_VERSIONS]
+         * is the closed set the client will negotiate; a contract advertising
+         * any other `protocol_version` fails closed. To support a future
+         * version, extend the set and add its field schema - never widen the
+         * v1 schema implicitly.
+         */
+        const val MOBILE_PROTOCOL_VERSION = 1
+        val SUPPORTED_MOBILE_PROTOCOL_VERSIONS = setOf(MOBILE_PROTOCOL_VERSION)
         const val APPROVAL_EVENT = "approval.request"
         const val APPROVAL_ONCE = "once"
         const val APPROVAL_DENY = "deny"
@@ -354,7 +378,6 @@ class HermesConnectionClient(
             RESPONSE_ENDPOINT_FIELD
         )
         val APPROVAL_ENDPOINT_FIELDS = setOf(METHOD_FIELD, PATH_FIELD)
-        const val DEVICE_CREDENTIAL_PROTOCOL_VERSION = 1
         const val DEVICE_PAIR_ENDPOINT = "device_pair"
         const val DEVICE_SELF_REVOKE_ENDPOINT = "device_self_revoke"
         val DEVICE_CREDENTIAL_CONTRACT_FIELDS = setOf(
