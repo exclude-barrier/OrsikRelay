@@ -11,6 +11,7 @@ import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionOu
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairError
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairingFailure
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairingOutcome
+import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +42,10 @@ fun OnboardingRoute(
     connectPairing: (profileName: String, baseUrl: String, pairingCode: String) -> DevicePairingOutcome = { _, _, _ ->
         DevicePairingOutcome.Failure(DevicePairingFailure.InvalidInput)
     },
-    onConnected: (ProfileConnectionOutcome.Success) -> Unit
+    onConnected: (ProfileConnectionOutcome.Success) -> Unit,
+    // Product Gate: a pairing deep-link bootstrap (server URL + code) pre-fills
+    // the pairing fields so the user never types a base URL or API key.
+    pairingBootstrap: PairingBootstrap? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     var connectionState by remember {
@@ -49,6 +53,9 @@ fun OnboardingRoute(
     }
 
     OnboardingScreen(
+        initialProfileName = pairingBootstrap?.suggestedProfileName.orEmpty(),
+        initialBaseUrl = pairingBootstrap?.baseUrl.orEmpty(),
+        initialPairingCode = pairingBootstrap?.pairingCode.orEmpty(),
         connectionState = connectionState,
         onInputChanged = {
             if (connectionState is OnboardingConnectionState.Failure) {

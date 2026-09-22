@@ -22,6 +22,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,17 +69,31 @@ fun OnboardingScreen(
     onValidPairing: (profileName: String, baseUrl: String, pairingCode: String) -> Unit,
     modifier: Modifier = Modifier,
     connectionState: OnboardingConnectionState = OnboardingConnectionState.Idle,
-    onInputChanged: () -> Unit = {}
+    onInputChanged: () -> Unit = {},
+    // Product Gate: pre-filled from a pairing deep link (server + code) so the
+    // user never types a base URL or API key. Empty when no deep link was used.
+    initialProfileName: String = "",
+    initialBaseUrl: String = "",
+    initialPairingCode: String = ""
 ) {
     var mode by remember { mutableStateOf(OnboardingMode.Pairing) }
-    var profileName by remember { mutableStateOf("") }
-    var baseUrl by remember { mutableStateOf("") }
+    var profileName by remember { mutableStateOf(initialProfileName) }
+    var baseUrl by remember { mutableStateOf(initialBaseUrl) }
     var apiKey by remember { mutableStateOf("") }
-    var pairingCode by remember { mutableStateOf("") }
+    var pairingCode by remember { mutableStateOf(initialPairingCode) }
     var validationError by remember {
         mutableStateOf<ProfileFormValidator.ValidationError?>(null)
     }
     var pairingCodeError by remember { mutableStateOf(false) }
+
+    // Re-tap support: a deep link delivered after first composition (onNewIntent)
+    // updates the pre-filled fields. Only non-empty values override, so a
+    // bootstrap never wipes a field the user has since edited.
+    LaunchedEffect(initialProfileName, initialBaseUrl, initialPairingCode) {
+        if (initialProfileName.isNotEmpty()) profileName = initialProfileName
+        if (initialBaseUrl.isNotEmpty()) baseUrl = initialBaseUrl
+        if (initialPairingCode.isNotEmpty()) pairingCode = initialPairingCode
+    }
     val apiKeyLabel = stringResource(R.string.onboarding_api_key_label)
     // Resolved in the composable scope: the semantics block below is not
     // @Composable and therefore cannot call stringResource itself.

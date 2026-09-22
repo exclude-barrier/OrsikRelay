@@ -1,5 +1,5 @@
 package io.github.excludebarrier.orsikrelay
-
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.LocalActivity
@@ -23,15 +24,24 @@ import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.navigation.initialDestination
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
+import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
+import io.github.excludebarrier.orsikrelay.domain.device.PairingDeepLink
 
 /**
  * Single entry point of the app. Hosts the Compose navigation shell;
  * all navigation logic lives in [HermesNavHost] and [io.github.excludebarrier.orsikrelay.navigation.AppNavigationState].
  */
 class MainActivity : ComponentActivity() {
+    // Product Gate: a pairing deep link (orsik://pair?server=...&code=...)
+    // received via onCreate or onNewIntent is parsed once and handed to the
+    // onboarding screen as a pre-fill, so the user never types a base URL or
+    // API key. Snapshot state so a re-delivered link recomposes the route.
+    private val pairingBootstrap = mutableStateOf<PairingBootstrap?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        pairingBootstrap.value = PairingDeepLink.parse(intent?.data?.toString().orEmpty())
         setContent {
             val themeStore = remember {
                 SharedPreferencesThemeSettingStore(applicationContext)
@@ -44,11 +54,17 @@ class MainActivity : ComponentActivity() {
                     HermesNavHost(
                         startDestination = initialDestination(),
                         sessionPageSource = sessionPageSourceForTests,
-                        themeController = themeController
+                        themeController = themeController,
+                        pairingBootstrap = pairingBootstrap.value
                     )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        pairingBootstrap.value = PairingDeepLink.parse(intent.data?.toString().orEmpty())
     }
 
     companion object {

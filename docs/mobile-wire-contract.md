@@ -197,3 +197,85 @@ Invarianten (invariante Sicherheitsgrenzen, nicht verhandelbar):
   nicht-Integer closed; pro-Fähigkeit-Independenz; malformed → `INCOMPATIBLE_API`).
 - Unverändert: `HermesConnectionClientTest`, `DeviceCredentialCapabilityTest`
   (exakt-Feld-Striktheit bleibt bestehen → alle bisherigen Tests grün).
+
+## 7. Pairing-Deep-Link / Bootstrap-Contract (Zero-Config)
+
+**Status:** Client-seitiges Bootstrap-Contract für das Orsik-Relay-Onboarding.
+Der Deep-Link ist der **einzige** Input, den eine frische App braucht, um
+Server-Base-URL + Pairing-Code zu erhalten — ohne manuelles Base-URL- oder
+API-Key-Eingeben (Product Gate).
+
+### 7.1 Format (exakt)
+
+```
+orsik://pair?server=<urlencoded-HTTPS-BaseURL>&code=<24-Char-Code>
+```
+
+- `scheme` exakt `orsik` (Client case-insensitive), `host` exakt `pair`.
+- Query: **exakt zwei** Parameter, beide Pflicht: `server` + `code`.
+- `server`: percent-encodierte (UTF-8) HTTPS-Base-URL (`:`→`%3A`,
+  `/`→`%2F`); der Client dekodiert robust (bereits-plain-Werte akzeptiert).
+- `code`: der rohe 24-Char-Code verbatim (Großbuchstaben/Ziffern, keine
+  Sonderzeichen → Percent-Encoding wirkt hier als no-op). **Keine**
+  Anzeige-Dashes im Link (die gibt es nur im CLI-Output).
+
+### 7.2 Fail-closed-Parser (Client: `PairingDeepLink.parse`)
+
+Liefert `null`, wirft nie (auch bei malformedem Percent-Encoding).
+
+| Regel | Ergebnis |
+|---|---|
+| blank / falsches `scheme` oder `host` / fehlende Query | `null` |
+| fehlendes oder leeres `server` bzw. `code` | `null` |
+| `#`-Fragment | `null` |
+| `server` nicht absolute HTTPS oder mit `user:pass@` | `null` |
+| `code` verletzt den `DevicePairCode`-Contract (≠24 / ∉31-Alphabet) | `null` |
+| malformedes Percent-Encoding (z. B. `%ZZ`) | `null` (kein Exception) |
+
+### 7.3 Code-Regeln
+
+- Länge **exakt 24**, Alphabet **exakt 31** Zeichen: `A–Z` ohne `I/L/O/U`
+  + `1–9`.
+- Anzeige (CLI): 6 Gruppen à 4 Zeichen, durch `-` getrennt (29 Zeichen).
+- Client-Normalisierung: trim → uppercase → `-`/`_`/Whitespace entfernen →
+  exakt-24- + Alphabet-Check; Abweichung wird lokal abgelehnt (kein Request).
+- **TTL 300 s, Single-Use, SHA-256-Hash at Rest.** Nach Redeem oder Ablauf
+  unbrauchbar.
+- **Device-Key (`hd_`) nie im Link** — erst nach erfolgreichem Redeem.
+
+### 7.4 Server-URL-Regeln
+
+- Absolute HTTPS-URL, Host erforderlich, **keine** User-Info, kein Klartext.
+- Fail-closed: `http://`, relative/schemeless, `user:pass@host` → abgelehnt.
+- Server-seitige Quelle: `API_SERVER_PUBLIC_BASE_URL` (`.env`/Environment).
+
+### 7.5 Zero-Config-Flow (Client)
+
+1. `hermes devices pair --label X` erzeugt den 24-Char-Code; mit gesetztem
+   `API_SERVER_PUBLIC_BASE_URL` zusätzlich Deep-Link + ASCII-QR.
+2. App öffnet `orsik://pair?…` (Tap oder QR-Scan; `BROWSABLE`-intent-filter).
+3. `MainActivity` (`onCreate`/`onNewIntent`) parst den Link fail-closed →
+   `PairingBootstrap`.
+4. Onboarding pre-füllt Profilname (Host-Label), Base-URL + Pairing-Code.
+5. Nutzer tippt **Connect** → `DevicePairingCoordinator.connect` (re-validiert
+   URL + Code) → `POST /v1/devices/pair`.
+6. `201` → Device-Key im Keystore, Verbindung aktiv.
+- **Kein Auto-Connect:** das Pairing erfordert die explizite Connect-Zustimmung
+  des Nutzers (Pre-Fill ja, Auto-Submit nein).
+
+### 7.6 Protocol-Version
+
+Pairing gehört zu **Mobile Protocol v1** (Feature `device_credentials`,
+`protocol_version=1`, §2.2). Der Deep-Link selbst ist versionsfrei (nur
+Client-Bootstrap); die Vertragssicherheit kommt aus den Pair-/Revoke-Endpoints
+(§2.3/§2.4) und dem Code-Contract (§7.3).
+
+### 7.7 Server-seitige Generierung (Private Extension)
+
+Die **kanonische** Mobile-v1-Quelle (`hermes devices pair`) gibt **nur** den
+24-Char-Code aus. Die Deep-Link- + ASCII-QR-Generierung
+(`_build_bootstrap_link` / `_render_qr_ascii` / `_public_base_url`) ist eine
+**private Server-Erweiterung** (dev-laptop-Teststand), die
+`API_SERVER_PUBLIC_BASE_URL` + Code zum obigen Link bündelt. Sie ist **nicht**
+Teil des kanonischen Mobile-v1-Commits und wird nicht als stehender
+Vertrag vorausgesetzt — der Client-Contract (§7.1–§7.6) bleibt davon unabhängig.

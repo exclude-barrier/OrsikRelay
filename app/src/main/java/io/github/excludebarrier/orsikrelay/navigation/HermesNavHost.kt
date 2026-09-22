@@ -43,6 +43,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairingCoordinator
+import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
@@ -86,7 +87,10 @@ fun HermesNavHost(
     themeController: ThemeModeController? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
-    capabilityStore: RunApprovalCapabilityStore? = null
+    capabilityStore: RunApprovalCapabilityStore? = null,
+    // Product Gate: pairing deep-link bootstrap (server URL + code) pre-filled
+    // into the onboarding route. Null when no deep link was received.
+    pairingBootstrap: PairingBootstrap? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
     val productionDependencies = remember(applicationContext) {
@@ -303,6 +307,7 @@ fun HermesNavHost(
     ) {
         composable(routeOf(AppScreen.Onboarding)) {
             OnboardingRoute(
+                pairingBootstrap = pairingBootstrap,
                 connect = { draft ->
                     val coordinator = connectionCoordinator
                         ?: productionDependencies.value.coordinator
