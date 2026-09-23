@@ -414,6 +414,52 @@ class ChatStreamEventPipelineTest {
     }
 
     @Test
+    fun approvalRequestWithServerPreFixFormatIsRejectedClosed() {
+        // Regression: the server previously emitted the approval.request event
+        // with a `command` field and a dynamic description. This exact shape
+        // must be rejected closed (the `command` field is not in the closed
+        // allowlist, and the dynamic description is not the fixed neutral text).
+        val target = ChatStreamEventPipeline(
+            expectedSessionId = SESSION_ID,
+            interactiveApprovals = true
+        )
+        target.process(frame("run.started", 1))
+        target.process(messageStartedFrame(2, MSG_ID))
+        assertProtocolViolation(
+            target,
+            ParsedSseFrame(
+                "approval.request",
+                baseFrame(3)
+                    .put("description", "delete in root path")
+                    .put("request_id", REQUEST_ID)
+                    .put("choices", org.json.JSONArray().put("once").put("deny"))
+                    .put("command", "[redacted]")
+                    .toString()
+            ),
+            "pre-fix server format (command + dynamic description) must be rejected"
+        )
+    }
+
+    @Test
+    fun approvalRequestWithSessionChoiceIsRejectedClosed() {
+        // The mobile protocol v1 offers only `once` and `deny`. A `session`
+        // choice is not part of the closed choice set and must be rejected.
+        val target = approvalPipeline(RUN_ID)
+        assertProtocolViolation(
+            target,
+            ParsedSseFrame(
+                "approval.request",
+                baseFrame(3)
+                    .put("description", "A dangerous action requires your approval.")
+                    .put("request_id", REQUEST_ID)
+                    .put("choices", org.json.JSONArray().put("once").put("session"))
+                    .toString()
+            ),
+            "session choice must be rejected"
+        )
+    }
+
+    @Test
     fun messageStartedBeforeRunStartedIsRejected() {
         assertProtocolViolation(pipeline, messageStartedFrame(1, MSG_ID))
     }
