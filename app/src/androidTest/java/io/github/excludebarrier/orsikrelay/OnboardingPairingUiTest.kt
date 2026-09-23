@@ -102,8 +102,9 @@ class OnboardingPairingUiTest {
                         profileId = "paired-profile",
                         sessionChatInteractiveApprovals = false
                     )
-                }
-            ) { connectedProfiles += it }
+                },
+                onConnected = { connectedProfiles += it }
+            )
         }
 
         fillPairingForm()
@@ -130,8 +131,9 @@ class OnboardingPairingUiTest {
                     started.countDown()
                     release.await(3, TimeUnit.SECONDS)
                     DevicePairingOutcome.Failure(DevicePairingFailure.InvalidInput)
-                }
-            ) { connectedProfiles += it }
+                },
+                onConnected = { connectedProfiles += it }
+            )
         }
 
         fillPairingForm()
@@ -161,11 +163,12 @@ class OnboardingPairingUiTest {
         composeRule.setContent {
             OnboardingRoute(
                 connect = { ProfileConnectionOutcome.Failure(ConnectionFailureReason.INVALID_INPUT) },
-                connectPairing = { _, _, _ -> outcome }
-            ) {
-                org.junit.Assert.fail("the failure path must not connect")
-                Unit
-            }
+                connectPairing = { _, _, _ -> outcome },
+                onConnected = {
+                    org.junit.Assert.fail("the failure path must not connect")
+                    Unit
+                }
+            )
         }
 
         val cases = listOf(
@@ -270,8 +273,9 @@ class OnboardingPairingUiTest {
                 connectPairing = { _, _, _ ->
                     pairingCallCount.incrementAndGet()
                     connectPairing()
-                }
-            ) { connectedProfiles += it }
+                },
+                onConnected = { connectedProfiles += it }
+            )
         }
     }
 
