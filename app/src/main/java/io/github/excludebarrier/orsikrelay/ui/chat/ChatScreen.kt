@@ -41,6 +41,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.ui.theme.brandSurface
+import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 
 /**
  * Chat screen with the live turn slice (Mission 006A) — thin presentation
@@ -562,7 +563,12 @@ private fun MessageRow(message: TimelineRow) {
                 .fillMaxWidth()
                 .brandSurface(background = bubbleBackground, contentPadding = 14.dp)
         ) {
-            if (message.content.isNotEmpty()) {
+            if (message.role == MessageRole.ASSISTANT) {
+                // Assistant output renders as markdown (P2); user, system and
+                // tool lines stay plain text so markdown can never surface user
+                // input or tool/approval detail.
+                AssistantMarkdownMessage(content = message.content)
+            } else {
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyLarge

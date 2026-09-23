@@ -110,4 +110,7 @@
     <string name="approval_in_flight">Entscheidung wird gesendet …</string>
     <string name="approval_already_resolved">Diese Freigabe wurde bereits beantwortet.</string>
     <string name="approval_error_generic">Die Entscheidung konnte nicht übermittelt werden.</string>
+    <string name="chat_code_language_fallback">CODE</string>
+    <string name="chat_code_copy">Kopieren</string>
+    <string name="chat_code_copied">Kopiert</string>
 </resources>
