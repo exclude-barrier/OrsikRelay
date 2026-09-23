@@ -1,7 +1,7 @@
 [versions]
 agp = "8.13.2"
 kotlin = "2.2.10"
-composeBom = "2025.08.00"
+composeBom = "2025.12.00"
 activityCompose = "1.10.1"
 navigationCompose = "2.9.3"
 junitVersion = "4.13.2"
@@ -11,6 +11,8 @@ androidxTestRunner = "1.6.2"
 okhttp = "4.12.0"
 json = "20240303"
 coroutines = "1.10.2"
+markdownRenderer = "0.41.0"
+materialIconsCore = "1.7.8"
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -33,6 +35,9 @@ okhttp-tls = { module = "com.squareup.okhttp3:okhttp-tls", version.ref = "okhttp
 json = { module = "org.json:json", version.ref = "json" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+multiplatform-markdown-renderer = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "markdownRenderer" }
+multiplatform-markdown-renderer-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
+material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "materialIconsCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
