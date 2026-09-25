@@ -93,7 +93,7 @@ object PairingDeepLink {
 
     /**
      * Derive a short, safe profile name from a base URL: the first host label
-     * (e.g. `dev-laptop` from `https://dev-laptop.example.net`), lowercased and
+     * (e.g. `my-host` from `https://my-host.example.net`), lowercased and
      * reduced to letters/digits/hyphen so it always passes name validation.
      * Fails closed to [DEFAULT_PROFILE_NAME].
      */

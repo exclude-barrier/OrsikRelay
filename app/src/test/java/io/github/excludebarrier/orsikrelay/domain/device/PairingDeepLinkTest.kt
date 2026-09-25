@@ -15,20 +15,20 @@ class PairingDeepLinkTest {
 
     @Test
     fun validDeepLinkParsesServerAndCode() {
-        val link = "orsik://pair?server=" + enc("https://hermes.example.ts.net") + "&code=" + CODE
+        val link = "orsik://pair?server=" + enc("https://server.example") + "&code=" + CODE
         val parsed = PairingDeepLink.parse(link)
         assertNotNull(parsed)
-        assertEquals("https://hermes.example.ts.net", parsed!!.baseUrl)
+        assertEquals("https://server.example", parsed!!.baseUrl)
         assertEquals(CODE, parsed.pairingCode)
     }
 
     @Test
     fun plainUnencodedServerIsAlsoAccepted() {
         // Robust to an already-plain (unpercent-encoded) URL value.
-        val link = "orsik://pair?server=https://hermes.example.ts.net&code=" + CODE
+        val link = "orsik://pair?server=https://server.example&code=" + CODE
         val parsed = PairingDeepLink.parse(link)
         assertNotNull(parsed)
-        assertEquals("https://hermes.example.ts.net", parsed!!.baseUrl)
+        assertEquals("https://server.example", parsed!!.baseUrl)
     }
 
     @Test
@@ -41,7 +41,7 @@ class PairingDeepLinkTest {
 
     @Test
     fun suggestedProfileNameIsFirstHostLabel() {
-        assertEquals("dev-laptop", PairingDeepLink.parse(validLink())!!.suggestedProfileName)
+        assertEquals("server", PairingDeepLink.parse(validLink())!!.suggestedProfileName)
     }
 
     @Test
@@ -145,7 +145,7 @@ class PairingDeepLinkTest {
     }
 
     private fun validLink() =
-        "orsik://pair?server=" + enc("https://hermes.example.ts.net") + "&code=" + CODE
+        "orsik://pair?server=" + enc("https://server.example") + "&code=" + CODE
 
     private fun enc(value: String): String =
         java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
