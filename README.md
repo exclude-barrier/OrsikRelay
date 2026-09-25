@@ -2,7 +2,7 @@
 
 Inoffizieller, eigenständig entwickelter Android-Client für Hermes Agent. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; Orsik Relay ist ein Kotlin-/Jetpack-Compose-Thin-Client ohne offizielle Verbindung zu Nous Research.
 
-## Projektstatus – v0.1.0-alpha.3
+## Projektstatus – v0.1.0-alpha.4
 
 Dieser Stand ist ein **privater technischer Alpha-Release für Tests**, nicht für den Produktiveinsatz. Enthalten sind:
 
@@ -11,20 +11,20 @@ Dieser Stand ist ein **privater technischer Alpha-Release für Tests**, nicht f�
 - Android-Keystore-geschützte Credentials und getrennte, nichtgeheime Server-/Gerätemetadaten,
 - Serververwaltung mit Auswahl, persistentem aktiven Server, Löschen sowie bestätigtem „Gerät trennen“,
 - Sessionliste, Session-Erstellung und Nachrichtenhistorie,
-- reine Textnachrichten mit live zusammengesetzten Hermes-SSE-Antworten,
-- sichere Werkzeugaktivitätsanzeige ohne Befehle, Argumente, Pfade, URLs oder Toolausgaben,
+- Markdown-Rendering für Assistant-Antworten mit Headings, Listen, Quotes, Inline Code und fenced Code Blocks mit Copy-Button,
+- sichere Werkzeugaktivitätsanzeige ohne Befehle, Argumente, Pfade, URLs oder Toolausgaben (auch in der geladenen Historie),
 - native Session-Chat-Approvals mit ausschließlich **Ablehnen** oder **einmal erlauben**,
 - laufende Runs stoppen und per Steer-Nachricht steuern,
 - persistente normale Chat-Entwürfe mit server- und sessiongetrennter Speicherung,
 - geschlossene Fehlerabbildung ohne automatische Wiederholung schreibender Requests,
+- kurzlebiger Foreground Service während aktiver Runs, damit das SSE im Android-Background aktiv bleibt, mit Approval- und Run-Completed-Benachrichtigungen,
 - ein eigenständiges Material-3-Design mit persistentem Modus System, Hell oder Dunkel,
-- sichere Edge-to-Edge-Inhalte für Statusleisten, Display-Cutouts und Gestennavigation.
 
 Geräte-Credentials sind auf `chat`, `runs` und `approvals` beschränkt. Sie gewähren keinen Zugriff auf Jobs, Artefakte, Memory, Cron oder Administration und können serverseitig sofort widerrufen werden.
 
 ## Hermes-Kompatibilität
 
-Alpha 3 benötigt einen Hermes-Server mit dem versionierten Mobile-Vertrag für:
+Alpha 4 benötigt einen Hermes-Server mit dem versionierten Mobile-Vertrag für:
 
 - `device_credentials` Protokoll v1 (`POST /v1/devices/pair`, `POST /v1/devices/self/revoke`),
 - interaktive Session-Chat-Approvals mit exakt korrelierter `request_id` und den Entscheidungen `once`/`deny`.
@@ -56,29 +56,28 @@ hermes devices revoke-all --yes
 
 Alternativ kann das gekoppelte Gerät in der App über **Gerät trennen** sein eigenes Credential widerrufen.
 
-## Verifikation des Alpha-3-Stands
+## Verifikation des Alpha-4-Stands
 
-- 508 JVM-/Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
-- 185 Connected-/Compose-Tests auf `Hermes_API_36`: 0 Fehler, 0 Errors, 0 Skips
-- `lintDebug`: 0 Error/Fatal und keine Findings in geänderten Dateien
-- `assembleDebug`, APK-Installation, Kaltstart und `git diff --check` erfolgreich
-- finales unabhängiges Sicherheitsreview: `APPROVE`, keine Findings
-- keine echten Credentials, keine Produktionsmutation und kein Gateway-Restart für die Tests
+- 626 JVM-/Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
+- 206 Connected-/Compose-Tests auf `emulator-5554` (API 36): 0 Fehler, 0 Errors, 1 dokumentierter Skip (System-Benachrichtigungstest, benötigt deaktiviertes System-Notification-Setting)
+- `lint`: 0 Errors
+- `assembleDebug`, APK-Installation und Versionsprüfung (`versionName=0.1.0-alpha.4`, `versionCode=4`) erfolgreich
+- E2E auf headed Emulator: Pairing, Chat, Markdown, Streaming, Tool-Activity (Live und Historie) und Approvals gegen einen lokalen Hermes-Serverstand
+- keine echten Credentials im Repository
 
 ## Installation des privaten Alpha-Releases
 
-1. Im privaten [GitHub-Releasebereich](https://github.com/exclude-barrier/Orsik-Relay/releases) `v0.1.0-alpha.3` öffnen.
-2. Die APK `orsik-relay-v0.1.0-alpha.3-debug.apk` herunterladen.
+1. Im privaten [GitHub-Releasebereich](https://github.com/exclude-barrier/Orsik-Relay/releases) `v0.1.0-alpha.4` öffnen.
+2. Die APK `orsik-relay-v0.1.0-alpha.4-debug.apk` herunterladen.
 3. Installation aus der verwendeten Datei-/Browser-App einmalig erlauben und die APK installieren.
 
 Die APK ist mit dem Android-Debug-Key signiert. Sie ist ausschließlich zum manuellen Testen bestimmt und bildet noch keinen stabilen Update- oder Store-Kanal.
 
 ## Bekannte Grenzen
 
-- Der erforderliche Hermes-Serververtrag ist noch nicht öffentlich/upstream verfügbar.
-- Kein reales End-to-End-Pairing mit einem physischen Android-Gerät über den späteren TLS-/Proxy-Pfad.
 - Kein produktives Release-Signing, keine AAB und keine CI-basierte Release-Pipeline.
-- Markdown-/Code-Rendering, Inline-Bilder, Sprache, Benachrichtigungen und Bot-Verwaltung sind noch nicht enthalten.
+- Der erforderliche Hermes-Serververtrag (Mobile-v1) ist noch nicht in der öffentlichen Hermes-Version enthalten.
+- Inline-Bilder, Sprache und Bot-Verwaltung sind noch nicht enthalten.
 - Die Benutzeroberfläche wird nach realer Nutzung schrittweise weiter angepasst.
 
 ## Lokale Entwicklungsumgebung auf build-host
@@ -112,7 +111,7 @@ Maßgeblich für alle Builds und Tests ist der versionierte **Gradle Wrapper 8.1
 
 Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/Orsik-Relay/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
 
-- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.3`, später `v0.1.0-beta.1`.
+- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.4`, später `v0.1.0-beta.1`.
 - CI, Wrapper-Validation, produktives Release-Signing und AAB-Erstellung folgen in einem separaten Release-Ticket.
 - Der Signing-Key kommt niemals ins Repository.
 - Vor einem öffentlichen bzw. Play-Store-Release sind Lizenz, Datenschutztext, Support- und Updatekonzept sowie vollständige Store-Metadaten erforderlich.
