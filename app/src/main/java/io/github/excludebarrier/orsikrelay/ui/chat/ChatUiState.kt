@@ -34,7 +34,17 @@ internal fun buildTimeline(
         TimelineRow(
             key = "server:${message.id}",
             role = message.role,
-            content = message.content,
+            // SECURITY (history tool redaction): a tool message's `content`
+            // is untrusted server data — commands, arguments, paths, URLs,
+            // tool output, exit codes and approval payloads. The timeline
+            // NEVER carries it for TOOL rows; the screen renders only the
+            // safe role label derived from the validated `toolName`
+            // metadata (fail closed, same policy as live tool activity).
+            content = if (message.role == MessageRole.TOOL) {
+                ""
+            } else {
+                message.content
+            },
             toolName = message.toolName
         )
     } + local

@@ -546,7 +546,7 @@ private fun MessageRow(message: TimelineRow) {
         } else {
             message.toolName?.takeIf { it.isNotBlank() }?.let {
                 stringResource(R.string.chat_role_tool_named, it)
-            } ?: stringResource(R.string.chat_role_tool)
+            } ?: stringResource(R.string.chat_tool_activity_history)
         }
     }
     // User messages get the brand-tinted bubble; assistant/system/tool use a
@@ -570,22 +570,43 @@ private fun MessageRow(message: TimelineRow) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .brandSurface(background = bubbleBackground, contentPadding = 14.dp)
-        ) {
-            if (message.role == MessageRole.ASSISTANT) {
-                // Assistant output renders as markdown (P2); user, system and
-                // tool lines stay plain text so markdown can never surface user
-                // input or tool/approval detail.
-                AssistantMarkdownMessage(content = message.content)
-            } else {
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyLarge
-                )
+        // SECURITY (history tool redaction): a history TOOL row renders ONLY
+        // its safe role label above — never a content bubble. The timeline
+        // already strips the untrusted `content` (see buildTimeline); this
+        // keeps the UI fail closed even if a future path ever carried
+        // verbatim tool data (commands, paths, output, payloads). Live
+        // (localTool) rows keep their existing app-generated status bubble.
+        if (message.role != MessageRole.TOOL || message.localTool) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .brandSurface(background = bubbleBackground, contentPadding = 14.dp)
+            ) {
+                if (message.role == MessageRole.ASSISTANT) {
+                    // Assistant output renders as markdown (P2); user, system
+                    // and tool lines stay plain text so markdown can never
+                    // surface user input or tool/approval detail.
+                    AssistantMarkdownMessage(content = message.content)
+                } else {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * A no-op notification-permission store used as the default for the chat
+ * screen (and by the existing instrumented tests): it reports the permission
+ * as already requested, so the contextual request is never triggered and the
+ * screen behavior is unchanged when no real store is supplied.
+ */
+internal object NoOpNotificationPermissionStore : NotificationPermissionStore {
+    override val hasRequested: Boolean
+        get() = true
+
+    override fun markRequested() = Unit
 }

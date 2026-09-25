@@ -54,6 +54,7 @@
     <string name="chat_role_system">System</string>
     <string name="chat_role_tool">Tool</string>
     <string name="chat_role_tool_named">Tool: %1$s</string>
+    <string name="chat_tool_activity_history">Tool-Aktivität</string>
     <string name="chat_send">Senden</string>
     <string name="chat_input_label">Nachricht</string>
     <string name="chat_tool_activity">Tool ist aktiv…</string>

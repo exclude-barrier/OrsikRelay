@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -15,8 +16,11 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
+import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -28,6 +32,17 @@ import org.junit.Rule
 import org.junit.Test
 
 class ChatScreenUiTest {
+
+    private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
+        override fun start(profileId: String, sessionId: String) {}
+        override fun stop() {}
+    }
+
+    private fun controllerFor(source: StreamingChatSource) = RunSessionController(
+        chatSource = source,
+        serviceStarter = noOpRunServiceStarter,
+        notificationCoordinator = NoOpNotificationCoordinator
+    )
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -49,14 +64,19 @@ class ChatScreenUiTest {
     }
 
     @Test
-    fun allRolesAndToolNameAreRenderedWithText() {
+    fun allRolesAreRenderedAndHistoryToolContentIsRedacted() {
         setScreen(MessageHistorySource { _, _ ->
             success(
                 listOf(
                     message(1, MessageRole.USER, "Fixture-Frage"),
                     message(2, MessageRole.ASSISTANT, "Fixture-Antwort"),
                     message(3, MessageRole.SYSTEM, "Fixture-System"),
-                    message(4, MessageRole.TOOL, "Fixture-Ergebnis", "fixture_tool")
+                    message(
+                        4,
+                        MessageRole.TOOL,
+                        """{"output":"SECRET_HISTORY_TOOL_123","exit_code":0,"error":null}""",
+                        "fixture_tool"
+                    )
                 )
             )
         })
@@ -65,9 +85,46 @@ class ChatScreenUiTest {
         listOf("Du", "Hermes", "System", "Tool: fixture_tool").forEach {
             composeRule.onNodeWithText(it).assertIsDisplayed()
         }
-        listOf("Fixture-Frage", "Fixture-Antwort", "Fixture-System", "Fixture-Ergebnis").forEach {
+        // Non-tool content is rendered verbatim…
+        listOf("Fixture-Frage", "Fixture-Antwort", "Fixture-System").forEach {
             composeRule.onNodeWithText(it).assertIsDisplayed()
         }
+        // …but the untrusted tool content never reaches the UI: only the
+        // safe role label is shown (history tool redaction). Tool content
+        // renders as one plain-text node when present, so exact text
+        // queries must find no node for the raw payload or any part of it.
+        composeRule.onAllNodesWithText("SECRET_HISTORY_TOOL_123").assertCountEquals(0)
+        composeRule.onAllNodesWithText("""{"output":"SECRET_HISTORY_TOOL_123","exit_code":0,"error":null}""").assertCountEquals(0)
+    }
+
+    @Test
+    fun unnamedHistoryToolShowsOnlyTheGenericSafeLabel() {
+        setScreen(MessageHistorySource { _, _ ->
+            success(
+                listOf(
+                    message(1, MessageRole.TOOL, "rm -rf /tmp/orsik_p3_e2e_dir", null)
+                )
+            )
+        })
+
+        waitForText("Tool-Aktivität")
+        composeRule.onAllNodesWithText("rm -rf /tmp/orsik_p3_e2e_dir").assertCountEquals(0)
+    }
+
+    @Test
+    fun historyToolPathAndUrlContentIsNotRendered() {
+        setScreen(MessageHistorySource { _, _ ->
+            success(
+                listOf(
+                    message(1, MessageRole.TOOL, "/home/user/.ssh/id_rsa", "terminal"),
+                    message(2, MessageRole.TOOL, "https://example.com/a?token=abc", null)
+                )
+            )
+        })
+
+        waitForText("Tool: terminal")
+        composeRule.onAllNodesWithText("/home/user/.ssh/id_rsa").assertCountEquals(0)
+        composeRule.onAllNodesWithText("https://example.com/a?token=abc").assertCountEquals(0)
     }
 
     @Test
@@ -103,7 +160,7 @@ class ChatScreenUiTest {
 
     private fun setScreen(
         source: MessageHistorySource,
-        chatSource: StreamingChatSource = streamingSourceThatNeverEmits,
+        runController: RunSessionController = controllerFor(streamingSourceThatNeverEmits),
         onBack: () -> Unit = {},
         runStopRequester: RunStopRequester = runStopRequesterThatIsNeverReached,
         runSteerRequester: RunSteerRequester = runSteerRequesterThatIsNeverReached,
@@ -113,7 +170,7 @@ class ChatScreenUiTest {
             HermesTheme {
                 ChatScreen(
                     historySource = source,
-                    chatSource = chatSource,
+                    runController = runController,
                     runStopRequester = runStopRequester,
                     runSteerRequester = runSteerRequester,
                     chatDraftRepository = chatDraftRepository,
