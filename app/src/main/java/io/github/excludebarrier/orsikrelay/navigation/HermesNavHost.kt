@@ -329,9 +329,24 @@ fun HermesNavHost(
                     ?: productionDependencies.value.chatDraftRepository,
                 runApprovalRequester = runApprovalRequester
                     ?: productionDependencies.value.runApprovalRequester,
+                notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
                 profileId = activeProfileId.orEmpty(),
                 sessionId = decodeRouteArgument(encodedSessionId),
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    // Guard against popping the back stack empty: a double
+                    // back event (fast double-tap on "Zurück" or a spurious
+                    // input event, e.g. from an accessibility service while
+                    // the tree changes) must never leave the NavHost without
+                    // a destination — that renders an empty screen whose
+                    // BackHandler is gone, so the next back closes the task.
+                    // `currentBackStack` is a restricted navigation API, so
+                    // the equivalent check compares the current destination
+                    // with the start destination (the only entry that must
+                    // never be popped).
+                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                        navController.popBackStack()
+                    }
+                }
             )
         }
     }
