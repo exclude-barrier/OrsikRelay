@@ -31,8 +31,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
+import io.github.excludebarrier.orsikrelay.data.notification.NotificationPermissionStore
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
-import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
@@ -40,6 +41,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
+import io.github.excludebarrier.orsikrelay.platform.notification.NotificationPermissionRequester
 import io.github.excludebarrier.orsikrelay.ui.theme.brandSurface
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 
@@ -65,11 +67,12 @@ import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMes
 @Composable
 fun ChatScreen(
     historySource: MessageHistorySource,
-    chatSource: StreamingChatSource,
+    runController: RunSessionController,
     runStopRequester: RunStopRequester,
     runSteerRequester: RunSteerRequester,
     chatDraftRepository: ChatDraftRepository,
     runApprovalRequester: RunApprovalRequester = NoOpRunApprovalRequester,
+    notificationPermissionStore: NotificationPermissionStore = NoOpNotificationPermissionStore,
     profileId: String,
     sessionId: String,
     onBack: () -> Unit,
@@ -93,7 +96,7 @@ fun ChatScreen(
     val viewModel = remember(profileId, sessionId) {
         ChatViewModel(
             historySource = historySource,
-            chatSource = chatSource,
+            runController = runController,
             runStopRequester = runStopRequester,
             runSteerRequester = runSteerRequester,
             chatDraftRepository = chatDraftRepository,
@@ -126,7 +129,16 @@ fun ChatScreen(
     // System and gesture back (Mission 006A): the platform back event goes
     // through exactly the same path as the visible button, so a running stream
     // is always canceled before the navigation back to the session list.
-    BackHandler(enabled = true, onBack = { viewModel.handleBack() })
+BackHandler(enabled = true, onBack = { viewModel.handleBack() })
+
+    // P3: contextual POST_NOTIFICATIONS request (Android 13+), triggered when
+    // a run is active in the foreground and the permission has not been
+    // requested yet. A denial is respected and never re-asked; the app stays
+    // fully functional without notifications.
+    NotificationPermissionRequester(
+        store = notificationPermissionStore,
+        isRunActive = state.turnActive
+    )
 
     Column(
         modifier = modifier
@@ -140,7 +152,7 @@ fun ChatScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(
-                onClick = { viewModel.handleBack() }
+onClick = { viewModel.handleBack() }
             ) {
                 Text(stringResource(R.string.chat_back))
             }

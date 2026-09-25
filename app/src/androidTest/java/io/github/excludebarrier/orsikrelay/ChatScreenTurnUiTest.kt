@@ -28,8 +28,11 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerError
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
+import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
+import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -42,6 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -52,6 +56,17 @@ import org.junit.Test
  * real hosts, no credentials.
  */
 class ChatScreenTurnUiTest {
+
+    private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
+        override fun start(profileId: String, sessionId: String) {}
+        override fun stop() {}
+    }
+
+    private fun controllerFor(source: StreamingChatSource) = RunSessionController(
+        chatSource = source,
+        serviceStarter = noOpRunServiceStarter,
+        notificationCoordinator = NoOpNotificationCoordinator
+    )
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -311,21 +326,13 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
-    fun backDuringRunningTurnCancelsTheStreamBeforeOnBack() {
+    fun backDuringRunningTurnKeepsTheStreamAliveAndInvokesOnBack() {
         val source = FakeTurnSource()
         val backInvoked = CountDownLatch(1)
-        val canceledBeforeBack = CountDownLatch(1)
         setScreen(
             history(emptyList()),
             source,
-            onBack = {
-                // Beobachtung: die Cancellation wurde bereits vor dem
-                // Back-Callback registriert.
-                if (source.canceled.getCount() == 0L) {
-                    canceledBeforeBack.countDown()
-                }
-                backInvoked.countDown()
-            }
+            onBack = { backInvoked.countDown() }
         )
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
@@ -338,13 +345,13 @@ class ChatScreenTurnUiTest {
 
         composeRule.onNodeWithText("Zurück").performClick()
         assertTrue("onBack was not invoked", backInvoked.await(3, TimeUnit.SECONDS))
-        assertTrue(
-            "the running stream must be canceled before onBack",
-            source.canceled.await(3, TimeUnit.SECONDS)
-        )
-        assertTrue(
-            "cancellation must have been observed before the back callback",
-            canceledBeforeBack.await(3, TimeUnit.SECONDS)
+        // P3-Background-Continuity: der Run gehört dem app-weiten
+        // RunSessionController, nicht dem Screen — Back bricht den Stream
+        // NICHT ab; der Foreground Service hält den Prozess unfrized,
+        // während der Run im Hintergrund weiterläuft.
+        assertFalse(
+            "the running stream must stay alive after back",
+            source.canceled.await(100, TimeUnit.MILLISECONDS)
         )
         assertEquals(1, source.calls.get())
     }
@@ -438,7 +445,7 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        assertEquals("collector must stop at TurnCompleted", 0L, source.canceled.count)
+        assertEquals("stream must survive the terminal event", 1L, source.canceled.count)
     }
 
     @Test
@@ -464,11 +471,11 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        assertEquals("collector must stop at TurnFailed", 0L, source.canceled.count)
+        assertEquals("stream must survive the terminal event", 1L, source.canceled.count)
     }
 
     @Test
-    fun sessionSwitchCancelsRunningCollectorAndResetsEphemeralState() {
+    fun sessionSwitchKeepsTheRunRunningAndResetsEphemeralState() {
         val firstSource = FakeTurnSource()
         val secondSource = FakeTurnSource()
         val key = androidx.compose.runtime.mutableStateOf("first-session")
@@ -476,7 +483,7 @@ class ChatScreenTurnUiTest {
             HermesTheme {
                 ChatScreen(
                     historySource = history(emptyList()),
-                    chatSource = if (key.value == "first-session") firstSource else secondSource,
+                    runController = controllerFor(if (key.value == "first-session") firstSource else secondSource),
                     runStopRequester = FakeRunStopRequester(),
                     runSteerRequester = FakeRunSteerRequester(),
                     chatDraftRepository = NoOpChatDraftRepository(),
@@ -495,14 +502,16 @@ class ChatScreenTurnUiTest {
         assertTrue(firstSource.opened.await(3, TimeUnit.SECONDS))
         waitForText("Du")
 
-        // Sessionwechsel bricht den laufenden Collector ab und setzt alle
-        // ephemeren Turnzustände zurück.
+        // P3-Background-Continuity: der laufende Run gehört dem app-weiten
+        // RunSessionController, nicht dem Screen — ein Sessionwechsel
+        // bricht ihn NICHT ab. Hier vertritt der erste (verwaiste)
+        // Controller den app-weiten Owner: sein Stream bleibt offen.
         key.value = "second-session"
         composeRule.waitForIdle()
 
-        assertTrue(
-            "the running collector must be canceled on session switch",
-            firstSource.canceled.await(3, TimeUnit.SECONDS)
+        assertFalse(
+            "the running stream must survive a session switch",
+            firstSource.canceled.await(100, TimeUnit.MILLISECONDS)
         )
         assertEquals(1, firstSource.calls.get())
         assertEquals(0, secondSource.calls.get())
@@ -590,12 +599,12 @@ class ChatScreenTurnUiTest {
             HermesTheme {
                 ChatScreen(
                     historySource = source,
-                    chatSource = chatSource,
                     runStopRequester = runStopRequester,
                     runSteerRequester = runSteerRequester,
                     chatDraftRepository = chatDraftRepository,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
+                    runController = controllerFor(chatSource),
                     onBack = onBack
                 )
             }
@@ -978,7 +987,7 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
-    fun backWhileStopRequestIsInFlightCancelsItSafelyBeforeOnBack() {
+    fun backWhileStopRequestIsInFlightKeepsRunAndStreamAlive() {
         val stopper = FakeRunStopRequester()
         val source = FakeTurnSource()
         val backInvoked = CountDownLatch(1)
@@ -1008,27 +1017,33 @@ class ChatScreenTurnUiTest {
             }
         }
 
-        // Back muss auch die laufende Stop-Coroutine abbrechen und
-        // sicher zurückkehren.
+        // P3-Background-Continuity: Back ist synchron und bricht nichts ab —
+        // weder den Run noch die laufende Stop-Anfrage.
         composeRule.onNodeWithText("Zurück").performClick()
         assertTrue("onBack was not invoked", backInvoked.await(3, TimeUnit.SECONDS))
-        assertTrue(
-            "the in-flight stop coroutine must be canceled by back",
-            stopper.canceled.await(3, TimeUnit.SECONDS)
+        assertFalse(
+            "the in-flight stop coroutine must not be canceled by back",
+            stopper.canceled.await(100, TimeUnit.MILLISECONDS)
         )
-        assertEquals("no state write may follow after the screen was left", 1, stopper.calls.get())
+        assertFalse(
+            "the running stream must stay alive after back",
+            source.canceled.await(100, TimeUnit.MILLISECONDS)
+        )
+        assertEquals("exactly one stop request in total", 1, stopper.calls.get())
         assertEquals(1, source.calls.get())
-        assertTrue(
-            "stop control must be gone after back",
-            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
-        )
-        // Ein später Callback (Resultat nach dem Verlassen) darf den
-        // verlassenen Screen nicht mehr mutieren: der Screen ist
-        // zurückgesetzt, der Composer ist frei.
+
+        // Die Stop-Anfrage läuft normal zu Ende; das akzeptierte Ergebnis
+        // allein beendet den Turn nicht (kein optimistischer Terminalzustand).
         stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
         composeRule.waitForIdle()
+
+        // Erst das terminale Stream-Event beendet den Turn: der Stop-Control
+        // verschwindet und der Composer wird frei.
+        source.enqueue(ChatTurnEvent.TurnCompleted())
+        source.complete()
+        waitForFlowCompletion(source)
         assertTrue(
-            "late result must not resurrect the stop control",
+            "stop control must be gone after the terminal event",
             composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
         )
         composeRule.onNodeWithText("Nachricht").assertIsEnabled()
@@ -1664,7 +1679,7 @@ class ChatScreenTurnUiTest {
             HermesTheme {
                 ChatScreen(
                     historySource = history(emptyList()),
-                    chatSource = if (key.value == "first-session") firstSource else secondSource,
+                    runController = controllerFor(if (key.value == "first-session") firstSource else secondSource),
                     runStopRequester = FakeRunStopRequester(),
                     runSteerRequester =
                         if (key.value == "first-session") firstSteer else secondSteer,

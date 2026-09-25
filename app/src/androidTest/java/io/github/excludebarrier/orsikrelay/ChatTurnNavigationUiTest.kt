@@ -9,6 +9,8 @@ import androidx.compose.ui.test.performTextInput
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
+import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
@@ -20,6 +22,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
+import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -32,6 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -45,11 +49,22 @@ import org.junit.Test
  */
 class ChatTurnNavigationUiTest {
 
+    private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
+        override fun start(profileId: String, sessionId: String) {}
+        override fun stop() {}
+    }
+
+    private fun controllerFor(source: StreamingChatSource) = RunSessionController(
+        chatSource = source,
+        serviceStarter = noOpRunServiceStarter,
+        notificationCoordinator = NoOpNotificationCoordinator
+    )
+
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun submitReceivesExactValuesAndBackDuringTurnCancelsStream() {
+    fun submitReceivesExactValuesAndBackDuringTurnKeepsStreamAlive() {
         val receivedProfile = AtomicReference<String>()
         val receivedSession = AtomicReference<String>()
         val receivedMessage = AtomicReference<String>()
@@ -92,13 +107,15 @@ class ChatTurnNavigationUiTest {
             )
         }
 
+        val runController = controllerFor(turnSource)
+
         composeRule.setContent {
             HermesTheme {
                 HermesNavHost(
                     startDestination = AppScreen.Onboarding,
                     sessionPageSource = sessions,
                     messageHistorySource = history,
-                    streamingChatSource = turnSource,
+                    runController = runController,
                     startupProfileResolver = { StartupProfile.Ready(PROFILE_ID) }
                 )
             }
@@ -118,35 +135,36 @@ class ChatTurnNavigationUiTest {
         assertEquals(sessionId, turnSource.sessionId.get())
         assertEquals("Synthese 1", turnSource.message.get())
 
-        // Back während des laufenden Turns bricht den Stream ab, bevor
-        // die Navigation zurückführt: Die Sessionliste erscheint erst
-        // nach der Cancellation, denn `onBack` wird erst nach
-        // `cancelAndJoin` aufgerufen.
+        // P3-Background-Continuity: Back während eines laufenden Turns bricht
+        // den Stream NICHT ab — der Run gehört dem app-weiten
+        // RunSessionController und läuft im Hintergrund weiter; die
+        // Navigation kehrt einfach zur Sessionliste zurück.
         composeRule.onNodeWithText("Zurück").performClick()
         waitForText("Turn-Session")
-        assertTrue(
-            "the running stream must be canceled before the back navigation",
-            turnSource.canceled.await(3, TimeUnit.SECONDS)
+        assertFalse(
+            "the running stream must survive the back navigation",
+            turnSource.canceled.await(100, TimeUnit.MILLISECONDS)
         )
         assertEquals("exactly one stream", 1, turnSource.calls.get())
         assertEquals(1, historyCalls.get())
     }
 
     /**
-     * System / gesture back during a running turn (Mission 006A acceptance
-     * point 2). A hardware BACK key (or predictive-back gesture) on the
-     * activity is delivered to the [androidx.activity.OnBackPressedDispatcher];
-     * the chat screen's Compose `BackHandler` is registered into that same
-     * dispatcher. `ComponentActivity.onBackPressed()` invokes the dispatcher,
-     * so this is the faithful instrumentation seam for the system back event
-     * (the compose ui-test 1.9.0 resolved here has no `performSystemBack`).
+     * System / gesture back during a running turn. A hardware BACK key (or
+     * predictive-back gesture) on the activity is delivered to the
+     * [androidx.activity.OnBackPressedDispatcher]; the chat screen's Compose
+     * `BackHandler` is registered into that same dispatcher.
+     * `ComponentActivity.onBackPressed()` invokes the dispatcher, so this is
+     * the faithful instrumentation seam for the system back event (the
+     * compose ui-test 1.9.0 resolved here has no `performSystemBack`).
      *
-     * The system back must: cancel the running collector (which closes the
-     * underlying call), navigate safely back to the session list, and leave
-     * no lifecycle crash or further UI state behind.
+     * The system back must navigate safely back to the session list and
+     * leave no lifecycle crash or further UI state behind. P3: the running
+     * turn is NOT interrupted — it is owned app-level by the run controller
+     * and continues in the background.
      */
     @Test
-    fun systemBackDuringRunningTurnCancelsStreamAndReturnsToSessionList() {
+    fun systemBackDuringRunningTurnKeepsStreamAliveAndReturnsToSessionList() {
         val turnSource = FakeTurnSource()
         val sessionId = "fixture/system-back-session"
         val sessions = SessionPageSource { _, _, _ ->
@@ -170,13 +188,15 @@ class ChatTurnNavigationUiTest {
             MessageHistoryResult.Success(MessagePage(emptyList()))
         }
 
+        val runController = controllerFor(turnSource)
+
         composeRule.setContent {
             HermesTheme {
                 HermesNavHost(
                     startDestination = AppScreen.Onboarding,
                     sessionPageSource = sessions,
                     messageHistorySource = history,
-                    streamingChatSource = turnSource,
+                    runController = runController,
                     startupProfileResolver = { StartupProfile.Ready(PROFILE_ID) }
                 )
             }
@@ -213,14 +233,80 @@ class ChatTurnNavigationUiTest {
         // prevent the session list from appearing).
         waitForText("SystemBack-Session")
 
-        // The running collector must have been canceled.
-        assertTrue(
-            "the running stream must be canceled by the system back",
-            turnSource.canceled.await(3, TimeUnit.SECONDS)
+        // P3: the running stream is NOT canceled by the system back — the
+        // run continues in the background under the app-level controller.
+        assertFalse(
+            "the running stream must survive the system back",
+            turnSource.canceled.await(100, TimeUnit.MILLISECONDS)
         )
         // The activity is still usable (not crashed / not finished).
         assertTrue("activity must still be usable after system back", !composeRule.activity.isFinishing)
         assertEquals("exactly one stream", 1, turnSource.calls.get())
+    }
+
+    /**
+     * A double back event on the chat screen (no active turn) — as from a
+     * fast double-tap on "Zurück" or a spurious input event — must NOT pop
+     * the navigation stack empty. The first back returns to the session
+     * list; the second back must be a no-op. Without the guard the NavHost
+     * is left without a destination, renders an empty (white) screen whose
+     * BackHandler is gone, and the next back closes the whole task.
+     */
+    @Test
+    fun doubleBackWithoutActiveTurnKeepsSessionListVisible() {
+        val turnSource = FakeTurnSource()
+        val sessionId = "fixture/double-back-session"
+        val sessions = SessionPageSource { _, _, _ ->
+            SessionListResult.Success(
+                SessionPage(
+                    sessions = listOf(
+                        HermesSession(
+                            id = sessionId,
+                            title = "DoubleBack-Session",
+                            source = null,
+                            lastActiveEpochSeconds = null,
+                            messageCount = 1,
+                            pinned = false
+                        )
+                    ),
+                    hasMore = false
+                )
+            )
+        }
+        val history = MessageHistorySource { _, _ ->
+            MessageHistoryResult.Success(MessagePage(emptyList()))
+        }
+        val runController = controllerFor(turnSource)
+
+        composeRule.setContent {
+            HermesTheme {
+                HermesNavHost(
+                    startDestination = AppScreen.Onboarding,
+                    sessionPageSource = sessions,
+                    messageHistorySource = history,
+                    runController = runController,
+                    startupProfileResolver = { StartupProfile.Ready(PROFILE_ID) }
+                )
+            }
+        }
+
+        waitForText("DoubleBack-Session")
+        composeRule.onNodeWithText("DoubleBack-Session").performClick()
+        waitForText("Chat")
+
+        // No turn is active: both backs go straight to onBack().
+        composeRule.runOnIdle {
+            composeRule.activity.onBackPressed()
+            composeRule.activity.onBackPressed()
+        }
+
+        // The session list must still be visible (NOT an empty white
+        // screen): the second back must have been a no-op.
+        waitForText("DoubleBack-Session")
+        assertTrue(
+            "activity must not be finished after the double back",
+            !composeRule.activity.isFinishing
+        )
     }
 
     private fun waitForText(text: String) {

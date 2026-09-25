@@ -11,6 +11,8 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
+import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerError
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
@@ -28,6 +30,7 @@ import kotlinx.coroutines.test.runTest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import org.junit.Assert.assertNotNull
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -53,6 +56,10 @@ class ChatViewModelTest {
     private val runId = "run_" + "a".repeat(32)
     private val requestId = "b".repeat(32)
 
+    /** The controller of the last built model (teardown + assertions). */
+    @Volatile
+    private var lastController: RunSessionController? = null
+
     private fun readyHistory(vararg messages: HermesChatMessage): MessageHistorySource =
         MessageHistorySource { _, _ ->
             MessageHistoryResult.Success(MessagePage(messages.toList()))
@@ -68,21 +75,31 @@ class ChatViewModelTest {
         stop: RunStopRequester = FakeStopRequester(),
         steer: RunSteerRequester = FakeSteerRequester(),
         draft: ChatDraftRepository = FakeDraftRepository(),
+        serviceStarter: RunForegroundServiceStarter = FakeRunServiceStarter(),
         onBack: () -> Unit = {}
-    ): ChatViewModel = ChatViewModel(
-        historySource = history,
-        chatSource = chat,
-        runStopRequester = stop,
-        runSteerRequester = steer,
-        chatDraftRepository = draft,
-        profileId = profileId,
-        sessionId = sessionId,
-        onBack = onBack,
-        toolActivityLabel = "Tool ist aktiv…",
-        namedToolActivityLabel = "Werkzeug %s ist aktiv…",
-        dispatcher = UnconfinedTestDispatcher(scheduler),
-        ioDispatcher = UnconfinedTestDispatcher(scheduler)
-    )
+    ): ChatViewModel {
+        val controller = RunSessionController(
+            chatSource = chat,
+            serviceStarter = serviceStarter,
+            notificationCoordinator = NoOpNotificationCoordinator,
+            dispatcher = UnconfinedTestDispatcher(scheduler)
+        )
+        lastController = controller
+        return ChatViewModel(
+            historySource = history,
+            runController = controller,
+            runStopRequester = stop,
+            runSteerRequester = steer,
+            chatDraftRepository = draft,
+            profileId = profileId,
+            sessionId = sessionId,
+            onBack = onBack,
+            toolActivityLabel = "Tool ist aktiv…",
+            namedToolActivityLabel = "Werkzeug %s ist aktiv…",
+            dispatcher = UnconfinedTestDispatcher(scheduler),
+            ioDispatcher = UnconfinedTestDispatcher(scheduler)
+        )
+    }
 
     /** Creates the model and loads (empty) history so the composer is enabled. */
     private fun withModel(
@@ -105,6 +122,8 @@ class ChatViewModelTest {
         testScheduler.advanceUntilIdle()
         block(model, chat, stop, steer, draft)
         model.close()
+        lastController?.close()
+        lastController = null
         testScheduler.advanceUntilIdle()
     }
 
@@ -551,7 +570,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun backDuringActiveTurnCancelsAndNavigatesExactlyOnce() {
+    fun backDuringActiveTurnNavigatesOnceAndRunContinues() {
         var backCalls = 0
         withModel(onBack = { backCalls++ }) { model, chat, _, _, _ ->
             model.onDraftChange("hi")
@@ -559,10 +578,15 @@ class ChatViewModelTest {
             assertTrue(chat.opened.await(1, TimeUnit.SECONDS))
             model.handleBack()
             testScheduler.advanceUntilIdle()
-            // onBack called exactly once, collector cancelled, state reset.
+            // P3 background continuity: onBack is called exactly once, but the
+            // run is NOT interrupted — it is owned app-level by the controller
+            // and keeps streaming (the foreground service keeps the process
+            // unfrozen). The screen's own turn state stays active because the
+            // (not-yet-disposed) view model is still observing the run.
             assertEquals(1, backCalls)
-            assertTrue(chat.canceled.get())
-            assertFalse(model.state.value.turnActive)
+            assertFalse(chat.canceled.get())
+            assertTrue(model.state.value.turnActive)
+            assertNotNull(lastController?.activeRun?.value)
         }
     }
 
@@ -571,14 +595,17 @@ class ChatViewModelTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun closeCancelsRunningCollector() = withModel { model, chat, _, _, _ ->
+    fun closeKeepsRunAliveOnController() = withModel { model, chat, _, _, _ ->
         model.onDraftChange("hi")
         model.send()
         assertTrue(chat.opened.await(1, TimeUnit.SECONDS))
-        // Leave the screen while the turn is still running.
+        // Leave the screen while the turn is still running: the run is owned
+        // app-level by the controller and is NOT interrupted by disposal —
+        // only the view model's event observer is canceled.
         model.close()
         testScheduler.advanceUntilIdle()
-        assertTrue(chat.canceled.get())
+        assertFalse(chat.canceled.get())
+        assertNotNull(lastController?.activeRun?.value)
     }
 
     // ------------------------------------------------------------------
@@ -612,6 +639,23 @@ class ChatViewModelTest {
 
         fun complete() {
             active?.close()
+        }
+    }
+
+    /** Synthetic foreground-service seam: records start/stop calls. */
+    private class FakeRunServiceStarter : RunForegroundServiceStarter {
+        val starts = AtomicInteger()
+        val stops = AtomicInteger()
+        @Volatile
+        var lastSession: Pair<String, String>? = null
+
+        override fun start(profileId: String, sessionId: String) {
+            starts.incrementAndGet()
+            lastSession = profileId to sessionId
+        }
+
+        override fun stop() {
+            stops.incrementAndGet()
         }
     }
 

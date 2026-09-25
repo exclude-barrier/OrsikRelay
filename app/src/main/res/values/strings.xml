@@ -113,4 +113,15 @@
     <string name="chat_code_language_fallback">CODE</string>
     <string name="chat_code_copy">Kopieren</string>
     <string name="chat_code_copied">Kopiert</string>
+    <string name="notification_channel_name">Orsik Relay</string>
+    <string name="notification_fallback_title">Orsik Relay</string>
+    <string name="notification_approval_body">Hermes wartet auf deine Freigabe.</string>
+    <string name="notification_run_completed_body">Hermes hat geantwortet.</string>
+    <string name="notification_run_channel_name">Hermes läuft</string>
+    <string name="notification_run_title">Hermes arbeitet</string>
+    <string name="notification_run_body">Eine Anfrage wird verarbeitet.</string>
+    <string name="notification_permission_title">Benachrichtigungen erlauben?</string>
+    <string name="notification_permission_body">Orsik Relay kann dich lokal informieren, wenn ein Lauf abgeschlossen ist oder Hermes auf deine Freigabe wartet. Ohne die Berechtigung funktioniert die App vollständig, es erscheinen nur keine Benachrichtigungen.</string>
+    <string name="notification_permission_allow">Erlauben</string>
+    <string name="notification_permission_not_now">Jetzt nicht</string>
 </resources>

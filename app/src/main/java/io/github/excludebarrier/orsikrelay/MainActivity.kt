@@ -26,6 +26,8 @@ import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
 import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.device.PairingDeepLink
+import io.github.excludebarrier.orsikrelay.platform.notification.AppForegroundTracker
+import io.github.excludebarrier.orsikrelay.platform.notification.NotificationSessionIntent
 
 /**
  * Single entry point of the app. Hosts the Compose navigation shell;
@@ -38,10 +40,17 @@ class MainActivity : ComponentActivity() {
     // API key. Snapshot state so a re-delivered link recomposes the route.
     private val pairingBootstrap = mutableStateOf<PairingBootstrap?>(null)
 
+    // P3: a notification tap (cold start or warm start) is parsed once into a
+    // validated (profileId, sessionId) and handed to the navigation host,
+    // which opens exactly that chat. Malformed intents yield null (fail-closed)
+    // and leave the normal startup navigation untouched.
+    private val notificationBootstrap = mutableStateOf<Pair<String, String>?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pairingBootstrap.value = PairingDeepLink.parse(intent?.data?.toString().orEmpty())
+        notificationBootstrap.value = NotificationSessionIntent.parse(intent)
         setContent {
             val themeStore = remember {
                 SharedPreferencesThemeSettingStore(applicationContext)
@@ -55,16 +64,27 @@ class MainActivity : ComponentActivity() {
                         startDestination = initialDestination(),
                         sessionPageSource = sessionPageSourceForTests,
                         themeController = themeController,
-                        pairingBootstrap = pairingBootstrap.value
+                        pairingBootstrap = pairingBootstrap.value,
+                        notificationBootstrap = notificationBootstrap.value
                     )
                 }
             }
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        AppForegroundTracker.activityStarted()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AppForegroundTracker.activityStopped()
+    }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         pairingBootstrap.value = PairingDeepLink.parse(intent.data?.toString().orEmpty())
+        notificationBootstrap.value = NotificationSessionIntent.parse(intent)
     }
 
     companion object {

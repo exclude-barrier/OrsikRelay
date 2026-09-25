@@ -25,9 +25,12 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
+import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.draft.ControllableDraftRepository
 import io.github.excludebarrier.orsikrelay.draft.InMemoryChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
+import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -63,6 +66,17 @@ import java.util.concurrent.atomic.AtomicInteger
  * honest-scope comment and internal task log, NICHT VERIFIZIERT).
  */
 class ChatDraftPersistenceUiTest {
+
+    private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
+        override fun start(profileId: String, sessionId: String) {}
+        override fun stop() {}
+    }
+
+    private fun controllerFor(source: StreamingChatSource) = RunSessionController(
+        chatSource = source,
+        serviceStarter = noOpRunServiceStarter,
+        notificationCoordinator = NoOpNotificationCoordinator
+    )
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -112,7 +126,7 @@ class ChatDraftPersistenceUiTest {
                     androidx.compose.runtime.key(instance.generation) {
                         ChatScreen(
                             historySource = historySource,
-                            chatSource = neverEmits,
+                            runController = controllerFor(neverEmits),
                             runStopRequester = neverReachedStop,
                             runSteerRequester = neverReachedSteer,
                             chatDraftRepository = instance.repository,
@@ -169,7 +183,7 @@ class ChatDraftPersistenceUiTest {
             HermesTheme {
                 ChatScreen(
                     historySource = historySource,
-                    chatSource = neverEmits,
+                    runController = controllerFor(neverEmits),
                     runStopRequester = neverReachedStop,
                     runSteerRequester = neverReachedSteer,
                     chatDraftRepository = drafts,
@@ -205,7 +219,7 @@ class ChatDraftPersistenceUiTest {
     fun successfulOrdinarySendClearsComposerAndPersistence() {
         val drafts = InMemoryChatDraftRepository()
         val source = FakeTurnSource()
-        setScreen(drafts, chatSource = source)
+        setScreen(drafts, runController = controllerFor(source))
 
         waitForEmpty()
         composeRule.onNodeWithText("Nachricht").performTextInput("Wird gesendet")
@@ -228,7 +242,7 @@ class ChatDraftPersistenceUiTest {
     fun failedOrBlockedSendKeepsComposerAndPersistence() {
         val drafts = InMemoryChatDraftRepository()
         val source = FakeTurnSource()
-        setScreen(drafts, chatSource = source)
+        setScreen(drafts, runController = controllerFor(source))
 
         waitForEmpty()
         composeRule.onNodeWithText("Nachricht").performTextInput("Bleibt erhalten")
@@ -266,7 +280,7 @@ class ChatDraftPersistenceUiTest {
                     androidx.compose.runtime.key(instance.generation) {
                         ChatScreen(
                             historySource = historySource,
-                            chatSource = instance.chatSource,
+                            runController = controllerFor(instance.chatSource),
                             runStopRequester = neverReachedStop,
                             runSteerRequester = instance.steerer,
                             chatDraftRepository = instance.repository,
@@ -334,7 +348,7 @@ class ChatDraftPersistenceUiTest {
                 androidx.compose.runtime.key(session.value) {
                     ChatScreen(
                         historySource = historySource,
-                        chatSource = neverEmits,
+                        runController = controllerFor(neverEmits),
                         runStopRequester = neverReachedStop,
                         runSteerRequester = neverReachedSteer,
                         chatDraftRepository = repo,
@@ -384,7 +398,7 @@ class ChatDraftPersistenceUiTest {
             HermesTheme {
                 ChatScreen(
                     historySource = historySource,
-                    chatSource = neverEmits,
+                    runController = controllerFor(neverEmits),
                     runStopRequester = neverReachedStop,
                     runSteerRequester = neverReachedSteer,
                     chatDraftRepository = repo,
@@ -431,7 +445,7 @@ class ChatDraftPersistenceUiTest {
             HermesTheme {
                 ChatScreen(
                     historySource = historySource,
-                    chatSource = source,
+                    runController = controllerFor(source),
                     runStopRequester = neverReachedStop,
                     runSteerRequester = neverReachedSteer,
                     chatDraftRepository = repo,
@@ -484,14 +498,14 @@ class ChatDraftPersistenceUiTest {
 
     private fun setScreen(
         drafts: ChatDraftRepository,
-        chatSource: StreamingChatSource = neverEmits,
+        runController: RunSessionController = controllerFor(neverEmits),
         runSteerRequester: RunSteerRequester = neverReachedSteer
     ) {
         composeRule.setContent {
             HermesTheme {
                 ChatScreen(
                     historySource = historySource,
-                    chatSource = chatSource,
+                    runController = runController,
                     runStopRequester = neverReachedStop,
                     runSteerRequester = runSteerRequester,
                     chatDraftRepository = drafts,

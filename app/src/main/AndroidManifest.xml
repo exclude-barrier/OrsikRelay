@@ -2,6 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- P3: local run/approval notifications. Requested contextually at
+         runtime (Android 13+); the app is fully functional without it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- P3: foreground continuity for an active agent run. dataSync type:
+         a user-initiated, continuous data exchange with the Hermes server.
+         No runtime permission is required for this type (verified against
+         the official foreground-service-type documentation). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:allowBackup="false"
@@ -27,6 +36,13 @@
                 <data android:scheme="orsik" android:host="pair" />
             </intent-filter>
         </activity>
+        <!-- P3: keeps the process out of the cached state while an agent
+             run is active, so the cached-app freezer cannot terminate the
+             run's SSE sockets. Owns no chat state; see the class doc. -->
+        <service
+            android:name=".platform.run.RunForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

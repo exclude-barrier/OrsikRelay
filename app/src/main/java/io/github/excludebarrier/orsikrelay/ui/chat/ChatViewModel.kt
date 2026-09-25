@@ -4,11 +4,13 @@ import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
-import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.notification.NotificationCoordinator
+import io.github.excludebarrier.orsikrelay.domain.notification.NotificationPoster
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerError
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
@@ -18,30 +20,28 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.withContext
 
 /**
- * View model owning the chat screen's turn state machine (P1 refactor).
+ * View model owning the chat screen's turn state machine (P1 refactor, P3
+ * background-continuity update).
  *
  * The screen composable no longer holds any business state: it renders
  * [state] and forwards user intents to the methods below. Every transition
  * of the verified P0 state machine (history load, draft, send/streaming,
  * run stop, run steer, recoverable steers, back, approval) is reproduced
- * here one-to-one. The only structural change is that the screen-local
- * `mutableStateOf` slots are replaced by a single immutable [ChatUiState]
- * published through [state], and the composition-scoped coroutines become
- * children of this view model's own [scope].
+ * here one-to-one. The screen-local `mutableStateOf` slots are replaced by
+ * a single immutable [ChatUiState] published through [state], and the
+ * composition-scoped coroutines become children of this view model's own
+ * [scope].
  *
  * The view model is intentionally a plain class (not an
  * `androidx.lifecycle.ViewModel`): the screen is keyed by
@@ -50,13 +50,18 @@ import kotlinx.coroutines.withContext
  * The ordinary draft survives a key switch / disposal through the
  * [ChatDraftRepository] (the debounced value is flushed on [close]).
  *
- * Network-protocol logic is NOT here: [chatSource] yields already-validated
- * [ChatTurnEvent]s; the SSE state machine and the strict protocol-v1 wire
- * contract stay in the repository/pipeline layer below.
+ * Network-protocol logic is NOT here: [runController] (app-level, P3) owns
+ * the active run's STREAM and foreground-service lifecycle, so a run
+ * survives leaving the chat screen, an activity recreation and the app
+ * going to the background. This view model only observes the controller's
+ * [RunSessionController.events] and renders them; leaving the screen no
+ * longer interrupts the run. If the view model is created while the
+ * session's run is already active (re-entry, deep-link tap, recreation) it
+ * re-attaches to that run's state.
  */
 internal class ChatViewModel(
     private val historySource: MessageHistorySource,
-    private val chatSource: StreamingChatSource,
+    private val runController: RunSessionController,
     private val runStopRequester: RunStopRequester,
     private val runSteerRequester: RunSteerRequester,
     private val chatDraftRepository: ChatDraftRepository,
@@ -73,18 +78,47 @@ internal class ChatViewModel(
     val state: StateFlow<ChatUiState> = _state
 
     // Bookkeeping that is not UI-observable and therefore kept OUT of
-    // [ChatUiState]: the per-screen local-row counter and the saveable-style
-    // draft generation guard.
+    // [ChatUiState]: the per-screen local-row counter, the saveable-style
+    // draft generation guard, the key of the premature local user line of
+    // the active turn (dropped on a pre-`RunStarted` failure) and the
+    // `pending_steer` carried by the active turn's terminal event.
     private var localKeyCounter = 0
     private var draftGeneration = 0
+    private var activeUserLineKey: String? = null
+    private var terminalPendingSteer: String? = null
 
-    // Job handles for the active turn collector and the in-flight stop and
-    // steer requests. Deliberately not part of the immutable state: they
-    // exist so a back can join them before navigating (Mission 007B/008B) and
-    // so a key switch / disposal can cancel the previous session's collectors.
-    private var collectorJob: Job? = null
+    // Job handles for the in-flight stop and steer requests. Deliberately
+    // not part of the immutable state: they exist so a settled turn can
+    // cancel a request that belongs to the finished run (Mission 007B/008B)
+    // and disposal can cancel a request of the left screen.
     private var stopJob: Job? = null
     private var steerJob: Job? = null
+
+    init {
+        // Re-attach: the run (if any) is owned app-level by the controller,
+        // so a view model created mid-run — re-entry, deep-link tap on the
+        // run/approval notification, activity recreation — restores the
+        // run UI state instead of starting from a blank screen.
+        val active = runController.activeRun.value
+        if (active != null && active.profileId == profileId && active.sessionId == sessionId) {
+            _state.update {
+                it.copy(
+                    turnActive = true,
+                    runStarted = true,
+                    boundRunId = active.runId,
+                    pendingApproval = active.pendingApproval
+                )
+            }
+        }
+        // Long-lived event observer: the stream itself lives on the
+        // controller's app scope; this collector only renders events into
+        // [state] and dies with the screen (disposal), never with the run.
+        scope.launch {
+            runController.events.collect { event ->
+                handleRunEvent(event)
+            }
+        }
+    }
 
     private fun nextLocalKey(): String {
         localKeyCounter += 1
@@ -243,19 +277,27 @@ internal class ChatViewModel(
      * Dismisses the pending approval dialog (Mission 014). Invoked by the
      * dialog only after a `Resolved` decision; the decision POST itself is
      * owned by the dialog's own composition scope, not by this view model.
+     * The app-level pending-approval bookkeeping is cleared together, so a
+     * re-attached view model does not re-show a request the user already
+     * resolved.
      */
     fun dismissApproval() {
         _state.update { it.copy(pendingApproval = null) }
+        runController.clearPendingApproval()
     }
 
     /**
      * Starts exactly one streaming turn for the validated composer draft
-     * (Mission 006A). The local user line appears immediately after the
-     * accepted submit; the draft is cleared only on `RunStarted`. A failure
-     * before the confirmed start keeps the draft and drops the premature
-     * user line. The collector is registered in [collectorJob] BEFORE it
-     * starts so a synchronous source still reaches the slot and the terminal
-     * `finally` can release `turnActive`.
+     * (Mission 006A, P3 background continuity). The local user line appears
+     * immediately after the accepted submit; the draft is cleared only on
+     * `RunStarted`. A failure before the confirmed start keeps the draft and
+     * drops the premature user line.
+     *
+     * The stream AND the run foreground service are owned app-level by
+     * [runController]: this method is the user's send tap, so the foreground
+     * start inside the controller is always eligible (the app is in the
+     * foreground), and the run survives this screen leaving composition.
+     * This method only prepares the screen state and hands the turn over.
      */
     fun send() {
         val current = _state.value
@@ -290,6 +332,7 @@ internal class ChatViewModel(
         // The local user line appears immediately after the accepted submit;
         // the draft is cleared only on `RunStarted`.
         val userLineKey = nextLocalKey()
+        activeUserLineKey = userLineKey
         _state.update {
             it.copy(
                 localLines = it.localLines + TimelineRow(
@@ -299,201 +342,209 @@ internal class ChatViewModel(
                 )
             )
         }
+        terminalPendingSteer = null
+        // Synchronous on purpose: the controller starts the foreground
+        // service while the app is still in the foreground.
+        runController.startTurn(profileId, sessionId, text)
+    }
 
-        fun dropPrematureUserLine() {
-            if (!_state.value.runStarted) {
-                // Failure before confirmed `run.started`: drop the premature
-                // local user line and keep the draft in the composer.
+    /**
+     * Handles one event of the active run (P3): the verified P0 state
+     * transitions, driven by the app-level controller instead of a
+     * screen-lifetime collector. Notification side effects (approval
+     * requested, run completed) are owned by the controller, so they fire
+     * even when no chat screen is open.
+     *
+     * Events are attributed by this screen's own [ChatUiState.turnActive]
+     * flag — deliberately NOT by the controller's active run: the stream
+     * events cross a buffered [RunSessionController.events] flow, so an
+     * event may be consumed only after the controller has already moved
+     * on with its own bookkeeping (the terminal event always arrives
+     * after the controller cleared its slot). [send] sets the flag before
+     * any event of the new turn can arrive, and [turnSettled] clears it
+     * exactly once, so at most one screen ever processes a given run
+     * (single-slot client).
+     */
+    private fun handleRunEvent(event: ChatTurnEvent) {
+        val current = _state.value
+        if (!current.turnActive) return
+
+        when (event) {
+            is ChatTurnEvent.RunStarted -> {
+                // The server-confirmed run ID is the only value the
+                // stop control may use; it is bound here and never
+                // rendered or logged. Successful send handoff:
+                // clear the composer AND its stored state together
+                // (Mission 009A).
+                _state.update { s -> s.copy(runStarted = true, boundRunId = event.runId) }
+                // The local line is no longer premature from here on.
+                activeUserLineKey = null
+                clearDraftState()
+            }
+            is ChatTurnEvent.AssistantStarted -> {
+                // Do not render an empty bubble: a tool may run
+                // before the first assistant token.
+            }
+            is ChatTurnEvent.AssistantDelta -> {
                 _state.update { s ->
-                    s.copy(localLines = s.localLines.filter { it.key != userLineKey })
+                    val last = s.localLines.lastOrNull()
+                    s.copy(
+                        localLines = if (last?.role == MessageRole.ASSISTANT) {
+                            appendToLastAssistantLine(s.localLines, event.text)
+                        } else {
+                            s.localLines + TimelineRow(
+                                key = nextLocalKey(),
+                                role = MessageRole.ASSISTANT,
+                                content = event.text
+                            )
+                        }
+                    )
                 }
             }
-        }
-
-        val job = scope.launch(start = CoroutineStart.LAZY) {
-            // The collector's own job (the local initializer cannot be
-            // referenced from inside its own lambda).
-            val self: Job? = coroutineContext[Job]
-            var completed = false
-            var cancelled = false
-            // The `pending_steer` carried by THIS turn's terminal event, so
-            // `finally` can tell "the in-flight request the server already
-            // reported as pending" apart from a genuinely separate leftover.
-            var completedPendingSteer: String? = null
-            try {
-                chatSource.streamTurn(profileId, sessionId, text).takeWhile { event ->
-                    when (event) {
-                        is ChatTurnEvent.RunStarted -> {
-                            // The server-confirmed run ID is the only value the
-                            // stop control may use; it is bound here and never
-                            // rendered or logged. Successful send handoff:
-                            // clear the composer AND its stored state together
-                            // (Mission 009A).
-                            _state.update { s -> s.copy(runStarted = true, boundRunId = event.runId) }
-                            clearDraftState()
+            is ChatTurnEvent.AssistantCompleted -> {
+                _state.update { s ->
+                    val last = s.localLines.lastOrNull()
+                    s.copy(
+                        localLines = if (last?.role == MessageRole.ASSISTANT) {
+replaceLastAssistantLine(s.localLines, event.finalText)
+                        } else {
+                            // A tool-only turn: the authoritative
+                            // final answer is appended after its
+                            // final tool row.
+                            s.localLines + TimelineRow(
+                                key = nextLocalKey(),
+                                role = MessageRole.ASSISTANT,
+                                content = event.finalText
+                            )
                         }
-                        is ChatTurnEvent.AssistantStarted -> {
-                            // Do not render an empty bubble: a tool may run
-                            // before the first assistant token.
-                        }
-                        is ChatTurnEvent.AssistantDelta -> {
-                            _state.update { s ->
-                                val last = s.localLines.lastOrNull()
-                                s.copy(
-                                    localLines = if (last?.role == MessageRole.ASSISTANT) {
-                                        appendToLastAssistantLine(s.localLines, event.text)
-                                    } else {
-                                        s.localLines + TimelineRow(
-                                            key = nextLocalKey(),
-                                            role = MessageRole.ASSISTANT,
-                                            content = event.text
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        is ChatTurnEvent.AssistantCompleted -> {
-                            _state.update { s ->
-                                val last = s.localLines.lastOrNull()
-                                s.copy(
-                                    localLines = if (last?.role == MessageRole.ASSISTANT) {
-                                        replaceLastAssistantLine(s.localLines, event.finalText)
-                                    } else {
-                                        // A tool-only turn: the authoritative
-                                        // final answer is appended after its
-                                        // final tool row.
-                                        s.localLines + TimelineRow(
-                                            key = nextLocalKey(),
-                                            role = MessageRole.ASSISTANT,
-                                            content = event.finalText
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        is ChatTurnEvent.ApprovalRequested -> {
-                            // A second request while one is still pending is
-                            // contradictory and must never overwrite the
-                            // actionable request.
-                            if (_state.value.pendingApproval != null) {
-                                throw ConcurrentApprovalException()
-                            }
-                            _state.update { s -> s.copy(pendingApproval = event.request) }
-                        }
-                        is ChatTurnEvent.ToolActivity -> {
-                            // Generic status only: never a tool name or payload
-                            // (those exist only for server history lines).
-                            _state.update { s ->
-                                s.copy(
-                                    localLines = s.localLines + TimelineRow(
-                                        key = nextLocalKey(),
-                                        role = MessageRole.TOOL,
-                                        content = event.toolName?.let {
-                                            namedToolActivityLabel.format(it)
-                                        } ?: toolActivityLabel,
-                                        localTool = true
-                                    )
-                                )
-                            }
-                        }
-                        is ChatTurnEvent.TurnCompleted -> {
-                            completed = true
-                            _state.update { s -> s.copy(pendingApproval = null) }
-                            val pending = event.pendingSteer
-                            if (pending != null) {
-                                // Mission 008B: a `pending_steer` carried by
-                                // `run.completed` is surfaced through the same
-                                // recoverable state, as its own separate item.
-                                completedPendingSteer = pending
-                                appendSteerRecovery(pending)
-                            }
-                        }
-                        is ChatTurnEvent.TurnFailed -> {
-                            _state.update {
-                                s -> s.copy(pendingApproval = null, turnFailure = event.error)
-                            }
-                            dropPrematureUserLine()
-                        }
-                    }
-                    event !is ChatTurnEvent.TurnCompleted &&
-                        event !is ChatTurnEvent.TurnFailed
-                }.collect { }
-            } catch (error: CancellationException) {
-                cancelled = true
-                throw error
-            } catch (_: ConcurrentApprovalException) {
-                _state.update {
-                    it.copy(pendingApproval = null, turnFailure = ChatStreamError.IncompatibleApi)
+                    )
                 }
-                dropPrematureUserLine()
-            } catch (_: Exception) {
-                _state.update { it.copy(turnFailure = ChatStreamError.Network) }
-                dropPrematureUserLine()
-            } finally {
-                // A flow that ends without `TurnCompleted` or `TurnFailed` must
-                // not silently release the composer: a closed stream is a
-                // generic network failure, and there is never an automatic
-                // retry.
-                if (!cancelled && !completed && _state.value.turnFailure == null) {
-                    _state.update { it.copy(turnFailure = ChatStreamError.Network) }
-                    dropPrematureUserLine()
-                }
-                // Bookkeeping is cleared here, on the main scope — never from a
-                // foreign `invokeOnCompletion` thread.
-                if (collectorJob === self) {
-                    collectorJob = null
-                    _state.update {
-                        it.copy(turnActive = false, pendingApproval = null, backPending = false)
-                    }
-                    if (!cancelled) {
-                        // The turn settled: a stop request that is still in
-                        // flight belongs to the finished run and is canceled so
-                        // no late callback can mutate the screen state
-                        // (Mission 007B). The same holds for a steer request
-                        // (Mission 008B).
-                        stopJob?.cancel()
-                        steerJob?.cancel()
-                    }
-                    stopJob = null
-                    steerJob = null
-                    // Capture the in-flight request's EXACT submitted text and
-                    // the leftover draft BEFORE clearing the flags (Mission
-                    // 008B): they are only known at this moment.
-                    val inFlightSteerText =
-                        if (_state.value.steerInFlight) _state.value.steerSubmittedText else null
-                    val leftoverSteerDraft = _state.value.steerDraft.takeIf { it.isNotBlank() }
+            }
+            is ChatTurnEvent.ApprovalRequested -> {
+                // A second request while one is still pending is a protocol
+                // contradiction: the actionable request must never be
+                // overwritten, so the turn fails with the closed
+                // `IncompatibleApi` code and the stream is canceled — the
+                // server interrupts the run exactly as the old screen-
+                // lifetime collector cancellation did. The notification for
+                // the FIRST request was already posted by the controller.
+                if (current.pendingApproval != null) {
                     _state.update {
                         it.copy(
-                            stopInFlight = false,
-                            stopFailed = false,
-                            boundRunId = null,
-                            steerInFlight = false,
-                            steerQueued = false,
-                            steerFailed = false,
-                            steerDraft = "",
-                            steerSubmittedText = null
+                            pendingApproval = null,
+                            turnFailure = ChatStreamError.IncompatibleApi
                         )
                     }
-                    // Same-request duplicate suppression (Mission 008B): if the
-                    // in-flight request was already reported by this turn's
-                    // terminal `pending_steer`, it has been appended exactly
-                    // once already. The comparison uses the exact
-                    // validated/trimmed wire text — never the raw draft.
-                    val sameRequestAsTerminalPending =
-                        inFlightSteerText != null &&
-                            completedPendingSteer != null &&
-                            inFlightSteerText == completedPendingSteer
-                    if (leftoverSteerDraft != null && !sameRequestAsTerminalPending) {
-                        appendSteerRecovery(leftoverSteerDraft)
-                    }
+                    dropPrematureUserLine()
+                    runController.cancelTurn()
+                    turnSettled()
+                } else {
+                    _state.update { s -> s.copy(pendingApproval = event.request) }
                 }
             }
+            is ChatTurnEvent.ToolActivity -> {
+                // Generic status only: never a tool name or payload
+                // (those exist only for server history lines).
+                _state.update { s ->
+                    s.copy(
+                        localLines = s.localLines + TimelineRow(
+                            key = nextLocalKey(),
+                            role = MessageRole.TOOL,
+                            content = event.toolName?.let {
+                                namedToolActivityLabel.format(it)
+                            } ?: toolActivityLabel,
+                            localTool = true
+                        )
+                    )
+                }
+            }
+            is ChatTurnEvent.TurnCompleted -> {
+                // P3: the run-completed notification is posted by the
+                // controller (background policy + duplicate guard); only the
+                // screen state is settled here.
+                _state.update { s -> s.copy(pendingApproval = null) }
+                val pending = event.pendingSteer
+                if (pending != null) {
+                    // Mission 008B: a `pending_steer` carried by
+                    // `run.completed` is surfaced through the same
+                    // recoverable state, as its own separate item.
+                    terminalPendingSteer = pending
+                    appendSteerRecovery(pending)
+                }
+                turnSettled()
+            }
+            is ChatTurnEvent.TurnFailed -> {
+                _state.update {
+                    s -> s.copy(pendingApproval = null, turnFailure = event.error)
+                }
+                dropPrematureUserLine()
+                turnSettled()
+            }
         }
-        // Register the job BEFORE it starts: with a synchronous source the
-        // collector could finish inside `start()`, and the `finally` block
-        // must still find its own job to release `turnActive`.
-        collectorJob = job
-        job.start()
+    }
+
+    /**
+     * Settles the active turn exactly once, on its terminal event or a
+     * client-side protocol failure: releases the composer, cancels any
+     * in-flight stop/steer request of the finished run (a late callback must
+     * never mutate the screen state — Mission 007B/008B), and applies the
+     * same-request duplicate suppression for the recoverable steer text.
+     */
+private fun turnSettled() {
+        if (!_state.value.turnActive) return
+        _state.update {
+            it.copy(turnActive = false, pendingApproval = null, backPending = false)
+        }
+        stopJob?.cancel()
+        steerJob?.cancel()
+        stopJob = null
+        steerJob = null
+        // Capture the in-flight request's EXACT submitted text and the
+        // leftover draft BEFORE clearing the flags (Mission 008B): they are
+        // only known at this moment.
+        val inFlightSteerText =
+            if (_state.value.steerInFlight) _state.value.steerSubmittedText else null
+        val leftoverSteerDraft = _state.value.steerDraft.takeIf { it.isNotBlank() }
+        _state.update {
+            it.copy(
+                stopInFlight = false,
+                stopFailed = false,
+                boundRunId = null,
+                steerInFlight = false,
+                steerQueued = false,
+                steerFailed = false,
+                steerDraft = "",
+                steerSubmittedText = null
+            )
+        }
+        // Same-request duplicate suppression (Mission 008B): if the
+        // in-flight request was already reported by this turn's terminal
+        // `pending_steer`, it was appended exactly once already. The
+        // comparison uses the exact validated/trimmed wire text — never the
+        // raw draft.
+        val sameRequestAsTerminalPending =
+            inFlightSteerText != null &&
+                terminalPendingSteer != null &&
+                inFlightSteerText == terminalPendingSteer
+        if (leftoverSteerDraft != null && !sameRequestAsTerminalPending) {
+            appendSteerRecovery(leftoverSteerDraft)
+        }
+        terminalPendingSteer = null
+        activeUserLineKey = null
+    }
+
+    /**
+     * Drops the premature local user line of the active turn, keeping the
+     * draft in the composer. Only applies before the confirmed `run.started`:
+     * a message the server confirmed is real and stays on the timeline.
+     */
+    private fun dropPrematureUserLine() {
+        val key = activeUserLineKey ?: return
+        if (!_state.value.runStarted) {
+            _state.update { s ->
+                s.copy(localLines = s.localLines.filter { it.key != key })
+            }
+        }
     }
 
     /**
@@ -554,8 +605,11 @@ internal class ChatViewModel(
                         )
                     }
                     leftoverSteerDraft?.let { appendSteerRecovery(it) }
-                    collectorJob?.cancel()
+                    // The history read is launched BEFORE the turn settles:
+                    // settling cancels this in-flight stop job itself.
                     loadHistory()
+                    runController.cancelTurn()
+                    turnSettled()
                 }
                 is RunStopResult.Failure -> {
                     // The running stream collection is left untouched. One
@@ -643,11 +697,13 @@ internal class ChatViewModel(
 
     /**
      * Routes the platform back (button, system key or gesture) exactly like
-     * the visible button (Mission 006A/007B/008B): with no active turn it
-     * navigates back immediately; with an active turn it cancels AND joins the
-     * collector plus any in-flight stop/steer request, resets the ephemeral
-     // state, clears the in-turn draft, and then navigates back exactly once.
-     * Fast double taps are ignored while the back is in flight.
+     * the visible button (Mission 006A/007B/008B, P3 background continuity):
+     * with no active turn it navigates back immediately; with an active turn
+     * it clears the in-turn draft and the run-specific steer state, and then
+     * navigates back exactly once. The run itself is NOT interrupted: it is
+     * owned app-level by the controller and keeps streaming in the
+     * background (the foreground service keeps the process unfrozen). Fast
+* double taps are ignored while the back is in flight.
      */
     fun handleBack() {
         val current = _state.value
@@ -656,56 +712,38 @@ internal class ChatViewModel(
             current.backPending -> Unit
             else -> {
                 _state.update { it.copy(backPending = true) }
-                // Capture the in-flight stop/steer jobs NOW: joining the
-                // collector runs its `finally`, which nulls them without
-                // canceling in the cancelled branch (Mission 007B/008B).
-                val pendingStop = stopJob
-                val pendingSteer = steerJob
-                scope.launch {
-                    collectorJob?.cancelAndJoin()
-                    pendingStop?.cancelAndJoin()
-                    pendingSteer?.cancelAndJoin()
-                    _state.update {
-                        it.copy(
-                            turnActive = false,
-                            runStarted = false,
-                            boundRunId = null,
-                            stopInFlight = false,
-                            stopFailed = false,
-                            localLines = emptyList(),
-                            turnFailure = null
-                        )
-                    }
-                    // Back leaves the screen: clear the composer AND its stored
-                    // state so the in-turn draft is not re-persisted as a draft
-                    // for the left session (Mission 009A).
-                    clearDraftState()
-                    // The run-specific steer state (incl. the recoverable items)
-                    // belongs to the left run (Mission 008B).
-                    _state.update {
-                        it.copy(
-                            steerInFlight = false,
-                            steerQueued = false,
-                            steerFailed = false,
-                            steerDraft = "",
-                            steerSubmittedText = null,
-                            steerRecovery = emptyList()
-                        )
-                    }
-                    onBack()
+                // Back leaves the screen: clear the composer AND its stored
+                // state so the in-turn draft is not re-persisted as a draft
+                // for the left session (Mission 009A). The run continues in
+                // the background.
+                clearDraftState()
+                // The run-specific steer state (incl. the recoverable items)
+                // belongs to the left run (Mission 008B).
+                _state.update {
+                    it.copy(
+                        steerInFlight = false,
+                        steerQueued = false,
+                        steerFailed = false,
+                        steerDraft = "",
+                        steerSubmittedText = null,
+                        steerRecovery = emptyList()
+                    )
                 }
+                onBack()
             }
         }
     }
 
     /**
      * Tears the view model down on a key switch or leaving composition
-     * (Mission 007B/009A): cancels the running collector AND any in-flight
-     * stop/steer request of the previous session, and deterministically
-     * flushes the pending ordinary draft so it is neither lost nor able to
-     * land under the new key. No state is published after cancellation.
+     * (Mission 007B/009A, P3 background continuity): cancels any in-flight
+     * stop/steer request and the event observer of the previous session, and
+     * deterministically flushes the pending ordinary draft so it is neither
+     * lost nor able to land under the new key. The active RUN (if any) is
+     * NOT affected: it is owned app-level by the controller and keeps
+     * streaming. No state is published after cancellation.
      */
-    fun close() {
+fun close() {
         scope.cancel()
         chatDraftRepository.flushPendingDraft()
     }
@@ -744,9 +782,16 @@ internal class ChatViewModel(
 }
 
 /**
- * Raised when a second `approval.request` arrives for the active turn while
- * one is still pending (Mission 014). It is a protocol contradiction: the
- * actionable request must never be overwritten, so the turn fails with a
- * closed `IncompatibleApi` code instead.
+ * A no-op notification coordinator for the run session controller in tests
+ * (unit and instrumented): it never posts anything, so run behavior is
+ * unaffected when no notification wiring is supplied. The no-op poster plus
+ * a permanently-foreground signal make it a double no-op: the policy alone
+ * already blocks every post.
  */
-private class ConcurrentApprovalException : Exception()
+internal val NoOpNotificationCoordinator: NotificationCoordinator =
+    NotificationCoordinator(
+        poster = NotificationPoster { },
+        isForeground = { true },
+        serverNameProvider = { "" },
+        fallbackTitle = ""
+    )

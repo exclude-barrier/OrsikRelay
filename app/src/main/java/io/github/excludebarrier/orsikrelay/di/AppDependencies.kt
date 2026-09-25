@@ -1,9 +1,12 @@
 package io.github.excludebarrier.orsikrelay.di
 
 import android.content.Context
+import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftStore
+import io.github.excludebarrier.orsikrelay.data.notification.NotificationPermissionStore
+import io.github.excludebarrier.orsikrelay.data.notification.SharedPreferencesNotificationPermissionStore
 import io.github.excludebarrier.orsikrelay.data.device.CredentialStoreDeviceCredentialSaver
 import io.github.excludebarrier.orsikrelay.data.device.SharedPreferencesDeviceCredentialMetadataStore
 import io.github.excludebarrier.orsikrelay.data.message.MessageHistoryRepository
@@ -23,15 +26,16 @@ import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionListRepository
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.data.session.resolveStartupProfile
-import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairingCoordinator
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
+import io.github.excludebarrier.orsikrelay.domain.notification.NotificationCoordinator
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.network.HermesConnectionClient
@@ -40,6 +44,9 @@ import io.github.excludebarrier.orsikrelay.network.HermesDeviceSelfRevokeClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunApprovalClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunStopClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunSteerClient
+import io.github.excludebarrier.orsikrelay.platform.notification.AndroidNotificationManager
+import io.github.excludebarrier.orsikrelay.platform.notification.AppForegroundTracker
+import io.github.excludebarrier.orsikrelay.platform.run.AndroidRunForegroundServiceStarter
 import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
 
 /**
@@ -65,10 +72,12 @@ internal data class AppDependencies(
     val sessionPageSource: SessionPageSource,
     val sessionCreator: SessionCreator,
     val messageHistorySource: MessageHistorySource,
-    val streamingChatSource: StreamingChatSource,
+    val runController: RunSessionController,
     val runStopRequester: RunStopRequester,
     val runSteerRequester: RunSteerRequester,
     val runApprovalRequester: RunApprovalRequester,
+    val notificationCoordinator: NotificationCoordinator,
+    val notificationPermissionStore: NotificationPermissionStore,
     val capabilityStore: RunApprovalCapabilityStore,
     val chatDraftRepository: ChatDraftRepository,
     val selectionStore: ActiveServerSelectionStore,
@@ -97,6 +106,10 @@ internal fun buildAppDependencies(
     // It contains no credential, URL, draft, chat or approval content.
     val resolvedCapabilityStore =
         capabilityStore ?: SharedPreferencesRunApprovalCapabilityStore(applicationContext)
+    // P3: the "ask at most once" flag for the POST_NOTIFICATIONS permission.
+    // Only a single boolean is stored; no credential or notification content.
+    val notificationPermissionStore =
+        SharedPreferencesNotificationPermissionStore(applicationContext)
     // One production ChatDraftRepository instance shared by the chat
     // screen and the profile repository (Mission 009B): profile
     // deletion clears the drafts through this same instance, so no
@@ -129,6 +142,38 @@ internal fun buildAppDependencies(
         deviceCredentialMetadataStore = deviceMetadataStore
     )
     val profileAdmin = ServerProfileAdmin(profileRepository)
+    // P3: local notifications. The poster is the single Android adapter;
+    // the coordinator applies the pure policy and the duplicate guard.
+    // The server label comes from the profile metadata and is validated
+    // (isSafeTitle) before it can reach a notification; the foreground
+    // signal is the single-activity start/stop tracker.
+    val notificationCoordinator = NotificationCoordinator(
+        poster = AndroidNotificationManager(applicationContext),
+        isForeground = { AppForegroundTracker.isForeground },
+        serverNameProvider = { profileId ->
+            profileAdmin
+                .listProfiles()
+                .firstOrNull { it.id == profileId }
+                ?.profileName
+                .orEmpty()
+        },
+        fallbackTitle = applicationContext.getString(R.string.notification_fallback_title)
+    )
+    // P3: the app-level owner of the single active run: the streaming
+    // source, the run foreground service and the run notification side
+    // effects. Exactly one instance for the whole app: the run must
+    // outlive any chat screen.
+    val runController = RunSessionController(
+        chatSource = StreamingChatRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore,
+            runApprovalCapabilitySource = RunApprovalCapabilityRepository(
+                capabilityStore = resolvedCapabilityStore
+            )
+        ),
+        serviceStarter = AndroidRunForegroundServiceStarter(applicationContext),
+        notificationCoordinator = notificationCoordinator
+    )
     return AppDependencies(
         profileAdmin = profileAdmin,
         coordinator = ProfileConnectionCoordinator(
@@ -158,13 +203,7 @@ internal fun buildAppDependencies(
             profileRepository = profileRepository,
             credentialStore = credentialStore
         ),
-        streamingChatSource = StreamingChatRepository(
-            profileRepository = profileRepository,
-            credentialStore = credentialStore,
-            runApprovalCapabilitySource = RunApprovalCapabilityRepository(
-                capabilityStore = resolvedCapabilityStore
-            )
-        ),
+        runController = runController,
         runStopRequester = RunStopRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore,
@@ -180,6 +219,8 @@ internal fun buildAppDependencies(
             credentialStore = credentialStore,
             runApprovalTransport = HermesRunApprovalClient()
         ),
+        notificationCoordinator = notificationCoordinator,
+        notificationPermissionStore = notificationPermissionStore,
         chatDraftRepository = chatDraftRepository,
         selectionStore = resolvedSelectionStore,
         capabilityStore = resolvedCapabilityStore,

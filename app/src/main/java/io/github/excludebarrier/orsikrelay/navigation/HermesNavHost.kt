@@ -22,7 +22,6 @@ import io.github.excludebarrier.orsikrelay.data.profile.ActiveServerSelectionSto
 import io.github.excludebarrier.orsikrelay.data.profile.RunApprovalCapabilityStore
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.di.buildAppDependencies
-import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
@@ -30,6 +29,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
@@ -52,7 +52,7 @@ fun HermesNavHost(
     sessionPageSource: SessionPageSource? = null,
     messageHistorySource: MessageHistorySource? = null,
     sessionCreator: SessionCreator? = null,
-    streamingChatSource: StreamingChatSource? = null,
+    runController: RunSessionController? = null,
     runStopRequester: RunStopRequester? = null,
     runSteerRequester: RunSteerRequester? = null,
     runApprovalRequester: RunApprovalRequester? = null,
@@ -64,7 +64,10 @@ fun HermesNavHost(
     capabilityStore: RunApprovalCapabilityStore? = null,
     // Product Gate: pairing deep-link bootstrap (server URL + code) pre-filled
     // into the onboarding route. Null when no deep link was received.
-    pairingBootstrap: PairingBootstrap? = null
+    pairingBootstrap: PairingBootstrap? = null,
+    // P3: a validated notification tap (profileId, sessionId) to open
+    // directly. Consumed exactly once; null when no tap is pending.
+    notificationBootstrap: Pair<String, String>? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
     val productionDependencies = remember(applicationContext) {
@@ -156,6 +159,33 @@ fun HermesNavHost(
             launchSingleTop = true
         }
         pendingCreatedSessionId = null
+    }
+
+    // P3: a validated notification tap (profileId, sessionId) is consumed
+    // exactly once. `pendingNotificationTap` mirrors the latest tap from the
+    // activity (cold start via onCreate, warm start via onNewIntent) so the
+    // consuming effect below can clear it after navigating.
+    var pendingNotificationTap by remember { mutableStateOf(notificationBootstrap) }
+    LaunchedEffect(notificationBootstrap) {
+        if (notificationBootstrap != null) pendingNotificationTap = notificationBootstrap
+    }
+    // P3: open the chat targeted by a validated notification tap. The effect
+    // waits until the navigation host is composed (resolvedStart non-null) and
+    // then switches the active profile to the tap's server (so the chat
+    // authenticates under the right server) and navigates to exactly that
+    // chat. A revoked or missing credential fails closed in the chat's
+    // existing history-load path; no navigation bypasses authentication.
+    LaunchedEffect(resolvedStart, pendingNotificationTap) {
+        if (resolvedStart == null) return@LaunchedEffect
+        val bootstrap = pendingNotificationTap ?: return@LaunchedEffect
+        val (profileId, sessionId) = bootstrap
+        withContext(Dispatchers.Main) {
+            activeProfileId = profileId
+            navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
+                launchSingleTop = true
+            }
+        }
+        pendingNotificationTap = null
     }
 
     val initialScreen = resolvedStart
@@ -289,8 +319,8 @@ fun HermesNavHost(
             ChatScreen(
                 historySource = messageHistorySource
                     ?: productionDependencies.value.messageHistorySource,
-                chatSource = streamingChatSource
-                    ?: productionDependencies.value.streamingChatSource,
+                runController = runController
+                    ?: productionDependencies.value.runController,
                 runStopRequester = runStopRequester
                     ?: productionDependencies.value.runStopRequester,
                 runSteerRequester = runSteerRequester
