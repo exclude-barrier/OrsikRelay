@@ -20,8 +20,13 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Hermes">
+        <!-- Official edge-to-edge setup: with adjustResize the app
+             receives IME insets (consumed once in ChatScreen via
+             WindowInsets.ime), so the window is never panned when the
+             keyboard opens. -->
         <activity
             android:name=".MainActivity"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

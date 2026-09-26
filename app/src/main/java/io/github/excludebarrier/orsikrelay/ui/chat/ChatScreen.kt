@@ -4,9 +4,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -143,6 +148,16 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
     Column(
         modifier = modifier
             .fillMaxSize()
+            // Edge-to-edge IME handling (official Compose e2e pattern): the
+            // window is never panned for the keyboard. The IME inset is
+            // consumed exactly once, here at the chat root, so the Column
+            // resizes from the bottom: the header stays put, the message
+            // list (weight 1f) shrinks, and the composer sits directly
+            // above the keyboard. `exclude(navigationBars)` subtracts the
+            // navigation-bar portion, which the root HermesAppSurface
+            // already applies via safeDrawingPadding() — without it the
+            // nav bar would be padded twice while the IME is open.
+            .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
             .padding(horizontal = 16.dp)
     ) {
         Row(
