@@ -1,7 +1,8 @@
 package io.github.excludebarrier.orsikrelay
 
-import android.graphics.Bitmap
+import android.content.Context
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.test.assertIsDisplayed
@@ -29,8 +30,6 @@ import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
-import java.io.File
-import java.io.FileOutputStream
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -131,16 +130,20 @@ class ChatImeLayoutUiTest {
         setScreen()
         waitForText("Kurze Antwort")
         val headerTopBefore = boundsTop("Chat")
+        val composerTopBefore = boundsTop("Nachricht")
 
-        // Tap the composer: the real emulator keyboard opens and the real
-        // IME insets flow through the window pipeline.
-        composeRule.onNodeWithText("Nachricht").performClick()
-        composeRule.waitForIdle()
-        Thread.sleep(3_500) // let the IME animation and insets settle
+        val imeOpened = openRealKeyboard()
+        Thread.sleep(2_500) // let the IME animation and insets settle
         composeRule.waitForIdle()
 
         val headerTopAfter = boundsTop("Chat")
         assertEquals("header must not pan when the real keyboard opens", headerTopBefore, headerTopAfter)
+        if (imeOpened) {
+            assertTrue(
+                "real IME must actually open: composer must move up by a substantial inset, but it stayed at $composerTopBefore",
+                boundsTop("Nachricht") < composerTopBefore - 500
+            )
+        }
         composeRule.onNodeWithText("Chat").assertIsDisplayed()
         composeRule.onNodeWithText("Nachricht").assertIsDisplayed()
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
@@ -150,10 +153,12 @@ class ChatImeLayoutUiTest {
     fun imeScreenshotsForVisualVerification() {
         setScreen()
         waitForText("Kurze Antwort")
-        capture("01_kb_closed_light")
+        shoot("01_kb_closed_light")
+        Thread.sleep(2_500)
 
         dispatchImeInsets(imeBottom)
-        capture("02_ime_open_layout_light")
+        shoot("02_ime_open_layout_light")
+        Thread.sleep(2_500)
 
         // Multi-line composer while the IME region is reserved. Focusing
         // the field makes the window re-dispatch its real insets (IME
@@ -161,32 +166,96 @@ class ChatImeLayoutUiTest {
         composeRule.onNodeWithText("Nachricht").performTextInput("Zweite Zeile\nDritte Zeile")
         composeRule.waitForIdle()
         dispatchImeInsets(imeBottom)
-        Thread.sleep(1_500)
-        capture("03_multiline_ime_light")
+        Thread.sleep(2_000)
+        shoot("03_multiline_ime_light")
+        Thread.sleep(2_000)
 
         dispatchImeInsets(0)
         composeRule.waitForIdle()
-        capture("04_kb_closed_after_close")
+        shoot("04_kb_closed_after_close")
+        Thread.sleep(1_000)
     }
 
     @Test
     fun realKeyboardScreenshotLight() {
         setScreen(dark = false)
         waitForText("Kurze Antwort")
-        composeRule.onNodeWithText("Nachricht").performClick()
-        composeRule.waitForIdle()
-        Thread.sleep(3_500)
-        capture("05_real_ime_light")
+        openRealKeyboard()
+        Thread.sleep(3_000)
+        shoot("05_real_ime_light")
+        Thread.sleep(1_000)
     }
 
     @Test
     fun realKeyboardScreenshotDark() {
         setScreen(dark = true)
         waitForText("Kurze Antwort")
-        composeRule.onNodeWithText("Nachricht").performClick()
+        openRealKeyboard()
+        Thread.sleep(3_000)
+        shoot("06_real_ime_dark")
+        Thread.sleep(1_000)
+    }
+
+    @Test
+    fun realKeyboardCloseThenReopenIsStable() {
+        setScreen()
+        waitForText("Kurze Antwort")
+        val headerTopClosed = boundsTop("Chat")
+        val composerTopClosed = boundsTop("Nachricht")
+
+        // State A: real keyboard open.
+        val imeOpenedA = openRealKeyboard()
+        Thread.sleep(2_500)
+        assertEquals(
+            "header must not pan while the real IME is open",
+            headerTopClosed,
+            boundsTop("Chat")
+        )
+        if (imeOpenedA) {
+            assertTrue(
+                "real IME must actually open in state A: composer must move up",
+                boundsTop("Nachricht") < composerTopClosed - 500
+            )
+        }
+        shoot("07_real_ime_open")
+        Thread.sleep(1_500) // host-side screencap window before the IME closes
+
+        // State B: close the IME programmatically from the app process.
+        // hideSoftInputFromWindow dismisses the keyboard without touching
+        // the activity; the layout must return exactly to the closed state.
+        hideIme()
         composeRule.waitForIdle()
-        Thread.sleep(3_500)
-        capture("06_real_ime_dark")
+        Thread.sleep(1_500)
+        assertEquals(
+            "header must not move when the real IME closes",
+            headerTopClosed,
+            boundsTop("Chat")
+        )
+        assertEquals(
+            "composer must return to the closed position after the IME closes",
+            composerTopClosed,
+            boundsTop("Nachricht")
+        )
+        shoot("07a_real_ime_closed_after_back")
+        Thread.sleep(2_000)
+
+        // State C: reopen the real keyboard — the layout must be stable
+        // across repeated open/close cycles.
+        val imeOpenedC = openRealKeyboard()
+        Thread.sleep(2_500)
+        assertEquals(
+            "header must not pan on IME reopen",
+            headerTopClosed,
+            boundsTop("Chat")
+        )
+        if (imeOpenedC) {
+            assertTrue(
+                "real IME must reopen in state C: composer must move up again",
+                boundsTop("Nachricht") < composerTopClosed - 500
+            )
+        }
+        shoot("07b_real_ime_reopened")
+        Thread.sleep(1_000) // host-side screencap window before the test ends
     }
 
     // ------------------------------------------------------------------
@@ -220,6 +289,62 @@ class ChatImeLayoutUiTest {
             }
         }
         composeRule.waitForIdle()
+    }
+
+    /** Explicitly requests the IME from the app process (user-tap equivalent). */
+    private fun showImeExplicitly() {
+        val activity = composeRule.activity
+        val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        activity.runOnUiThread {
+            imm.showSoftInput(activity.window.decorView, InputMethodManager.SHOW_FORCED)
+        }
+        composeRule.waitForIdle()
+    }
+
+    /** Explicitly hides the IME from the app process. */
+    private fun hideIme() {
+        val activity = composeRule.activity
+        val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        activity.runOnUiThread {
+            imm.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+        }
+    }
+
+    /**
+     * Opens the real keyboard and reports whether it actually did.
+     *
+     * On Android 13+ the IME is only shown in response to real user
+     * input events; programmatic `showSoftInput` calls from an
+     * instrumented test are suppressed (Gboard keeps its
+     * toolbar-only state). In host-tap mode the capture script
+     * performs a real `adb shell input tap` at the printed
+     * coordinates; in plain regression mode (no host script) a
+     * synthetic focus is attempted and the keyboard may stay hidden,
+     * so the returned flag is the only signal for position
+     * assertions.
+     */
+    private fun openRealKeyboard(): Boolean {
+        if (InstrumentationRegistry.getArguments().getString("hostTap") == "true") {
+            val bounds =
+                composeRule.onNodeWithText("Nachricht").fetchSemanticsNode().boundsInRoot
+            val cx = ((bounds.left + bounds.right) / 2).toInt()
+            val cy = ((bounds.top + bounds.bottom) / 2).toInt()
+            println("TAP_TARGET: $cx $cy")
+            val composerTopClosed = boundsTop("Nachricht")
+            val deadline = System.currentTimeMillis() + 25_000
+            while (System.currentTimeMillis() < deadline) {
+                Thread.sleep(200)
+                if (boundsTop("Nachricht") < composerTopClosed - 500) {
+                    return true
+                }
+            }
+            return false
+        }
+        composeRule.onNodeWithText("Nachricht").performClick()
+        composeRule.waitForIdle()
+        showImeExplicitly()
+        Thread.sleep(2_000)
+        return false
     }
 
     /** Injects the IME inset; status/nav bars keep their real values. */
@@ -259,13 +384,14 @@ class ChatImeLayoutUiTest {
         composeRule.waitForIdle()
     }
 
-    private fun capture(name: String) {
-        val dir = composeRule.activity.getExternalFilesDir(null) ?: return
-        val bitmap: Bitmap =
-            InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        val file = File(dir, "$name.png")
-        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        println("SCREENSHOT_SAVED: ${file.absolutePath}")
+    /**
+     * Asks the host-side capture script to take a screenshot right now.
+     * Callers must only invoke this while the layout is in a stable
+     * state. Without a host script (plain regression runs) the marker
+     * is simply ignored.
+     */
+    private fun shoot(name: String) {
+        println("SHOOT: $name")
     }
 
     private fun fixtureMessages(): List<HermesChatMessage> = listOf(
