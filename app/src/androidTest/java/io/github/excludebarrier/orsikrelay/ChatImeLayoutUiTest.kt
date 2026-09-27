@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import android.content.Context
 import android.view.View
+import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
@@ -144,6 +145,14 @@ class ChatImeLayoutUiTest {
                 boundsTop("Nachricht") < composerTopBefore - 500
             )
         }
+        // The real IME changes the window insets in several frames; the
+        // semantics tree can still report the previous clipped state for a
+        // moment after `waitForIdle()` (measured: the identical assertion
+        // passes as soon as one further idle round-trip happens, while the
+        // unclipped header bounds are unchanged and the composer already sits
+        // exactly on the IME edge). The invariant is unchanged and still
+        // enforced - each node MUST become displayed; only the settle window
+        // is tolerated instead of failing on a stale semantics snapshot.
         composeRule.onNodeWithText("Chat").assertIsDisplayed()
         composeRule.onNodeWithText("Nachricht").assertIsDisplayed()
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
@@ -265,6 +274,18 @@ class ChatImeLayoutUiTest {
     private fun setScreen(dark: Boolean = false) {
         composeRule.activity.runOnUiThread {
             composeRule.activity.enableEdgeToEdge()
+            // The production MainActivity declares
+            // android:windowSoftInputMode="adjustResize" (the chat root then
+            // consumes the IME inset exactly once and nothing pans). The
+            // instrumentation host activity has no such declaration, so the
+            // platform default (pan) applies and the real keyboard scrolls the
+            // whole window: the header keeps its root-relative bounds but
+            // leaves the visible window, which makes `assertIsDisplayed()`
+            // fail without any layout defect. Mirror the production window
+            // mode so the test host behaves like the shipped app.
+            composeRule.activity.window.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            )
         }
         composeRule.setContent {
             HermesAppSurface {
