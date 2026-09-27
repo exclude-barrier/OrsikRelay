@@ -3,6 +3,7 @@ package io.github.excludebarrier.orsikrelay.data.message
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileMetadataStore
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamHandle
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
@@ -869,6 +870,128 @@ class StreamingChatRepositoryTest {
         assertEquals("run_p4", transport.lastRunId)
     }
 
+    @Test
+    fun textOnlyTurnCallsTheLegacyOpenTurnExactlyOnce() {
+        // P5 seam: a text-only turn must take the pre-P5 `openTurn` path
+        // exactly once and never the attachment-carrying open.
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = AttachmentCapturingTransport()
+
+        val events = collect(
+            repository(metadata, credentials, transport)
+        ) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_synthetic"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            events
+        )
+        assertEquals(1, transport.openTurnCalls)
+        assertEquals("Hallo", transport.openTurnMessage)
+        assertEquals(0, transport.attachmentCalls)
+        assertTrue(transport.attachmentMessage == null)
+    }
+
+    @Test
+    fun imageTurnCallsTheAttachmentOpenExactlyOnceWithTheImageList() {
+        // P5 seam: a turn with an inline image must take the
+        // attachment-carrying open exactly once with the validated body
+        // (trimmed text plus the data URL list) and never the legacy open.
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = AttachmentCapturingTransport()
+
+        val events = collect(
+            repository(metadata, credentials, transport)
+        ) {
+            it.streamTurnWithAttachments(
+                PROFILE_ID, SESSION_ID, "  Hallo  ", listOf(IMAGE_DATA_URL)
+            )
+        }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_synthetic"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            events
+        )
+        assertEquals(0, transport.openTurnCalls)
+        assertEquals(1, transport.attachmentCalls)
+        val message = checkNotNull(transport.attachmentMessage) {
+            "the attachment-carrying open must receive the outbound body"
+        }
+        assertEquals("Hallo", message.text)
+        assertEquals(listOf(IMAGE_DATA_URL), message.imageDataUrls)
+    }
+
+    @Test
+    fun imageTurnTransientFailureReattachesViaResumeAndNeverRepostsTheAttachment() {
+        // P5 re-attach boundary: the attachment travels only in the initial
+        // POST body. A transient failure after the run is confirmed is
+        // repaired by a body-less re-attach GET to the same run, so the
+        // attachment-carrying open happens exactly once and no second chat
+        // POST is ever sent.
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val reattach = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p5"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(runId = "run_p5", lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                listener.onEvent(ChatTurnEvent.AssistantDelta("fortsetzung"))
+                listener.onEvent(ChatTurnEvent.TurnCompleted())
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(runId = "run_p5", lastSeq = 3L, runCompleted = true))
+            }
+        )
+        val transport = AttachmentReattachTransport(reattach)
+        val repository = repository(
+            metadata, credentials, transport,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val events = collect(repository) {
+            it.streamTurnWithAttachments(
+                PROFILE_ID, SESSION_ID, "Hallo", listOf(IMAGE_DATA_URL)
+            )
+        }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p5"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.AssistantDelta("fortsetzung"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            events
+        )
+        // Exactly one attachment-carrying open (the initial POST) across
+        // the whole reconnect scenario; the re-attach is a body-less GET
+        // to the same run, and the legacy open is never used.
+        assertEquals(1, transport.openTurnWithAttachmentsCalls)
+        assertEquals(0, transport.openTurnCalls)
+        assertEquals(
+            listOf(IMAGE_DATA_URL),
+            transport.attachmentMessage?.imageDataUrls
+        )
+        assertEquals(1, reattach.openResumeCalls)
+        assertEquals("run_p5", reattach.lastRunId)
+        assertEquals(2L, reattach.lastResume?.lastSeq)
+    }
+
     private fun awaitHandleClose(
         closeCalls: java.util.concurrent.atomic.AtomicInteger
     ): Boolean {
@@ -1053,6 +1176,117 @@ class StreamingChatRepositoryTest {
         }
     }
 
+    /** P5 capturing transport: records which open seam the repository used. */
+    private class AttachmentCapturingTransport : ChatStreamTransport {
+        var openTurnCalls = 0
+        var openTurnMessage: String? = null
+        var attachmentCalls = 0
+        var attachmentMessage: ChatOutboundMessage? = null
+
+        override fun openTurn(
+            baseUrl: String,
+            apiKey: SecretValue,
+            sessionId: String,
+            message: String,
+            interactiveApprovals: Boolean,
+            listener: ChatStreamListener
+        ): ChatStreamHandle {
+            openTurnCalls += 1
+            openTurnMessage = message
+            listener.onEvent(ChatTurnEvent.RunStarted("run_synthetic"))
+            listener.onEvent(ChatTurnEvent.TurnCompleted())
+            listener.onFinished()
+            return NoopHandle
+        }
+
+        override fun openTurnWithAttachments(
+            baseUrl: String,
+            apiKey: SecretValue,
+            sessionId: String,
+            message: ChatOutboundMessage,
+            interactiveApprovals: Boolean,
+            listener: ChatStreamListener
+        ): ChatStreamHandle {
+            attachmentCalls += 1
+            attachmentMessage = message
+            listener.onEvent(ChatTurnEvent.RunStarted("run_synthetic"))
+            listener.onEvent(ChatTurnEvent.TurnCompleted())
+            listener.onFinished()
+            return NoopHandle
+        }
+    }
+
+    /**
+     * P5 re-attach boundary: a [ReattachTransport] that additionally records
+     * every attachment-carrying open, so a test can prove the attachment
+     * travels only in the initial POST and never in a re-attach.
+     */
+    private class AttachmentReattachTransport(
+        private val inner: ReattachTransport
+    ) : ChatStreamTransport {
+        var openTurnCalls = 0
+        var openTurnWithAttachmentsCalls = 0
+        var attachmentMessage: ChatOutboundMessage? = null
+
+        override fun openTurn(
+            baseUrl: String,
+            apiKey: SecretValue,
+            sessionId: String,
+            message: String,
+            interactiveApprovals: Boolean,
+            listener: ChatStreamListener
+        ): ChatStreamHandle {
+            openTurnCalls += 1
+            return inner.openTurn(
+                baseUrl = baseUrl,
+                apiKey = apiKey,
+                sessionId = sessionId,
+                message = message,
+                interactiveApprovals = interactiveApprovals,
+                listener = listener
+            )
+        }
+
+        override fun openTurnWithAttachments(
+            baseUrl: String,
+            apiKey: SecretValue,
+            sessionId: String,
+            message: ChatOutboundMessage,
+            interactiveApprovals: Boolean,
+            listener: ChatStreamListener
+        ): ChatStreamHandle {
+            openTurnWithAttachmentsCalls += 1
+            attachmentMessage = message
+            return inner.openTurnWithAttachments(
+                baseUrl = baseUrl,
+                apiKey = apiKey,
+                sessionId = sessionId,
+                message = message,
+                interactiveApprovals = interactiveApprovals,
+                listener = listener
+            )
+        }
+
+        override fun openResume(
+            baseUrl: String,
+            apiKey: SecretValue,
+            sessionId: String,
+            runId: String,
+            resume: ChatStreamResumeState,
+            interactiveApprovals: Boolean,
+            listener: ChatStreamListener
+        ): ChatStreamHandle = inner.openResume(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            sessionId = sessionId,
+            runId = runId,
+            resume = resume,
+            interactiveApprovals = interactiveApprovals,
+            listener = listener
+        )
+    }
+
+
     private class HandleWithSnapshot(private val state: ChatStreamResumeState?) :
         ChatStreamHandle {
         override fun close() {
@@ -1127,6 +1361,7 @@ class StreamingChatRepositoryTest {
     private companion object {
         const val PROFILE_ID = "fixture-profile-id"
         const val SESSION_ID = "fixture-session-id"
+        const val IMAGE_DATA_URL = "data:image/png;base64,AA=="
         const val BASE_URL = "https://example.invalid/p/android"
         const val FIXTURE_KEY = "fixture-credential"
     }

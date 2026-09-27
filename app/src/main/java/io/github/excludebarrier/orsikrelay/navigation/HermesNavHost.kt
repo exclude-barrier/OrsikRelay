@@ -334,6 +334,7 @@ fun HermesNavHost(
                 runApprovalRequester = runApprovalRequester
                     ?: productionDependencies.value.runApprovalRequester,
                 notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
+                attachmentSource = productionDependencies.value.chatAttachmentSource,
                 profileId = activeProfileId.orEmpty(),
                 sessionId = decodeRouteArgument(encodedSessionId),
                 onBack = {

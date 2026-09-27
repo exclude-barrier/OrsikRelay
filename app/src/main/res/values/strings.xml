@@ -56,6 +56,13 @@
     <string name="chat_role_tool">Tool</string>
     <string name="chat_role_tool_named">Tool: %1$s</string>
     <string name="chat_tool_activity_history">Tool-Aktivität</string>
+    <string name="chat_attachment_add">Anhang</string>
+    <string name="chat_attachment_remove">Entfernen</string>
+    <string name="chat_attachment_busy">Anhang wird gelesen …</string>
+    <string name="chat_attachment_error_generic">Dieser Anhang kann nicht gesendet werden.</string>
+    <string name="chat_attachment_error_type">Dieser Dateityp wird nicht unterstützt. Unterstützt werden JPEG-, PNG- und WEBP-Bilder.</string>
+    <string name="chat_attachment_error_size">Der Anhang ist zu groß. Maximal 5 MiB pro Bild.</string>
+    <string name="chat_attachment_error_unreadable">Der Anhang konnte nicht gelesen werden.</string>
     <string name="chat_send">Senden</string>
     <string name="chat_input_label">Nachricht</string>
     <string name="chat_tool_activity">Tool ist aktiv…</string>

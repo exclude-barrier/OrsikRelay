@@ -1,6 +1,12 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentDraftHolder
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
+import io.github.excludebarrier.orsikrelay.data.chat.NoopChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentError
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentRules
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
@@ -69,6 +75,8 @@ internal class ChatViewModel(
     private val runStopRequester: RunStopRequester,
     private val runSteerRequester: RunSteerRequester,
     private val chatDraftRepository: ChatDraftRepository,
+    /** P5: reads the picked attachment's metadata/bytes; no-op when unwired. */
+    private val attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
     private val profileId: String,
     private val sessionId: String,
     private val onBack: () -> Unit,
@@ -163,6 +171,13 @@ internal class ChatViewModel(
                     localLines = rows
                 )
             }
+        }
+        // P5 rehydration: a recreation re-creates this view model, and the
+        // picker's read permission lives as long as the process, so the
+        // picked-but-unsent attachment is re-read from the process-scoped
+        // holder (exactly this profile+session).
+        ChatAttachmentDraftHolder.get(profileId, sessionId)?.let { draft ->
+            _state.update { it.copy(attachment = draft) }
         }
         // Long-lived event observer: the stream itself lives on the
         // controller's app scope; this collector only renders events into
@@ -418,6 +433,62 @@ internal class ChatViewModel(
      * foreground), and the run survives this screen leaving composition.
      * This method only prepares the screen state and hands the turn over.
      */
+    /**
+     * Records one picker result (P5). The provider's metadata is read through
+     * the [ChatAttachmentSource] seam and gated by [ChatAttachmentRules]
+     * before anything is stored: an unsupported type, an over-sized file or an
+     * unreadable URI yields a closed error and no draft. Nothing is uploaded
+     * here - the bytes are only read at send time.
+     */
+    fun onAttachmentPicked(contentUri: String) {
+        val current = _state.value
+        if (current.turnActive || current.attachmentBusy) return
+        if (contentUri.isBlank()) {
+            _state.update { it.copy(attachmentError = ChatAttachmentError.Unreadable) }
+            return
+        }
+        _state.update { it.copy(attachmentBusy = true, attachmentError = null) }
+        scope.launch {
+            val metadata = try {
+                withContext(ioDispatcher) { attachmentSource.readMetadata(contentUri) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            if (metadata == null) {
+                _state.update {
+                    it.copy(attachmentBusy = false, attachmentError = ChatAttachmentError.Unreadable)
+                }
+                return@launch
+            }
+            val validated = ChatAttachmentRules.validate(
+                localId = nextLocalKey(),
+                contentUri = contentUri,
+                displayName = metadata.displayName,
+                mimeType = metadata.mimeType,
+                sizeBytes = metadata.sizeBytes
+            )
+            val draft = validated.getOrNull()
+            if (draft == null) {
+                val error = (validated.exceptionOrNull() as? ChatAttachmentRules.AttachmentRejected)
+                    ?.error
+                    ?: ChatAttachmentError.Unreadable
+                _state.update { it.copy(attachmentBusy = false, attachmentError = error) }
+                return@launch
+            }
+            ChatAttachmentDraftHolder.put(profileId, sessionId, draft)
+            _state.update { it.copy(attachmentBusy = false, attachment = draft, attachmentError = null) }
+        }
+    }
+
+    /** Drops the picked attachment (and its process-scoped rehydration entry). */
+    fun removeAttachment() {
+        if (_state.value.attachment == null) return
+        ChatAttachmentDraftHolder.clear(profileId, sessionId)
+        _state.update { it.copy(attachment = null, attachmentError = null) }
+    }
+
     fun send() {
         val current = _state.value
         if (current.turnActive) return
@@ -426,7 +497,14 @@ internal class ChatViewModel(
         // deliberate submit; only an active turn or a failure after the
         // confirmed start does.
         if (current.turnFailure != null && current.runStarted) return
-        val message = ChatMessageValidator.validate(current.draft).getOrNull() ?: return
+        val attachment = current.attachment
+        val message = if (attachment == null) {
+            ChatMessageValidator.validate(current.draft).getOrNull() ?: return
+        } else {
+            // An attachment-only turn is legitimate: the text may be blank,
+            // and the final body is validated once the image is encoded.
+            ChatMessageValidator.validateOptional(current.draft).getOrNull() ?: return
+        }
         _state.update {
             it.copy(
                 turnActive = true,
@@ -457,16 +535,60 @@ internal class ChatViewModel(
                 localLines = it.localLines + TimelineRow(
                     key = userLineKey,
                     role = MessageRole.USER,
-                    content = message
+                    // An attachment-only turn has no text to show, so the row
+                    // falls back to the attachment's display name (display
+                    // only, never sent, never a path).
+                    content = message.ifBlank { attachment?.displayName.orEmpty() }
                 )
             )
         }
         terminalPendingSteer = null
-        // Synchronous on purpose: the controller starts the foreground
-        // service while the app is still in the foreground. The VALIDATED
-        // (trimmed) text is handed over - the same text the visible user row
-        // shows - so a re-created view model rehydrates the identical line.
-        runController.startTurn(profileId, sessionId, message)
+        if (attachment == null) {
+            // Synchronous on purpose: the controller starts the foreground
+            // service while the app is still in the foreground. The VALIDATED
+            // (trimmed) text is handed over - the same text the visible user row
+            // shows - so a re-created view model rehydrates the identical line.
+            runController.startTurn(profileId, sessionId, message)
+            return
+        }
+        // P5: the attachment bytes are read and encoded BEFORE the POST. On
+        // any failure no request is sent at all, the turn stays inactive and
+        // the draft (text + attachment) is kept, so the user can retry or
+        // remove it deliberately.
+        scope.launch {
+            val dataUrl = try {
+                withContext(ioDispatcher) {
+                    attachmentSource.readInlineDataUrl(
+                        contentUri = attachment.contentUri,
+                        mimeType = attachment.mimeType,
+                        maxBytes = ChatAttachmentRules.MAX_IMAGE_BYTES
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            val outbound = dataUrl?.let {
+                ChatOutboundMessage.create(message, listOf(it))
+            }
+            if (outbound == null) {
+                _state.update {
+                    it.copy(
+                        turnActive = false,
+                        attachmentError = ChatAttachmentError.Unreadable
+                    )
+                }
+                dropPrematureUserLine()
+                return@launch
+            }
+            runController.startTurn(
+                profileId = profileId,
+                sessionId = sessionId,
+                message = outbound.text,
+                imageDataUrls = outbound.imageDataUrls
+            )
+        }
     }
 
     /**
@@ -513,6 +635,13 @@ internal class ChatViewModel(
                 // The local line is no longer premature from here on.
                 activeUserLineKey = null
                 clearDraftState()
+                // P5: the run is confirmed, so the sent attachment is cleared
+                // from the composer and from the process-scoped rehydration
+                // entry - it can never be sent twice.
+                if (_state.value.attachment != null) {
+                    ChatAttachmentDraftHolder.clear(profileId, sessionId)
+                    _state.update { s -> s.copy(attachment = null, attachmentError = null) }
+                }
             }
             is ChatTurnEvent.AssistantStarted -> {
                 // Do not render an empty bubble: a tool may run

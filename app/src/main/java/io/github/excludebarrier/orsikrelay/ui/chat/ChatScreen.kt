@@ -49,6 +49,23 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationPermissionRequester
 import io.github.excludebarrier.orsikrelay.ui.theme.brandSurface
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import io.github.excludebarrier.orsikrelay.platform.attachment.ChatAttachmentThumbnails
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentError
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft
+import io.github.excludebarrier.orsikrelay.data.chat.NoopChatAttachmentSource
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Image
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.compose.rememberLauncherForActivityResult
 
 /**
  * Chat screen with the live turn slice (Mission 006A) — thin presentation
@@ -77,6 +94,7 @@ fun ChatScreen(
     runSteerRequester: RunSteerRequester,
     chatDraftRepository: ChatDraftRepository,
     runApprovalRequester: RunApprovalRequester = NoOpRunApprovalRequester,
+    attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
     notificationPermissionStore: NotificationPermissionStore = NoOpNotificationPermissionStore,
     profileId: String,
     sessionId: String,
@@ -97,6 +115,12 @@ fun ChatScreen(
     val steerErrorLabel = stringResource(R.string.error_run_steer_generic)
     val steerRecoveryLabel = stringResource(R.string.chat_steer_recovery_note)
     val steerSendAsNewMessageLabel = stringResource(R.string.chat_steer_send_as_new_message)
+    val attachmentAddLabel = stringResource(R.string.chat_attachment_add)
+    val attachmentRemoveLabel = stringResource(R.string.chat_attachment_remove)
+    val attachmentBusyLabel = stringResource(R.string.chat_attachment_busy)
+    val attachmentTypeErrorLabel = stringResource(R.string.chat_attachment_error_type)
+    val attachmentSizeErrorLabel = stringResource(R.string.chat_attachment_error_size)
+    val attachmentUnreadableErrorLabel = stringResource(R.string.chat_attachment_error_unreadable)
 
     val viewModel = remember(profileId, sessionId) {
         ChatViewModel(
@@ -105,6 +129,7 @@ fun ChatScreen(
             runStopRequester = runStopRequester,
             runSteerRequester = runSteerRequester,
             chatDraftRepository = chatDraftRepository,
+            attachmentSource = attachmentSource,
             profileId = profileId,
             sessionId = sessionId,
             onBack = onBack,
@@ -129,6 +154,31 @@ fun ChatScreen(
     }
 
     val state by viewModel.state.collectAsState()
+
+    val context = LocalContext.current
+    // P5: the Android system photo picker - no storage permission, no custom
+    // file browser; the app can only ever read what the user explicitly
+    // picked. The result is a content:// URI that the view model validates
+    // through the ChatAttachmentSource seam.
+    val pickImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.onAttachmentPicked(uri.toString())
+        }
+    }
+    // The chip preview is decoded from the picked URI, bounded and local-only;
+    // it is recomputed when the picked attachment changes.
+    val attachmentThumbnail by produceState<ImageBitmap?>(null, state.attachment?.contentUri) {
+        val uri = state.attachment?.contentUri
+        value = if (uri == null) {
+            null
+        } else {
+            withContext(Dispatchers.IO) {
+                ChatAttachmentThumbnails.decode(context, uri)?.asImageBitmap()
+            }
+        }
+    }
     val timelineListState = remember(profileId, sessionId) { LazyListState() }
 
     // System and gesture back (Mission 006A): the platform back event goes
@@ -288,7 +338,27 @@ onClick = { viewModel.handleBack() }
                     onDraftChange = { viewModel.onDraftChange(it) },
                     sendEnabled = state.sendEnabled,
                     onSend = { viewModel.send() },
-                    turnActive = state.turnActive
+                    turnActive = state.turnActive,
+                    attachment = state.attachment,
+                    attachmentThumbnail = attachmentThumbnail,
+                    attachmentBusy = state.attachmentBusy,
+                    attachmentErrorLabel = state.attachmentError?.let { error ->
+                        when (error) {
+                            ChatAttachmentError.UnsupportedType ->
+                                attachmentTypeErrorLabel
+                            ChatAttachmentError.TooLarge -> attachmentSizeErrorLabel
+                            ChatAttachmentError.Unreadable -> attachmentUnreadableErrorLabel
+                        }
+                    },
+                    attachmentAddLabel = attachmentAddLabel,
+                    attachmentRemoveLabel = attachmentRemoveLabel,
+                    attachmentBusyLabel = attachmentBusyLabel,
+                    onPickAttachment = {
+                        pickImage.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onRemoveAttachment = { viewModel.removeAttachment() }
                 )
             }
         }
@@ -518,31 +588,133 @@ private fun ComposerBar(
     onDraftChange: (String) -> Unit,
     sendEnabled: Boolean,
     onSend: () -> Unit,
-    turnActive: Boolean
+    turnActive: Boolean,
+    attachment: ChatAttachmentDraft?,
+    attachmentThumbnail: ImageBitmap?,
+    attachmentBusy: Boolean,
+    attachmentErrorLabel: String?,
+    attachmentAddLabel: String,
+    attachmentRemoveLabel: String,
+    attachmentBusyLabel: String,
+    onPickAttachment: () -> Unit,
+    onRemoveAttachment: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(top = 8.dp, bottom = 12.dp)
     ) {
-        OutlinedTextField(
-            value = draft,
-            onValueChange = onDraftChange,
-            label = { Text(stringResource(R.string.chat_input_label)) },
-            enabled = !turnActive,
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 8.dp)
-        )
-        Button(
-            onClick = onSend,
-            enabled = sendEnabled
-        ) {
-            Text(stringResource(R.string.chat_send))
+        // P5: compact attachment chip above the input row. Local-only data:
+        // the file name and size the provider reported, plus a bounded decoded
+        // thumbnail; no path, no URI and no provider text is ever rendered.
+        if (attachmentErrorLabel != null && attachment != null) {
+            Text(
+                text = attachmentErrorLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+        if (attachment != null || attachmentErrorLabel != null || attachmentBusy) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                when {
+                    attachmentBusy -> {
+                        Text(
+                            text = attachmentBusyLabel,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    attachment != null -> {
+                        attachmentThumbnail?.let { bitmap ->
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .padding(end = 8.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = attachment.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            val sizeLabel = formatAttachmentSize(attachment.sizeBytes)
+                            if (sizeLabel.isNotEmpty()) {
+                                Text(
+                                    text = sizeLabel,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = onRemoveAttachment,
+                            enabled = !turnActive,
+                            modifier = Modifier.testTag(TAG_ATTACHMENT_REMOVE)
+                        ) {
+                            Text(attachmentRemoveLabel)
+                        }
+                    }
+                    else -> {
+                        Text(
+                            text = attachmentErrorLabel.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(
+                onClick = onPickAttachment,
+                enabled = !turnActive && !attachmentBusy,
+                modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
+            ) {
+                Text(attachmentAddLabel)
+            }
+            OutlinedTextField(
+                value = draft,
+                onValueChange = onDraftChange,
+                label = { Text(stringResource(R.string.chat_input_label)) },
+                enabled = !turnActive,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            )
+            Button(
+                onClick = onSend,
+                enabled = sendEnabled
+            ) {
+                Text(stringResource(R.string.chat_send))
+            }
         }
     }
 }
+
+/** Display-only size text of the attachment chip (no path, no provider text). */
+private fun formatAttachmentSize(sizeBytes: Long): String {
+    // A provider may not report a size at all: show nothing instead of a
+    // meaningless negative number.
+    if (sizeBytes <= 0L) return ""
+    val kib = 1024L
+    val mib = kib * kib
+    return when {
+        sizeBytes >= mib -> String.format(java.util.Locale.ROOT, "%.1f MiB", sizeBytes.toDouble() / mib)
+        sizeBytes >= kib -> String.format(java.util.Locale.ROOT, "%.0f KiB", sizeBytes.toDouble() / kib)
+        else -> "$sizeBytes B"
+    }
+}
+
+internal const val TAG_ATTACHMENT_ADD = "composer_attachment_add"
+internal const val TAG_ATTACHMENT_REMOVE = "composer_attachment_remove"
 
 @Composable
 private fun StatusText(text: String) {

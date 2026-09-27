@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamHandle
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
@@ -27,6 +28,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -117,6 +119,51 @@ class HermesSessionStreamClient(
         interactiveApprovals: Boolean,
         listener: ChatStreamListener
     ): ChatStreamHandle {
+        // Text-only path: the shared validator decides, and the serialized
+        // body stays exactly the pre-P5 shape (`{"message": "<text>"}`).
+        val trimmedMessage = ChatMessageValidator.validate(message).getOrNull()
+            ?: return failNow(listener, ChatStreamError.InvalidInput)
+        return startTurn(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            sessionId = sessionId,
+            message = ChatOutboundMessage(text = trimmedMessage),
+            interactiveApprovals = interactiveApprovals,
+            listener = listener
+        )
+    }
+
+    /**
+     * Attachment-aware turn (P5): the same request, headers, threading and
+     * listener contract as [openTurn], with the body built as a content-part
+     * list when the message carries inline images. The attachment is only ever
+     * part of THIS request; a P4 re-attach is a separate GET and never repeats
+     * it.
+     */
+    override fun openTurnWithAttachments(
+        baseUrl: String,
+        apiKey: SecretValue,
+        sessionId: String,
+        message: ChatOutboundMessage,
+        interactiveApprovals: Boolean,
+        listener: ChatStreamListener
+    ): ChatStreamHandle = startTurn(
+        baseUrl = baseUrl,
+        apiKey = apiKey,
+        sessionId = sessionId,
+        message = message,
+        interactiveApprovals = interactiveApprovals,
+        listener = listener
+    )
+
+    private fun startTurn(
+        baseUrl: String,
+        apiKey: SecretValue,
+        sessionId: String,
+        message: ChatOutboundMessage,
+        interactiveApprovals: Boolean,
+        listener: ChatStreamListener
+    ): ChatStreamHandle {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
             ?: return failNow(listener, ChatStreamError.InvalidInput)
         if (!isSafeSessionId(sessionId)) {
@@ -131,13 +178,11 @@ class HermesSessionStreamClient(
         if (!keyIsSafe) {
             return failNow(listener, ChatStreamError.InvalidInput)
         }
-        val trimmedMessage = ChatMessageValidator.validate(message).getOrNull()
+        // Defensive re-validation: only a well-formed body is ever sent.
+        val validated = ChatOutboundMessage.create(message.text, message.imageDataUrls)
             ?: return failNow(listener, ChatStreamError.InvalidInput)
-        val bodyJson = try {
-            JSONObject().put(MESSAGE_FIELD, trimmedMessage).toString()
-        } catch (_: Exception) {
-            return failNow(listener, ChatStreamError.InvalidInput)
-        }
+        val bodyJson = buildTurnBodyJson(validated)
+            ?: return failNow(listener, ChatStreamError.InvalidInput)
 
         val url = base.toHttpUrl().newBuilder()
             .addPathSegment(API_SEGMENT)
@@ -572,6 +617,41 @@ class HermesSessionStreamClient(
         return runId.none { it.isISOControl() }
     }
 
+    /**
+     * Serializes one turn body. Text-only keeps the plain pre-P5 shape
+     * (`{"message": "<text>"}`); with attachments the message becomes the
+     * server's content-part list, images as `data:image/...;base64,...` URLs.
+     * Returns `null` when the body cannot be represented (never a partial
+     * body).
+     */
+    private fun buildTurnBodyJson(message: ChatOutboundMessage): String? = try {
+        if (!message.hasImages) {
+            JSONObject().put(MESSAGE_FIELD, message.text).toString()
+        } else {
+            val parts = JSONArray()
+            if (message.text.isNotEmpty()) {
+                parts.put(
+                    JSONObject()
+                        .put(PART_TYPE_FIELD, TEXT_PART_TYPE)
+                        .put(PART_TEXT_FIELD, message.text)
+                )
+            }
+            for (dataUrl in message.imageDataUrls) {
+                parts.put(
+                    JSONObject()
+                        .put(PART_TYPE_FIELD, IMAGE_PART_TYPE)
+                        .put(
+                            IMAGE_URL_FIELD,
+                            JSONObject().put(IMAGE_URL_URL_FIELD, dataUrl)
+                        )
+                )
+            }
+            JSONObject().put(MESSAGE_FIELD, parts).toString()
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     private fun failNow(
         listener: ChatStreamListener,
         error: ChatStreamError
@@ -722,6 +802,12 @@ class HermesSessionStreamClient(
         const val SSE_CONTENT_TYPE = "text/event-stream"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
         const val MESSAGE_FIELD = "message"
+        const val PART_TYPE_FIELD = "type"
+        const val PART_TEXT_FIELD = "text"
+        const val TEXT_PART_TYPE = "text"
+        const val IMAGE_PART_TYPE = "image_url"
+        const val IMAGE_URL_FIELD = "image_url"
+        const val IMAGE_URL_URL_FIELD = "url"
         const val OK_CODE = 200
 
         /** The final frame of a complete turn; no frame may follow it. */

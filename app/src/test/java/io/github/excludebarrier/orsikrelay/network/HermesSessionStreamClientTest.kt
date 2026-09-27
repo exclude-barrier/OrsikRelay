@@ -3,6 +3,7 @@ package io.github.excludebarrier.orsikrelay.network
 import io.github.excludebarrier.orsikrelay.data.message.StreamingChatRepository
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileMetadataStore
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamHandle
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
@@ -329,6 +330,166 @@ class HermesSessionStreamClientTest {
         assertNull(handle.resumeState())
         assertEquals(0, server.requestCount)
         handle.close()
+    }
+
+    @Test
+    fun textOnlyOpenTurnWithAttachmentsSendsExactLegacyBody() {
+        // P5 wire exactness: a text-only body must stay byte-identical to
+        // the pre-P5 legacy shape - no content-part list, no extra field.
+        server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
+        val listener = RecordingListener()
+
+        client.openTurnWithAttachments(
+            baseUrl = baseUrl(),
+            apiKey = SecretValue(FIXTURE_KEY),
+            sessionId = SESSION_ID,
+            message = checkNotNull(ChatOutboundMessage.textOnly("hallo")),
+            interactiveApprovals = false,
+            listener = listener
+        )
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+
+        val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+            "expected one recorded request"
+        }
+        assertEquals("POST", request.method)
+        assertEquals("""{"message":"hallo"}""", request.body.readUtf8())
+        assertEquals(1, server.requestCount)
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted(RUN_ID),
+                ChatTurnEvent.AssistantStarted,
+                ChatTurnEvent.AssistantDelta("Hallo"),
+                ChatTurnEvent.AssistantCompleted("Hallo Welt"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            listener.events
+        )
+    }
+
+    @Test
+    fun imageOnlyOpenTurnWithAttachmentsSendsSingleImagePartWithNoLocalPaths() {
+        // P5 wire exactness: an image-only turn is a content-part list with
+        // exactly one `image_url` part carrying the inline data URL; no
+        // `content://` reference, no `file://` path and no file name ever
+        // reach the wire.
+        server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
+        val listener = RecordingListener()
+
+        client.openTurnWithAttachments(
+            baseUrl = baseUrl(),
+            apiKey = SecretValue(FIXTURE_KEY),
+            sessionId = SESSION_ID,
+            message = checkNotNull(ChatOutboundMessage.create("", listOf(IMAGE_DATA_URL))),
+            interactiveApprovals = false,
+            listener = listener
+        )
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+
+        val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+            "expected one recorded request"
+        }
+        assertEquals("POST", request.method)
+        val raw = request.body.readUtf8()
+        val parts = JSONObject(raw).getJSONArray("message")
+        assertEquals(1, parts.length())
+        val part = parts.getJSONObject(0)
+        assertEquals(2, part.length())
+        assertEquals("image_url", part.getString("type"))
+        val imageUrl = part.getJSONObject("image_url")
+        assertEquals(1, imageUrl.length())
+        val url = imageUrl.getString("url")
+        assertEquals(IMAGE_DATA_URL, url)
+        assertTrue(url.startsWith("data:image/png;base64,"))
+        assertFalse(raw.contains("content://"))
+        assertFalse(raw.contains("file://"))
+        assertFalse(raw.contains(ATTACHMENT_FILE_NAME))
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun textAndImageOpenTurnWithAttachmentsSendsOrderedTwoPartList() {
+        // P5 wire exactness: with text and an image the body is a
+        // two-part list - text first, image second - and each appears
+        // exactly once.
+        server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
+        val listener = RecordingListener()
+
+        client.openTurnWithAttachments(
+            baseUrl = baseUrl(),
+            apiKey = SecretValue(FIXTURE_KEY),
+            sessionId = SESSION_ID,
+            message = checkNotNull(
+                ChatOutboundMessage.create("  schau das  ", listOf(IMAGE_DATA_URL))
+            ),
+            interactiveApprovals = false,
+            listener = listener
+        )
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+
+        val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+            "expected one recorded request"
+        }
+        assertEquals("POST", request.method)
+        val raw = request.body.readUtf8()
+        val parts = JSONObject(raw).getJSONArray("message")
+        assertEquals(2, parts.length())
+        val textPart = parts.getJSONObject(0)
+        assertEquals("text", textPart.getString("type"))
+        assertEquals("schau das", textPart.getString("text"))
+        val imagePart = parts.getJSONObject(1)
+        assertEquals("image_url", imagePart.getString("type"))
+        assertEquals(
+            IMAGE_DATA_URL,
+            imagePart.getJSONObject("image_url").getString("url")
+        )
+        assertEquals(1, raw.split("schau das").size - 1)
+        assertEquals(1, raw.split(IMAGE_DATA_URL).size - 1)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun foreignImageDataUrlFailsClosedWithoutSendingARequest() {
+        // P5 wire exactness: a data URL that is not an inline image
+        // (`data:image/...`) must never reach the wire. The defensive
+        // re-validation in the transport rejects it before any request is
+        // built, so the server never sees the turn at all.
+        val listener = RecordingListener()
+        val handle = client.openTurnWithAttachments(
+            baseUrl = baseUrl(),
+            apiKey = SecretValue(FIXTURE_KEY),
+            sessionId = SESSION_ID,
+            message = ChatOutboundMessage("hallo", listOf("data:text/plain;base64,AA==")),
+            interactiveApprovals = false,
+            listener = listener
+        )
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnFailed(ChatStreamError.InvalidInput)),
+            listener.events
+        )
+        assertEquals(0, server.requestCount)
+        handle.close()
+    }
+
+    @Test
+    fun legacyOpenTurnStillSendsExactLegacyBody() {
+        // P5 regression guard: the pre-P5 string path must keep sending
+        // the exact legacy body, unchanged.
+        server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
+        val listener = RecordingListener()
+
+        client.openTurn(
+            baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, "hallo", listener
+        )
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+
+        val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+            "expected one recorded request"
+        }
+        assertEquals("POST", request.method)
+        assertEquals("""{"message":"hallo"}""", request.body.readUtf8())
+        assertEquals(1, server.requestCount)
     }
 
     @Test
@@ -1293,6 +1454,10 @@ class HermesSessionStreamClientTest {
         const val FIXTURE_KEY = "fixture-credential"
         const val SESSION_ID = "synthetic-session"
         const val RUN_ID = "run_synthetic"
+        const val IMAGE_DATA_URL = "data:image/png;base64,AA=="
+        // Display name of the synthetic attachment; it must never leak
+        // into a wire body, which carries only the data URL.
+        const val ATTACHMENT_FILE_NAME = "foto.png"
         const val ENCODED_SESSION_ID = "synthetic/sess ion"
         const val MAX_REASONABLE_READ_TIMEOUT_SECONDS = 120L
         const val BURST_PROFILE_ID = "burst-profile-id"

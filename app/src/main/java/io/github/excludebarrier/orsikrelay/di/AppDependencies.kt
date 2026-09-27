@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.di
 
 import android.content.Context
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftStore
@@ -44,6 +45,7 @@ import io.github.excludebarrier.orsikrelay.network.HermesDeviceSelfRevokeClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunApprovalClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunStopClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunSteerClient
+import io.github.excludebarrier.orsikrelay.platform.attachment.AndroidChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.platform.notification.AndroidNotificationManager
 import io.github.excludebarrier.orsikrelay.platform.notification.AppForegroundTracker
 import io.github.excludebarrier.orsikrelay.platform.run.AndroidRunForegroundServiceStarter
@@ -80,6 +82,8 @@ internal data class AppDependencies(
     val notificationPermissionStore: NotificationPermissionStore,
     val capabilityStore: RunApprovalCapabilityStore,
     val chatDraftRepository: ChatDraftRepository,
+    /** P5: reads a picked attachment's metadata/bytes through the ContentResolver. */
+    val chatAttachmentSource: ChatAttachmentSource,
     val selectionStore: ActiveServerSelectionStore,
     val startupResolver: () -> StartupProfile,
 )
@@ -264,6 +268,7 @@ internal fun buildAppDependencies(
         notificationCoordinator = notificationCoordinator,
         notificationPermissionStore = notificationPermissionStore,
         chatDraftRepository = chatDraftRepository,
+        chatAttachmentSource = AndroidChatAttachmentSource(applicationContext),
         selectionStore = resolvedSelectionStore,
         capabilityStore = resolvedCapabilityStore,
         startupResolver = {

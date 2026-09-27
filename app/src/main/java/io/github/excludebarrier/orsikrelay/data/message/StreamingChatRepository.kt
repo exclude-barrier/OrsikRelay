@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.data.message
 
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamHandle
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
@@ -75,18 +76,26 @@ class StreamingChatRepository(
         profileId: String,
         sessionId: String,
         message: String
+    ): Flow<ChatTurnEvent> = streamTurnWithAttachments(profileId, sessionId, message, emptyList())
+
+    override fun streamTurnWithAttachments(
+        profileId: String,
+        sessionId: String,
+        message: String,
+        imageDataUrls: List<String>
     ): Flow<ChatTurnEvent> = callbackFlow {
-        // The message is validated and normalized before any profile,
-        // credential or transport access: every injected transport only
-        // ever receives a trimmed, valid message, and invalid input fails
-        // closed without touching any store. The transport may validate
-        // defensively again.
-        val message = ChatMessageValidator.validate(message).getOrNull()
+        // The turn body is validated and normalized before any profile,
+        // credential or transport access: every injected transport only ever
+        // receives a well-formed body (text only, or text plus inline images),
+        // and invalid input fails closed without touching any store. The
+        // transport may validate defensively again.
+        val outbound = ChatOutboundMessage.create(message, imageDataUrls)
             ?: run {
                 trySend(ChatTurnEvent.TurnFailed(ChatStreamError.InvalidInput))
                 close()
                 return@callbackFlow
             }
+        val message = outbound.text
         if (profileId.isBlank() || sessionId.isBlank()) {
             trySend(ChatTurnEvent.TurnFailed(ChatStreamError.InvalidInput))
             close()
@@ -181,14 +190,28 @@ class StreamingChatRepository(
                 }
                 currentHandle = try {
                     if (attempt == 0) {
-                        streamTransport.openTurn(
-                            baseUrl = profile.baseUrl,
-                            apiKey = credential,
-                            sessionId = sessionId,
-                            message = message,
-                            interactiveApprovals = interactiveApprovals,
-                            listener = listener
-                        )
+                        if (outbound.hasImages) {
+                            // P5: the attachment travels only in this initial
+                            // POST body. A re-attach below is a GET from the
+                            // confirmed sequence state and never repeats it.
+                            streamTransport.openTurnWithAttachments(
+                                baseUrl = profile.baseUrl,
+                                apiKey = credential,
+                                sessionId = sessionId,
+                                message = outbound,
+                                interactiveApprovals = interactiveApprovals,
+                                listener = listener
+                            )
+                        } else {
+                            streamTransport.openTurn(
+                                baseUrl = profile.baseUrl,
+                                apiKey = credential,
+                                sessionId = sessionId,
+                                message = outbound.text,
+                                interactiveApprovals = interactiveApprovals,
+                                listener = listener
+                            )
+                        }
                     } else {
                         // Re-attach to the same run from the confirmed
                         // state of the interrupted attempt.

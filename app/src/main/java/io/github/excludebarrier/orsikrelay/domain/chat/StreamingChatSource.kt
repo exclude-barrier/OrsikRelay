@@ -24,4 +24,19 @@ fun interface StreamingChatSource {
         sessionId: String,
         message: String
     ): Flow<ChatTurnEvent>
+
+    /**
+     * Streams one turn whose body may carry inline image attachments (P5).
+     *
+     * Additive seam: the default implementation streams the text alone, so
+     * every existing source (and every test double) keeps its exact
+     * behaviour, and an attachment can never be silently invented by a source
+     * that does not implement it.
+     */
+    fun streamTurnWithAttachments(
+        profileId: String,
+        sessionId: String,
+        message: String,
+        imageDataUrls: List<String>
+    ): Flow<ChatTurnEvent> = streamTurn(profileId, sessionId, message)
 }

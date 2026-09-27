@@ -155,7 +155,18 @@ class RunSessionController(
      * the app is in the foreground and the Android 14+ background-start
      * restriction cannot apply.
      */
-    fun startTurn(profileId: String, sessionId: String, message: String) {
+    fun startTurn(
+        profileId: String,
+        sessionId: String,
+        message: String,
+        /**
+         * P5: inline image data URLs of this turn's attachments. They travel
+         * only in the initial POST body - never into the durable run state
+         * (they are large and carry user content the UI already shows) and
+         * never into a P4 re-attach.
+         */
+        imageDataUrls: List<String> = emptyList()
+    ) {
         val previous = runJob
         if (previous != null && previous.isActive) {
             previous.cancel()
@@ -176,7 +187,11 @@ class RunSessionController(
         val job = scope.launch {
             var terminalSeen = false
             try {
-                chatSource.streamTurn(profileId, sessionId, message).collect { event ->
+                if (imageDataUrls.isEmpty()) {
+                    chatSource.streamTurn(profileId, sessionId, message)
+                } else {
+                    chatSource.streamTurnWithAttachments(profileId, sessionId, message, imageDataUrls)
+                }.collect { event ->
                     if (event is ChatTurnEvent.TurnCompleted ||
                         event is ChatTurnEvent.TurnFailed
                     ) {

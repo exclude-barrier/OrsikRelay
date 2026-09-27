@@ -33,6 +33,36 @@ interface ChatStreamTransport {
     ): ChatStreamHandle
 
     /**
+     * Opens one turn whose body may carry inline image attachments (P5).
+     *
+     * The wire shape is the confirmed server contract: text-only stays the
+     * plain `message` string, with images it becomes a
+     * `text`/`image_url` content-part list carrying `data:image/...` URLs.
+     * Nothing about the turn lifecycle, the listener contract or the
+     * re-attach behaviour changes - an attachment travels only in the initial
+     * POST body and is never repeated by a re-attach.
+     *
+     * The default implementation delegates to the text-only [openTurn], so a
+     * transport without attachment support (or a test double) silently sends
+     * the text alone instead of breaking the seam.
+     */
+    fun openTurnWithAttachments(
+        baseUrl: String,
+        apiKey: SecretValue,
+        sessionId: String,
+        message: ChatOutboundMessage,
+        interactiveApprovals: Boolean = false,
+        listener: ChatStreamListener
+    ): ChatStreamHandle = openTurn(
+        baseUrl = baseUrl,
+        apiKey = apiKey,
+        sessionId = sessionId,
+        message = message.text,
+        interactiveApprovals = interactiveApprovals,
+        listener = listener
+    )
+
+    /**
      * Re-attaches to an already-started run of [sessionId] (P4):
      * `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`,
      * where `N` is [resume].[ChatStreamResumeState.lastSeq]. The server

@@ -1,6 +1,12 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentDraftHolder
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentMetadata
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
+import io.github.excludebarrier.orsikrelay.data.chat.NoopChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentError
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentRules
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
@@ -20,6 +26,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -36,6 +43,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -60,6 +68,16 @@ class ChatViewModelTest {
     @Volatile
     private var lastController: RunSessionController? = null
 
+    /**
+     * The attachment holder is process-scoped: drop every key this suite
+     * uses so no test can rehydrate another test's picked attachment.
+     */
+    @Before
+    fun clearAttachmentHolderForTestIsolation() {
+        ChatAttachmentDraftHolder.clear(profileId, sessionId)
+        ChatAttachmentDraftHolder.clear(profileId, "other-chat")
+    }
+
     private fun readyHistory(vararg messages: HermesChatMessage): MessageHistorySource =
         MessageHistorySource { _, _ ->
             MessageHistoryResult.Success(MessagePage(messages.toList()))
@@ -76,6 +94,7 @@ class ChatViewModelTest {
         steer: RunSteerRequester = FakeSteerRequester(),
         draft: ChatDraftRepository = FakeDraftRepository(),
         serviceStarter: RunForegroundServiceStarter = FakeRunServiceStarter(),
+        attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
         onBack: () -> Unit = {},
         // P4: an EXISTING controller simulates a re-created screen that
         // re-attaches to the same app-level run.
@@ -95,6 +114,7 @@ class ChatViewModelTest {
             runStopRequester = stop,
             runSteerRequester = steer,
             chatDraftRepository = draft,
+            attachmentSource = attachmentSource,
             profileId = profileId,
             sessionId = sessionKey,
             onBack = onBack,
@@ -109,6 +129,7 @@ class ChatViewModelTest {
     private fun withModel(
         history: MessageHistorySource = readyHistory(),
         onBack: () -> Unit = {},
+        attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
         block: suspend kotlinx.coroutines.test.TestScope.(
             model: ChatViewModel,
             chat: FakeTurnSource,
@@ -121,7 +142,7 @@ class ChatViewModelTest {
         val stop = FakeStopRequester()
         val steer = FakeSteerRequester()
         val draft = FakeDraftRepository()
-        val model = build(this.testScheduler, history = history, chat = chat, stop = stop, steer = steer, draft = draft, onBack = onBack)
+        val model = build(this.testScheduler, history = history, chat = chat, stop = stop, steer = steer, draft = draft, onBack = onBack, attachmentSource = attachmentSource)
         model.loadHistory()
         testScheduler.advanceUntilIdle()
         block(model, chat, stop, steer, draft)
@@ -658,6 +679,386 @@ class ChatViewModelTest {
     }
 
     // ------------------------------------------------------------------
+    // P5: attachments
+    // ------------------------------------------------------------------
+
+    @Test
+    fun pickerAcceptsJpegPngAndWebpWithNormalizedMimeAndSize() {
+        val picks = listOf(
+            Triple("content://img/jpeg", "photo.jpg", "IMAGE/JPEG"),
+            Triple("content://img/png", "bild.png", "Image/PNG"),
+            Triple("content://img/webp", "bild.webp", "image/webp ")
+        )
+        for ((uri, name, rawMime) in picks) {
+            val source = FakeAttachmentSource().apply {
+                metadata = mapOf(uri to ChatAttachmentMetadata(name, rawMime, 1234L))
+            }
+            withModel(attachmentSource = source) { model, _, _, _, _ ->
+                model.onAttachmentPicked(uri)
+                testScheduler.advanceUntilIdle()
+                val attachment = model.state.value.attachment
+                assertNotNull(attachment)
+                assertEquals(rawMime.trim().lowercase(), attachment?.mimeType)
+                assertEquals(1234L, attachment?.sizeBytes)
+                assertEquals(name, attachment?.displayName)
+                assertEquals(uri, attachment?.contentUri)
+                assertFalse(model.state.value.attachmentBusy)
+                assertNull(model.state.value.attachmentError)
+                // The pick is staged for recreation rehydration.
+                assertEquals(attachment, ChatAttachmentDraftHolder.get(profileId, sessionId))
+            }
+        }
+    }
+
+    @Test
+    fun unsupportedMimeTypesAreRejectedAsUnsupportedType() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf(
+                "content://doc/pdf" to ChatAttachmentMetadata("doc.pdf", "application/pdf", 10L),
+                "content://doc/txt" to ChatAttachmentMetadata("note.txt", "text/plain", 10L)
+            )
+        }
+        withModel(attachmentSource = source) { model, _, _, _, _ ->
+            model.onAttachmentPicked("content://doc/pdf")
+            testScheduler.advanceUntilIdle()
+            assertEquals(ChatAttachmentError.UnsupportedType, model.state.value.attachmentError)
+            assertNull(model.state.value.attachment)
+            assertFalse(model.state.value.attachmentBusy)
+
+            model.onAttachmentPicked("content://doc/txt")
+            testScheduler.advanceUntilIdle()
+            assertEquals(ChatAttachmentError.UnsupportedType, model.state.value.attachmentError)
+            assertNull(model.state.value.attachment)
+            // A rejected pick never reaches the holder.
+            assertNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+        }
+    }
+
+    @Test
+    fun knownOversizedImageIsRejectedAsTooLarge() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf(
+                "content://big" to ChatAttachmentMetadata(
+                    "big.jpg",
+                    "image/jpeg",
+                    ChatAttachmentRules.MAX_IMAGE_BYTES + 1
+                )
+            )
+        }
+        withModel(attachmentSource = source) { model, _, _, _, _ ->
+            model.onAttachmentPicked("content://big")
+            testScheduler.advanceUntilIdle()
+            assertEquals(ChatAttachmentError.TooLarge, model.state.value.attachmentError)
+            assertNull(model.state.value.attachment)
+            assertNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+        }
+    }
+
+    @Test
+    fun unknownSizeIsAccepted() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://cloud" to ChatAttachmentMetadata("cloud.jpg", "image/jpeg", -1L))
+        }
+        withModel(attachmentSource = source) { model, _, _, _, _ ->
+            model.onAttachmentPicked("content://cloud")
+            testScheduler.advanceUntilIdle()
+            val attachment = model.state.value.attachment
+            assertNotNull(attachment)
+            // A non-positive provider size means "unknown", not "too large".
+            assertEquals(-1L, attachment?.sizeBytes)
+            assertNull(model.state.value.attachmentError)
+        }
+    }
+
+    @Test
+    fun metadataReadFailureSetsUnreadable() {
+        val source = FakeAttachmentSource().apply {
+            throwingMetadataUris = setOf("content://boom")
+        }
+        withModel(attachmentSource = source) { model, _, _, _, _ ->
+            // A provider that yields nothing (no metadata entry)...
+            model.onAttachmentPicked("content://gone")
+            testScheduler.advanceUntilIdle()
+            assertEquals(ChatAttachmentError.Unreadable, model.state.value.attachmentError)
+            assertNull(model.state.value.attachment)
+            assertFalse(model.state.value.attachmentBusy)
+            assertNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+
+            // ...and one that throws are the same closed failure at the gate.
+            model.onAttachmentPicked("content://boom")
+            testScheduler.advanceUntilIdle()
+            assertEquals(ChatAttachmentError.Unreadable, model.state.value.attachmentError)
+            assertNull(model.state.value.attachment)
+        }
+    }
+
+    @Test
+    fun removeAttachmentClearsStateAndHolder() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://img" to ChatAttachmentMetadata("img.png", "image/png", 10L))
+        }
+        withModel(attachmentSource = source) { model, _, _, _, _ ->
+            model.onAttachmentPicked("content://img")
+            testScheduler.advanceUntilIdle()
+            assertNotNull(model.state.value.attachment)
+            assertNotNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+
+            model.removeAttachment()
+            testScheduler.advanceUntilIdle()
+            assertNull(model.state.value.attachment)
+            assertNull(model.state.value.attachmentError)
+            assertNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+
+            // Removing again is a no-op that keeps the state clean.
+            model.removeAttachment()
+            assertNull(model.state.value.attachment)
+        }
+    }
+
+    @Test
+    fun textOnlySendStartsOneRunWithoutAttachment() {
+        val source = FakeAttachmentSource()
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            model.onDraftChange("hallo")
+            model.send()
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, chat.calls.get())
+            // No attachment: the text-only path is used and the byte read
+            // seam is never touched.
+            assertEquals(0, chat.attachmentCalls.get())
+            assertEquals("hallo", chat.lastMessage)
+            assertEquals(0, source.dataUrlCalls.get())
+            assertNull(model.state.value.attachment)
+        }
+    }
+
+    @Test
+    fun imageOnlySendStartsOneRunAndReadsDataUrlOnce() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://solo" to ChatAttachmentMetadata("img.png", "image/png", 10L))
+            dataUrls = mapOf("content://solo" to "data:image/png;base64,QUJD")
+        }
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            // No text: a blank draft plus the attachment is a legitimate turn.
+            model.onAttachmentPicked("content://solo")
+            testScheduler.advanceUntilIdle()
+            assertNotNull(model.state.value.attachment)
+
+            model.send()
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, chat.calls.get())
+            assertEquals(1, chat.attachmentCalls.get())
+            assertEquals(1, source.dataUrlCalls.get())
+            assertEquals("", chat.lastMessage)
+            assertEquals(listOf("data:image/png;base64,QUJD"), chat.lastImageDataUrls)
+            assertTrue(model.state.value.turnActive)
+        }
+    }
+
+    @Test
+    fun textAndImageSendPassesTextAndOneDataUrlToController() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://pair" to ChatAttachmentMetadata("img.jpg", "image/jpeg", 10L))
+            dataUrls = mapOf("content://pair" to "data:image/jpeg;base64,QkVX")
+        }
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            model.onAttachmentPicked("content://pair")
+            testScheduler.advanceUntilIdle()
+            model.onDraftChange("bild anbei")
+            testScheduler.advanceUntilIdle()
+
+            model.send()
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, chat.calls.get())
+            assertEquals(1, chat.attachmentCalls.get())
+            assertEquals(1, source.dataUrlCalls.get())
+            assertEquals("bild anbei", chat.lastMessage)
+            assertEquals(listOf("data:image/jpeg;base64,QkVX"), chat.lastImageDataUrls)
+        }
+    }
+
+    @Test
+    fun sendIsBlockedWhileAttachmentIsBusy() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://slow" to ChatAttachmentMetadata("slow.png", "image/png", 10L))
+            metadataGate = CompletableDeferred()
+        }
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            model.onAttachmentPicked("content://slow")
+            // The metadata read is still in flight: the pick is busy.
+            assertTrue(model.state.value.attachmentBusy)
+            // The composer gate stays off for any draft while the pick is
+            // in flight (a plain "hallo" alone would enable it).
+            model.onDraftChange("hallo")
+            assertFalse(model.state.value.sendEnabled)
+            // A deliberate submit cannot start a run while the pick is
+            // unreadable (blank draft: the only reachable submit shape).
+            model.onDraftChange("")
+            model.send()
+            testScheduler.advanceUntilIdle()
+            assertEquals(0, chat.calls.get())
+            assertFalse(model.state.value.turnActive)
+
+            source.metadataGate?.complete(Unit)
+            testScheduler.advanceUntilIdle()
+            assertFalse(model.state.value.attachmentBusy)
+            assertNotNull(model.state.value.attachment)
+            // The attachment alone now enables the composer.
+            assertTrue(model.state.value.sendEnabled)
+        }
+    }
+
+    @Test
+    fun dataUrlReadFailureKeepsDraftAndAttachmentWithoutPost() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://bad" to ChatAttachmentMetadata("bad.png", "image/png", 10L))
+            // No data URL entry: the byte read yields nothing.
+        }
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            model.onAttachmentPicked("content://bad")
+            testScheduler.advanceUntilIdle()
+            model.onDraftChange("bitte")
+            testScheduler.advanceUntilIdle()
+
+            model.send()
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, source.dataUrlCalls.get())
+            assertEquals(0, chat.calls.get())
+            assertFalse(model.state.value.turnActive)
+            assertEquals(ChatAttachmentError.Unreadable, model.state.value.attachmentError)
+            // The text draft and the attachment survive for a deliberate retry.
+            assertEquals("bitte", model.state.value.draft)
+            assertNotNull(model.state.value.attachment)
+            assertNotNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+            assertTrue(model.state.value.localLines.isEmpty())
+
+            // A throwing provider is the same closed failure: still no POST.
+            source.throwingDataUrlUris = setOf("content://bad")
+            model.send()
+            testScheduler.advanceUntilIdle()
+            assertEquals(2, source.dataUrlCalls.get())
+            assertEquals(0, chat.calls.get())
+            assertFalse(model.state.value.turnActive)
+            assertEquals(ChatAttachmentError.Unreadable, model.state.value.attachmentError)
+            assertNotNull(model.state.value.attachment)
+        }
+    }
+
+    @Test
+    fun runStartedClearsAttachmentAndHolderEntry() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://sent" to ChatAttachmentMetadata("sent.png", "image/png", 10L))
+            dataUrls = mapOf("content://sent" to "data:image/png;base64,QUJD")
+        }
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            model.onAttachmentPicked("content://sent")
+            testScheduler.advanceUntilIdle()
+            model.send()
+            testScheduler.advanceUntilIdle()
+            // Before the confirmed start the attachment is still staged
+            // (state AND holder).
+            assertNotNull(model.state.value.attachment)
+            assertNotNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+
+            chat.enqueue(ChatTurnEvent.RunStarted(runId))
+            testScheduler.advanceUntilIdle()
+            // The confirmed start clears the sent attachment from the
+            // composer and the process-scoped rehydration entry.
+            assertNull(model.state.value.attachment)
+            assertNull(model.state.value.attachmentError)
+            assertNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+            assertTrue(model.state.value.runStarted)
+            assertEquals(runId, model.state.value.boundRunId)
+
+            // Progress after the start never resurrects it.
+            chat.enqueue(ChatTurnEvent.AssistantDelta("ok"))
+            testScheduler.advanceUntilIdle()
+            assertNull(model.state.value.attachment)
+            assertNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+        }
+    }
+
+    @Test
+    fun failureBeforeRunStartedKeepsAttachment() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://keep" to ChatAttachmentMetadata("keep.png", "image/png", 10L))
+            dataUrls = mapOf("content://keep" to "data:image/png;base64,QUJD")
+        }
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            model.onAttachmentPicked("content://keep")
+            testScheduler.advanceUntilIdle()
+            model.onDraftChange("bitte")
+            model.send()
+            testScheduler.advanceUntilIdle()
+            chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Timeout))
+            chat.complete()
+            testScheduler.advanceUntilIdle()
+            assertEquals(ChatStreamError.Timeout, model.state.value.turnFailure)
+            assertFalse(model.state.value.turnActive)
+            // The turn never got a confirmed start: the attachment (state
+            // AND holder) and the text draft survive for a deliberate retry.
+            assertNotNull(model.state.value.attachment)
+            assertNotNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+            assertEquals("bitte", model.state.value.draft)
+        }
+    }
+
+    @Test
+    fun anotherSessionNeverSeesThePickersDraft() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://mine" to ChatAttachmentMetadata("mine.png", "image/png", 10L))
+        }
+        withModel(attachmentSource = source) { model, _, _, _, _ ->
+            model.onAttachmentPicked("content://mine")
+            testScheduler.advanceUntilIdle()
+            assertNotNull(model.state.value.attachment)
+            assertNotNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
+
+            // A model of ANOTHER session (same profile, same app-level
+            // controller) must start without it.
+            val other = build(
+                testScheduler,
+                controller = lastController,
+                attachmentSource = source,
+                sessionKey = "other-chat"
+            )
+            other.loadHistory()
+            testScheduler.advanceUntilIdle()
+            assertNull(other.state.value.attachment)
+            assertNull(ChatAttachmentDraftHolder.get(profileId, "other-chat"))
+            other.close()
+            testScheduler.advanceUntilIdle()
+            // The original chat still has its attachment.
+            assertNotNull(model.state.value.attachment)
+        }
+    }
+
+    @Test
+    fun recreatedViewModelRehydratesThePickedAttachment() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://picked" to ChatAttachmentMetadata("picked.png", "image/png", 10L))
+        }
+        withRecreatedModel(
+            attachmentSource = source,
+            beforeRecreation = {
+                it.enqueue(ChatTurnEvent.TurnCompleted())
+                it.complete()
+            },
+            actOnFirstModel = { it.onAttachmentPicked("content://picked") }
+        ) { second, chat, _, _ ->
+            // The re-created screen rehydrates the picked-but-unsent
+            // attachment from the process-scoped holder.
+            val attachment = second.state.value.attachment
+            assertNotNull(attachment)
+            assertEquals("content://picked", attachment?.contentUri)
+            assertEquals("image/png", attachment?.mimeType)
+            assertEquals("picked.png", attachment?.displayName)
+            // The recreation itself never POSTs.
+            assertEquals(1, chat.calls.get())
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Fakes
     // ------------------------------------------------------------------
 
@@ -676,6 +1077,7 @@ class ChatViewModelTest {
         actOnFirstModel: (ChatViewModel) -> Unit = {},
         sessionKeyOfSecond: String = sessionId,
         historyForSecond: MessageHistorySource = readyHistory(),
+        attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
         block: suspend kotlinx.coroutines.test.TestScope.(
             second: ChatViewModel,
             chat: FakeTurnSource,
@@ -692,7 +1094,7 @@ class ChatViewModelTest {
             dispatcher = UnconfinedTestDispatcher(testScheduler)
         )
         lastController = controller
-        val first = build(testScheduler, chat = chat, stop = stop, controller = controller)
+        val first = build(testScheduler, chat = chat, stop = stop, controller = controller, attachmentSource = attachmentSource)
         first.loadHistory()
         testScheduler.advanceUntilIdle()
         first.onDraftChange("Hallo Welt")
@@ -716,7 +1118,8 @@ class ChatViewModelTest {
             chat = chat,
             stop = stop,
             controller = controller,
-            sessionKey = sessionKeyOfSecond
+            sessionKey = sessionKeyOfSecond,
+            attachmentSource = attachmentSource
         )
         second.loadHistory()
         testScheduler.advanceUntilIdle()
@@ -1005,11 +1408,18 @@ class ChatViewModelTest {
         val opened = CountDownLatch(1)
         val completed = AtomicBoolean(false)
         val canceled = AtomicBoolean(false)
+        val attachmentCalls = AtomicInteger()
+        @Volatile
+        var lastMessage: String? = null
+        @Volatile
+        var lastImageDataUrls: List<String> = emptyList()
+
         @Volatile
         private var active: Channel<ChatTurnEvent>? = null
 
         override fun streamTurn(profileId: String, sessionId: String, message: String): Flow<ChatTurnEvent> {
             calls.incrementAndGet()
+            lastMessage = message
             val channel = Channel<ChatTurnEvent>(Channel.UNLIMITED)
             active = channel
             opened.countDown()
@@ -1020,12 +1430,65 @@ class ChatViewModelTest {
             }
         }
 
+        override fun streamTurnWithAttachments(
+            profileId: String,
+            sessionId: String,
+            message: String,
+            imageDataUrls: List<String>
+        ): Flow<ChatTurnEvent> {
+            attachmentCalls.incrementAndGet()
+            lastImageDataUrls = imageDataUrls
+            return streamTurn(profileId, sessionId, message)
+        }
+
         fun enqueue(vararg events: ChatTurnEvent) {
             active?.let { channel -> events.forEach { channel.trySend(it) } }
         }
 
         fun complete() {
             active?.close()
+        }
+    }
+
+    /**
+     * Synthetic attachment source (P5): per-URI metadata and inline data
+     * URLs (missing entry = `null` read), per-URI throws, a suspending gate
+     * to hold `readMetadata` (the view model's busy window), and call
+     * capture.
+     */
+    private class FakeAttachmentSource : ChatAttachmentSource {
+        val metadataCalls = AtomicInteger()
+        val dataUrlCalls = AtomicInteger()
+        @Volatile
+        var metadata: Map<String, ChatAttachmentMetadata?> = emptyMap()
+        @Volatile
+        var dataUrls: Map<String, String?> = emptyMap()
+        @Volatile
+        var throwingMetadataUris: Set<String> = emptySet()
+        @Volatile
+        var throwingDataUrlUris: Set<String> = emptySet()
+        /** When non-null, `readMetadata` suspends until it completes. */
+        @Volatile
+        var metadataGate: CompletableDeferred<Unit>? = null
+        @Volatile
+        var lastDataUrlRequest: Triple<String, String, Long>? = null
+
+        override suspend fun readMetadata(contentUri: String): ChatAttachmentMetadata? {
+            metadataCalls.incrementAndGet()
+            if (contentUri in throwingMetadataUris) throw IllegalStateException("provider gone")
+            metadataGate?.await()
+            return metadata[contentUri]
+        }
+
+        override suspend fun readInlineDataUrl(
+            contentUri: String,
+            mimeType: String,
+            maxBytes: Long
+        ): String? {
+            dataUrlCalls.incrementAndGet()
+            lastDataUrlRequest = Triple(contentUri, mimeType, maxBytes)
+            if (contentUri in throwingDataUrlUris) throw IllegalStateException("provider gone")
+            return dataUrls[contentUri]
         }
     }
 

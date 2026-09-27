@@ -45,4 +45,19 @@ object ChatMessageValidator {
         }
         return Result.success(trimmed)
     }
+
+    /**
+     * Validates the text of a turn that MAY carry an attachment (P5): every
+     * rule of [validate] applies except that a blank text is allowed, because
+     * an attachment-only turn is a legitimate request (the server accepts a
+     * content-part list whose only visible payload is the image). Returns the
+     * trimmed text, which may be empty.
+     */
+    fun validateOptional(raw: String): Result<String> {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) {
+            return Result.success("")
+        }
+        return validate(trimmed)
+    }
 }
