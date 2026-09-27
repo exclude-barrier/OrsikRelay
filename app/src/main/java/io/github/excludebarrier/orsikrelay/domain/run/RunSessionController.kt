@@ -75,17 +75,48 @@ class RunSessionController(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
 ) {
     /**
-     * The single active run. [runId] is bound only after the server
-     * confirmed the run (`RunStarted`); [pendingApproval] is the request
-     * the user has not decided yet (restored when a view model re-attaches
-     * to a running session).
+     * The single active run: the small, closed in-memory state a chat
+     * screen needs to re-attach to a running turn (P4 recreation fix).
+     *
+     * [runId] is bound only after the server confirmed the run
+     * (`RunStarted`). [userMessage] is the validated user text of the turn
+     * and [assistantText] the composed assistant text received so far, so a
+     * view model re-created by an Activity/configuration change can rebuild
+     * the visible turn instead of starting from a blank screen.
+     * [reconnecting] mirrors the transient re-attach and [pendingApproval]
+     * the request the user has not decided yet (both restored when a view
+     * model re-attaches to a running session).
+     *
+     * Nothing here is persisted (no disk, no process-death recovery), and no
+     * server payload beyond the already UI-safe values crosses this type:
+     * no command, arguments, path, raw tool output, exception text, URL or
+     * credential. [assistantText] is exactly the text the user already sees.
+     *
+     * `status` is a derived view of the flags, so the UI has one closed
+     * status value without a second state machine.
      */
     data class ActiveRun(
         val profileId: String,
         val sessionId: String,
+        val userMessage: String = "",
+        val assistantText: String = "",
+        /** Safe tool identifiers of the turn, in arrival order (redacted domain). */
+        val toolNames: List<String> = emptyList(),
         val runId: String? = null,
+        val reconnecting: Boolean = false,
         val pendingApproval: ApprovalRequest? = null
-    )
+    ) {
+        /** Closed, derived status of the active run. */
+        val status: Status
+            get() = when {
+                pendingApproval != null -> Status.WAITING_FOR_APPROVAL
+                reconnecting -> Status.RECONNECTING
+                else -> Status.RUNNING
+            }
+
+        /** Closed set of active-run statuses for the UI projection. */
+        enum class Status { RUNNING, RECONNECTING, WAITING_FOR_APPROVAL }
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val _activeRun = MutableStateFlow<ActiveRun?>(null)
@@ -108,6 +139,15 @@ class RunSessionController(
     private var runJob: Job? = null
 
     /**
+     * Identity of the turn currently owning the slot (P4). A replaced run's
+     * collector may still execute its synchronous body after
+     * [startTurn] cancelled it; the token makes such a late event a no-op
+     * instead of letting it write the previous run's text into the new
+     * slot.
+     */
+    private var slotTurnToken: Long = 0L
+
+    /**
      * Starts one streaming turn for [message] in [sessionId] (single slot:
      * a still-active run is terminated first, exactly like leaving its
      * screen used to do). The foreground service is started synchronously
@@ -122,9 +162,17 @@ class RunSessionController(
         }
         // Optimistic start: a send that fails immediately stops the service
         // again on the terminal event (below), so a failed turn leaves no
-        // background footprint.
+        // background footprint. The validated user text is kept in the
+        // active-run state (P4), so a re-created view model can restore the
+        // visible turn without a new POST.
+        val token = slotTurnToken + 1L
+        slotTurnToken = token
         serviceStarter.start(profileId, sessionId)
-        _activeRun.value = ActiveRun(profileId = profileId, sessionId = sessionId)
+        _activeRun.value = ActiveRun(
+            profileId = profileId,
+            sessionId = sessionId,
+            userMessage = message
+        )
         val job = scope.launch {
             var terminalSeen = false
             try {
@@ -134,13 +182,18 @@ class RunSessionController(
                     ) {
                         terminalSeen = true
                     }
-                    handleEvent(profileId, sessionId, event)
+                    handleEvent(profileId, sessionId, token, event)
                 }
                 // Defensive fail-closed: the source contract guarantees a
                 // terminal event, but a stream that closes without one must
                 // still settle as a generic network failure.
                 if (!terminalSeen) {
-                    handleEvent(profileId, sessionId, ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                    handleEvent(
+                        profileId,
+                        sessionId,
+                        token,
+                        ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+                    )
                 }
             } catch (e: CancellationException) {
                 // Single-slot replacement, [cancelTurn] or [close]: no
@@ -151,7 +204,12 @@ class RunSessionController(
             } catch (_: Exception) {
                 // Defensive: the source contract guarantees a terminal
                 // event; an unexpected throw must still fail the run closed.
-                handleEvent(profileId, sessionId, ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                handleEvent(
+                    profileId,
+                    sessionId,
+                    token,
+                    ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+                )
             } finally {
                 // Bookkeeping only: stop ownership lives in the terminal
                 // handlers ([handleEvent]) and in [cancelTurn]/[close].
@@ -180,13 +238,41 @@ class RunSessionController(
     }
 
     /**
-     * Clears a decided approval (the view model calls this after the user's
-     * decision has been POSTed), so a re-attached view model does not
-     * re-show a request the user already resolved.
+     * Clears ONE decided approval from the durable run state, so a
+     * re-created screen cannot resurrect a request that is no longer
+     * answerable (P4-APPROVAL-RESURRECTION).
+     *
+     * Strictly correlated (P4): the record is only dropped when the slot
+     * still belongs to this profile/session AND its pending approval is
+     * exactly [runId]/[requestId]. A late result of an older run or an
+     * older request therefore can never clear the current approval, and a
+     * request that was already replaced stays untouched.
+     *
+     * Only authoritative terminal outcomes may be cleared through this:
+     * an applied decision (`once`/`deny`) or the server's own "not pending"
+     * answer. A transient/ambiguous transport failure is deliberately NOT
+     * a reason to clear - the request stays resolvable after a reconnect.
      */
-    fun clearPendingApproval() {
+    fun clearPendingApproval(
+        profileId: String,
+        sessionId: String,
+        runId: String,
+        requestId: String
+    ) {
         _activeRun.update { current ->
-            current?.let { it.copy(pendingApproval = null) }
+            val pending = current?.pendingApproval
+            if (
+                current != null &&
+                current.profileId == profileId &&
+                current.sessionId == sessionId &&
+                pending != null &&
+                pending.runId == runId &&
+                pending.requestId == requestId
+            ) {
+                current.copy(pendingApproval = null)
+            } else {
+                current
+            }
         }
     }
 
@@ -200,33 +286,68 @@ class RunSessionController(
         _activeRun.value = null
     }
 
-    private suspend fun handleEvent(profileId: String, sessionId: String, event: ChatTurnEvent) {
+    private suspend fun handleEvent(
+        profileId: String,
+        sessionId: String,
+        turnToken: Long,
+        event: ChatTurnEvent
+    ) {
         when (event) {
-            is ChatTurnEvent.RunStarted -> _activeRun.update { current ->
-                if (current != null && current.sessionId == sessionId) {
-                    current.copy(runId = event.runId)
+            is ChatTurnEvent.RunStarted -> updateActiveRun(sessionId, turnToken) {
+                it.copy(runId = event.runId, reconnecting = false)
+            }
+
+            is ChatTurnEvent.AssistantStarted -> updateActiveRun(sessionId, turnToken) {
+                it.copy(reconnecting = false)
+            }
+
+            is ChatTurnEvent.AssistantDelta -> updateActiveRun(sessionId, turnToken) {
+                it.copy(assistantText = it.assistantText + event.text, reconnecting = false)
+            }
+
+            is ChatTurnEvent.AssistantCompleted -> updateActiveRun(sessionId, turnToken) {
+                it.copy(assistantText = event.finalText, reconnecting = false)
+            }
+
+            is ChatTurnEvent.ToolActivity -> {
+                val toolName = event.toolName
+                if (toolName != null) {
+                    updateActiveRun(sessionId, turnToken) {
+                        it.copy(toolNames = it.toolNames + toolName, reconnecting = false)
+                    }
                 } else {
-                    current
+                    updateActiveRun(sessionId, turnToken) { it.copy(reconnecting = false) }
                 }
             }
 
+            is ChatTurnEvent.StreamReconnecting -> updateActiveRun(sessionId, turnToken) {
+                it.copy(reconnecting = true)
+            }
+
             is ChatTurnEvent.ApprovalRequested -> {
-                _activeRun.update { current ->
-                    if (current != null && current.sessionId == sessionId) {
-                        current.copy(pendingApproval = event.request)
-                    } else {
-                        current
-                    }
+                updateActiveRun(sessionId, turnToken) {
+                    it.copy(pendingApproval = event.request, reconnecting = false)
                 }
                 notificationCoordinator.onApprovalRequested(profileId, sessionId, event.request)
             }
 
-is ChatTurnEvent.TurnCompleted -> {
+            is ChatTurnEvent.TurnCompleted -> {
+                // The terminal path must honour the same turn identity as
+                // every other update: a late terminal event of a run that
+                // [startTurn] already replaced must never stop the successor's
+                // foreground service, notify for its run id or clear its slot.
+                if (slotTurnToken != turnToken) {
+                    _events.emit(event)
+                    return
+                }
                 val runId = _activeRun.value?.runId
                 // Stop the foreground service BEFORE the terminal is emitted
                 // so a view model's reaction (the run-completed notification
                 // is posted by the coordinator, not the view model) can never
-                // race the foreground notification removal.
+                // race the foreground notification removal. The terminal
+                // state itself clears the reconstructable turn state, so no
+                // stale stop/reconnect/approval state can survive a
+                // re-created view model.
                 serviceStarter.stop()
                 if (runId != null) {
                     notificationCoordinator.onRunCompleted(profileId, sessionId, runId)
@@ -235,15 +356,41 @@ is ChatTurnEvent.TurnCompleted -> {
             }
 
             is ChatTurnEvent.TurnFailed -> {
+                if (slotTurnToken != turnToken) {
+                    _events.emit(event)
+                    return
+                }
                 serviceStarter.stop()
                 _activeRun.value = null
             }
-
-            is ChatTurnEvent.AssistantStarted,
-            is ChatTurnEvent.AssistantDelta,
-            is ChatTurnEvent.AssistantCompleted,
-            is ChatTurnEvent.ToolActivity -> Unit
         }
-_events.emit(event)
+        // Bookkeeping only: the event itself is still emitted to the live
+        // observers exactly once.
+        _events.emit(event)
+    }
+
+    /**
+     * Applies [transform] to the active-run state, but only when the slot
+     * still belongs to [sessionId] AND is still owned by the same turn
+     * ([turnToken], P4): an event of another session - or a late event of a
+     * run that [startTurn] already replaced - can never mutate this state,
+     * and the transform is never applied to a cleared slot.
+     */
+    private inline fun updateActiveRun(
+        sessionId: String,
+        turnToken: Long,
+        transform: (ActiveRun) -> ActiveRun
+    ) {
+        _activeRun.update { current ->
+            if (
+                current != null &&
+                current.sessionId == sessionId &&
+                slotTurnToken == turnToken
+            ) {
+                transform(current)
+            } else {
+                current
+            }
+        }
     }
 }

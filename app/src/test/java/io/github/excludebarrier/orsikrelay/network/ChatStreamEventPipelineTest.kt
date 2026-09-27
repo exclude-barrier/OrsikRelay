@@ -1,10 +1,12 @@
 package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamResumeState
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -757,6 +759,151 @@ class ChatStreamEventPipelineTest {
         )
     }
 
+    // ------------------------------------------------------------------
+    // P4: re-attach snapshot and resumed sequence state
+    // ------------------------------------------------------------------
+
+    @Test
+    fun snapshotIsNullBeforeFirstFrameAndCarriesConfirmedStateAfter() {
+        assertNull(pipeline.snapshot())
+        pipeline.process(frame("run.started", 1))
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        pipeline.process(deltaFrame(3, MSG_ID, "Hallo"))
+
+        val state = pipeline.snapshot()
+        assertEquals(RUN_ID, state?.runId)
+        assertEquals(3L, state?.lastSeq)
+        assertTrue(state?.messageStarted == true)
+        assertEquals(MSG_ID, state?.messageId)
+        assertEquals("Hallo", state?.composed)
+        assertFalse(state?.terminal == true)
+    }
+
+    @Test
+    fun resumeStartsFromConfirmedStateAndContinuesSequence() {
+        val state = snapshotAfterDelta()
+        val resumed = ChatStreamEventPipeline(SESSION_ID, resume = state)
+
+        // No `run.started` is re-expected: the next frame is exactly
+        // `lastSeq + 1`, and the composed text continues from the
+        // confirmed state.
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.AssistantDelta(" mehr")),
+            resumed.process(deltaFrame(4, MSG_ID, " mehr"))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.AssistantCompleted("Hallo mehr")),
+            resumed.process(completedFrame(5, MSG_ID, "Hallo mehr"))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
+            resumed.process(frame("run.completed", 6))
+        )
+    }
+
+    @Test
+    fun resumeRejectsSequenceGap() {
+        val resumed = ChatStreamEventPipeline(SESSION_ID, resume = snapshotAfterDelta())
+        assertProtocolViolation(resumed, deltaFrame(5, MSG_ID, "gap"), "gap in resumed sequence")
+    }
+
+    @Test
+    fun resumeRejectsReplayedRunStarted() {
+        val resumed = ChatStreamEventPipeline(SESSION_ID, resume = snapshotAfterDelta())
+        assertProtocolViolation(
+            resumed,
+            frame("run.started", 4),
+            "replayed run.started in resumed stream"
+        )
+    }
+
+    @Test
+    fun resumeRejectsBackwardSequence() {
+        val resumed = ChatStreamEventPipeline(SESSION_ID, resume = snapshotAfterDelta())
+        assertProtocolViolation(
+            resumed,
+            deltaFrame(2, MSG_ID, "backward"),
+            "backward sequence in resumed stream"
+        )
+    }
+
+    @Test
+    fun resumedPipelineDropsAnIdenticalReplayedFrame() {
+        val resumed = ChatStreamEventPipeline(SESSION_ID, resume = snapshotAfterDelta())
+
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.AssistantDelta(" mehr")),
+            resumed.process(deltaFrame(4, MSG_ID, " mehr"))
+        )
+        // The re-attached server stream resubmits the identical frame
+        // (same `seq`, same payload): dropped, never applied twice, so the
+        // composed text carries the delta exactly once.
+        assertEquals(emptyList<ChatTurnEvent>(), resumed.process(deltaFrame(4, MSG_ID, " mehr")))
+        assertEquals("Hallo mehr", resumed.snapshot()?.composed)
+        assertEquals(4L, resumed.snapshot()?.lastSeq)
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.AssistantCompleted("Hallo mehr")),
+            resumed.process(completedFrame(5, MSG_ID, "Hallo mehr"))
+        )
+    }
+
+    @Test
+    fun endOfStreamWithoutAnyTerminalFrameIsNotAProtocolViolation() {
+        // P4 finding: a clean mid-stream EOF (the socket died at a
+        // frame boundary, no terminal frame and no `done`) is a
+        // transient disconnect, not a malformed stream. The pipeline
+        // must accept that end, so the transport can map it to the
+        // reconnectable ChatStreamError.Network.
+        val streaming = ChatStreamEventPipeline(SESSION_ID, requireDoneAfterTerminal = true)
+        streaming.process(frame("run.started", 1))
+        streaming.process(messageStartedFrame(2, MSG_ID))
+        streaming.process(deltaFrame(3, MSG_ID, "Hallo"))
+        streaming.endOfStream()
+        assertEquals(3L, streaming.snapshot()?.lastSeq)
+        assertFalse(streaming.snapshot()?.terminal == true)
+    }
+
+    @Test
+    fun endOfStreamAfterTerminalFrameWithoutDoneIsAProtocolViolation() {
+        // Unchanged strictness: a stream that sent the terminal frame
+        // but no `done` is truncated and stays IncompatibleApi.
+        val completedThenEof =
+            ChatStreamEventPipeline(SESSION_ID, requireDoneAfterTerminal = true)
+        completedThenEof.process(frame("run.started", 1))
+        completedThenEof.process(messageStartedFrame(2, MSG_ID))
+        completedThenEof.process(completedFrame(3, MSG_ID, "Hallo"))
+        completedThenEof.process(frame("run.completed", 4))
+        assertProtocolViolationAtEndOfStream(completedThenEof)
+
+        val errorThenEof =
+            ChatStreamEventPipeline(SESSION_ID, requireDoneAfterTerminal = true)
+        errorThenEof.process(frame("run.started", 1))
+        errorThenEof.process(messageStartedFrame(2, MSG_ID))
+        errorThenEof.process(
+            ParsedSseFrame("error", baseFrame(3).put("message", "dynamic").toString())
+        )
+        assertProtocolViolationAtEndOfStream(errorThenEof)
+    }
+
+    @Test
+    fun resumedPipelineAcceptsACleanEofBeforeAnyNewFrame() {
+        // The re-attached socket died again before it delivered a new
+        // frame: end-of-stream before any frame is a transient
+        // disconnect, and the confirmed state of the interrupted
+        // attempt stays the state to re-attach from.
+        val resumed = ChatStreamEventPipeline(SESSION_ID, requireDoneAfterTerminal = true, resume = snapshotAfterDelta())
+        resumed.endOfStream()
+        assertEquals(3L, resumed.snapshot()?.lastSeq)
+    }
+
+    private fun snapshotAfterDelta(): ChatStreamResumeState {
+        val source = ChatStreamEventPipeline(SESSION_ID)
+        source.process(frame("run.started", 1))
+        source.process(messageStartedFrame(2, MSG_ID))
+        source.process(deltaFrame(3, MSG_ID, "Hallo"))
+        return source.snapshot() ?: error("snapshot must exist after confirmed frames")
+    }
+
     private fun approvalPipeline(runId: String): ChatStreamEventPipeline {
         val target = ChatStreamEventPipeline(
             expectedSessionId = SESSION_ID,
@@ -837,6 +984,15 @@ class ChatStreamEventPipelineTest {
         try {
             target.process(frame)
             fail("$label")
+        } catch (expected: ChatTurnProtocolException) {
+            assertTrue(expected.message.isNullOrBlank())
+        }
+    }
+
+    private fun assertProtocolViolationAtEndOfStream(target: ChatStreamEventPipeline) {
+        try {
+            target.endOfStream()
+            fail("expected a truncated-stream protocol violation at end of stream")
         } catch (expected: ChatTurnProtocolException) {
             assertTrue(expected.message.isNullOrBlank())
         }

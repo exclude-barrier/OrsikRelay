@@ -6,6 +6,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamHandle
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamResumeState
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamTransport
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
@@ -435,6 +436,439 @@ class StreamingChatRepositoryTest {
         )
     }
 
+    // ------------------------------------------------------------------
+    // P4: re-attach across transient stream failures
+    // ------------------------------------------------------------------
+
+    @Test
+    fun transientNetworkFailureReattachesToSameRunWithConfirmedState() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                listener.onEvent(ChatTurnEvent.AssistantDelta("fortsetzung"))
+                listener.onEvent(ChatTurnEvent.TurnCompleted())
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 3L, runCompleted = true))
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.AssistantDelta("fortsetzung"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            events
+        )
+        assertEquals(1, transport.openTurnCalls)
+        assertEquals(1, transport.openResumeCalls)
+        assertEquals("run_p4", transport.lastRunId)
+        assertEquals(2L, transport.lastResume?.lastSeq)
+    }
+
+    @Test
+    fun definitiveFailureIsNeverReattached() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.InvalidInput))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot())
+            },
+            resumeAttempt = { _, _ -> throw AssertionError("openResume must not be called") }
+        )
+        val repository = repository(metadata, credentials, transport)
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.TurnFailed(ChatStreamError.InvalidInput)
+            ),
+            events
+        )
+        assertEquals(0, transport.openResumeCalls)
+    }
+
+    @Test
+    fun networkFailureWithoutConfirmedRunSettlesWithoutReattach() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(null)
+            },
+            resumeAttempt = { _, _ -> throw AssertionError("openResume must not be called") }
+        )
+        val repository = repository(metadata, credentials, transport)
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnFailed(ChatStreamError.Network)),
+            events
+        )
+        assertEquals(0, transport.openResumeCalls)
+    }
+
+    @Test
+    fun terminalSnapshotIsNotReattached() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(sawError = true))
+            },
+            resumeAttempt = { _, _ -> throw AssertionError("openResume must not be called") }
+        )
+        val repository = repository(metadata, credentials, transport)
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+            ),
+            events
+        )
+        assertEquals(0, transport.openResumeCalls)
+    }
+
+    @Test
+    fun resumeFailureSettlesTurnWithSingleTerminalEvent() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                // A transport without re-attach support settles with the
+                // closed ResumeUnavailable reason (default contract).
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.ResumeUnavailable))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.TurnFailed(ChatStreamError.ResumeUnavailable)
+            ),
+            events
+        )
+        assertEquals(1, transport.openResumeCalls)
+    }
+
+    @Test
+    fun reattachAlwaysTargetsTheSameRunAsTheResumeStateItReplays() {
+        // P4 run-id boundary invariant: the run id of the re-attach
+        // request and the run id of the state it resumes are the same
+        // confirmed run. The transport additionally rejects a mismatch
+        // closed, so a foreign run can never be replayed.
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                listener.onEvent(ChatTurnEvent.TurnCompleted())
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 3L, runCompleted = true))
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.TurnCompleted()
+            ),
+            events
+        )
+        assertEquals(1, transport.openTurnCalls)
+        assertEquals(1, transport.openResumeCalls)
+        assertEquals("run_p4", transport.lastRunId)
+        assertEquals(
+            "the re-attach must target exactly the run of its resume state",
+            transport.lastRunId,
+            transport.lastResume?.runId
+        )
+    }
+
+    @Test
+    fun reconnectBackoffClampsToTheLastIntervalAndNeverRetriesAtZero() {
+        // P4 backoff bound: an `attempt` outside the ladder (only
+        // possible when a caller pairs a larger attempt bound with a
+        // shorter ladder) clamps to the LAST interval instead of
+        // falling back to 0 ms, so no aggressive retry spin exists.
+        val ladder = longArrayOf(500L, 1_000L, 2_000L)
+        assertEquals(500L, StreamingChatRepository.reconnectBackoffMsFor(0, ladder))
+        assertEquals(1_000L, StreamingChatRepository.reconnectBackoffMsFor(1, ladder))
+        assertEquals(2_000L, StreamingChatRepository.reconnectBackoffMsFor(2, ladder))
+        assertEquals(
+            "the first attempt past the ladder must clamp, not drop to 0 ms",
+            2_000L,
+            StreamingChatRepository.reconnectBackoffMsFor(3, ladder)
+        )
+        assertEquals(2_000L, StreamingChatRepository.reconnectBackoffMsFor(1_000, ladder))
+        // The production ladder has exactly one interval per allowed
+        // attempt, so the clamp is unreachable with the defaults.
+        assertEquals(
+            StreamingChatRepository.MAX_RECONNECT_ATTEMPTS,
+            StreamingChatRepository.RECONNECT_BACKOFF_MS.size
+        )
+        assertTrue(StreamingChatRepository.RECONNECT_BACKOFF_MS.all { it > 0L })
+        // Only a deliberately empty ladder yields 0 ms - and even then
+        // the number of attempts stays bounded by maxReconnectAttempts.
+        assertEquals(0L, StreamingChatRepository.reconnectBackoffMsFor(0, longArrayOf()))
+    }
+
+    @Test
+    fun reattachAttemptsAreBoundedAndStillTerminate() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            maxReconnectAttempts = 2,
+            reconnectBackoffMs = longArrayOf(1L, 1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+            ),
+            events
+        )
+        assertEquals(1, transport.openTurnCalls)
+        assertEquals(2, transport.openResumeCalls)
+    }
+
+    @Test
+    fun resumeFailureWithoutAttemptSnapshotFallsBackToTheConfirmedState() {
+        // Production shape of an HTTP status failure on the re-attach GET
+        // (5xx -> Network): the stream was never bound, so that attempt's
+        // handle carries no snapshot of its own. The confirmed state of the
+        // interrupted attempt is still exact (no frame was processed), so
+        // the loop must keep re-attaching to the same run from that state
+        // instead of settling the turn on the transport hiccup.
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        var resumeAttempts = 0
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                resumeAttempts += 1
+                if (resumeAttempts == 1) {
+                    listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                    listener.onFinished()
+                    HandleWithSnapshot(null)
+                } else {
+                    listener.onEvent(ChatTurnEvent.AssistantDelta("fortsetzung"))
+                    listener.onEvent(ChatTurnEvent.TurnCompleted())
+                    listener.onFinished()
+                    HandleWithSnapshot(snapshot(lastSeq = 3L, runCompleted = true))
+                }
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.AssistantDelta("fortsetzung"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            events
+        )
+        // No second POST, no second user message: the turn is only
+        // re-attached, and the confirmed run and its confirmed sequence
+        // survive the snapshot-less failure unchanged.
+        assertEquals(1, transport.openTurnCalls)
+        assertEquals(2, transport.openResumeCalls)
+        assertEquals("run_p4", transport.lastRunId)
+        assertEquals(2L, transport.lastResume?.lastSeq)
+    }
+
+    @Test
+    fun synchronousResumeFailureRetriesWithTheConfirmedState() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        var resumeAttempts = 0
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                resumeAttempts += 1
+                if (resumeAttempts == 1) {
+                    throw IllegalStateException("synthetic-sensitive-detail")
+                }
+                listener.onEvent(ChatTurnEvent.TurnCompleted())
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 3L, runCompleted = true))
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.TurnCompleted()
+            ),
+            events
+        )
+        assertEquals(1, transport.openTurnCalls)
+        assertEquals(2, transport.openResumeCalls)
+        assertEquals("run_p4", transport.lastRunId)
+        assertEquals(2L, transport.lastResume?.lastSeq)
+        assertFalse(events.toString().contains("synthetic-sensitive-detail"))
+    }
+
+    @Test
+    fun rejectedCredentialOnReattachFailsClosedWithoutRetry() {
+        // A credential rejected (401/403) or revoked between the attempts
+        // is definitive for the turn: exactly one re-attach, then fail
+        // closed - never a retry ladder and never a second POST.
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, _ ->
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.InvalidCredentials))
+                listener.onFinished()
+                HandleWithSnapshot(null)
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted("run_p4"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.TurnFailed(ChatStreamError.InvalidCredentials)
+            ),
+            events
+        )
+        assertEquals(1, transport.openTurnCalls)
+        assertEquals(1, transport.openResumeCalls)
+        assertEquals("run_p4", transport.lastRunId)
+    }
+
     private fun awaitHandleClose(
         closeCalls: java.util.concurrent.atomic.AtomicInteger
     ): Boolean {
@@ -467,7 +901,9 @@ class StreamingChatRepositoryTest {
                 return NoopHandle
             }
         },
-        capabilitySource: RunApprovalCapabilitySource = RunApprovalCapabilitySource { false }
+        capabilitySource: RunApprovalCapabilitySource = RunApprovalCapabilitySource { false },
+        maxReconnectAttempts: Int = 5,
+        reconnectBackoffMs: LongArray = longArrayOf(1L)
     ): StreamingChatRepository {
         val profileRepository =
             ServerProfileRepository(metadata, credentials, idFactory = { "unused-id" })
@@ -475,7 +911,9 @@ class StreamingChatRepositoryTest {
             profileRepository,
             credentials,
             transport,
-            capabilitySource
+            capabilitySource,
+            maxReconnectAttempts,
+            reconnectBackoffMs
         )
     }
 
@@ -575,6 +1013,71 @@ class StreamingChatRepositoryTest {
             return handle
         }
     }
+
+
+    /** Synthetic P4 re-attach transport: scripted first and resume attempts. */
+    private class ReattachTransport(
+        private val firstAttempt: (ChatStreamListener) -> ChatStreamHandle,
+        private val resumeAttempt: (ChatStreamListener, ChatStreamResumeState) -> ChatStreamHandle
+    ) : ChatStreamTransport {
+        var openTurnCalls = 0
+        var openResumeCalls = 0
+        var lastRunId: String? = null
+        var lastResume: ChatStreamResumeState? = null
+
+        override fun openTurn(
+            baseUrl: String,
+            apiKey: SecretValue,
+            sessionId: String,
+            message: String,
+            interactiveApprovals: Boolean,
+            listener: ChatStreamListener
+        ): ChatStreamHandle {
+            openTurnCalls += 1
+            return firstAttempt(listener)
+        }
+
+        override fun openResume(
+            baseUrl: String,
+            apiKey: SecretValue,
+            sessionId: String,
+            runId: String,
+            resume: ChatStreamResumeState,
+            interactiveApprovals: Boolean,
+            listener: ChatStreamListener
+        ): ChatStreamHandle {
+            openResumeCalls += 1
+            lastRunId = runId
+            lastResume = resume
+            return resumeAttempt(listener, resume)
+        }
+    }
+
+    private class HandleWithSnapshot(private val state: ChatStreamResumeState?) :
+        ChatStreamHandle {
+        override fun close() {
+            // nothing to cancel
+        }
+
+        override fun resumeState(): ChatStreamResumeState? = state
+    }
+
+    private fun snapshot(
+        runId: String = "run_p4",
+        lastSeq: Long = 1L,
+        sawError: Boolean = false,
+        runCompleted: Boolean = false
+    ): ChatStreamResumeState = ChatStreamResumeState(
+        runId = runId,
+        lastSeq = lastSeq,
+        messageStarted = false,
+        messageId = null,
+        composed = "",
+        assistantCompleted = false,
+        finalText = null,
+        runCompleted = runCompleted,
+        sawError = sawError
+    )
 
     private class FakeMetadataStore(
         val profiles: MutableList<ServerProfile> = mutableListOf()

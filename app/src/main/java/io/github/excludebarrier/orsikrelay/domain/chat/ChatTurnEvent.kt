@@ -49,6 +49,24 @@ sealed interface ChatTurnEvent {
      */
     data class TurnCompleted(val pendingSteer: String? = null) : ChatTurnEvent
 
-    /** Closed generic failure; nothing is retried automatically. */
+    /**
+     * Closed generic failure. Delivered at most once per turn, and only
+     * after the automatic repair is over: a transient [ChatStreamError]
+     * (`Network`/`Timeout`, P4) with a confirmed run is first repaired by
+     * the bounded re-attach of [StreamReconnecting]; every other reason -
+     * a protocol violation, a credential rejection, a rate limit, a TLS
+     * failure or a server-side `error` frame - is definitive and never
+     * retried. A turn whose transient repair was exhausted fails here.
+     */
     data class TurnFailed(val error: ChatStreamError) : ChatTurnEvent
+
+    /**
+     * The stream was interrupted by a transient network failure while
+     * the run is still alive server-side; the client is re-attaching to
+     * the same run (P4). Non-terminal: the turn continues, and the flow
+     * still terminates with exactly one [TurnCompleted] or [TurnFailed].
+     * The UI may show a transient reconnecting status for it; the run's
+     * foreground service and all run bookkeeping stay active.
+     */
+    data object StreamReconnecting : ChatTurnEvent
 }

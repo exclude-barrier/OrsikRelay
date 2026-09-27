@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -81,6 +82,117 @@ class RunSessionControllerTest {
         val starter: FakeServiceStarter,
         val poster: RecordingPoster
     )
+
+    // ------------------------------------------------------------------
+    // P4: durable in-memory turn state for re-created screens
+    // ------------------------------------------------------------------
+
+    @Test
+    fun activeRunCarriesTheTurnTextForRehydration() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "Hallo Welt")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("Das ist "))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("eine Antwort."))
+        built.source.enqueue(ChatTurnEvent.ToolActivity(toolName = "web_search"))
+        testScheduler.advanceUntilIdle()
+
+        val active = built.controller.activeRun.value
+        assertNotNull(active)
+        assertEquals(sessionId, active?.sessionId)
+        assertEquals(runId, active?.runId)
+        // The controller keeps the user text it was handed (the view model
+        // hands over the VALIDATED, trimmed text), so a re-created screen
+        // rebuilds exactly the line the user saw.
+        assertEquals("Hallo Welt", active?.userMessage)
+        assertEquals("Das ist eine Antwort.", active?.assistantText)
+        assertEquals(listOf("web_search"), active?.toolNames)
+        assertEquals(RunSessionController.ActiveRun.Status.RUNNING, active?.status)
+        built.controller.close()
+    }
+
+    @Test
+    fun activeRunSurfacesTheReconnectingAndApprovalStatus() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.StreamReconnecting)
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            RunSessionController.ActiveRun.Status.RECONNECTING,
+            built.controller.activeRun.value?.status
+        )
+        assertTrue(built.controller.activeRun.value?.reconnecting == true)
+
+        built.source.enqueue(ChatTurnEvent.ApprovalRequested(approvalRequest()))
+        testScheduler.advanceUntilIdle()
+        val awaiting = built.controller.activeRun.value
+        assertEquals(
+            RunSessionController.ActiveRun.Status.WAITING_FOR_APPROVAL,
+            awaiting?.status
+        )
+        assertEquals(requestId, awaiting?.pendingApproval?.requestId)
+        assertFalse("progress clears the transient reconnecting flag", awaiting?.reconnecting == true)
+        built.controller.close()
+    }
+
+    @Test
+    fun assistantCompletedReplacesTheComposedTextExactlyOnce() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
+        built.source.enqueue(ChatTurnEvent.AssistantCompleted("teil antwort"))
+        testScheduler.advanceUntilIdle()
+        assertEquals("teil antwort", built.controller.activeRun.value?.assistantText)
+        built.controller.close()
+    }
+
+    @Test
+    fun startingATurnForAnotherSessionReplacesTheSlotWithoutLeakingState() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
+        built.source.enqueue(ChatTurnEvent.ApprovalRequested(approvalRequest()))
+        testScheduler.advanceUntilIdle()
+        built.controller.startTurn(profileId, otherSessionId, "other")
+        testScheduler.advanceUntilIdle()
+        val after = built.controller.activeRun.value
+        assertEquals(otherSessionId, after?.sessionId)
+        assertEquals("other", after?.userMessage)
+        // Nothing of the previous session's turn survives in the new slot.
+        assertEquals("", after?.assistantText)
+        assertNull(after?.runId)
+        assertNull(after?.pendingApproval)
+        assertFalse(after?.reconnecting == true)
+        built.controller.close()
+    }
+
+    @Test
+    fun aTerminalEventClearsTheReconstructableTurnState() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
+        built.source.enqueue(ChatTurnEvent.TurnCompleted())
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        built.controller.close()
+    }
+
+    @Test
+    fun cancelTurnClearsTheReconstructableTurnState() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
+        testScheduler.advanceUntilIdle()
+        built.controller.cancelTurn()
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        built.controller.close()
+    }
 
     // ------------------------------------------------------------------
     // Foreground-service lifecycle over the run's terminal states
@@ -228,7 +340,8 @@ class RunSessionControllerTest {
             ChatTurnEvent.RunStarted(runId),
             ChatTurnEvent.ApprovalRequested(approvalRequest())
         )
-        built.controller.clearPendingApproval()
+        testScheduler.advanceUntilIdle()
+        built.controller.clearPendingApproval(profileId, sessionId, runId, requestId)
         testScheduler.advanceUntilIdle()
         // The run itself is untouched; only the decided request is cleared
         // so a re-attached view model does not re-show it.
@@ -236,6 +349,58 @@ class RunSessionControllerTest {
         assertTrue(active != null)
         assertNull(active?.pendingApproval)
         assertEquals(0, built.starter.stops.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun clearPendingApprovalRequiresTheExactRequestIdentity() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.ApprovalRequested(approvalRequest())
+        )
+        testScheduler.advanceUntilIdle()
+        // Any mismatching identity leaves the pending request untouched.
+        built.controller.clearPendingApproval(profileId, otherSessionId, runId, requestId)
+        built.controller.clearPendingApproval(profileId, sessionId, "run_" + "c".repeat(32), requestId)
+        built.controller.clearPendingApproval(profileId, sessionId, runId, "d".repeat(32))
+        built.controller.clearPendingApproval("other-profile", sessionId, runId, requestId)
+        testScheduler.advanceUntilIdle()
+        assertEquals(requestId, built.controller.activeRun.value?.pendingApproval?.requestId)
+        // The exact identity clears it.
+        built.controller.clearPendingApproval(profileId, sessionId, runId, requestId)
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value?.pendingApproval)
+        built.controller.close()
+    }
+
+    @Test
+    fun aStaleApprovalResultNeverClearsTheCurrentApproval() = runTest {
+        val built = build(this.testScheduler)
+        // Run A raises and "answers" an approval, but the result arrives late.
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.ApprovalRequested(approvalRequest())
+        )
+        testScheduler.advanceUntilIdle()
+        // A new run B takes the slot and raises its own approval.
+        val runB = "run_" + "e".repeat(32)
+        val requestB = "f".repeat(32)
+        built.controller.startTurn(profileId, sessionId, "second")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runB),
+            ChatTurnEvent.ApprovalRequested(
+                ApprovalRequest(runB, requestB, ApprovalRequest.SAFE_DESCRIPTION)
+            )
+        )
+        testScheduler.advanceUntilIdle()
+        // The late result of run A / request A must not touch B.
+        built.controller.clearPendingApproval(profileId, sessionId, runId, requestId)
+        testScheduler.advanceUntilIdle()
+        assertEquals(requestB, built.controller.activeRun.value?.pendingApproval?.requestId)
+        assertEquals(runB, built.controller.activeRun.value?.runId)
         built.controller.close()
     }
 

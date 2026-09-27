@@ -48,6 +48,7 @@
     <string name="chat_title">Chat</string>
     <string name="chat_back">Zurück</string>
     <string name="chat_loading">Nachrichten werden geladen…</string>
+    <string name="chat_stream_reconnecting">Verbinde neu …</string>
     <string name="chat_empty">Diese Session enthält noch keine Nachrichten.</string>
     <string name="chat_role_user">Du</string>
     <string name="chat_role_assistant">Hermes</string>

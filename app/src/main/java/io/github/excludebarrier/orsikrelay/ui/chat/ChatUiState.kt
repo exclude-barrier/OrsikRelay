@@ -70,6 +70,8 @@ internal data class ChatUiState(
     val localLines: List<TimelineRow> = emptyList(),
     val turnFailure: ChatStreamError? = null,
     val turnActive: Boolean = false,
+    /** P4: the active turn's stream is being re-attached to the run. */
+    val reconnecting: Boolean = false,
     val runStarted: Boolean = false,
     val boundRunId: String? = null,
     val pendingApproval: ApprovalRequest? = null,

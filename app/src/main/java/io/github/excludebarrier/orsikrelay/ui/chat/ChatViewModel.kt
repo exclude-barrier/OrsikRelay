@@ -4,6 +4,7 @@ import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
+import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
@@ -57,7 +58,10 @@ import kotlinx.coroutines.withContext
  * [RunSessionController.events] and renders them; leaving the screen no
  * longer interrupts the run. If the view model is created while the
  * session's run is already active (re-entry, deep-link tap, recreation) it
- * re-attaches to that run's state.
+ * re-attaches to that run's state and rebuilds the visible turn (user line,
+ * composed assistant text, reconnecting/approval status) from the
+ * controller's durable in-memory turn state - so an Activity recreation
+ * neither loses the turn nor starts a second POST.
  */
 internal class ChatViewModel(
     private val historySource: MessageHistorySource,
@@ -85,6 +89,11 @@ internal class ChatViewModel(
     private var localKeyCounter = 0
     private var draftGeneration = 0
     private var activeUserLineKey: String? = null
+    // P4: key of the user line REHYDRATED from the controller after a
+    // recreation. It is dropped as soon as the loaded server history carries
+    // the same message (the server stores it when the run starts), so a
+    // re-created screen never renders the user's message twice.
+    private var rehydratedUserLineKey: String? = null
     private var terminalPendingSteer: String? = null
 
     // Job handles for the in-flight stop and steer requests. Deliberately
@@ -101,12 +110,57 @@ internal class ChatViewModel(
         // run UI state instead of starting from a blank screen.
         val active = runController.activeRun.value
         if (active != null && active.profileId == profileId && active.sessionId == sessionId) {
+            // Rebuild the visible turn from the controller's durable,
+            // in-memory turn state (P4 recreation fix): the user line and
+            // the assistant text received so far, plus the run identity and
+            // the transient statuses. Deliberately rebuilt ONLY from the
+            // closed, UI-safe fields - no command, argument, path, raw tool
+            // output or credential ever enters this state.
+            val rows = mutableListOf<TimelineRow>()
+            var rehydratedUserKey: String? = null
+            if (active.userMessage.isNotBlank()) {
+                rehydratedUserKey = nextLocalKey()
+                rehydratedUserLineKey = rehydratedUserKey
+                rows += TimelineRow(
+                    key = rehydratedUserKey,
+                    role = MessageRole.USER,
+                    content = active.userMessage
+                )
+            }
+            // Tool activity rows are rebuilt BEFORE the assistant row: the
+            // assistant row must stay last so a following delta appends to it
+            // (and `assistant.completed` replaces it) instead of creating a
+            // second assistant row. The names come from the already redacted
+            // domain event, never from a raw payload.
+            for (toolName in active.toolNames) {
+                rows += TimelineRow(
+                    key = nextLocalKey(),
+                    role = MessageRole.TOOL,
+                    content = namedToolActivityLabel.format(toolName),
+                    localTool = true
+                )
+            }
+            if (active.assistantText.isNotEmpty()) {
+                rows += TimelineRow(
+                    key = nextLocalKey(),
+                    role = MessageRole.ASSISTANT,
+                    content = active.assistantText
+                )
+            }
+            // Only an UNCONFIRMED run still owns a premature user line that a
+            // pre-`RunStarted` failure may drop; a confirmed run keeps its row.
+            activeUserLineKey = if (active.runId == null) rehydratedUserKey else null
             _state.update {
                 it.copy(
                     turnActive = true,
-                    runStarted = true,
+                    // The flag means "the server confirmed this run": a
+                    // re-created screen must not claim a confirmed run that
+                    // the server has not acknowledged yet.
+                    runStarted = active.runId != null,
                     boundRunId = active.runId,
-                    pendingApproval = active.pendingApproval
+                    pendingApproval = active.pendingApproval,
+                    reconnecting = active.reconnecting,
+                    localLines = rows
                 )
             }
         }
@@ -167,13 +221,52 @@ internal class ChatViewModel(
             _state.update {
                 it.copy(
                     history = when (result) {
-                        is MessageHistoryResult.Success ->
+                        is MessageHistoryResult.Success -> {
+                            dropRehydratedUserLineShadowedByHistory(result.page.messages)
                             MessageHistoryState.Ready(result.page.messages)
+                        }
                         is MessageHistoryResult.Failure ->
                             MessageHistoryState.Failed(result.error)
                     }
                 )
             }
+        }
+    }
+
+    /**
+     * P4: removes the rehydrated turn rows once the loaded server history
+     * already records the same turn. The server stores the user message when
+     * the run starts and the assistant answer when it ends, so a screen
+     * re-created mid-turn would otherwise render the user's own message (and,
+     * once the run finished before the load resolved, the answer) twice.
+     *
+     * Deliberately narrow: it only ever touches rows this view model
+     * rehydrated (the rehydrated user row and the rows after it, which are
+     * exactly this turn's), and only when the history's NEWEST user row is an
+     * exact (role, content) match. While the turn is still running, the
+     * history ends with that user row, so only the user line is dropped and
+     * the live partial answer stays; once the history also carries a later
+     * row (the recorded answer), the whole rehydrated turn is dropped because
+     * the history is authoritative.
+     */
+    private fun dropRehydratedUserLineShadowedByHistory(messages: List<HermesChatMessage>) {
+        val key = rehydratedUserLineKey ?: return
+        val rehydratedIndex = _state.value.localLines.indexOfFirst { it.key == key }
+        if (rehydratedIndex < 0) return
+        val localUser = _state.value.localLines[rehydratedIndex]
+        val newestUserIndex = messages.indexOfLast { it.role == MessageRole.USER }
+        if (newestUserIndex < 0) return
+        if (messages[newestUserIndex].content != localUser.content) return
+        val turnRecordedInFull = newestUserIndex < messages.lastIndex
+        rehydratedUserLineKey = null
+        _state.update { current ->
+            current.copy(
+                localLines = if (turnRecordedInFull) {
+                    current.localLines.take(rehydratedIndex)
+                } else {
+                    current.localLines.filterNot { it.key == key }
+                }
+            )
         }
     }
 
@@ -255,6 +348,7 @@ internal class ChatViewModel(
      * then re-runs the idempotent history read. The POST is never resent.
      */
     fun refreshHistory() {
+        rehydratedUserLineKey = null
         _state.update {
             it.copy(
                 localLines = emptyList(),
@@ -282,8 +376,33 @@ internal class ChatViewModel(
      * resolved.
      */
     fun dismissApproval() {
+        val request = _state.value.pendingApproval ?: return
         _state.update { it.copy(pendingApproval = null) }
-        runController.clearPendingApproval()
+        runController.clearPendingApproval(
+            profileId = profileId,
+            sessionId = sessionId,
+            runId = request.runId,
+            requestId = request.requestId
+        )
+    }
+
+    /**
+     * Drops the app-level record of an approval the server reports as no
+     * longer pending (409 `NoPending`: already answered elsewhere or timed
+     * out). The authoritative answer is terminal, so a re-created screen
+     * must not resurrect the dialog - but THIS composition keeps its local
+     * request state, so the user still sees the short "already answered"
+     * note it is showing. Deliberately never called for a transient failure:
+     * an ambiguous decision must stay resolvable after a reconnect.
+     */
+    fun finishApproval() {
+        val request = _state.value.pendingApproval ?: return
+        runController.clearPendingApproval(
+            profileId = profileId,
+            sessionId = sessionId,
+            runId = request.runId,
+            requestId = request.requestId
+        )
     }
 
     /**
@@ -308,11 +427,11 @@ internal class ChatViewModel(
         // confirmed start does.
         if (current.turnFailure != null && current.runStarted) return
         val message = ChatMessageValidator.validate(current.draft).getOrNull() ?: return
-        val text = current.draft
         _state.update {
             it.copy(
                 turnActive = true,
                 turnFailure = null,
+                reconnecting = false,
                 runStarted = false,
                 // A new turn starts with a fresh stop state: the previous run
                 // ID and any in-flight stop belong to the finished turn and
@@ -344,8 +463,10 @@ internal class ChatViewModel(
         }
         terminalPendingSteer = null
         // Synchronous on purpose: the controller starts the foreground
-        // service while the app is still in the foreground.
-        runController.startTurn(profileId, sessionId, text)
+        // service while the app is still in the foreground. The VALIDATED
+        // (trimmed) text is handed over - the same text the visible user row
+        // shows - so a re-created view model rehydrates the identical line.
+        runController.startTurn(profileId, sessionId, message)
     }
 
     /**
@@ -368,8 +489,20 @@ internal class ChatViewModel(
     private fun handleRunEvent(event: ChatTurnEvent) {
         val current = _state.value
         if (!current.turnActive) return
+        // P4: any progress after a re-attach announcement means the
+        // stream is flowing again; only the announcement itself sets
+        // the transient status.
+        if (event !is ChatTurnEvent.StreamReconnecting && current.reconnecting) {
+            _state.update { it.copy(reconnecting = false) }
+        }
 
         when (event) {
+            is ChatTurnEvent.StreamReconnecting -> {
+                // P4: the stream was interrupted by a transient network
+                // failure and is being re-attached to the same run:
+                // the turn stays active, nothing is settled.
+                _state.update { s -> s.copy(reconnecting = true) }
+            }
             is ChatTurnEvent.RunStarted -> {
                 // The server-confirmed run ID is the only value the
                 // stop control may use; it is bound here and never
@@ -493,7 +626,7 @@ replaceLastAssistantLine(s.localLines, event.finalText)
 private fun turnSettled() {
         if (!_state.value.turnActive) return
         _state.update {
-            it.copy(turnActive = false, pendingApproval = null, backPending = false)
+            it.copy(turnActive = false, pendingApproval = null, backPending = false, reconnecting = false)
         }
         stopJob?.cancel()
         steerJob?.cancel()

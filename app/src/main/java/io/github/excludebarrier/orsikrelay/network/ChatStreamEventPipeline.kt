@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamResumeState
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import java.math.BigDecimal
@@ -60,7 +61,16 @@ class ChatStreamEventPipeline(
      * performs no additional check and no `done` is required.
      */
     requireDoneAfterTerminal: Boolean = false,
-    private val interactiveApprovals: Boolean = false
+    private val interactiveApprovals: Boolean = false,
+    /**
+     * P4 re-attach: the confirmed sequence state of an interrupted
+     * stream of the SAME run. When non-null the pipeline starts from
+     * that state: the run is already bound and started (no
+     * `run.started` frame is expected again), and the next frame must
+     * carry exactly `resume.lastSeq + 1` — the sequence check is
+     * unchanged, so every other shape fails closed.
+     */
+    resume: ChatStreamResumeState? = null
 ) {
     private val requireDoneAfterTerminal = requireDoneAfterTerminal
     private var boundRunId: String? = null
@@ -79,6 +89,25 @@ class ChatStreamEventPipeline(
     private var runCompleted = false
     private var sawError = false
     private var doneSent = false
+    init {
+        // P4 re-attach: start from the confirmed state of the
+        // interrupted stream. A non-null snapshot always carries a
+        // confirmed run (boundRunId is set by the first frame, which
+        // must be the `seq = 1` `run.started`), so `runStarted` is
+        // restored to `true`.
+        if (resume != null) {
+            boundRunId = resume.runId
+            lastSeq = resume.lastSeq
+            runStarted = true
+            messageStarted = resume.messageStarted
+            boundMessageId = resume.messageId
+            composed = StringBuilder(resume.composed)
+            assistantCompleted = resume.assistantCompleted
+            finalText = resume.finalText
+            runCompleted = resume.runCompleted
+            sawError = resume.sawError
+        }
+    }
 
     /**
      * Validates one frame and returns the closed events it produces.
@@ -137,13 +166,43 @@ class ChatStreamEventPipeline(
      * but before `done`, because such a stream cannot be distinguished
      * from a truncated one.
      *
-     * @throws ChatTurnProtocolException when the stream did not send a
-     * valid `done` after a terminal frame.
+     * A stream that ended without any terminal frame - no
+     * `run.completed` and no `error` - is deliberately NOT a protocol
+     * violation: the connection simply died mid-stream (P4). The run
+     * is still alive server-side, so the transport maps this end to a
+     * reconnectable [ChatStreamError.Network] and the repository
+     * re-attaches to the same run instead of failing the turn closed.
+     * Only a malformed frame, a wrong order or a wrong identity is
+     * [ChatStreamError.IncompatibleApi].
+     *
+     * @throws ChatTurnProtocolException when the stream sent a
+     * terminal frame but no valid `done` after it.
      */
     fun endOfStream() {
-        if (requireDoneAfterTerminal && !doneSent) {
+        if (requireDoneAfterTerminal && !doneSent && (runCompleted || sawError)) {
             throw protocol()
         }
+    }
+
+    /**
+     * P4 re-attach snapshot of the confirmed sequence state, or `null`
+     * while no frame has been processed (no run confirmed). The
+     * transport exposes it on the stream handle; callers must read it
+     * only after the stream has finished.
+     */
+    fun snapshot(): ChatStreamResumeState? {
+        val runId = boundRunId ?: return null
+        return ChatStreamResumeState(
+            runId = runId,
+            lastSeq = lastSeq,
+            messageStarted = messageStarted,
+            messageId = boundMessageId,
+            composed = composed.toString(),
+            assistantCompleted = assistantCompleted,
+            finalText = finalText,
+            runCompleted = runCompleted,
+            sawError = sawError
+        )
     }
 
     /**

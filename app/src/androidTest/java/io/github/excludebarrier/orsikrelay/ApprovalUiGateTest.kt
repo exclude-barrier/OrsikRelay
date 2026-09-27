@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -136,9 +137,66 @@ class ApprovalUiGateTest {
         assertEquals(1, calls.get())
     }
 
+    @Test
+    fun noPendingReportsTheFinishedRequestAndKeepsTheNote() {
+        val calls = AtomicInteger()
+        val finished = AtomicInteger()
+        setGate(
+            pendingApproval = REQUEST,
+            onFinished = { finished.incrementAndGet() },
+            requester = fake { _, runId, _, _ ->
+                calls.incrementAndGet()
+                RunApprovalResult.NoPending(runId)
+            }
+        )
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        composeRule.waitForIdle()
+
+        // One request, one authoritative terminal answer: the app-level
+        // record is reported finished exactly once, the dialog stays with
+        // its note and both buttons are terminally disabled.
+        assertEquals(1, calls.get())
+        assertEquals(1, finished.get())
+        composeRule.onNodeWithText(TITLE).assertIsDisplayed()
+        composeRule.onNodeWithText(ALREADY_RESOLVED).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_DENY).assertIsNotEnabled()
+    }
+
+    @Test
+    fun ambiguousFailureNeitherReportsFinishedNorReenablesTheButtons() {
+        val calls = AtomicInteger()
+        val finished = AtomicInteger()
+        setGate(
+            pendingApproval = REQUEST,
+            onFinished = { finished.incrementAndGet() },
+            requester = fake { _, _, _, _ ->
+                calls.incrementAndGet()
+                RunApprovalResult.Failure(
+                    io.github.excludebarrier.orsikrelay.domain.run.RunApprovalError.Network
+                )
+            }
+        )
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_ALLOW).performClick()
+        composeRule.waitForIdle()
+
+        // An ambiguous transport result must NOT drop the app-level record
+        // (the request has to stay resolvable) and the buttons stay disabled
+        // in this composition.
+        assertEquals(1, calls.get())
+        assertEquals(0, finished.get())
+        composeRule.onNodeWithText(TITLE).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsNotEnabled()
+    }
+
     private fun setGate(
         pendingApproval: ApprovalRequest?,
-        requester: RunApprovalRequester
+        requester: RunApprovalRequester,
+        onFinished: () -> Unit = {}
     ) {
         composeRule.setContent {
             // A Resolved decision closes the dialog: mirror production by
@@ -150,7 +208,8 @@ class ApprovalUiGateTest {
                         pendingApproval = pendingApproval,
                         profileId = PROFILE_ID,
                         requester = requester,
-                        onDismiss = { show = false }
+                        onDismiss = { show = false },
+                        onFinished = onFinished
                     )
                 }
             }
@@ -178,6 +237,8 @@ class ApprovalUiGateTest {
         const val HINT_LABEL = "Hinweis"
 
         const val TAG_ALLOW = "approval_allow"
+        const val TAG_DENY = "approval_deny"
+        const val ALREADY_RESOLVED = "Diese Freigabe wurde bereits beantwortet."
 
         val REQUEST = ApprovalRequest(
             runId = RUN_ID,

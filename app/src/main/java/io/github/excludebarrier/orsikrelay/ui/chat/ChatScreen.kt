@@ -278,6 +278,11 @@ onClick = { viewModel.handleBack() }
                         )
                     }
                 }
+                // P4: transient re-attach status while the stream is
+                // being re-attached to the still-running server run.
+                if (state.reconnecting) {
+                    StatusText(stringResource(R.string.chat_stream_reconnecting))
+                }
                 ComposerBar(
                     draft = state.draft,
                     onDraftChange = { viewModel.onDraftChange(it) },
@@ -296,7 +301,8 @@ onClick = { viewModel.handleBack() }
         pendingApproval = state.pendingApproval,
         profileId = profileId,
         requester = runApprovalRequester,
-        onDismiss = { viewModel.dismissApproval() }
+        onDismiss = { viewModel.dismissApproval() },
+        onFinished = { viewModel.finishApproval() }
     )
 }
 
@@ -330,7 +336,9 @@ private fun TurnFailureBlock(
                     stringResource(R.string.error_connection_incompatible_api)
                 ChatStreamError.Http,
                 ChatStreamError.InvalidInput,
-                ChatStreamError.Conflict ->
+                ChatStreamError.Conflict,
+                ChatStreamError.ResumeUnavailable,
+                ChatStreamError.ResumeGap ->
                     stringResource(R.string.error_connection_http)
             },
             style = MaterialTheme.typography.bodyMedium,

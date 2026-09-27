@@ -21,7 +21,7 @@ import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.profile.ActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.RunApprovalCapabilityStore
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
-import io.github.excludebarrier.orsikrelay.di.buildAppDependencies
+import io.github.excludebarrier.orsikrelay.di.AppDependenciesHolder
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
@@ -70,8 +70,12 @@ fun HermesNavHost(
     notificationBootstrap: Pair<String, String>? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
+    // P4 recreation fix: the graph (and with it the app-level live-run
+    // state) is process-scoped, so an Activity/configuration recreation
+    // re-attaches to the still-running turn instead of building a second,
+    // empty graph. Test-injected stores still get a fresh graph.
     val productionDependencies = remember(applicationContext) {
-        lazy { buildAppDependencies(applicationContext, selectionStore, capabilityStore) }
+        lazy { AppDependenciesHolder.get(applicationContext, selectionStore, capabilityStore) }
     }
 
     val navHostCoroutineScope = rememberCoroutineScope()

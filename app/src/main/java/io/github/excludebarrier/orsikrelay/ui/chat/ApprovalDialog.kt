@@ -74,6 +74,16 @@ fun ApprovalDialog(
     profileId: String,
     requester: RunApprovalRequester,
     onDismiss: () -> Unit,
+    /**
+     * Notified for the authoritative terminal outcome that is NOT an applied
+     * decision: a 409 `NoPending` answer (the request was already answered
+     * elsewhere or timed out). The app-level approval record must then be
+     * dropped, so a re-created screen cannot resurrect a non-answerable
+     * dialog. The dialog itself stays open in this composition to show its
+     * short note. Never called for an ambiguous transport failure - that
+     * request deliberately stays resolvable.
+     */
+    onFinished: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
@@ -107,7 +117,14 @@ fun ApprovalDialog(
             inFlight = false
             when (result) {
                 is RunApprovalResult.Resolved -> onDismiss()
-                is RunApprovalResult.NoPending -> outcome = ApprovalOutcome.AlreadyResolved
+                is RunApprovalResult.NoPending -> {
+                    // The server's authoritative "not pending" answer is
+                    // terminal for the request: report it so the app-level
+                    // record is dropped (no resurrection after recreation),
+                    // then keep this composition's note.
+                    outcome = ApprovalOutcome.AlreadyResolved
+                    onFinished()
+                }
                 is RunApprovalResult.Failure -> outcome = ApprovalOutcome.Failed
             }
         }

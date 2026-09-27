@@ -6,6 +6,7 @@ import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamHandle
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamResumeState
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
@@ -135,6 +136,45 @@ class HermesSessionStreamClientTest {
     }
 
     @Test
+    fun resumeRequestCarriesTheApprovalOptInHeaderOnlyWhenNegotiated() {
+        // The re-attached pipeline accepts approval.request, so the
+        // re-attach connection must declare the same protocol-v1 opt-in
+        // as the initial POST - and must never declare it when the
+        // capability was not negotiated.
+        listOf(true, false).forEach { interactive ->
+            // The fixture is deliberately an EMPTY event stream: the test
+            // asserts the request shape only, and an empty body is a valid
+            // (if fruitless) SSE response - it never pretends to be a valid
+            // resumed turn.
+            server.enqueue(
+                MockResponse()
+                    .addHeader("Content-Type", "text/event-stream")
+                    .setChunkedBody("", 0)
+            )
+            val listener = RecordingListener()
+            client.openResume(
+                baseUrl = baseUrl(),
+                apiKey = SecretValue(FIXTURE_KEY),
+                sessionId = SESSION_ID,
+                runId = RUN_ID,
+                resume = resumeState(lastSeq = 2L),
+                interactiveApprovals = interactive,
+                listener = listener
+            )
+            assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+            val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+                "expected one recorded resume request"
+            }
+            assertEquals("GET", request.method)
+            assertEquals(
+                if (interactive) "1" else null,
+                request.getHeader("X-Hermes-Interactive-Approvals")
+            )
+            assertEquals("2", request.requestUrl!!.queryParameter("after_seq"))
+        }
+    }
+
+    @Test
     fun keyNeverAppearsInUrlBodyOrEvents() {
         server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
         val listener = RecordingListener()
@@ -174,6 +214,133 @@ class HermesSessionStreamClientTest {
         }
         // One request per failure: no automatic retry.
         assertEquals(7, server.requestCount)
+    }
+
+    @Test
+    fun resumeRequestCarriesAfterSeqAndStatusFailuresStayClosed() {
+        // P4 re-attach: the GET is addressed by session + run and resumes
+        // exactly after the confirmed sequence; every status failure is
+        // closed and never retried inside the transport. A 5xx is the one
+        // transient status (the run is still alive server-side) - and a
+        // status failure never binds a stream, so the handle has no resume
+        // state and the repository continues from the state it started from.
+        listOf(
+            401 to ChatStreamError.InvalidCredentials,
+            403 to ChatStreamError.InvalidCredentials,
+            404 to ChatStreamError.ResumeUnavailable,
+            409 to ChatStreamError.ResumeGap,
+            429 to ChatStreamError.RateLimited,
+            500 to ChatStreamError.Network,
+            503 to ChatStreamError.Network
+        ).forEach { (code, reason) ->
+            server.enqueue(MockResponse().setResponseCode(code))
+            val listener = RecordingListener()
+            val handle = client.openResume(
+                baseUrl = baseUrl(),
+                apiKey = SecretValue(FIXTURE_KEY),
+                sessionId = SESSION_ID,
+                runId = RUN_ID,
+                resume = resumeState(lastSeq = 2L),
+                listener = listener
+            )
+            assertTrue(
+                "resume for $code did not finish",
+                listener.finished.await(10, TimeUnit.SECONDS)
+            )
+            assertEquals(
+                listOf<ChatTurnEvent>(ChatTurnEvent.TurnFailed(reason)),
+                listener.events
+            )
+            assertFalse(listener.events.toString().contains(FIXTURE_KEY))
+            assertNull(handle.resumeState())
+            handle.close()
+
+            val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+                "expected one recorded request"
+            }
+            assertEquals("GET", request.method)
+            assertEquals(
+                "/api/sessions/$SESSION_ID/runs/$RUN_ID/stream",
+                request.requestUrl!!.encodedPath
+            )
+            assertEquals("2", request.requestUrl!!.queryParameter("after_seq"))
+            assertEquals("Bearer $FIXTURE_KEY", request.getHeader("Authorization"))
+            assertEquals("text/event-stream", request.getHeader("Accept"))
+            assertFalse(request.requestUrl!!.toString().contains(FIXTURE_KEY))
+        }
+        // One request per failure: the re-attach ladder lives in the
+        // repository, never in the transport.
+        assertEquals(7, server.requestCount)
+    }
+
+    @Test
+    fun cleanMidStreamEofWithoutTerminalFrameIsNetworkNotIncompatible() {
+        // P4 finding: a socket that dies cleanly at a frame boundary
+        // without any terminal frame is a transient disconnect, not a
+        // protocol violation. The classified reason must be the
+        // reconnectable ChatStreamError.Network, never
+        // IncompatibleApi and never a fabricated TurnCompleted.
+        server.enqueue(
+            sseResponse(
+                listOf(
+                    frame("run.started", 1, JSONObject(), SESSION_ID),
+                    frame("message.started", 2, messageExtra(), SESSION_ID),
+                    frame("assistant.delta", 3, deltaExtra("Hallo"), SESSION_ID)
+                )
+            )
+        )
+        val listener = RecordingListener()
+        client.openTurn(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, "Hallo", listener)
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted(RUN_ID),
+                ChatTurnEvent.AssistantStarted,
+                ChatTurnEvent.AssistantDelta("Hallo"),
+                ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+            ),
+            listener.events
+        )
+        assertFalse(listener.events.any { it is ChatTurnEvent.TurnCompleted })
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun resumeWithForeignRunIdFailsClosedWithoutSendingARequest() {
+        // P4 run-id boundary: the confirmed snapshot of a DIFFERENT run
+        // must never be used to build a re-attach request. No request
+        // is sent (the MockWebServer has no queued response at all) and
+        // the turn fails closed with a definitive reason, so the
+        // repository neither retries nor re-attaches a foreign run.
+        val listener = RecordingListener()
+        val handle = client.openResume(
+            baseUrl = baseUrl(),
+            apiKey = SecretValue(FIXTURE_KEY),
+            sessionId = SESSION_ID,
+            runId = RUN_ID,
+            resume = resumeState(lastSeq = 2L).copy(runId = "run_other_synthetic"),
+            listener = listener
+        )
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnFailed(ChatStreamError.InvalidInput)),
+            listener.events
+        )
+        assertNull(handle.resumeState())
+        assertEquals(0, server.requestCount)
+        handle.close()
+    }
+
+    @Test
+    fun productionConnectAndWriteTimeoutsAreFiniteWhileAStreamStaysLongLived() {
+        // P4 wallclock decision: the established SSE stream must stay
+        // long-lived (no global call timeout), but every connect and
+        // write of a broken (re-)attach attempt must be bounded.
+        val defaults = HermesSessionStreamClient.newDefaultStreamClient()
+        assertTrue("connect timeout must be finite", defaults.connectTimeoutMillis > 0)
+        assertTrue("write timeout must be finite", defaults.writeTimeoutMillis > 0)
+        assertTrue("read timeout must be finite", defaults.readTimeoutMillis > 0)
+        assertEquals("an established SSE stream stays long-lived", 0, defaults.callTimeoutMillis)
     }
 
     @Test
@@ -857,6 +1024,19 @@ class HermesSessionStreamClientTest {
     }
 
     private fun baseUrl(): String = server.url("/").toString().trimEnd('/')
+
+    /** Confirmed re-attach state of an interrupted attempt (P4). */
+    private fun resumeState(lastSeq: Long): ChatStreamResumeState = ChatStreamResumeState(
+        runId = RUN_ID,
+        lastSeq = lastSeq,
+        messageStarted = true,
+        messageId = "msg_synthetic",
+        composed = "Hallo",
+        assistantCompleted = false,
+        finalText = null,
+        runCompleted = false,
+        sawError = false
+    )
 
     private fun sseResponse(frames: List<String>): MockResponse = MockResponse()
         .addHeader("Content-Type", "text/event-stream")

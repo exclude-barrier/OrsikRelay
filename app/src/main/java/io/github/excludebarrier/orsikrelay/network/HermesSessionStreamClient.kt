@@ -4,6 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamHandle
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamListener
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamResumeState
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamTransport
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileBaseUrlValidator
@@ -163,8 +164,114 @@ class HermesSessionStreamClient(
         val handle = StreamHandle()
         handle.bind(client.newCall(request))
         Thread({
-            runTurn(handle, sessionId, interactiveApprovals, listener)
+            runTurn(
+                handle = handle,
+                sessionId = sessionId,
+                interactiveApprovals = interactiveApprovals,
+                listener = listener,
+                resume = null,
+                statusReasonFor = ::statusReason
+            )
         }, "hermes-chat-stream").start()
+        return handle
+    }
+
+    /**
+     * Re-attaches to an already-started run (P4):
+     * `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`.
+     *
+     * The GET is a pure read of the server-side run buffer: it is
+     * idempotent and may safely be repeated by the repository's
+     * re-attach loop. The security rules of [openTurn] apply
+     * unchanged: HTTPS base URL only, safe single path segments, the
+     * bearer key only inside [SecretValue.useRaw], redirects and
+     * connection retries disabled.
+     *
+     * Closed status mapping (no dynamic data ever escapes): 400 ->
+     * [ChatStreamError.InvalidInput] (a locally validated `after_seq`
+     * must never trigger this); 401/403 ->
+     * [ChatStreamError.InvalidCredentials]; 404 ->
+     * [ChatStreamError.ResumeUnavailable] (unknown or foreign run,
+     * session mismatch, evicted buffer, or a server without the
+     * re-attach endpoint); 409 -> [ChatStreamError.ResumeGap]
+     * (un-replayable gap); 429 -> [ChatStreamError.RateLimited]; 5xx
+     * -> [ChatStreamError.Network] (transient: the run is still alive
+     * server-side, so the re-attach read may be retried); any other
+     * status (including redirects) ->
+     * [ChatStreamError.ResumeUnavailable].
+     */
+    override fun openResume(
+        baseUrl: String,
+        apiKey: SecretValue,
+        sessionId: String,
+        runId: String,
+        resume: ChatStreamResumeState,
+        interactiveApprovals: Boolean,
+        listener: ChatStreamListener
+    ): ChatStreamHandle {
+        val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
+            ?: return failNow(listener, ChatStreamError.InvalidInput)
+        if (!isSafeSessionId(sessionId) || !isSafeRunId(runId)) {
+            return failNow(listener, ChatStreamError.InvalidInput)
+        }
+        if (resume.lastSeq !in 0L..MAX_AFTER_SEQ) {
+            return failNow(listener, ChatStreamError.InvalidInput)
+        }
+        if (resume.runId != runId) {
+            // Boundary invariant (P4): a re-attach may only ever replay
+            // the confirmed state of the run it targets. A snapshot of
+            // a different run must never be used to build a request for
+            // this one - fail closed without sending anything.
+            return failNow(listener, ChatStreamError.InvalidInput)
+        }
+        val keyIsSafe = apiKey.useRaw { rawKey ->
+            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
+                rawKey.none { character ->
+                    character.isWhitespace() || character.isISOControl()
+                }
+        }
+        if (!keyIsSafe) {
+            return failNow(listener, ChatStreamError.InvalidInput)
+        }
+
+        val url = base.toHttpUrl().newBuilder()
+            .addPathSegment(API_SEGMENT)
+            .addPathSegment(SESSIONS_SEGMENT)
+            .addPathSegment(sessionId)
+            .addPathSegment(RUNS_SEGMENT)
+            .addPathSegment(runId)
+            .addPathSegment(STREAM_SEGMENT)
+            .addQueryParameter(AFTER_SEQ_QUERY, resume.lastSeq.toString())
+            .build()
+        val request = apiKey.useRaw { rawKey ->
+            val builder = Request.Builder()
+                .url(url)
+                .get()
+                .header(AUTHORIZATION_HEADER, "$BEARER_PREFIX$rawKey")
+                .header(ACCEPT_HEADER, SSE_CONTENT_TYPE)
+            if (interactiveApprovals) {
+                // The re-attached pipeline is built with
+                // `interactiveApprovals = true`, so the connection must
+                // declare the same capability opt-in as [openTurn]:
+                // never accept an approval frame on a connection that
+                // did not announce the protocol-v1 contract.
+                builder.header(INTERACTIVE_APPROVALS_HEADER, "1")
+            }
+            builder.build()
+        }
+
+        val handle = StreamHandle()
+        handle.bind(client.newCall(request))
+        Thread({
+            runTurn(
+                handle = handle,
+                sessionId = sessionId,
+                interactiveApprovals = interactiveApprovals,
+                listener = listener,
+                resume = resume,
+                statusReasonFor = ::resumeStatusReason
+            )
+        }, "hermes-chat-stream-resume").start()
         return handle
     }
 
@@ -172,7 +279,9 @@ class HermesSessionStreamClient(
         handle: StreamHandle,
         sessionId: String,
         interactiveApprovals: Boolean,
-        listener: ChatStreamListener
+        listener: ChatStreamListener,
+        resume: ChatStreamResumeState?,
+        statusReasonFor: (Response) -> ChatStreamError?
     ) {
         val finished = AtomicBoolean()
         val responseRef = arrayOfNulls<Response>(1)
@@ -218,7 +327,7 @@ class HermesSessionStreamClient(
                 finish(null)
                 return
             }
-            val reason = statusReason(response)
+            val reason = statusReasonFor(response)
             if (reason != null) {
                 response.close()
                 finish(ChatTurnEvent.TurnFailed(reason))
@@ -234,8 +343,10 @@ class HermesSessionStreamClient(
             val pipeline = ChatStreamEventPipeline(
                 expectedSessionId = sessionId,
                 requireDoneAfterTerminal = true,
-                interactiveApprovals = interactiveApprovals
+                interactiveApprovals = interactiveApprovals,
+                resume = resume
             )
+            handle.bindPipeline(pipeline)
             // Hard bound: at most [MAX_STREAM_BYTES] body bytes ever
             // reach the decoder or the parser. A further read past the
             // limit fails closed with [StreamLimitException] if any
@@ -425,6 +536,25 @@ class HermesSessionStreamClient(
         else -> ChatStreamError.Http
     }
 
+    /**
+     * Closed status mapping for the P4 re-attach GET (see
+     * [openResume]): unlike [statusReason], a 404 is not "session not
+     * found" but "this run cannot be re-attached", a 409 is an
+     * un-replayable gap, and a 5xx is a transient server-side failure
+     * of the idempotent read that the re-attach loop may retry.
+     */
+    private fun resumeStatusReason(response: Response): ChatStreamError? =
+        when (response.code) {
+            OK_CODE -> null
+            400 -> ChatStreamError.InvalidInput
+            401, 403 -> ChatStreamError.InvalidCredentials
+            404 -> ChatStreamError.ResumeUnavailable
+            409 -> ChatStreamError.ResumeGap
+            429 -> ChatStreamError.RateLimited
+            in 500..599 -> ChatStreamError.Network
+            else -> ChatStreamError.ResumeUnavailable
+        }
+
     private fun isSseContentType(header: String?): Boolean {
         val type = header?.substringBefore(';')?.trim() ?: return false
         return SSE_CONTENT_TYPE.equals(type, ignoreCase = true)
@@ -434,6 +564,12 @@ class HermesSessionStreamClient(
         if (sessionId.isBlank()) return false
         if (sessionId.length > MAX_SESSION_ID_LENGTH) return false
         return sessionId.none { it.isISOControl() }
+    }
+
+    private fun isSafeRunId(runId: String): Boolean {
+        if (runId.isBlank()) return false
+        if (runId.length > MAX_SESSION_ID_LENGTH) return false
+        return runId.none { it.isISOControl() }
     }
 
     private fun failNow(
@@ -460,6 +596,16 @@ class HermesSessionStreamClient(
         fun bind(newCall: Call) {
             call = newCall
         }
+
+        @Volatile
+        var pipeline: ChatStreamEventPipeline? = null
+            private set
+
+        fun bindPipeline(newPipeline: ChatStreamEventPipeline) {
+            pipeline = newPipeline
+        }
+
+        override fun resumeState(): ChatStreamResumeState? = pipeline?.snapshot()
 
         /**
          * Runs one event delivery while holding the handle monitor, and
@@ -559,11 +705,14 @@ class HermesSessionStreamClient(
         const val MAX_STREAM_BYTES = 8L * 1024 * 1024
         const val MAX_API_KEY_CHARACTERS = 4096
         const val MAX_SESSION_ID_LENGTH = 256
+        const val MAX_AFTER_SEQ = 0x7FFFFFFF
         const val BUFFER_SIZE = 8 * 1024
         const val API_SEGMENT = "api"
         const val SESSIONS_SEGMENT = "sessions"
         const val CHAT_SEGMENT = "chat"
         const val STREAM_SEGMENT = "stream"
+        const val RUNS_SEGMENT = "runs"
+        const val AFTER_SEQ_QUERY = "after_seq"
         const val AUTHORIZATION_HEADER = "Authorization"
         const val BEARER_PREFIX = "Bearer "
         const val CONTENT_TYPE_HEADER = "Content-Type"
@@ -605,9 +754,28 @@ class HermesSessionStreamClient(
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(STREAM_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
-            // The streaming read is bounded by the stream size limit and
-            // by the collector; a global call timeout would kill long
-            // model answers, so it is intentionally left at 0 (none).
+            // Timeout-chain decision (P4, Finding "no wallclock bound"):
+            // an ESTABLISHED SSE stream may be long-lived by design - a
+            // model answer can take minutes - so the global
+            // `callTimeout` stays 0 (none) and never kills a live
+            // stream.
+            //
+            // The chain is nevertheless finite everywhere it matters:
+            // * connectTimeout bounds TCP connect AND the TLS
+            //   handshake of every (re-)attach attempt: a dead or
+            //   blackholed endpoint returns within 10 s instead of
+            //   hanging;
+            // * readTimeout bounds the first byte (response headers)
+            //   of every (re-)attach attempt and every inter-byte gap
+            //   of a live stream - it is 45 s, above the confirmed 30 s
+            //   server keepalive, so an idle-but-alive turn is never
+            //   aborted while a dead socket is detected;
+            // * writeTimeout bounds the request body write;
+            // * the complete reconnect ladder is bounded by
+            //   `maxReconnectAttempts` plus the finite backoff series
+            //   (see StreamingChatRepository), so a broken run can
+            //   never be re-attached forever.
+            // No additional global wallclock budget is therefore added.
             .callTimeout(0, TimeUnit.SECONDS)
             .followRedirects(false)
             .followSslRedirects(false)

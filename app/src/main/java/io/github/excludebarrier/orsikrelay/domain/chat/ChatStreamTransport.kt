@@ -31,6 +31,64 @@ interface ChatStreamTransport {
         interactiveApprovals: Boolean = false,
         listener: ChatStreamListener
     ): ChatStreamHandle
+
+    /**
+     * Re-attaches to an already-started run of [sessionId] (P4):
+     * `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`,
+     * where `N` is [resume].[ChatStreamResumeState.lastSeq]. The server
+     * replays the buffered events with `seq > N`, then follows the run
+     * live until its terminal tail.
+     *
+     * Replay/dedup contract (confirmed against the server,
+     * `gateway/platforms/api_server.py`: `RunEventBuffer.next_event`
+     * returns the next buffered event with `seq > after_seq`):
+     * - the bound is STRICTLY exclusive, so no event with
+     *   `seq <= N` is ever replayed and no already-processed event can
+     *   reach the client twice;
+     * - the client therefore does not need to persist its per-attempt
+     *   `seenSeqs` map across a re-attach: the resumed pipeline starts
+     *   at `N` and accepts exactly `N + 1` next. A frame that repeats
+     *   `N` (or goes backwards) is not deduplicated but rejected
+     *   closed - it would contradict the confirmed contract, and
+     *   failing closed is the only safe answer without the identity of
+     *   the previously confirmed frame;
+     * - if the buffer no longer covers `N + 1` the server answers 409
+     *   ([ChatStreamError.ResumeGap]) instead of silently skipping
+     *   events;
+     * - [resume].[ChatStreamResumeState.runId] MUST equal [runId]: a
+     *   snapshot of any other run is rejected closed without a request.
+     *
+     * The [openTurn] contract applies unchanged: the method returns
+     * quickly, all [ChatStreamListener] callbacks arrive on a
+     * transport-owned background thread, the transport never throws for
+     * protocol or network failures, and [ChatStreamHandle.close]
+     * cancels the call and is idempotent.
+     *
+     * The default implementation fails closed with
+     * [ChatStreamError.ResumeUnavailable]: a transport without re-attach
+     * support simply cannot re-attach, and the repository settles the
+     * turn with that closed reason.
+     */
+    fun openResume(
+        baseUrl: String,
+        apiKey: SecretValue,
+        sessionId: String,
+        runId: String,
+        resume: ChatStreamResumeState,
+        interactiveApprovals: Boolean = false,
+        listener: ChatStreamListener
+    ): ChatStreamHandle {
+        try {
+            listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.ResumeUnavailable))
+        } finally {
+            listener.onFinished()
+        }
+        return object : ChatStreamHandle {
+            override fun close() {
+                // nothing to cancel
+            }
+        }
+    }
 }
 
 /** Callback sink of one streaming turn. */
@@ -45,4 +103,12 @@ interface ChatStreamListener {
 /** Handle of one open stream; closing it cancels the underlying call. */
 interface ChatStreamHandle {
     fun close()
+
+    /**
+     * UI-safe snapshot of the stream's confirmed sequence state (P4),
+     * or `null` while no run is confirmed yet or the transport does
+     * not track one. Read only after the stream has finished (the
+     * terminal event has been delivered).
+     */
+    fun resumeState(): ChatStreamResumeState? = null
 }

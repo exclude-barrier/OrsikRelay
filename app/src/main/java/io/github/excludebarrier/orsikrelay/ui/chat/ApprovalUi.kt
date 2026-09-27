@@ -21,6 +21,7 @@ fun ApprovalUi(
     profileId: String,
     requester: RunApprovalRequester,
     onDismiss: () -> Unit,
+    onFinished: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // A pending request itself is the fail-closed delivery proof. Do not
@@ -32,6 +33,7 @@ fun ApprovalUi(
             profileId = profileId,
             requester = requester,
             onDismiss = onDismiss,
+            onFinished = onFinished,
             modifier = modifier
         )
     }

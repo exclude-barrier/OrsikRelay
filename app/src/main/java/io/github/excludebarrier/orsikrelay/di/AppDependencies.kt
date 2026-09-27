@@ -85,6 +85,48 @@ internal data class AppDependencies(
 )
 
 /**
+ * Process-scoped holder of the single production [AppDependencies] graph
+ * (P4 recreation fix).
+ *
+ * The graph owns the app-level live-run state and its stream (through
+ * [RunSessionController]): a chat screen that is re-created by a
+ * configuration change must be able to re-attach to the still-running turn.
+ * A composition-scoped `remember { lazy { … } }` built a NEW graph - and
+ * therefore an empty `activeRun` - on every Activity recreation, so the
+ * re-created screen lost the live-turn binding while the previous graph kept
+ * the stream and the foreground service alive.
+ *
+ * Scope of this holder is deliberately the LIVE PROCESS only: it survives an
+ * Activity or view-model recreation inside the same process and dies with the
+ * process. Nothing is persisted to disk, so this is NOT a process-death
+ * recovery mechanism (no Room, no DataStore, no saved state).
+ *
+ * Injected test stores always bypass the cache: a caller that supplies its own
+ * [selectionStore]/[capabilityStore] gets a fresh, isolated graph, exactly as
+ * before.
+ */
+internal object AppDependenciesHolder {
+    @Volatile
+    private var cached: AppDependencies? = null
+
+    fun get(
+        applicationContext: Context,
+        selectionStore: ActiveServerSelectionStore? = null,
+        capabilityStore: RunApprovalCapabilityStore? = null,
+    ): AppDependencies {
+        if (selectionStore != null || capabilityStore != null) {
+            return buildAppDependencies(applicationContext, selectionStore, capabilityStore)
+        }
+        val existing = cached
+        if (existing != null) return existing
+        return synchronized(this) {
+            cached ?: buildAppDependencies(applicationContext, selectionStore, capabilityStore)
+                .also { cached = it }
+        }
+    }
+}
+
+/**
  * Builds the production [AppDependencies] graph for [applicationContext].
  * [selectionStore] and [capabilityStore] may be injected (tests); when null
  * the app-private SharedPreferences-backed stores are created.

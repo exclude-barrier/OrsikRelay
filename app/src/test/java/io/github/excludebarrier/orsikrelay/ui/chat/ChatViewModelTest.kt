@@ -76,23 +76,27 @@ class ChatViewModelTest {
         steer: RunSteerRequester = FakeSteerRequester(),
         draft: ChatDraftRepository = FakeDraftRepository(),
         serviceStarter: RunForegroundServiceStarter = FakeRunServiceStarter(),
-        onBack: () -> Unit = {}
+        onBack: () -> Unit = {},
+        // P4: an EXISTING controller simulates a re-created screen that
+        // re-attaches to the same app-level run.
+        controller: RunSessionController? = null,
+        sessionKey: String = sessionId
     ): ChatViewModel {
-        val controller = RunSessionController(
+        val resolvedController = controller ?: RunSessionController(
             chatSource = chat,
             serviceStarter = serviceStarter,
             notificationCoordinator = NoOpNotificationCoordinator,
             dispatcher = UnconfinedTestDispatcher(scheduler)
         )
-        lastController = controller
+        lastController = resolvedController
         return ChatViewModel(
             historySource = history,
-            runController = controller,
+            runController = resolvedController,
             runStopRequester = stop,
             runSteerRequester = steer,
             chatDraftRepository = draft,
             profileId = profileId,
-            sessionId = sessionId,
+            sessionId = sessionKey,
             onBack = onBack,
             toolActivityLabel = "Tool ist aktiv…",
             namedToolActivityLabel = "Werkzeug %s ist aktiv…",
@@ -278,6 +282,51 @@ class ChatViewModelTest {
         // The user line is kept: the run had a confirmed start. (P0 does not
         // reset `runStarted` on a failed turn; only the user line matters.)
         assertTrue(model.state.value.localLines.any { it.role == MessageRole.USER })
+    }
+
+    // ------------------------------------------------------------------
+    // P4: transient stream re-attach (StreamReconnecting)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun streamReconnectingKeepsTurnActiveAndSetsReconnectingStatus() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        chat.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.StreamReconnecting)
+        testScheduler.advanceUntilIdle()
+        assertTrue(model.state.value.turnActive)
+        assertTrue(model.state.value.reconnecting)
+        assertNull(model.state.value.turnFailure)
+    }
+
+    @Test
+    fun progressAfterReconnectingClearsReconnectingStatus() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        chat.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.StreamReconnecting,
+            ChatTurnEvent.AssistantDelta("fortsetzung")
+        )
+        testScheduler.advanceUntilIdle()
+        assertTrue(model.state.value.turnActive)
+        assertFalse(model.state.value.reconnecting)
+    }
+
+    @Test
+    fun terminalAfterReconnectingSettlesTurnAndClearsStatus() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        chat.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.StreamReconnecting,
+            ChatTurnEvent.TurnCompleted()
+        )
+        chat.complete()
+        testScheduler.advanceUntilIdle()
+        assertFalse(model.state.value.turnActive)
+        assertFalse(model.state.value.reconnecting)
+        assertNull(model.state.value.turnFailure)
     }
 
     // ------------------------------------------------------------------
@@ -612,6 +661,344 @@ class ChatViewModelTest {
     // Fakes
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    // P4: Activity / view-model recreation rehydration
+    // ------------------------------------------------------------------
+
+    /**
+     * Runs the two-screen recreation scenario on ONE controller: the first
+     * screen sends and streams, [beforeRecreation] may inject further events,
+     * the first screen is disposed (the Activity recreation), and a second
+     * model is built on the SAME controller (the re-created screen).
+     */
+    private fun withRecreatedModel(
+        beforeRecreation: (FakeTurnSource) -> Unit = {},
+        actOnFirstModel: (ChatViewModel) -> Unit = {},
+        sessionKeyOfSecond: String = sessionId,
+        historyForSecond: MessageHistorySource = readyHistory(),
+        block: suspend kotlinx.coroutines.test.TestScope.(
+            second: ChatViewModel,
+            chat: FakeTurnSource,
+            stop: FakeStopRequester,
+            controller: RunSessionController
+        ) -> Unit
+    ) = runTest {
+        val chat = FakeTurnSource()
+        val stop = FakeStopRequester()
+        val controller = RunSessionController(
+            chatSource = chat,
+            serviceStarter = FakeRunServiceStarter(),
+            notificationCoordinator = NoOpNotificationCoordinator,
+            dispatcher = UnconfinedTestDispatcher(testScheduler)
+        )
+        lastController = controller
+        val first = build(testScheduler, chat = chat, stop = stop, controller = controller)
+        first.loadHistory()
+        testScheduler.advanceUntilIdle()
+        first.onDraftChange("Hallo Welt")
+        first.send()
+        testScheduler.advanceUntilIdle()
+        chat.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        chat.enqueue(ChatTurnEvent.AssistantDelta("Das ist eine "))
+        testScheduler.advanceUntilIdle()
+        beforeRecreation(chat)
+        testScheduler.advanceUntilIdle()
+        actOnFirstModel(first)
+        testScheduler.advanceUntilIdle()
+        // The Activity is re-created: the screen's view model dies, the
+        // app-level controller and its run keep going.
+        first.close()
+        testScheduler.advanceUntilIdle()
+        val second = build(
+            testScheduler,
+            history = historyForSecond,
+            chat = chat,
+            stop = stop,
+            controller = controller,
+            sessionKey = sessionKeyOfSecond
+        )
+        second.loadHistory()
+        testScheduler.advanceUntilIdle()
+        block(this, second, chat, stop, controller)
+        second.close()
+        controller.close()
+        lastController = null
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun aModelWithoutAnActiveRunStartsIdle() = withModel { model, _, _, _, _ ->
+        assertFalse(model.state.value.turnActive)
+        assertTrue(model.state.value.localLines.isEmpty())
+        assertNull(model.state.value.boundRunId)
+        assertFalse(model.state.value.reconnecting)
+    }
+
+    @Test
+    fun recreatedViewModelRehydratesTheRunningTurnWithoutANewPost() =
+        withRecreatedModel { second, chat, _, _ ->
+            val state = second.state.value
+            assertTrue("the turn must survive the recreation", state.turnActive)
+            assertTrue(state.runStarted)
+            assertEquals(runId, state.boundRunId)
+            assertTrue("the stop control must be available again", state.controlsVisible)
+            assertEquals(
+                "the visible turn must be restored exactly (user line + partial text)",
+                listOf(MessageRole.USER to "Hallo Welt", MessageRole.ASSISTANT to "Das ist eine "),
+                state.localLines.map { it.role to it.content }
+            )
+            assertEquals("a recreation must never start a second stream", 1, chat.calls.get())
+            assertTrue(lastController?.activeRun?.value?.assistantText == "Das ist eine ")
+        }
+
+    @Test
+    fun recreatedViewModelAppendsFurtherDeltasExactlyOnce() =
+        withRecreatedModel { second, chat, _, _ ->
+            chat.enqueue(ChatTurnEvent.AssistantDelta("bereits teilweise erzeugte Antwort."))
+            testScheduler.advanceUntilIdle()
+            chat.enqueue(ChatTurnEvent.AssistantCompleted("Das ist eine bereits teilweise erzeugte Antwort."))
+            testScheduler.advanceUntilIdle()
+            val lines = second.state.value.localLines
+            assertEquals("no duplicate or lost assistant row", 2, lines.size)
+            assertEquals(1, lines.count { it.role == MessageRole.ASSISTANT })
+            assertEquals(
+                "Das ist eine bereits teilweise erzeugte Antwort.",
+                lines.last().content
+            )
+            assertEquals(1, chat.calls.get())
+        }
+
+    @Test
+    fun recreatedViewModelKeepsTheReconnectingStatusUntilProgressArrives() = withRecreatedModel(
+        beforeRecreation = { it.enqueue(ChatTurnEvent.StreamReconnecting) }
+    ) { second, chat, _, _ ->
+        assertTrue("reconnecting must survive the recreation", second.state.value.reconnecting)
+        assertTrue(second.state.value.turnActive)
+        assertEquals(runId, second.state.value.boundRunId)
+        chat.enqueue(ChatTurnEvent.AssistantDelta("weiter"))
+        testScheduler.advanceUntilIdle()
+        assertFalse(second.state.value.reconnecting)
+        assertEquals(1, chat.calls.get())
+    }
+
+    @Test
+    fun recreatedViewModelShowsTheSamePendingApprovalExactlyOnce() = withRecreatedModel(
+        beforeRecreation = {
+            it.enqueue(
+                ChatTurnEvent.ApprovalRequested(
+                    ApprovalRequest(runId, requestId, ApprovalRequest.SAFE_DESCRIPTION)
+                )
+            )
+        }
+    ) { second, chat, _, controller ->
+        val approval = second.state.value.pendingApproval
+        assertEquals("the same request must be shown", requestId, approval?.requestId)
+        assertEquals(runId, approval?.runId)
+        assertEquals(1, chat.calls.get())
+        // The user's decision clears it in the view model AND app-level, so
+        // no re-created screen can re-show a resolved request.
+        second.dismissApproval()
+        testScheduler.advanceUntilIdle()
+        assertNull(second.state.value.pendingApproval)
+        assertNull(controller.activeRun.value?.pendingApproval)
+    }
+
+    @Test
+    fun stopAfterRecreationTargetsTheSameRunAndStartsNoNewStream() =
+        withRecreatedModel { second, chat, stop, _ ->
+            second.stop()
+            assertTrue(stop.started.await(1, TimeUnit.SECONDS))
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, stop.calls.get())
+            assertEquals("the stop must reach the same run", runId, stop.lastRunId)
+            assertEquals(1, chat.calls.get())
+        }
+
+    @Test
+    fun aRecreatedViewModelOfAnotherSessionNeverBindsTheRun() =
+        withRecreatedModel(sessionKeyOfSecond = "other-session") { second, chat, _, _ ->
+            assertFalse(
+                "another session must never show this run",
+                second.state.value.turnActive
+            )
+            assertNull(second.state.value.boundRunId)
+            assertTrue(second.state.value.localLines.isEmpty())
+            assertFalse(second.state.value.controlsVisible)
+            assertEquals(1, chat.calls.get())
+        }
+
+    @Test
+    fun aRehydratedUserLineIsNotDuplicatedOnceTheHistoryCarriesIt() =
+        withRecreatedModel(
+            // The server stores the user message when the run starts, so the
+            // re-created screen's history already contains it.
+            historyForSecond = readyHistory(
+                msg(1, MessageRole.USER, "Hallo Welt")
+            )
+        ) { second, _, _, _ ->
+            val state = second.state.value
+            val timeline = buildTimeline(
+                (state.history as MessageHistoryState.Ready).messages,
+                state.localLines
+            )
+            assertEquals(
+                "the user's own message must be rendered exactly once",
+                1,
+                timeline.count { it.role == MessageRole.USER && it.content == "Hallo Welt" }
+            )
+            assertEquals(
+                "the rehydrated partial assistant text must stay",
+                1,
+                timeline.count { it.role == MessageRole.ASSISTANT }
+            )
+        }
+
+    @Test
+    fun recreatedViewModelRebuildsToolRowsAndKeepsTheAssistantRowLast() =
+        withRecreatedModel(
+            beforeRecreation = { it.enqueue(ChatTurnEvent.ToolActivity(toolName = "web_search")) }
+        ) { second, chat, _, _ ->
+            val roles = second.state.value.localLines.map { it.role }
+            assertEquals(
+                listOf(MessageRole.USER, MessageRole.TOOL, MessageRole.ASSISTANT),
+                roles
+            )
+            assertEquals(
+                "Werkzeug web_search ist aktiv…",
+                second.state.value.localLines[1].content
+            )
+            chat.enqueue(ChatTurnEvent.AssistantDelta("mehr"))
+            testScheduler.advanceUntilIdle()
+            assertEquals("a delta must append, not add a row", 3, second.state.value.localLines.size)
+            assertEquals(
+                "Das ist eine mehr",
+                second.state.value.localLines.last().content
+            )
+            chat.enqueue(ChatTurnEvent.AssistantCompleted("Das ist eine mehr"))
+            testScheduler.advanceUntilIdle()
+            assertEquals(
+                "assistant.completed must replace the rehydrated row",
+                3,
+                second.state.value.localLines.size
+            )
+            assertEquals(1, second.state.value.localLines.count { it.role == MessageRole.ASSISTANT })
+        }
+
+    @Test
+    fun aRehydratedTurnIsDroppedOnceTheHistoryRecordsItInFull() =
+        withRecreatedModel(
+            // The run finished before the re-created screen's history load
+            // resolved, so the recorded turn is complete in the history.
+            historyForSecond = readyHistory(
+                msg(1, MessageRole.USER, "Hallo Welt"),
+                msg(2, MessageRole.ASSISTANT, "Das ist eine Antwort.")
+            )
+        ) { second, _, _, _ ->
+            assertTrue(
+                "the authoritative history replaces the rehydrated turn rows",
+                second.state.value.localLines.isEmpty()
+            )
+            val timeline = buildTimeline(
+                (second.state.value.history as MessageHistoryState.Ready).messages,
+                second.state.value.localLines
+            )
+            assertEquals(1, timeline.count { it.role == MessageRole.USER })
+            assertEquals(1, timeline.count { it.role == MessageRole.ASSISTANT })
+        }
+
+    @Test
+    fun recreationAfterDismissShowsNoDialog() = withRecreatedModel(
+        beforeRecreation = {
+            it.enqueue(
+                ChatTurnEvent.ApprovalRequested(
+                    ApprovalRequest(runId, requestId, ApprovalRequest.SAFE_DESCRIPTION)
+                )
+            )
+        },
+        actOnFirstModel = { it.dismissApproval() }
+    ) { second, _, _, controller ->
+        assertNull("an applied decision must not come back", second.state.value.pendingApproval)
+        assertNull(controller.activeRun.value?.pendingApproval)
+        // The run itself is untouched by the approval decision.
+        assertEquals(sessionId, controller.activeRun.value?.sessionId)
+        assertTrue(controller.activeRun.value != null)
+    }
+
+    @Test
+    fun recreationAfterAFinishedApprovalShowsNoDialog() = withRecreatedModel(
+        beforeRecreation = {
+            it.enqueue(
+                ChatTurnEvent.ApprovalRequested(
+                    ApprovalRequest(runId, requestId, ApprovalRequest.SAFE_DESCRIPTION)
+                )
+            )
+        },
+        actOnFirstModel = { it.finishApproval() }
+    ) { second, _, _, controller ->
+        // The server's authoritative "not pending" answer is terminal: the
+        // app-level record is gone, so a re-created screen shows no dialog.
+        assertNull(second.state.value.pendingApproval)
+        assertNull(controller.activeRun.value?.pendingApproval)
+    }
+
+    @Test
+    fun recreationWhileAnApprovalIsStillUndecidedShowsTheSameRequest() = withRecreatedModel(
+        beforeRecreation = {
+            it.enqueue(
+                ChatTurnEvent.ApprovalRequested(
+                    ApprovalRequest(runId, requestId, ApprovalRequest.SAFE_DESCRIPTION)
+                )
+            )
+        }
+        // No decision at all: the re-created screen must show the still
+        // undecided request again (the ambiguous `Failure` branch that also
+        // keeps the durable record is covered by
+        // ApprovalUiGateTest.ambiguousFailureNeitherReportsFinishedNorReenablesTheButtons
+        // and by the real E2E G4 run).
+    ) { second, _, _, controller ->
+        assertEquals(requestId, second.state.value.pendingApproval?.requestId)
+        assertEquals(requestId, controller.activeRun.value?.pendingApproval?.requestId)
+        assertTrue(second.state.value.controlsVisible || second.state.value.turnActive)
+    }
+
+    @Test
+    fun finishApprovalKeepsTheLocalDialogStateButDropsTheAppLevelRecord() =
+        withModel { model, chat, _, _, _ ->
+            model.onDraftChange("hi")
+            model.send()
+            chat.enqueue(ChatTurnEvent.RunStarted(runId))
+            chat.enqueue(
+                ChatTurnEvent.ApprovalRequested(
+                    ApprovalRequest(runId, requestId, ApprovalRequest.SAFE_DESCRIPTION)
+                )
+            )
+            testScheduler.advanceUntilIdle()
+            assertEquals(requestId, model.state.value.pendingApproval?.requestId)
+            // 409 NoPending: the authoritative terminal outcome keeps THIS
+            // composition's note but drops the durable record.
+            model.finishApproval()
+            testScheduler.advanceUntilIdle()
+            assertEquals(
+                "the local composition keeps its request state",
+                requestId,
+                model.state.value.pendingApproval?.requestId
+            )
+            assertNull(lastController?.activeRun?.value?.pendingApproval)
+        }
+
+    @Test
+    fun aTerminalRunIsNotRehydratedAsActive() = withRecreatedModel(
+        beforeRecreation = { it.enqueue(ChatTurnEvent.TurnCompleted()) }
+    ) { second, _, _, controller ->
+        assertNull("no stale active run after the terminal event", controller.activeRun.value)
+        assertFalse(second.state.value.turnActive)
+        assertFalse(second.state.value.controlsVisible)
+        assertFalse(second.state.value.reconnecting)
+        assertNull(second.state.value.pendingApproval)
+        assertTrue(second.state.value.localLines.isEmpty())
+    }
+
     /** Synthetic streaming fake: [streamTurn] is latched, events enqueued, closed by the test. */
     private class FakeTurnSource : StreamingChatSource {
         val calls = AtomicInteger()
@@ -663,11 +1050,16 @@ class ChatViewModelTest {
     private class FakeStopRequester : RunStopRequester {
         val calls = AtomicInteger()
         val started = CountDownLatch(1)
+
+        @Volatile
+        var lastRunId: String? = null
+
         @Volatile
         var result: RunStopResult = RunStopResult.Accepted("run_" + "a".repeat(32))
 
         override suspend fun stopRun(profileId: String, runId: String): RunStopResult {
             calls.incrementAndGet()
+            lastRunId = runId
             started.countDown()
             return result
         }

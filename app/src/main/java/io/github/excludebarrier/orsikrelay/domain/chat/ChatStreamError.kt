@@ -39,4 +39,19 @@ sealed interface ChatStreamError {
     /** The response is not the expected SSE/JSON contract: wrong content
      * type, invalid framing, size limits, wrong event order. */
     data object IncompatibleApi : ChatStreamError
+
+    /**
+     * The re-attach endpoint could not be used for the interrupted run
+     * (unknown or foreign run, session mismatch, evicted buffer, or a
+     * server without the re-attach endpoint). No retry is performed.
+     */
+    data object ResumeUnavailable : ChatStreamError
+
+    /**
+     * The server reports a replay gap on re-attach (409): the buffered
+     * events no longer cover the point after the last confirmed
+     * sequence. The run continues server-side; the turn fails closed
+     * and is reconciled from run status/history. No retry is performed.
+     */
+    data object ResumeGap : ChatStreamError
 }
