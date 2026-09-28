@@ -30,6 +30,42 @@ interface ChatAttachmentSource {
      * type.
      */
     suspend fun readInlineDataUrl(contentUri: String, mimeType: String, maxBytes: Long): String?
+
+    /**
+     * Same read as [readInlineDataUrl], but with a closed outcome so the UI can
+     * tell an over-limit attachment apart from a broken read (P5.1).
+     *
+     * Sources that cannot distinguish the two keep the fail-closed default,
+     * which reports every `null` of [readInlineDataUrl] as
+     * [ChatAttachmentReadResult.Unreadable].
+     */
+    suspend fun readInlineDataUrlResult(
+        contentUri: String,
+        mimeType: String,
+        maxBytes: Long
+    ): ChatAttachmentReadResult =
+        readInlineDataUrl(contentUri, mimeType, maxBytes)
+            ?.let { ChatAttachmentReadResult.DataUrl(it) }
+            ?: ChatAttachmentReadResult.Unreadable
+}
+
+/** Closed outcome of one attachment read (P5.1). */
+sealed interface ChatAttachmentReadResult {
+    /** The attachment was read within the bound and is ready to be sent. */
+    class DataUrl(val value: String) : ChatAttachmentReadResult {
+        override fun equals(other: Any?): Boolean =
+            other is DataUrl && value == other.value
+
+        override fun hashCode(): Int = value.hashCode()
+
+        override fun toString(): String = "DataUrl(" + value.length + " chars)"
+    }
+
+    /** The source delivered more than the caller's bound: nothing was accepted. */
+    data object TooLarge : ChatAttachmentReadResult
+
+    /** Empty stream, missing provider, refused or failed read. */
+    data object Unreadable : ChatAttachmentReadResult
 }
 
 /** Provider-reported, display-only metadata of one picker result. */

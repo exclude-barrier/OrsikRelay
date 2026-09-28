@@ -6,10 +6,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Base64
+import io.github.excludebarrier.orsikrelay.data.chat.AttachmentDataUrl
+import io.github.excludebarrier.orsikrelay.data.chat.BoundedAttachmentReader
+import io.github.excludebarrier.orsikrelay.data.chat.BoundedReadOutcome
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentMetadata
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentReadResult
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,10 +24,13 @@ import kotlinx.coroutines.withContext
  * Safety rules:
  * - only the given URI is opened; no path is derived from the display name and
  *   no filesystem path is ever constructed;
- * - the size limit is enforced while reading (an over-sized stream is aborted
- *   and reported as unusable instead of being buffered);
- * - every failure (revoked permission, missing provider, unreadable stream)
- *   returns `null`, never an exception or provider text;
+ * - the size limit is enforced while reading: the read is aborted at the bound
+ *   and reported as [ChatAttachmentReadResult.TooLarge] instead of being
+ *   buffered;
+ * - every other failure (revoked permission, missing provider, unreadable or
+ *   stalled stream) yields [ChatAttachmentReadResult.Unreadable], never an
+ *   exception and never provider text; [readInlineDataUrl] maps both failure
+ *   outcomes onto its `null` for callers that cannot act on the difference;
  * - the decoded thumbnail is bounded by [THUMBNAIL_MAX_PIXELS] so a malformed
  *   or huge image cannot exhaust memory.
  */
@@ -67,42 +72,40 @@ class AndroidChatAttachmentSource(context: Context) : ChatAttachmentSource {
         contentUri: String,
         mimeType: String,
         maxBytes: Long
-    ): String? = withContext(Dispatchers.IO) {
-        val uri = runCatching { Uri.parse(contentUri) }.getOrNull() ?: return@withContext null
-        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return@withContext null
-        val bytes = try {
-            val stream: InputStream = contentResolver.openInputStream(uri)
-                ?: return@withContext null
-            stream.use { readBounded(it, maxBytes) }
-        } catch (_: Exception) {
-            null
-        } ?: return@withContext null
-        try {
-            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            "data:$mimeType;base64,$encoded"
-        } catch (_: Exception) {
-            null
-        }
+    ): String? = when (val result = readInlineDataUrlResult(contentUri, mimeType, maxBytes)) {
+        is ChatAttachmentReadResult.DataUrl -> result.value
+        ChatAttachmentReadResult.TooLarge, ChatAttachmentReadResult.Unreadable -> null
     }
 
-    /** Reads at most [maxBytes]; returns `null` as soon as the stream is larger. */
-    private fun readBounded(stream: InputStream, maxBytes: Long): ByteArray? {
-        val buffer = ByteArrayOutputStream()
-        val chunk = ByteArray(READ_CHUNK_BYTES)
-        var total = 0L
-        while (true) {
-            val read = stream.read(chunk)
-            if (read < 0) break
-            total += read
-            if (total > maxBytes) return null
-            buffer.write(chunk, 0, read)
+    override suspend fun readInlineDataUrlResult(
+        contentUri: String,
+        mimeType: String,
+        maxBytes: Long
+    ): ChatAttachmentReadResult = withContext(Dispatchers.IO) {
+        val uri = runCatching { Uri.parse(contentUri) }.getOrNull()
+            ?: return@withContext ChatAttachmentReadResult.Unreadable
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) {
+            return@withContext ChatAttachmentReadResult.Unreadable
         }
-        val bytes = buffer.toByteArray()
-        return if (bytes.isEmpty()) null else bytes
+        // The base64 encode is the biggest allocation of this path, so it stays
+        // inside the same fail-closed wrapper as the read itself.
+        try {
+            val stream: InputStream = contentResolver.openInputStream(uri)
+                ?: return@withContext ChatAttachmentReadResult.Unreadable
+            when (val outcome = BoundedAttachmentReader.read(stream, maxBytes)) {
+                is BoundedReadOutcome.Bytes ->
+                    ChatAttachmentReadResult.DataUrl(AttachmentDataUrl.inline(mimeType, outcome.bytes))
+                BoundedReadOutcome.TooLarge -> ChatAttachmentReadResult.TooLarge
+                BoundedReadOutcome.Unreadable -> ChatAttachmentReadResult.Unreadable
+            }
+        } catch (_: Exception) {
+            ChatAttachmentReadResult.Unreadable
+        } catch (_: OutOfMemoryError) {
+            ChatAttachmentReadResult.Unreadable
+        }
     }
 
     private companion object {
-        const val READ_CHUNK_BYTES = 64 * 1024
         const val THUMBNAIL_MAX_PIXELS = 256
     }
 }

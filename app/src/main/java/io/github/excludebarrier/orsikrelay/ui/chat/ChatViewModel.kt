@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentDraftHolder
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentReadResult
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.NoopChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
@@ -556,9 +557,12 @@ internal class ChatViewModel(
         // the draft (text + attachment) is kept, so the user can retry or
         // remove it deliberately.
         scope.launch {
-            val dataUrl = try {
+            // The read outcome is closed (P5.1): an attachment that exceeds the
+            // limit is reported as too large even when the provider never
+            // reported a size, while a broken read stays "unreadable".
+            val readResult = try {
                 withContext(ioDispatcher) {
-                    attachmentSource.readInlineDataUrl(
+                    attachmentSource.readInlineDataUrlResult(
                         contentUri = attachment.contentUri,
                         mimeType = attachment.mimeType,
                         maxBytes = ChatAttachmentRules.MAX_IMAGE_BYTES
@@ -567,17 +571,18 @@ internal class ChatViewModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                null
+                ChatAttachmentReadResult.Unreadable
             }
-            val outbound = dataUrl?.let {
-                ChatOutboundMessage.create(message, listOf(it))
+            val outbound = (readResult as? ChatAttachmentReadResult.DataUrl)?.let {
+                ChatOutboundMessage.create(message, listOf(it.value))
             }
             if (outbound == null) {
+                val error = when (readResult) {
+                    ChatAttachmentReadResult.TooLarge -> ChatAttachmentError.TooLarge
+                    else -> ChatAttachmentError.Unreadable
+                }
                 _state.update {
-                    it.copy(
-                        turnActive = false,
-                        attachmentError = ChatAttachmentError.Unreadable
-                    )
+                    it.copy(turnActive = false, attachmentError = error)
                 }
                 dropPrematureUserLine()
                 return@launch

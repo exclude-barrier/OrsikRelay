@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.ui.chat
 
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentDraftHolder
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentMetadata
+import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentReadResult
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.NoopChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
@@ -945,6 +946,37 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun tooLargeReadOutcomeAtSendSetsTooLargeErrorWithoutPost() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://oversized" to ChatAttachmentMetadata("oversized.png", "image/png", 10L))
+            // The closed outcome (P5.1): the provider streamed more than the
+            // caller's bound while never reporting a size up front.
+            dataUrlResults = mapOf("content://oversized" to ChatAttachmentReadResult.TooLarge)
+        }
+        withModel(attachmentSource = source) { model, chat, _, _, _ ->
+            model.onAttachmentPicked("content://oversized")
+            testScheduler.advanceUntilIdle()
+            assertNotNull(model.state.value.attachment)
+
+            model.onDraftChange("bitte")
+            model.send()
+            testScheduler.advanceUntilIdle()
+
+            // The closed TooLarge outcome maps to its own error, and the
+            // over-limit attachment is never POSTed.
+            assertFalse(model.state.value.turnActive)
+            assertEquals(ChatAttachmentError.TooLarge, model.state.value.attachmentError)
+            assertEquals(0, chat.calls.get())
+            assertEquals(0, chat.attachmentCalls.get())
+            assertEquals(1, source.dataUrlCalls.get())
+            // The text draft and the attachment survive for a deliberate retry.
+            assertEquals("bitte", model.state.value.draft)
+            assertNotNull(model.state.value.attachment)
+            assertTrue(model.state.value.localLines.isEmpty())
+        }
+    }
+
+    @Test
     fun runStartedClearsAttachmentAndHolderEntry() {
         val source = FakeAttachmentSource().apply {
             metadata = mapOf("content://sent" to ChatAttachmentMetadata("sent.png", "image/png", 10L))
@@ -1489,6 +1521,24 @@ class ChatViewModelTest {
             lastDataUrlRequest = Triple(contentUri, mimeType, maxBytes)
             if (contentUri in throwingDataUrlUris) throw IllegalStateException("provider gone")
             return dataUrls[contentUri]
+        }
+
+        /** Per-URI closed outcomes of `readInlineDataUrlResult` (P5.1). */
+        @Volatile
+        var dataUrlResults: Map<String, ChatAttachmentReadResult> = emptyMap()
+
+        override suspend fun readInlineDataUrlResult(
+            contentUri: String,
+            mimeType: String,
+            maxBytes: Long
+        ): ChatAttachmentReadResult {
+            dataUrlCalls.incrementAndGet()
+            lastDataUrlRequest = Triple(contentUri, mimeType, maxBytes)
+            if (contentUri in throwingDataUrlUris) throw IllegalStateException("provider gone")
+            dataUrlResults[contentUri]?.let { return it }
+            return dataUrls[contentUri]
+                ?.let { ChatAttachmentReadResult.DataUrl(it) }
+                ?: ChatAttachmentReadResult.Unreadable
         }
     }
 
