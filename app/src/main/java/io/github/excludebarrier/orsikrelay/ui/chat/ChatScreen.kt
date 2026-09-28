@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -400,7 +402,44 @@ onClick = { viewModel.handleBack() }
                         )
                     },
                     onRemoveAttachment = { viewModel.removeAttachment() },
-                    compact = compactComposer
+                    compact = compactComposer,
+                    // In the compact regime the timeline (and with it the stop
+                    // and steer controls) is not composed at all. Those two are
+                    // run-critical, so they move into the compact composer row
+                    // while a server-confirmed run is bound: stop first, steer
+                    // next to it. Secondary steer status text stays out of the
+                    // compact row on purpose.
+                    compactRunControls = if (state.controlsVisible) {
+                        {
+                            OutlinedButton(
+                                onClick = { viewModel.stop() },
+                                enabled = !state.stopInFlight,
+                                modifier = Modifier.testTag(TAG_RUN_STOP)
+                            ) {
+                                Text(if (state.stopInFlight) stoppingLabel else stopLabel)
+                            }
+                            OutlinedTextField(
+                                value = state.steerDraft,
+                                onValueChange = { viewModel.onSteerDraftChange(it) },
+                                label = { Text(steerInputLabel) },
+                                enabled = !state.steerInFlight,
+                                maxLines = COMPACT_DRAFT_MAX_LINES,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp)
+                                    .testTag("chatSteerInput")
+                            )
+                            OutlinedButton(
+                                onClick = { viewModel.steer() },
+                                enabled = !state.steerInFlight,
+                                modifier = Modifier.testTag("chatSteerSend")
+                            ) {
+                                Text(steerLabel)
+                            }
+                        }
+                    } else {
+                        null
+                    }
                 )
             }
         }
@@ -497,7 +536,8 @@ private fun StopControl(
         }
         OutlinedButton(
             onClick = onStop,
-            enabled = enabled
+            enabled = enabled,
+            modifier = Modifier.testTag(TAG_RUN_STOP)
         ) {
             Text(label)
         }
@@ -641,7 +681,8 @@ internal fun ComposerBar(
     attachmentBusyLabel: String,
     onPickAttachment: () -> Unit,
     onRemoveAttachment: () -> Unit,
-    compact: Boolean = false
+    compact: Boolean = false,
+    compactRunControls: (@Composable RowScope.() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -651,6 +692,46 @@ internal fun ComposerBar(
                 bottom = if (compact) 0.dp else 12.dp
             )
     ) {
+        if (compact) {
+            // Compact regime (height-constrained window, e.g. landscape with
+            // the keyboard open): ONE dense row instead of chip row + input
+            // row. Two rows cannot fit below the header there, and a row that
+            // is squeezed below 48 dp would shrink the touch targets of
+            // "Anhang", "Entfernen" and "Senden". The row keeps the Material
+            // minimum height, so every control in it keeps a full 48 dp
+            // touch target; only secondary information (the size line, the
+            // paddings, the visible draft lines) is reduced.
+            if (attachmentErrorLabel != null) {
+                // Above the row, like the non-compact composer: an inline error
+                // would take width away from the draft field and push the send
+                // action off the row.
+                Text(
+                    text = attachmentErrorLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+            CompactComposerRow(
+                draft = draft,
+                onDraftChange = onDraftChange,
+                sendEnabled = sendEnabled,
+                onSend = onSend,
+                turnActive = turnActive,
+                attachment = attachment,
+                attachmentThumbnail = attachmentThumbnail,
+                attachmentBusy = attachmentBusy,
+                attachmentAddLabel = attachmentAddLabel,
+                attachmentRemoveLabel = attachmentRemoveLabel,
+                attachmentBusyLabel = attachmentBusyLabel,
+                onPickAttachment = onPickAttachment,
+                onRemoveAttachment = onRemoveAttachment,
+                runControls = compactRunControls
+            )
+            return@Column
+        }
         // P5: compact attachment chip above the input row. Local-only data:
         // the file name and size the provider reported, plus a bounded decoded
         // thumbnail; no path, no URI and no provider text is ever rendered.
@@ -666,8 +747,7 @@ internal fun ComposerBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(if (compact) Modifier.heightIn(max = COMPACT_CHIP_ROW_HEIGHT) else Modifier)
-                    .padding(bottom = if (compact) 2.dp else 6.dp),
+                    .padding(bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 when {
@@ -683,49 +763,24 @@ internal fun ComposerBar(
                                 bitmap = bitmap,
                                 contentDescription = null,
                                 modifier = Modifier
-                                    .size(if (compact) COMPACT_THUMBNAIL_SIZE else 40.dp)
+                                    .size(40.dp)
                                     .padding(end = 8.dp)
                                     .testTag(TAG_ATTACHMENT_THUMBNAIL)
                             )
                         }
                         val sizeLabel = formatAttachmentSize(attachment.sizeBytes)
-                        if (compact) {
-                            // One line for name and size: the compact chip row
-                            // is capped, so a second line would be cut in half.
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = attachment.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (sizeLabel.isNotEmpty()) {
                                 Text(
-                                    text = attachment.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false)
+                                    text = sizeLabel,
+                                    style = MaterialTheme.typography.bodySmall
                                 )
-                                if (sizeLabel.isNotEmpty()) {
-                                    Text(
-                                        text = sizeLabel,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        modifier = Modifier.padding(start = 8.dp)
-                                    )
-                                }
-                            }
-                        } else {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = attachment.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (sizeLabel.isNotEmpty()) {
-                                    Text(
-                                        text = sizeLabel,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
                             }
                         }
                         TextButton(
@@ -746,10 +801,7 @@ internal fun ComposerBar(
                 }
             }
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = if (compact) Modifier.heightIn(max = COMPACT_INPUT_ROW_HEIGHT) else Modifier
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(
                 onClick = onPickAttachment,
                 enabled = !turnActive && !attachmentBusy,
@@ -762,18 +814,138 @@ internal fun ComposerBar(
                 onValueChange = onDraftChange,
                 label = { Text(stringResource(R.string.chat_input_label)) },
                 enabled = !turnActive,
-                // In the compact regime the input row is the last thing that
-                // may grow: an unbounded multi-line draft would push the
-                // composer past the keyboard edge again. The field keeps
-                // scrolling the rest of the text internally.
-                maxLines = if (compact) COMPACT_DRAFT_MAX_LINES else Int.MAX_VALUE,
+                maxLines = Int.MAX_VALUE,
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 8.dp)
+                    .testTag(TAG_COMPOSER_FIELD)
             )
             Button(
                 onClick = onSend,
-                enabled = sendEnabled
+                enabled = sendEnabled,
+                modifier = Modifier.testTag(TAG_COMPOSER_SEND)
+            ) {
+                Text(stringResource(R.string.chat_send))
+            }
+        }
+    }
+}
+
+/**
+ * The compact composer: ONE dense row for a height-constrained window
+ * (landscape with the keyboard open, split screen).
+ *
+ * Two rows do not fit below the header there, and a row squeezed below its
+ * Material minimum would shrink the touch targets of the picker, remove and
+ * send actions. This row therefore keeps its natural height, so every control
+ * in it keeps a full 48 dp touch target, and only secondary information is
+ * reduced: no second chip line, a 24 dp thumbnail and a two-line draft cap.
+ * The layout is driven by the available height, never by the orientation.
+ *
+ * [runControls] replaces the ordinary picker/field/send trio while a run is
+ * active (stop and steer must stay reachable even though the timeline and its
+ * status blocks are not composed in this regime).
+ */
+@Composable
+private fun CompactComposerRow(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    sendEnabled: Boolean,
+    onSend: () -> Unit,
+    turnActive: Boolean,
+    attachment: ChatAttachmentDraft?,
+    attachmentThumbnail: ImageBitmap?,
+    attachmentBusy: Boolean,
+    attachmentAddLabel: String,
+    attachmentRemoveLabel: String,
+    attachmentBusyLabel: String,
+    onPickAttachment: () -> Unit,
+    onRemoveAttachment: () -> Unit,
+    runControls: (@Composable RowScope.() -> Unit)?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        when {
+            attachmentBusy -> {
+                Text(
+                    text = attachmentBusyLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1
+                )
+            }
+            attachment != null -> {
+                attachmentThumbnail?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(COMPACT_THUMBNAIL_SIZE)
+                            .padding(end = 8.dp)
+                            .testTag(TAG_ATTACHMENT_THUMBNAIL)
+                    )
+                }
+                // Bounded, NOT weighted: the draft field below is the only
+                // weighted child, so it receives all the remaining width. Two
+                // weighted children would pin the field to half of it and
+                // leave dead space after the send button. The size line is
+                // secondary information and is dropped in this regime - the
+                // row must first of all keep the field and the actions
+                // reachable.
+                Text(
+                    text = attachment.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = COMPACT_NAME_MAX_WIDTH)
+                )
+                TextButton(
+                    onClick = onRemoveAttachment,
+                    enabled = !turnActive,
+                    modifier = Modifier.testTag(TAG_ATTACHMENT_REMOVE)
+                ) {
+                    Text(attachmentRemoveLabel)
+                }
+            }
+            else -> Unit
+        }
+        if (runControls != null) {
+            runControls()
+        } else {
+            // A turn carries at most one image, so while an attachment is
+            // staged the picker has nothing to do and its width belongs to the
+            // draft field.
+            if (attachment == null && !attachmentBusy) {
+                TextButton(
+                    onClick = onPickAttachment,
+                    enabled = !turnActive,
+                    modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
+                ) {
+                    Text(attachmentAddLabel)
+                }
+            }
+            OutlinedTextField(
+                value = draft,
+                onValueChange = onDraftChange,
+                label = { Text(stringResource(R.string.chat_input_label)) },
+                enabled = !turnActive,
+                // Fixed height and bounded lines: the compact row must keep a
+                // deterministic budget, because an error line can sit above it
+                // and a growing draft (or a raised font scale) would otherwise
+                // squeeze the row below the 48 dp touch targets. Longer text
+                // scrolls inside the field.
+                maxLines = COMPACT_DRAFT_MAX_LINES,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = COMPACT_FIELD_HEIGHT, max = COMPACT_FIELD_HEIGHT)
+                    .padding(end = 8.dp)
+                    .testTag(TAG_COMPOSER_FIELD)
+            )
+            Button(
+                onClick = onSend,
+                enabled = sendEnabled,
+                modifier = Modifier.testTag(TAG_COMPOSER_SEND)
             ) {
                 Text(stringResource(R.string.chat_send))
             }
@@ -820,14 +992,18 @@ internal val COMPACT_COMPOSER_MAX_HEIGHT = 300.dp
  */
 internal const val COMPACT_DRAFT_MAX_LINES = 2
 
-/** Chip row height in the compact composer (thumbnail 24 dp + remove action). */
-internal val COMPACT_CHIP_ROW_HEIGHT = 30.dp
+/** Max width of the attachment name in the compact composer row. */
+internal val COMPACT_NAME_MAX_WIDTH = 96.dp
 
-/** Thumbnail edge in the compact chip. */
+/** Fixed draft-field height in the compact composer row (Material minimum). */
+internal val COMPACT_FIELD_HEIGHT = 56.dp
+
+/** Thumbnail edge in the compact composer row. */
 internal val COMPACT_THUMBNAIL_SIZE = 24.dp
 
-/** Input row height in the compact composer (field, picker and send action). */
-internal val COMPACT_INPUT_ROW_HEIGHT = 36.dp
+internal const val TAG_RUN_STOP = "composer_run_stop"
+internal const val TAG_COMPOSER_SEND = "composer_send"
+internal const val TAG_COMPOSER_FIELD = "composer_field"
 
 @Composable
 private fun StatusText(text: String) {

@@ -15,6 +15,7 @@ import io.github.excludebarrier.orsikrelay.ui.chat.ComposerBar
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_ADD
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_REMOVE
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_THUMBNAIL
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_SEND
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -132,6 +133,31 @@ class ChatComposerBarStateTest {
         val root = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
         val remove = composeRule.onNodeWithTag(TAG_ATTACHMENT_REMOVE).fetchSemanticsNode().boundsInRoot
         assertTrue(remove.left >= root.left && remove.right <= root.right)
+    }
+
+    @Test
+    fun normalComposerControlsKeepFullTouchTargets() {
+        // Portrait/normal-path guard: the touch targets of the ordinary
+        // composer must not shrink. (The compact regression itself is covered
+        // by ChatLandscapeComposerUiTest.compactControlsKeepFullTouchTargets,
+        // which is the one that fails without the compact fix.)
+        setBar(attachment = attachment("holiday.png"))
+
+        listOf(
+            "attachment picker" to TAG_ATTACHMENT_ADD,
+            "send" to TAG_COMPOSER_SEND,
+            "attachment remove" to TAG_ATTACHMENT_REMOVE
+        ).forEach { (label, tag) ->
+            // touchBoundsInRoot is the platform touch box (48 dp minimum),
+            // while the Material button itself reports a 40 dp layout.
+            val heightDp = with(composeRule.density) {
+                composeRule.onNodeWithTag(tag).fetchSemanticsNode().touchBoundsInRoot.height / density
+            }
+            assertTrue(
+                "the normal $label touch target must stay at least 48 dp, was $heightDp dp",
+                heightDp >= 48f
+            )
+        }
     }
 
     private fun attachment(name: String) = ChatAttachmentDraft(
