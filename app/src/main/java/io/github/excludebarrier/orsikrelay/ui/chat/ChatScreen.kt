@@ -2,12 +2,14 @@ package io.github.excludebarrier.orsikrelay.ui.chat
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -195,25 +197,39 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
         isRunActive = state.turnActive
     )
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            // Edge-to-edge IME handling (official Compose e2e pattern): the
-            // window is never panned for the keyboard. The IME inset is
-            // consumed exactly once, here at the chat root, so the Column
-            // resizes from the bottom: the header stays put, the message
-            // list (weight 1f) shrinks, and the composer sits directly
-            // above the keyboard. `exclude(navigationBars)` subtracts the
-            // navigation-bar portion, which the root HermesAppSurface
-            // already applies via safeDrawingPadding() — without it the
-            // nav bar would be padded twice while the IME is open.
-            .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
-            .padding(horizontal = 16.dp)
-    ) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        // Adaptive composer (landscape + keyboard): with the soft keyboard open
+        // on a phone in landscape the chat root can shrink to roughly the
+        // height of the header plus the composer. Measured on a 1080x2400
+        // display with the Gboard landscape IME (686 px of 1080 px): ~394 px
+        // (about 150 dp) are left. Header, attachment chip and input row then
+        // no longer fit, and the input row collapsed to zero height, so the
+        // composer has to switch to its compact spacing in that regime. The
+        // decision uses the AVAILABLE height (never the orientation), so it
+        // also covers split screen, freeform windows and a taller keyboard.
+        val compactComposer = maxHeight < COMPACT_COMPOSER_MAX_HEIGHT
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // Edge-to-edge IME handling (official Compose e2e pattern): the
+                // window is never panned for the keyboard. The IME inset is
+                // consumed exactly once, here at the chat root, so the Column
+                // resizes from the bottom: the header stays put, the message
+                // list (weight 1f) shrinks, and the composer sits directly
+                // above the keyboard. `exclude(navigationBars)` subtracts the
+                // navigation-bar portion, which the root HermesAppSurface
+                // already applies via safeDrawingPadding() — without it the
+                // nav bar would be padded twice while the IME is open.
+                .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
+                .padding(horizontal = 16.dp)
+        ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 12.dp, bottom = 8.dp),
+                .padding(
+                    top = if (compactComposer) 2.dp else 12.dp,
+                    bottom = if (compactComposer) 2.dp else 8.dp
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(
@@ -264,6 +280,29 @@ onClick = { viewModel.handleBack() }
                         timelineListState.scrollToItem(timeline.lastIndex)
                     }
                 }
+                // The middle region (timeline plus every status/control block)
+                // is the only flexible part of the chat column: it takes
+                // whatever is left after the header and the composer, and
+                // shrinks - down to nothing - when the composer needs the
+                // space. A compose window that is shorter than header plus
+                // composer (landscape with the keyboard open, split screen)
+                // must never squeeze the input row out: the composer keeps its
+                // intrinsic height and this region absorbs the deficit.
+                //
+                // Column measures its children in declaration order, so this
+                // region is measured BEFORE the composer and would consume its
+                // own content height first (a couple of lines of status text
+                // are already enough to push the composer off the keyboard
+                // edge). In the compact regime it is therefore not composed at
+                // all: the whole remaining budget belongs to the composer, and
+                // the timeline, the status lines and the run controls come back
+                // as soon as there is room for them again.
+                if (!compactComposer) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                    ) {
                 if (timeline.isEmpty()) {
                     StatusText(stringResource(R.string.chat_empty))
                 } else {
@@ -333,6 +372,8 @@ onClick = { viewModel.handleBack() }
                 if (state.reconnecting) {
                     StatusText(stringResource(R.string.chat_stream_reconnecting))
                 }
+                }
+                }
                 ComposerBar(
                     draft = state.draft,
                     onDraftChange = { viewModel.onDraftChange(it) },
@@ -358,10 +399,12 @@ onClick = { viewModel.handleBack() }
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
                     },
-                    onRemoveAttachment = { viewModel.removeAttachment() }
+                    onRemoveAttachment = { viewModel.removeAttachment() },
+                    compact = compactComposer
                 )
             }
         }
+    }
     }
     // A strictly validated protocol-v1 `approval.request` is emitted by the
     // authenticated chat stream only after the complete capability contract
@@ -597,12 +640,16 @@ internal fun ComposerBar(
     attachmentRemoveLabel: String,
     attachmentBusyLabel: String,
     onPickAttachment: () -> Unit,
-    onRemoveAttachment: () -> Unit
+    onRemoveAttachment: () -> Unit,
+    compact: Boolean = false
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 12.dp)
+            .padding(
+                top = if (compact) 0.dp else 8.dp,
+                bottom = if (compact) 0.dp else 12.dp
+            )
     ) {
         // P5: compact attachment chip above the input row. Local-only data:
         // the file name and size the provider reported, plus a bounded decoded
@@ -619,7 +666,8 @@ internal fun ComposerBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp),
+                    .then(if (compact) Modifier.heightIn(max = COMPACT_CHIP_ROW_HEIGHT) else Modifier)
+                    .padding(bottom = if (compact) 2.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 when {
@@ -635,24 +683,49 @@ internal fun ComposerBar(
                                 bitmap = bitmap,
                                 contentDescription = null,
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(if (compact) COMPACT_THUMBNAIL_SIZE else 40.dp)
                                     .padding(end = 8.dp)
                                     .testTag(TAG_ATTACHMENT_THUMBNAIL)
                             )
                         }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = attachment.displayName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            val sizeLabel = formatAttachmentSize(attachment.sizeBytes)
-                            if (sizeLabel.isNotEmpty()) {
+                        val sizeLabel = formatAttachmentSize(attachment.sizeBytes)
+                        if (compact) {
+                            // One line for name and size: the compact chip row
+                            // is capped, so a second line would be cut in half.
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = sizeLabel,
-                                    style = MaterialTheme.typography.bodySmall
+                                    text = attachment.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
+                                if (sizeLabel.isNotEmpty()) {
+                                    Text(
+                                        text = sizeLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = attachment.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (sizeLabel.isNotEmpty()) {
+                                    Text(
+                                        text = sizeLabel,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                         }
                         TextButton(
@@ -673,7 +746,10 @@ internal fun ComposerBar(
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = if (compact) Modifier.heightIn(max = COMPACT_INPUT_ROW_HEIGHT) else Modifier
+        ) {
             TextButton(
                 onClick = onPickAttachment,
                 enabled = !turnActive && !attachmentBusy,
@@ -686,6 +762,11 @@ internal fun ComposerBar(
                 onValueChange = onDraftChange,
                 label = { Text(stringResource(R.string.chat_input_label)) },
                 enabled = !turnActive,
+                // In the compact regime the input row is the last thing that
+                // may grow: an unbounded multi-line draft would push the
+                // composer past the keyboard edge again. The field keeps
+                // scrolling the rest of the text internally.
+                maxLines = if (compact) COMPACT_DRAFT_MAX_LINES else Int.MAX_VALUE,
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 8.dp)
@@ -717,6 +798,36 @@ private fun formatAttachmentSize(sizeBytes: Long): String {
 internal const val TAG_ATTACHMENT_ADD = "composer_attachment_add"
 internal const val TAG_ATTACHMENT_REMOVE = "composer_attachment_remove"
 internal const val TAG_ATTACHMENT_THUMBNAIL = "composer_attachment_thumbnail"
+
+/**
+ * Available chat-root height below which the header and the composer switch to
+ * their compact spacing.
+ *
+ * The budget in this regime is header + attachment chip + input row and nothing
+ * else: with the Gboard landscape keyboard open (686 px of a 1080 px display)
+ * about 394 px ≈ 150 dp remain, while the normal spacing needs roughly 190 dp
+ * for those three blocks alone. 300 dp sits well below the smallest
+ * non-constrained case (a phone in portrait with the keyboard open is about
+ * 600 dp) and well above the landscape-with-keyboard case, so the normal layout
+ * is untouched wherever it already fits.
+ */
+internal val COMPACT_COMPOSER_MAX_HEIGHT = 300.dp
+
+/**
+ * Visible draft lines in the compact composer. Bounds the intrinsic height of
+ * the input row in the height-constrained regime (the rest of the text stays
+ * editable and scrolls inside the field).
+ */
+internal const val COMPACT_DRAFT_MAX_LINES = 2
+
+/** Chip row height in the compact composer (thumbnail 24 dp + remove action). */
+internal val COMPACT_CHIP_ROW_HEIGHT = 30.dp
+
+/** Thumbnail edge in the compact chip. */
+internal val COMPACT_THUMBNAIL_SIZE = 24.dp
+
+/** Input row height in the compact composer (field, picker and send action). */
+internal val COMPACT_INPUT_ROW_HEIGHT = 36.dp
 
 @Composable
 private fun StatusText(text: String) {
