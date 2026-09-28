@@ -583,7 +583,7 @@ private fun SteerRecoveryBlock(
 }
 
 @Composable
-private fun ComposerBar(
+internal fun ComposerBar(
     draft: String,
     onDraftChange: (String) -> Unit,
     sendEnabled: Boolean,
@@ -637,6 +637,7 @@ private fun ComposerBar(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .padding(end = 8.dp)
+                                    .testTag(TAG_ATTACHMENT_THUMBNAIL)
                             )
                         }
                         Column(modifier = Modifier.weight(1f)) {
@@ -715,6 +716,7 @@ private fun formatAttachmentSize(sizeBytes: Long): String {
 
 internal const val TAG_ATTACHMENT_ADD = "composer_attachment_add"
 internal const val TAG_ATTACHMENT_REMOVE = "composer_attachment_remove"
+internal const val TAG_ATTACHMENT_THUMBNAIL = "composer_attachment_thumbnail"
 
 @Composable
 private fun StatusText(text: String) {

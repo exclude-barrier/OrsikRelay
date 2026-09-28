@@ -127,28 +127,35 @@ object ChatAttachmentRules {
      * never sent to the server.
      */
     fun sanitizeDisplayName(rawName: String, mimeType: String): String {
-        val cleaned = rawName
-            // Unicode FORMAT (Cf) characters carry no visible glyph but reorder
-            // or hide text (e.g. U+202E RIGHT-TO-LEFT OVERRIDE, bidi isolates,
-            // zero-width marks). A provider-controlled file name must not be
-            // able to spoof its own chip label, so they are dropped entirely
-            // instead of leaving stray separators behind.
-            .filter { character -> Character.getType(character) != Character.FORMAT.toInt() }
-            .map { character ->
-                when {
-                    character.isISOControl() -> ' '
-                    character == '/' || character == '\\' -> '_'
-                    else -> character
-                }
+        val builder = StringBuilder(rawName.length)
+        // Iterate by CODE POINT, never per Char: a supplementary-plane FORMAT
+        // (Cf) character such as U+E0001 LANGUAGE TAG is a surrogate pair whose
+        // two units both report type SURROGATE, so a per-Char filter would let
+        // it through. The same walk drops unpaired surrogates, which would
+        // otherwise render as replacement glyphs.
+        var index = 0
+        while (index < rawName.length) {
+            val codePoint = rawName.codePointAt(index)
+            index += Character.charCount(codePoint)
+            when {
+                Character.getType(codePoint) == Character.FORMAT.toInt() -> Unit
+                Character.getType(codePoint) == Character.SURROGATE.toInt() -> Unit
+                codePoint == '/'.code || codePoint == '\\'.code -> builder.append('_')
+                Character.isISOControl(codePoint) -> builder.append(' ')
+                else -> builder.appendCodePoint(codePoint)
             }
-            .joinToString("")
-            .trim()
-        val base = cleaned.ifBlank { defaultDisplayName(mimeType) }
-        return if (base.length > MAX_DISPLAY_NAME_CHARS) {
-            base.take(MAX_DISPLAY_NAME_CHARS)
-        } else {
-            base
         }
+        val cleaned = builder.toString().trim()
+        val base = cleaned.ifBlank { defaultDisplayName(mimeType) }
+        if (base.length <= MAX_DISPLAY_NAME_CHARS) return base
+        // Never cut a surrogate pair in half: a truncated name must not end in
+        // an unpaired surrogate that renders as a replacement glyph.
+        val cut = if (Character.isHighSurrogate(base[MAX_DISPLAY_NAME_CHARS - 1])) {
+            MAX_DISPLAY_NAME_CHARS - 1
+        } else {
+            MAX_DISPLAY_NAME_CHARS
+        }
+        return base.take(cut)
     }
 
     private fun defaultDisplayName(mimeType: String): String = when (mimeType) {

@@ -155,6 +155,37 @@ class ChatAttachmentTest {
     }
 
     @Test
+    fun `sanitize display name strips supplementary plane format characters`() {
+        // U+E0001 LANGUAGE TAG and U+1D173 MUSICAL SYMBOL BEGIN BEAM are Cf
+        // code points OUTSIDE the BMP: a per-Char filter would keep their two
+        // surrogate units, so the filter must walk code points.
+        val sanitized = ChatAttachmentRules.sanitizeDisplayName(
+            "ta\uDB40\uDC01g\uD834\uDD73.png",
+            "image/png"
+        )
+        assertEquals("tag.png", sanitized)
+        assertTrue(
+            "no format character survives",
+            sanitized.none { Character.getType(it) == Character.SURROGATE.toInt() }
+        )
+    }
+
+    @Test
+    fun `sanitize display name drops unpaired surrogates`() {
+        assertEquals("name.png", ChatAttachmentRules.sanitizeDisplayName("na\uD83Dme.png", "image/png"))
+    }
+
+    @Test
+    fun `sanitize display name never truncates inside a surrogate pair`() {
+        // 119 ASCII chars + an emoji (2 UTF-16 units) crosses the 120 bound in
+        // the middle of the pair.
+        val name = "x".repeat(119) + "\uD83D\uDE00" + ".png"
+        val sanitized = ChatAttachmentRules.sanitizeDisplayName(name, "image/png")
+        assertEquals(119, sanitized.length)
+        assertTrue("no trailing high surrogate", !Character.isHighSurrogate(sanitized.last()))
+    }
+
+    @Test
     fun `sanitize display name keeps a normal name untouched`() {
         assertEquals("photo 2026-09-27.png", ChatAttachmentRules.sanitizeDisplayName("photo 2026-09-27.png", "image/png"))
     }
