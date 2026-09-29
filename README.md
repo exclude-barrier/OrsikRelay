@@ -2,7 +2,7 @@
 
 Inoffizieller, eigenständig entwickelter Android-Client für Hermes Agent. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; Orsik Relay ist ein Kotlin-/Jetpack-Compose-Thin-Client ohne offizielle Verbindung zu Nous Research.
 
-## Projektstatus – v0.1.0-alpha.4
+## Projektstatus – v0.1.0-alpha.5
 
 Dieser Stand ist ein **privater technischer Alpha-Release für Tests**, nicht für den Produktiveinsatz. Enthalten sind:
 
@@ -14,20 +14,25 @@ Dieser Stand ist ein **privater technischer Alpha-Release für Tests**, nicht f�
 - Markdown-Rendering für Assistant-Antworten mit Headings, Listen, Quotes, Inline Code und fenced Code Blocks mit Copy-Button,
 - sichere Werkzeugaktivitätsanzeige ohne Befehle, Argumente, Pfade, URLs oder Toolausgaben (auch in der geladenen Historie),
 - native Session-Chat-Approvals mit ausschließlich **Ablehnen** oder **einmal erlauben**,
+- laufende Hermes-Runs überleben Netzwerk-/SSE-Unterbrechungen: automatischer Reconnect auf dieselbe `run_id` mit `after_seq`-Replay, ohne doppelten Prompt und ohne zweiten Run,
+- laufende Runs und offene Approvals überleben eine Activity-Recreation (Rotation); veraltete Approval-Dialoge werden nicht wiederbelebt,
 - laufende Runs stoppen und per Steer-Nachricht steuern,
+- Bilder senden über den Android System Photo Picker (JPEG, PNG, WEBP, max. 1 Bild pro Turn, bis 5 MiB, ohne Storage-Berechtigung): Text + Bild oder Bild-only als multimodale Hermes-Content-Parts, inline und ohne Upload-Endpoint,
 - persistente normale Chat-Entwürfe mit server- und sessiongetrennter Speicherung,
 - geschlossene Fehlerabbildung ohne automatische Wiederholung schreibender Requests,
 - kurzlebiger Foreground Service während aktiver Runs, damit das SSE im Android-Background aktiv bleibt, mit Approval- und Run-Completed-Benachrichtigungen,
 - ein eigenständiges Material-3-Design mit persistentem Modus System, Hell oder Dunkel,
+- stabilerer IME-/Keyboard-Support inklusive adaptivem Compact Composer in Landscape (Composer und Stop-/Steer-Controls bleiben erreichbar, Anhang/Entfernen/Senden behalten 48-dp-Touch-Targets),
 
 Geräte-Credentials sind auf `chat`, `runs` und `approvals` beschränkt. Sie gewähren keinen Zugriff auf Jobs, Artefakte, Memory, Cron oder Administration und können serverseitig sofort widerrufen werden.
 
 ## Hermes-Kompatibilität
 
-Alpha 4 benötigt einen Hermes-Server mit dem versionierten Mobile-Vertrag für:
+Alpha 5 benötigt einen Hermes-Server mit dem versionierten Mobile-Vertrag für:
 
 - `device_credentials` Protokoll v1 (`POST /v1/devices/pair`, `POST /v1/devices/self/revoke`),
-- interaktive Session-Chat-Approvals mit exakt korrelierter `request_id` und den Entscheidungen `once`/`deny`.
+- interaktive Session-Chat-Approvals mit exakt korrelierter `request_id` und den Entscheidungen `once`/`deny`,
+- multimodale Session-Chat-Nachrichten (`message` als Content-Part-Liste mit `text` und `image_url`), damit Bilder inline übertragen werden können.
 
 Der dafür entwickelte Hermes-Serverstand wurde separat auf einer isolierten frischen Installation per E2E geprüft, ist aber **noch nicht in der öffentlichen Hermes-Version verfügbar**. Eine unveränderte offizielle Hermes-Installation ist deshalb derzeit nicht kompatibel. Dieser private App-Release ist für den passenden Entwicklungsstand bestimmt; die Veröffentlichung des Serververtrags ist Voraussetzung für einen allgemein nutzbaren Release.
 
@@ -56,19 +61,20 @@ hermes devices revoke-all --yes
 
 Alternativ kann das gekoppelte Gerät in der App über **Gerät trennen** sein eigenes Credential widerrufen.
 
-## Verifikation des Alpha-4-Stands
+## Verifikation des Alpha-5-Stands
 
-- 626 JVM-/Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
-- 206 Connected-/Compose-Tests auf `emulator-5554` (API 36): 0 Fehler, 0 Errors, 1 dokumentierter Skip (System-Benachrichtigungstest, benötigt deaktiviertes System-Notification-Setting)
+- 755 JVM-/Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
+- 244 Connected-/Compose-Tests auf `emulator-5554` (API 36): 0 Fehler, 0 Errors, 1 dokumentierter Skip (System-Benachrichtigungstest, benötigt deaktiviertes System-Notification-Setting)
+- zusätzlich 99 fokussierte Instrumentationstests (IME-Layout, Landscape Compact Composer, Attachment-Chip, Composer-States, Run/Steer, Approvals, Draft-Persistenz, Recreation): 0 Fehler
 - `lint`: 0 Errors
-- `assembleDebug`, APK-Installation und Versionsprüfung (`versionName=0.1.0-alpha.4`, `versionCode=4`) erfolgreich
-- E2E auf headed Emulator: Pairing, Chat, Markdown, Streaming, Tool-Activity (Live und Historie) und Approvals gegen einen lokalen Hermes-Serverstand
+- `assembleDebug`, APK-Installation, Kaltstart und Versionsprüfung (`versionName=0.1.0-alpha.5`, `versionCode=5`) erfolgreich
+- E2E auf headed Emulator gegen einen lokalen Hermes-Serverstand: Text-Chat, Bild-Turn (genau ein Image-Part), Reconnect auf dieselbe `run_id` mit `after_seq` ohne zweiten POST, Activity-Recreation mit gebundenem Run, Approval `once` und `deny`, Compact-Landscape mit erreichbaren Stop-/Steer-Controls
 - keine echten Credentials im Repository
 
 ## Installation des privaten Alpha-Releases
 
-1. Im privaten [GitHub-Releasebereich](https://github.com/exclude-barrier/Orsik-Relay/releases) `v0.1.0-alpha.4` öffnen.
-2. Die APK `orsik-relay-v0.1.0-alpha.4-debug.apk` herunterladen.
+1. Im privaten [GitHub-Releasebereich](https://github.com/exclude-barrier/Orsik-Relay/releases) `v0.1.0-alpha.5` öffnen.
+2. Die APK `orsik-relay-v0.1.0-alpha.5-debug.apk` herunterladen.
 3. Installation aus der verwendeten Datei-/Browser-App einmalig erlauben und die APK installieren.
 
 Die APK ist mit dem Android-Debug-Key signiert. Sie ist ausschließlich zum manuellen Testen bestimmt und bildet noch keinen stabilen Update- oder Store-Kanal.
@@ -77,7 +83,11 @@ Die APK ist mit dem Android-Debug-Key signiert. Sie ist ausschließlich zum manu
 
 - Kein produktives Release-Signing, keine AAB und keine CI-basierte Release-Pipeline.
 - Der erforderliche Hermes-Serververtrag (Mobile-v1) ist noch nicht in der öffentlichen Hermes-Version enthalten.
-- Inline-Bilder, Sprache und Bot-Verwaltung sind noch nicht enthalten.
+- PDF-, Text- und allgemeine Dateianhänge werden nicht unterstützt, und es wird maximal ein Bild pro Turn übertragen.
+- Vision-Support hängt vom verwendeten Hermes-Modell ab.
+- Sprache und Bot-Verwaltung sind noch nicht enthalten.
+- Nach einer Activity-Recreation kann das Laden der Historie einmalig fehlschlagen; „Erneut versuchen“ lädt sie nach, der laufende Run bleibt dabei gebunden.
+- Im Compact-Modus (sehr flaches Fenster, z. B. Landscape mit offener Tastatur) bleibt die Nachrichtenliste ausgeblendet, bis wieder genug Höhe verfügbar ist; Header, Eingabe und die Stop-/Steer-Controls bleiben sichtbar.
 - Die Benutzeroberfläche wird nach realer Nutzung schrittweise weiter angepasst.
 
 ## Lokale Entwicklungsumgebung auf build-host
@@ -111,7 +121,7 @@ Maßgeblich für alle Builds und Tests ist der versionierte **Gradle Wrapper 8.1
 
 Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/Orsik-Relay/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
 
-- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.4`, später `v0.1.0-beta.1`.
+- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.5`, später `v0.1.0-beta.1`.
 - CI, Wrapper-Validation, produktives Release-Signing und AAB-Erstellung folgen in einem separaten Release-Ticket.
 - Der Signing-Key kommt niemals ins Repository.
 - Vor einem öffentlichen bzw. Play-Store-Release sind Lizenz, Datenschutztext, Support- und Updatekonzept sowie vollständige Store-Metadaten erforderlich.
