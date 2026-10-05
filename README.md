@@ -122,9 +122,10 @@ Maßgeblich für alle Builds und Tests ist der versionierte **Gradle Wrapper 8.1
 Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/Orsik-Relay/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
 
 - Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.5`, später `v0.1.0-beta.1`.
-- CI, Wrapper-Validation, produktives Release-Signing und AAB-Erstellung folgen in einem separaten Release-Ticket.
+- CI (Unit-Tests, Lint, `assembleDebug` und Instrumentationstests auf API 36) liegt in `.github/workflows/android.yml`; die Gradle-Wrapper-Validation ist Teil des Workflows.
+- Produktives Release-Signing und AAB-Erstellung folgen in einem separaten Release-Ticket.
 - Der Signing-Key kommt niemals ins Repository.
-- Vor einem öffentlichen bzw. Play-Store-Release sind Lizenz, Datenschutztext, Support- und Updatekonzept sowie vollständige Store-Metadaten erforderlich.
+- Lizenz: **Apache-2.0** (siehe `LICENSE`). Vor einem öffentlichen bzw. Play-Store-Release sind zusätzlich Datenschutztext, Support- und Updatekonzept sowie vollständige Store-Metadaten erforderlich.
 
 ## Verbindliche Dokumente
 
