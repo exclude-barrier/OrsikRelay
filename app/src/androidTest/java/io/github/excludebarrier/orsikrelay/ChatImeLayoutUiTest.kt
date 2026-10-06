@@ -71,7 +71,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun imeOpenResizesChatWithoutPanningOrDoubleInsets() {
         setScreen()
-        waitForText("Kurze Antwort")
+        waitForText("Nachricht")
         val navBottom = realNavBottom()
         // State A: no IME.
         val headerTopA = boundsTop("Chat")
@@ -129,7 +129,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun realKeyboardOpenKeepsHeaderAndComposerVisible() {
         setScreen()
-        waitForText("Kurze Antwort")
+        waitForText("Nachricht")
         val headerTopBefore = boundsTop("Chat")
         val composerTopBefore = boundsTop("Nachricht")
 
@@ -162,7 +162,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun imeScreenshotsForVisualVerification() {
         setScreen()
-        waitForText("Kurze Antwort")
+        waitForText("Nachricht")
         shoot("01_kb_closed_light")
         Thread.sleep(2_500)
 
@@ -190,7 +190,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun realKeyboardScreenshotLight() {
         setScreen(dark = false)
-        waitForText("Kurze Antwort")
+        waitForText("Nachricht")
         openRealKeyboard()
         Thread.sleep(3_000)
         shoot("05_real_ime_light")
@@ -201,7 +201,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun realKeyboardScreenshotDark() {
         setScreen(dark = true)
-        waitForText("Kurze Antwort")
+        waitForText("Nachricht")
         openRealKeyboard()
         Thread.sleep(3_000)
         shoot("06_real_ime_dark")
@@ -211,7 +211,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun realKeyboardCloseThenReopenIsStable() {
         setScreen()
-        waitForText("Kurze Antwort")
+        waitForText("Nachricht")
         val headerTopClosed = boundsTop("Chat")
         val composerTopClosed = boundsTop("Nachricht")
 
@@ -420,11 +420,14 @@ class ChatImeLayoutUiTest {
     private fun boundsBottom(text: String): Int =
         composeRule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.bottom.toInt()
 
+    /**
+     * Waits for a node with [text] and settles the UI. Callers wait for the
+     * always-present composer ("Nachricht"), never for a specific timeline
+     * message: on a smaller CI screen an off-screen LazyColumn item is never
+     * composed, so waiting for it would time out even though the layout under
+     * test (header + composer) is correct and independent of message content.
+     */
     private fun waitForText(text: String) {
-        // Generous timeout: on a cold headless CI emulator the first
-        // composition plus history load and auto-scroll can take well over the
-        // previous 5 s, which made this file fail with ComposeTimeoutException
-        // even though the layout was correct.
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
         }
