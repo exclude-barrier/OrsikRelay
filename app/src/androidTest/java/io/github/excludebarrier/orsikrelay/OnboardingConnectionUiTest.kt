@@ -78,7 +78,10 @@ class OnboardingConnectionUiTest {
         submitValidForm()
         waitForText("Der API-Key wurde abgelehnt.")
 
-        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
+        // The form is scrollable and submitValidForm() scrolled to the submit
+        // button, so the title may be scrolled out of view; scroll it back in
+        // before asserting it is displayed (proves we stayed on onboarding).
+        composeRule.onNodeWithText("Server hinzufügen").performScrollTo().assertIsDisplayed()
         assertEquals(0, saveCalls.get())
     }
 
@@ -97,7 +100,7 @@ class OnboardingConnectionUiTest {
         submitValidForm()
         waitForText("Der Server konnte nicht sicher gespeichert werden.")
 
-        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
+        composeRule.onNodeWithText("Server hinzufügen").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -159,7 +162,8 @@ class OnboardingConnectionUiTest {
     }
 
     private fun waitForText(text: String) {
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        // 20 s tolerates a cold headless CI emulator.
+        composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()

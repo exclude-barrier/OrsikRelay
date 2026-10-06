@@ -158,6 +158,7 @@ class ChatImeLayoutUiTest {
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
     }
 
+    @CaptureOnly
     @Test
     fun imeScreenshotsForVisualVerification() {
         setScreen()
@@ -185,6 +186,7 @@ class ChatImeLayoutUiTest {
         Thread.sleep(1_000)
     }
 
+    @CaptureOnly
     @Test
     fun realKeyboardScreenshotLight() {
         setScreen(dark = false)
@@ -195,6 +197,7 @@ class ChatImeLayoutUiTest {
         Thread.sleep(1_000)
     }
 
+    @CaptureOnly
     @Test
     fun realKeyboardScreenshotDark() {
         setScreen(dark = true)
@@ -418,7 +421,11 @@ class ChatImeLayoutUiTest {
         composeRule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.bottom.toInt()
 
     private fun waitForText(text: String) {
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        // Generous timeout: on a cold headless CI emulator the first
+        // composition plus history load and auto-scroll can take well over the
+        // previous 5 s, which made this file fail with ComposeTimeoutException
+        // even though the layout was correct.
+        composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()

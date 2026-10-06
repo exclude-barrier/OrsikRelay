@@ -110,7 +110,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+          # Capture-only tests (real IME / screenshot markers, no assertions) are
+          # environment-dependent and excluded from CI via @CaptureOnly.
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.github.excludebarrier.orsikrelay.CaptureOnly
 
       - name: Upload instrumented test reports
         if: always()
