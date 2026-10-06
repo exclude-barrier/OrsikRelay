@@ -5,8 +5,8 @@ Orsik Relay und markiert ausdrücklich die Stellen, an denen der
 `internal plan` (Soll) vom Code (Ist) abweicht. Maßgeblich ist der
 Code; Abweichungen sind teils bewusst, teils offen.
 
-Stand: `v0.1.0-alpha.5` (`versionCode 5`) auf Basis Commit `1356bff`, ergänzt um
-die noch nicht committeten Gap-Fixes (CI-Workflow, Lizenz, Härtungen).
+Stand: `v0.1.0-alpha.6` (`versionCode 6`), inklusive CI-Workflow,
+Apache-2.0-Lizenz und Audit-Härtungen.
 
 ## 1. Modul- und Build-Struktur
 

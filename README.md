@@ -2,7 +2,7 @@
 
 Inoffizieller, eigenständig entwickelter Android-Client für Hermes Agent. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; Orsik Relay ist ein Kotlin-/Jetpack-Compose-Thin-Client ohne offizielle Verbindung zu Nous Research.
 
-## Projektstatus – v0.1.0-alpha.5
+## Projektstatus – v0.1.0-alpha.6
 
 Dieser Stand ist ein **privater technischer Alpha-Release für Tests**, nicht für den Produktiveinsatz. Enthalten sind:
 
@@ -67,14 +67,14 @@ Alternativ kann das gekoppelte Gerät in der App über **Gerät trennen** sein e
 - 244 Connected-/Compose-Tests auf `emulator-5554` (API 36): 0 Fehler, 0 Errors, 1 dokumentierter Skip (System-Benachrichtigungstest, benötigt deaktiviertes System-Notification-Setting)
 - zusätzlich 99 fokussierte Instrumentationstests (IME-Layout, Landscape Compact Composer, Attachment-Chip, Composer-States, Run/Steer, Approvals, Draft-Persistenz, Recreation): 0 Fehler
 - `lint`: 0 Errors
-- `assembleDebug`, APK-Installation, Kaltstart und Versionsprüfung (`versionName=0.1.0-alpha.5`, `versionCode=5`) erfolgreich
+- `assembleDebug`, APK-Installation, Kaltstart und Versionsprüfung (`versionName=0.1.0-alpha.6`, `versionCode=6`) erfolgreich
 - E2E auf headed Emulator gegen einen lokalen Hermes-Serverstand: Text-Chat, Bild-Turn (genau ein Image-Part), Reconnect auf dieselbe `run_id` mit `after_seq` ohne zweiten POST, Activity-Recreation mit gebundenem Run, Approval `once` und `deny`, Compact-Landscape mit erreichbaren Stop-/Steer-Controls
 - keine echten Credentials im Repository
 
 ## Installation des privaten Alpha-Releases
 
-1. Im privaten [GitHub-Releasebereich](https://github.com/exclude-barrier/Orsik-Relay/releases) `v0.1.0-alpha.5` öffnen.
-2. Die APK `orsik-relay-v0.1.0-alpha.5-debug.apk` herunterladen.
+1. Im privaten [GitHub-Releasebereich](https://github.com/exclude-barrier/Orsik-Relay/releases) `v0.1.0-alpha.6` öffnen.
+2. Die APK `orsik-relay-v0.1.0-alpha.6-debug.apk` herunterladen.
 3. Installation aus der verwendeten Datei-/Browser-App einmalig erlauben und die APK installieren.
 
 Die APK ist mit dem Android-Debug-Key signiert. Sie ist ausschließlich zum manuellen Testen bestimmt und bildet noch keinen stabilen Update- oder Store-Kanal.
@@ -121,7 +121,7 @@ Maßgeblich für alle Builds und Tests ist der versionierte **Gradle Wrapper 8.1
 
 Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/Orsik-Relay/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
 
-- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.5`, später `v0.1.0-beta.1`.
+- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.6`, später `v0.1.0-beta.1`.
 - CI (Unit-Tests, Lint, `assembleDebug` und Instrumentationstests auf API 36) liegt in `.github/workflows/android.yml`; die Gradle-Wrapper-Validation ist Teil des Workflows.
 - Produktives Release-Signing und AAB-Erstellung folgen in einem separaten Release-Ticket.
 - Der Signing-Key kommt niemals ins Repository.
