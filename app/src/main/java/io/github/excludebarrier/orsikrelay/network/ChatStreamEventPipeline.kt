@@ -79,7 +79,14 @@ class ChatStreamEventPipeline(
     // different event name or payload is rejected as contradictory while an
     // exactly identical frame is dropped. Only the digest is stored; the
     // payload itself is never kept.
-    private val seenSeqs = HashMap<Long, ByteArray>()
+    // Bounded window: only the most recent SEEN_SEQS_WINDOW digests are kept.
+    // A strictly increasing stream only ever resubmits the immediately
+    // preceding seq, so this preserves dedup behaviour while bounding memory.
+    private val seenSeqs = object : LinkedHashMap<Long, ByteArray>() {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<Long, ByteArray>?
+        ): Boolean = size > SEEN_SEQS_WINDOW
+    }
     private var runStarted = false
     private var messageStarted = false
     private var boundMessageId: String? = null
@@ -344,8 +351,7 @@ class ChatStreamEventPipeline(
                 // that crosses the boundary (Mission 008B): a non-blank
                 // string is preserved exactly; every other shape (absent,
                 // null, non-string, blank) yields `null`.
-                val pendingSteer = (payload.opt(PENDING_STEER_FIELD) as? String)
-                    ?.takeIf { it.isNotBlank() }
+                val pendingSteer = safePendingSteer(payload.opt(PENDING_STEER_FIELD) as? String)
                 runCompleted = true
                 return listOf(ChatTurnEvent.TurnCompleted(pendingSteer))
             }
@@ -526,6 +532,22 @@ class ChatStreamEventPipeline(
         }
     }
 
+    /**
+     * Bounds the one dynamic server string that reaches the UI as recovery
+     * text. It is still preserved without trimming/escaping, but a value that
+     * is too long or carries control characters other than the usual whitespace
+     * (CR/LF/TAB) is dropped (null) instead of being rendered/composed.
+     */
+    private fun safePendingSteer(value: String?): String? {
+        if (value == null || value.isBlank()) return null
+        if (value.length > MAX_PENDING_STEER_LENGTH) return null
+        val hasDisallowedControl = value.any { character ->
+            (character.code < 0x20 && character != '\n' && character != '\t' && character != '\r') ||
+                character.code == 0x7F
+        }
+        return if (hasDisallowedControl) null else value
+    }
+
     private fun protocol(): ChatTurnProtocolException = ChatTurnProtocolException()
 
     private companion object {
@@ -534,6 +556,8 @@ class ChatStreamEventPipeline(
         const val MAX_DELTA_LENGTH = 32 * 1024
         const val MAX_COMPOSED_LENGTH = 1024 * 1024
         const val MAX_TOOL_NAME_LENGTH = 80
+        const val MAX_PENDING_STEER_LENGTH = 32 * 1024
+        const val SEEN_SEQS_WINDOW = 64
 
         const val SESSION_ID_FIELD = "session_id"
         const val RUN_ID_FIELD = "run_id"

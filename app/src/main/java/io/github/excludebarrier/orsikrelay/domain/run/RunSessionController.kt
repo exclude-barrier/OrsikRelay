@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Seam for starting and stopping the run foreground service (P3).
@@ -72,7 +73,11 @@ class RunSessionController(
     private val chatSource: StreamingChatSource,
     private val serviceStarter: RunForegroundServiceStarter,
     private val notificationCoordinator: NotificationCoordinator,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    // Dispatcher for the notification side effects (server-label lookup is
+    // storage + JSON parsing). Defaults to [dispatcher] so tests stay on their
+    // controlled dispatcher; production injects Dispatchers.IO.
+    private val ioDispatcher: CoroutineDispatcher = dispatcher
 ) {
     /**
      * The single active run: the small, closed in-memory state a chat
@@ -136,6 +141,10 @@ class RunSessionController(
      */
     val events: SharedFlow<ChatTurnEvent> = _events
 
+    // Visible across the (single-threaded) dispatcher and any thread that
+    // calls startTurn/cancelTurn; the controller processes events serially, so
+    // the compound token update below is not concurrent in practice.
+    @Volatile
     private var runJob: Job? = null
 
     /**
@@ -145,6 +154,7 @@ class RunSessionController(
      * instead of letting it write the previous run's text into the new
      * slot.
      */
+    @Volatile
     private var slotTurnToken: Long = 0L
 
     /**
@@ -343,7 +353,11 @@ class RunSessionController(
                 updateActiveRun(sessionId, turnToken) {
                     it.copy(pendingApproval = event.request, reconnecting = false)
                 }
-                notificationCoordinator.onApprovalRequested(profileId, sessionId, event.request)
+                // The title resolves the server label from profile metadata
+                // (SharedPreferences + JSON), so keep it off the main thread.
+                withContext(ioDispatcher) {
+                    notificationCoordinator.onApprovalRequested(profileId, sessionId, event.request)
+                }
             }
 
             is ChatTurnEvent.TurnCompleted -> {
@@ -352,7 +366,9 @@ class RunSessionController(
                 // [startTurn] already replaced must never stop the successor's
                 // foreground service, notify for its run id or clear its slot.
                 if (slotTurnToken != turnToken) {
-                    _events.emit(event)
+                    // A late terminal event of a run that [startTurn] already
+                    // replaced must not reach observers: they are re-attached
+                    // to the successor and cannot tell the two apart.
                     return
                 }
                 val runId = _activeRun.value?.runId
@@ -365,14 +381,19 @@ class RunSessionController(
                 // re-created view model.
                 serviceStarter.stop()
                 if (runId != null) {
-                    notificationCoordinator.onRunCompleted(profileId, sessionId, runId)
+                    // Server-label lookup is storage + JSON parsing; never on
+                    // the main thread that emits the terminal event below.
+                    withContext(ioDispatcher) {
+                        notificationCoordinator.onRunCompleted(profileId, sessionId, runId)
+                    }
                 }
                 _activeRun.value = null
             }
 
             is ChatTurnEvent.TurnFailed -> {
                 if (slotTurnToken != turnToken) {
-                    _events.emit(event)
+                    // Same rule as TurnCompleted: a replaced run's late
+                    // terminal must not be observed by the successor.
                     return
                 }
                 serviceStarter.stop()

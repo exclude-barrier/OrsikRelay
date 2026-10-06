@@ -87,6 +87,9 @@ fun ProfilesScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var profiles by remember { mutableStateOf<List<ServerProfile>?>(null) }
+    // A load failure must be reachable and retryable: without this the screen
+    // stayed on the loading text forever after a transient store failure.
+    var loadFailed by remember { mutableStateOf(false) }
     // Mission 017B: profile ID -> non-secret credential kind, loaded
     // together with the list (device metadata only, no credential read).
     var credentialKinds by remember { mutableStateOf<Map<String, ProfileCredentialKind>>(emptyMap()) }
@@ -107,6 +110,7 @@ fun ProfilesScreen(
 
     fun loadProfiles() {
         coroutineScope.launch {
+            loadFailed = false
             val list = try {
                 withContext(Dispatchers.IO) { admin.listProfiles() }
             } catch (error: CancellationException) {
@@ -114,22 +118,24 @@ fun ProfilesScreen(
             } catch (_: Exception) {
                 null
             }
-            if (list != null) {
-                profiles = list
-                // Mission 017B: the credential kind is NON-SECRET metadata
-                // (device metadata presence only; no credential is read).
-                // It is loaded together with the list; a query failure or a
-                // non-device kind simply means the action is not offered —
-                // fail-closed.
-                credentialKinds = withContext(Dispatchers.IO) {
-                    list.associate { profile ->
-                        profile.id to
-                            try {
-                                admin.credentialKind(profile.id)
-                            } catch (_: Exception) {
-                                ProfileCredentialKind.API_KEY
-                            }
-                    }
+            if (list == null) {
+                loadFailed = true
+                return@launch
+            }
+            profiles = list
+            // Mission 017B: the credential kind is NON-SECRET metadata
+            // (device metadata presence only; no credential is read).
+            // It is loaded together with the list; a query failure or a
+            // non-device kind simply means the action is not offered —
+            // fail-closed.
+            credentialKinds = withContext(Dispatchers.IO) {
+                list.associate { profile ->
+                    profile.id to
+                        try {
+                            admin.credentialKind(profile.id)
+                        } catch (_: Exception) {
+                            ProfileCredentialKind.API_KEY
+                        }
                 }
             }
         }
@@ -247,14 +253,37 @@ fun ProfilesScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
         when (val current = profiles) {
-            null -> Text(
-                text = stringResource(R.string.profiles_loading),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 24.dp)
-            )
+            null -> if (loadFailed) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = stringResource(R.string.profiles_error_generic),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { loadProfiles() },
+                        modifier = Modifier.testTag("profiles_retry")
+                    ) {
+                        Text(text = stringResource(R.string.sessions_retry))
+                    }
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.profiles_loading),
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp)
+                )
+            }
 
             else -> {
                 if (current.isEmpty()) {

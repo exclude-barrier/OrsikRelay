@@ -49,8 +49,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        pairingBootstrap.value = PairingDeepLink.parse(intent?.data?.toString().orEmpty())
-        notificationBootstrap.value = NotificationSessionIntent.parse(intent)
+        // Consume the launch intent exactly once. On a configuration-change
+        // recreation the framework re-delivers the SAME intent, so re-parsing
+        // it here would replay a notification tap (the user is thrown back
+        // into the chat on every rotation) or overwrite edited onboarding
+        // fields with the deep-link prefill. A cold start has a null
+        // savedInstanceState and still consumes the intent.
+        if (savedInstanceState == null) {
+            pairingBootstrap.value = PairingDeepLink.parse(intent?.data?.toString().orEmpty())
+            notificationBootstrap.value = NotificationSessionIntent.parse(intent)
+        }
         setContent {
             val themeStore = remember {
                 SharedPreferencesThemeSettingStore(applicationContext)
@@ -83,6 +91,9 @@ class MainActivity : ComponentActivity() {
     }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Keep getIntent() in sync with the latest delivery so a later
+        // recreation does not see a stale intent (singleTop delivery).
+        setIntent(intent)
         pairingBootstrap.value = PairingDeepLink.parse(intent.data?.toString().orEmpty())
         notificationBootstrap.value = NotificationSessionIntent.parse(intent)
     }
@@ -98,6 +109,7 @@ class MainActivity : ComponentActivity() {
          * repository is used and behavior is unchanged.
          */
         @VisibleForTesting
+        @Volatile
         internal var sessionPageSourceForTests: SessionPageSource? = null
     }
 }

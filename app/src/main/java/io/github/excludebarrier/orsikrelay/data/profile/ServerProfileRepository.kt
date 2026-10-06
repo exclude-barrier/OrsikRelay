@@ -36,7 +36,8 @@ class ServerProfileRepository(
     private val profileDraftClearer: ProfileDraftClearer? = null,
     private val selectionStore: ActiveServerSelectionStore? = null,
     private val deviceCredentialSaver: DeviceCredentialSaver? = null,
-    private val deviceCredentialMetadataStore: DeviceCredentialMetadataStore? = null
+    private val deviceCredentialMetadataStore: DeviceCredentialMetadataStore? = null,
+    private val runApprovalCapabilityStore: RunApprovalCapabilityStore? = null
 ) : VerifiedProfileSaver, PairedProfileSaver {
 
     override fun saveVerified(draft: ProfileDraft): ServerProfile {
@@ -147,6 +148,14 @@ class ServerProfileRepository(
             deviceCredentialMetadataStore?.delete(profileId)
         } catch (_: Exception) {
             // Best-effort cleanup of non-secret metadata after profile deletion.
+        }
+        try {
+            // Mission 014 follow-up: the per-profile approval capability is
+            // non-secret metadata; without this it would leak one key per
+            // deleted profile forever. Best-effort like the device metadata.
+            runApprovalCapabilityStore?.clear(profileId)
+        } catch (_: Exception) {
+            // Best-effort cleanup; must not turn the deletion into a failure.
         }
         // Only reachable after BOTH deletions succeeded: the profile is
         // gone, so its drafts may be removed. A failure in either deletion

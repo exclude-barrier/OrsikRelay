@@ -4,10 +4,16 @@
 
 Die Werkzeuge sind benutzerlokal installiert; es wurden keine Systempakete und keine sudo-Rechte benötigt.
 
-- Temurin JDK `17.0.20.1+1`: `~/.local/opt/temurin-17`
-- Gradle `9.7.1`: `~/.local/opt/gradle-9.7.1`
+> Hinweis: Die folgenden Pfade und Versionen sind ein **beispielhafter**
+> Maschinenstand und nicht generell gültig. Maßgeblich für Builds ist
+> ausschließlich der versionierte Gradle Wrapper (`./gradlew`, Gradle 8.14.5).
+> `scripts/verify-environment.sh` leitet `$HOME` und das Repo-Verzeichnis selbst
+> ab und prüft die unten genannten SDK-Pfade.
+
+- Temurin JDK `17` (Pfadbeispiel: `~/.local/opt/temurin-17`; es genügt ein JDK 17 im `PATH`)
+- Gradle (nur für den initialen Wrapper-Bootstrap; maßgeblich ist `./gradlew`)
 - Android SDK: `~/Android/Sdk`
-- Command-line Tools `23.0`
+- Command-line Tools `12.0` (`source.properties` der installierten `cmdline-tools/latest`)
 - Platform Tools `37.0.1`
 - Android Platform `36` Revision 2
 - Build Tools `36.1.0`

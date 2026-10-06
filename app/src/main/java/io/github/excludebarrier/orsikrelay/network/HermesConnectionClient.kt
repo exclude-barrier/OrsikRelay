@@ -143,12 +143,13 @@ class HermesConnectionClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
     }
 
     private fun parseHealth(json: JSONObject): String {

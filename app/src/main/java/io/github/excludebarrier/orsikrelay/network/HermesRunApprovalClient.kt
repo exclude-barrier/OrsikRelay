@@ -155,7 +155,15 @@ class HermesRunApprovalClient(
             OK_CODE -> return
             401, 403 -> throw ApprovalFailure(RunApprovalError.InvalidCredentials)
             NOT_FOUND_CODE -> throw ApprovalFailure(RunApprovalError.NotFound)
-            CONFLICT_CODE -> throw NoPendingApprovalException()
+            CONFLICT_CODE -> {
+                // Only the documented conflict codes are "not pending"; any
+                // other 409 is fail-closed, never silently reported as resolved.
+                val code = extractErrorCode(readBoundedUtf8(response.body))
+                if (code != null && code in PENDING_CONFLICT_CODES) {
+                    throw NoPendingApprovalException()
+                }
+                throw ApprovalFailure(RunApprovalError.Http)
+            }
             RATE_LIMITED_CODE -> throw ApprovalFailure(RunApprovalError.RateLimited)
             else -> throw ApprovalFailure(RunApprovalError.Http)
         }
@@ -235,12 +243,13 @@ class HermesRunApprovalClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw ApprovalFailure(RunApprovalError.IncompatibleApi)
     }
 
     private fun isSafeRunId(runId: String): Boolean {
@@ -287,6 +296,8 @@ class HermesRunApprovalClient(
         const val OK_CODE = 200
         const val NOT_FOUND_CODE = 404
         const val CONFLICT_CODE = 409
+        // Documented 409 `error.code` values that mean "no pending approval".
+        val PENDING_CONFLICT_CODES = setOf("approval_not_pending", "approval_not_active")
         const val RATE_LIMITED_CODE = 429
 
         fun defaultRunApprovalHttpClient(): OkHttpClient = OkHttpClient.Builder()

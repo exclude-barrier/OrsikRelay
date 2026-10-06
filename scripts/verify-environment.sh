@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOME_DIR="/home/user"
-PROJECT="$HOME_DIR/Projekte/hermes-android"
+HOME_DIR="${HOME:?HOME is not set}"
+PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
 export JAVA_HOME="$HOME_DIR/.local/opt/temurin-17"
 export ANDROID_HOME="$HOME_DIR/Android/Sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"

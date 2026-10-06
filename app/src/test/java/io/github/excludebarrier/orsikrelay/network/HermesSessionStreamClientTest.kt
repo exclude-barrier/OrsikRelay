@@ -713,11 +713,22 @@ class HermesSessionStreamClientTest {
         )
         val listener = RecordingListener()
         client.openTurn(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, "Hallo", listener)
-        // At 400 ms at most ~2.7 throttle periods have elapsed, so no more
-        // than ~1.4 KiB of the ~3 KiB body are on the wire; `done` (the
-        // final ~90 bytes) cannot have been written yet, so the stream
-        // cannot have finished.
-        Thread.sleep(400)
+        // Wait deterministically for the first live non-terminal event instead
+        // of relying on a fixed wall-clock sleep: as soon as one non-terminal
+        // event has been delivered, the stream is demonstrably mid-flight while
+        // the throttled `done` is still on the wire. The terminal-buffering
+        // assertions below hold regardless (a bounded deadline keeps this
+        // robust on a slow runner).
+        val liveDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < liveDeadline) {
+            val sawNonTerminal = synchronized(listener.events) {
+                listener.events.any {
+                    it !is ChatTurnEvent.TurnCompleted && it !is ChatTurnEvent.TurnFailed
+                }
+            }
+            if (sawNonTerminal) break
+            Thread.sleep(10)
+        }
         assertFalse("finished before `done` was written", listener.finished.await(0, TimeUnit.MILLISECONDS))
         // Snapshot the events under the same lock the listener uses; do
         // NOT assert which non-terminal events arrived by now (that

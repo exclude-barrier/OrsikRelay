@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.di
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
@@ -128,6 +129,16 @@ internal object AppDependenciesHolder {
                 .also { cached = it }
         }
     }
+
+    /**
+     * Drops the process-scoped cached graph. Test-only: without this a
+     * cached production graph (including a live [io.github.excludebarrier.orsikrelay.domain.run.RunSessionController]
+     * and its coroutine scope) would leak into later tests in the same process.
+     */
+    @VisibleForTesting
+    internal fun resetForTest() {
+        synchronized(this) { cached = null }
+    }
 }
 
 /**
@@ -185,7 +196,8 @@ internal fun buildAppDependencies(
         profileDraftClearer = chatDraftRepository,
         selectionStore = resolvedSelectionStore,
         deviceCredentialSaver = deviceCredentialSaver,
-        deviceCredentialMetadataStore = deviceMetadataStore
+        deviceCredentialMetadataStore = deviceMetadataStore,
+        runApprovalCapabilityStore = resolvedCapabilityStore
     )
     val profileAdmin = ServerProfileAdmin(profileRepository)
     // P3: local notifications. The poster is the single Android adapter;
@@ -218,7 +230,9 @@ internal fun buildAppDependencies(
             )
         ),
         serviceStarter = AndroidRunForegroundServiceStarter(applicationContext),
-        notificationCoordinator = notificationCoordinator
+        notificationCoordinator = notificationCoordinator,
+        // Notification titles resolve profile metadata off the main thread.
+        ioDispatcher = kotlinx.coroutines.Dispatchers.IO
     )
     return AppDependencies(
         profileAdmin = profileAdmin,

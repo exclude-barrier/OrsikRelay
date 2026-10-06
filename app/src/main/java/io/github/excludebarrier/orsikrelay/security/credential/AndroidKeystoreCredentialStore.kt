@@ -43,9 +43,15 @@ class AndroidKeystoreCredentialStore(
         validateProfileId(profileId)
         if (secret.isEmpty()) throw CredentialStoreException()
 
+        val alias = aliasFor(profileId)
+        val keyExisted = try {
+            keyStore.containsAlias(alias)
+        } catch (_: Exception) {
+            false
+        }
         try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(aliasFor(profileId)))
+            cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(alias))
             val payload = secret.useRaw { raw ->
                 val plaintext = raw.toByteArray(Charsets.UTF_8)
                 try {
@@ -60,6 +66,16 @@ class AndroidKeystoreCredentialStore(
                 throw CredentialStoreException()
             }
         } catch (error: CredentialStoreException) {
+            // Best effort: a newly created key without a persisted ciphertext is
+            // an orphan; remove it, but never delete a pre-existing key (it may
+            // still protect a valid payload in another write order).
+            if (!keyExisted) {
+                try {
+                    keyStore.deleteEntry(alias)
+                } catch (_: Exception) {
+                    // Preserve the original closed failure.
+                }
+            }
             throw error
         } catch (_: Exception) {
             throw CredentialStoreException()
@@ -97,10 +113,10 @@ class AndroidKeystoreCredentialStore(
         validateProfileId(profileId)
 
         try {
-            val alias = aliasFor(profileId)
-            if (keyStore.containsAlias(alias)) {
-                keyStore.deleteEntry(alias)
-            }
+            // Remove the ciphertext FIRST: it is the source of truth. If the
+            // commit fails, the (retryable) payload stays decryptable because
+            // the key still exists. Deleting the key first would leave an
+            // undecryptable orphan ciphertext.
             if (!preferences.edit().remove(preferenceKeyFor(profileId)).commit()) {
                 throw CredentialStoreException()
             }
@@ -108,6 +124,16 @@ class AndroidKeystoreCredentialStore(
             throw error
         } catch (_: Exception) {
             throw CredentialStoreException()
+        }
+        // Best-effort key cleanup; a leftover alias is harmless once the
+        // ciphertext is gone and is removed on the next delete.
+        try {
+            val alias = aliasFor(profileId)
+            if (keyStore.containsAlias(alias)) {
+                keyStore.deleteEntry(alias)
+            }
+        } catch (_: Exception) {
+            // Preserve the successful deletion; the ciphertext is already gone.
         }
     }
 

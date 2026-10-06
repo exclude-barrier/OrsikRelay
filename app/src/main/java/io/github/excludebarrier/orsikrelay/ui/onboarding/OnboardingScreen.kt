@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,9 +77,13 @@ fun OnboardingScreen(
     initialBaseUrl: String = "",
     initialPairingCode: String = ""
 ) {
-    var mode by remember { mutableStateOf(OnboardingMode.Pairing) }
-    var profileName by remember { mutableStateOf(initialProfileName) }
-    var baseUrl by remember { mutableStateOf(initialBaseUrl) }
+    // Non-secret fields survive a rotation/recreation via the saved instance
+    // state. The secrets (API key, one-time pairing code) deliberately stay in
+    // plain `remember`: persisting them into the Bundle would write credentials
+    // to disk-backed saved state.
+    var mode by rememberSaveable { mutableStateOf(OnboardingMode.Pairing) }
+    var profileName by rememberSaveable { mutableStateOf(initialProfileName) }
+    var baseUrl by rememberSaveable { mutableStateOf(initialBaseUrl) }
     var apiKey by remember { mutableStateOf("") }
     var pairingCode by remember { mutableStateOf(initialPairingCode) }
     var validationError by remember {

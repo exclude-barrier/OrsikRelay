@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -141,6 +142,9 @@ internal fun OrsikCodeBlock(
             )
             Row(
                 modifier = Modifier
+                    // Keep the copy action at the 48 dp minimum touch target
+                    // even though the visible label is small.
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClickLabel = stringResource(R.string.chat_code_copy)) {
                         clipboard.setText(AnnotatedString(code))

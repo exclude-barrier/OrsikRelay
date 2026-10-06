@@ -134,7 +134,7 @@ class ChatImeLayoutUiTest {
         val composerTopBefore = boundsTop("Nachricht")
 
         val imeOpened = openRealKeyboard()
-        Thread.sleep(2_500) // let the IME animation and insets settle
+        if (imeOpened) awaitIme(open = true)
         composeRule.waitForIdle()
 
         val headerTopAfter = boundsTop("Chat")
@@ -214,7 +214,7 @@ class ChatImeLayoutUiTest {
 
         // State A: real keyboard open.
         val imeOpenedA = openRealKeyboard()
-        Thread.sleep(2_500)
+        if (imeOpenedA) awaitIme(open = true)
         assertEquals(
             "header must not pan while the real IME is open",
             headerTopClosed,
@@ -234,7 +234,6 @@ class ChatImeLayoutUiTest {
         // the activity; the layout must return exactly to the closed state.
         hideIme()
         composeRule.waitForIdle()
-        Thread.sleep(1_500)
         assertEquals(
             "header must not move when the real IME closes",
             headerTopClosed,
@@ -251,7 +250,7 @@ class ChatImeLayoutUiTest {
         // State C: reopen the real keyboard — the layout must be stable
         // across repeated open/close cycles.
         val imeOpenedC = openRealKeyboard()
-        Thread.sleep(2_500)
+        if (imeOpenedC) awaitIme(open = true)
         assertEquals(
             "header must not pan on IME reopen",
             headerTopClosed,
@@ -329,6 +328,26 @@ class ChatImeLayoutUiTest {
         activity.runOnUiThread {
             imm.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
         }
+        awaitIme(open = false)
+    }
+
+    /**
+     * Bounded wait for the real IME inset to reach the expected state
+     * (`open`: bottom > 0, `closed`: bottom == 0). Replaces fixed wall-clock
+     * sleeps so the assertions are robust on a slow emulator.
+     */
+    private fun awaitIme(open: Boolean, timeoutMs: Long = 10_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val imeBottom = ViewCompat.getRootWindowInsets(composeRule.activity.window.decorView)
+                ?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
+            if ((open && imeBottom > 0) || (!open && imeBottom == 0)) {
+                composeRule.waitForIdle()
+                return
+            }
+            Thread.sleep(100)
+        }
+        composeRule.waitForIdle()
     }
 
     /**
@@ -364,7 +383,7 @@ class ChatImeLayoutUiTest {
         composeRule.onNodeWithText("Nachricht").performClick()
         composeRule.waitForIdle()
         showImeExplicitly()
-        Thread.sleep(2_000)
+        awaitIme(open = true, timeoutMs = 3_000)
         return false
     }
 

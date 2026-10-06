@@ -168,17 +168,33 @@ class HermesRunSteerClientTest {
             500 to RunSteerResult.Failure(RunSteerError.Http),
             503 to RunSteerResult.Failure(RunSteerError.Http)
         ).forEach { (code, expected) ->
+            val body = if (code == 409) {
+                // Only the documented conflict code maps to NotAccepting.
+                """{"error":{"code":"run_not_accepting_steer"}}"""
+            } else {
+                """{"error":{"message":"dynamic server detail $code"}}"""
+            }
             server.enqueue(
                 MockResponse()
                     .setResponseCode(code)
-                    .setBody(
-                        """{"error":{"message":"dynamic server detail $code"}}"""
-                    )
+                    .setBody(body)
             )
             assertEquals(expected, steer())
         }
         // One request per attempt: the steer POST is never retried.
         assertEquals(7, server.requestCount)
+    }
+
+    @Test
+    fun conflictWithUnknownCodeIsClosedHttpFailure() {
+        // A 409 whose error.code is not documented must fail closed instead of
+        // being misreported as the benign NotAccepting outcome.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(409)
+                .setBody("""{"error":{"code":"something_else"}}""")
+        )
+        assertEquals(RunSteerResult.Failure(RunSteerError.Http), steer())
     }
 
     @Test

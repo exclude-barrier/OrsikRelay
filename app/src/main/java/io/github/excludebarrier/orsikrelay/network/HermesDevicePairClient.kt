@@ -223,6 +223,11 @@ class HermesDevicePairClient(
             ?: throw PairFailure(DevicePairError.IncompatibleApi)
         val label = root.opt(LABEL_FIELD) as? String
             ?: throw PairFailure(DevicePairError.IncompatibleApi)
+        if (!isSafeServerString(profile, MAX_SAFE_SERVER_STRING_LENGTH) ||
+            !isSafeServerString(label, MAX_SAFE_SERVER_STRING_LENGTH)
+        ) {
+            throw PairFailure(DevicePairError.IncompatibleApi)
+        }
         val permissionsArray = root.opt(PERMISSIONS_FIELD) as? JSONArray
             ?: throw PairFailure(DevicePairError.IncompatibleApi)
         val permissions = ArrayList<String>(permissionsArray.length())
@@ -237,7 +242,8 @@ class HermesDevicePairClient(
             throw PairFailure(DevicePairError.IncompatibleApi)
         }
         val issuedAt = root.opt(ISSUED_AT_FIELD)
-        if (issuedAt !is Number || !issuedAt.toDouble().isFinite()) {
+        val issuedAtValue = (issuedAt as? Number)?.toDouble()
+        if (issuedAtValue == null || !issuedAtValue.isFinite() || issuedAtValue < 0.0) {
             throw PairFailure(DevicePairError.IncompatibleApi)
         }
         return DevicePairResult.Paired(
@@ -247,7 +253,7 @@ class HermesDevicePairClient(
                 profile = profile,
                 label = label,
                 permissions = permissions,
-                issuedAt = issuedAt.toDouble()
+                issuedAt = issuedAtValue
             )
         )
     }
@@ -275,19 +281,16 @@ class HermesDevicePairClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw PairFailure(DevicePairError.IncompatibleApi)
     }
 
-    private fun isUuid(value: String): Boolean = try {
-        UUID.fromString(value) != null
-    } catch (_: IllegalArgumentException) {
-        false
-    }
+    private fun isUuid(value: String): Boolean = isStrictUuid(value)
 
     private class PairFailure(val reason: DevicePairError) : Exception()
 

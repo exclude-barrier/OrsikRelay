@@ -103,6 +103,29 @@ class ChatStreamEventPipelineTest {
     }
 
     @Test
+    fun runCompletedPendingSteerRejectsOverlongOrControlCharacters() {
+        // Bounded hardening: an overlong value or one carrying a disallowed
+        // control character is dropped instead of reaching the UI/composer.
+        val cases = listOf(
+            "a".repeat(32 * 1024 + 1),
+            "ok\u0000bad"
+        )
+        cases.forEachIndexed { index, raw ->
+            val fresh = ChatStreamEventPipeline(SESSION_ID)
+            fresh.process(frame("run.started", 1))
+            fresh.process(messageStartedFrame(2, MSG_ID))
+            fresh.process(completedFrame(3, MSG_ID, "Hallo"))
+            assertEquals(
+                "unsafe pending_steer $index must be dropped",
+                listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
+                fresh.process(
+                    frame("run.completed", 4, JSONObject().put("pending_steer", raw))
+                )
+            )
+        }
+    }
+
+    @Test
     fun emptyAssistantDeltaIsAValidNoOpFragment() {
         feedRunStarted()
         pipeline.process(messageStartedFrame(2, MSG_ID))

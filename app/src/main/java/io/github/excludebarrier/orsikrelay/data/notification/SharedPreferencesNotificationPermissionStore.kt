@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.data.notification
 
+import android.annotation.SuppressLint
 import android.content.Context
 
 /**
@@ -7,6 +8,7 @@ import android.content.Context
  * Only a single boolean is stored; no credential, URL or notification content
  * ever touches this store.
  */
+@SuppressLint("UseKtx")
 class SharedPreferencesNotificationPermissionStore(
     context: Context,
     preferencesName: String = PREFERENCES_NAME
@@ -21,7 +23,11 @@ class SharedPreferencesNotificationPermissionStore(
         get() = preferences.getBoolean(PREFERENCES_KEY, false)
 
     override fun markRequested() {
-        preferences.edit().putBoolean(PREFERENCES_KEY, true).apply()
+        // Durable write: the flag must survive a process death right after the
+        // request, otherwise the app would ask for the permission again. The
+        // result is intentionally not surfaced; this is best-effort bookkeeping
+        // and must never crash the caller.
+        preferences.edit().putBoolean(PREFERENCES_KEY, true).commit()
     }
 
     companion object {

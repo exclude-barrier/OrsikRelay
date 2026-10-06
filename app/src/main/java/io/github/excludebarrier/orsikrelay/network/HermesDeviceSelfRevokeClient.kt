@@ -164,12 +164,7 @@ class HermesDeviceSelfRevokeClient(
             ?: throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
         val deviceId = root.opt(DEVICE_ID_FIELD) as? String
             ?: throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
-        val deviceIdValid = try {
-            UUID.fromString(deviceId) != null
-        } catch (_: IllegalArgumentException) {
-            false
-        }
-        if (!deviceIdValid) {
+        if (!isStrictUuid(deviceId)) {
             throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
         }
         return DeviceSelfRevokeResult.Revoked(revoked = revoked, deviceId = deviceId)
@@ -198,12 +193,13 @@ class HermesDeviceSelfRevokeClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
     }
 
     private class RevokeFailure(val reason: DeviceSelfRevokeError) : Exception()

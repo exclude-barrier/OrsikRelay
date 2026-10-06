@@ -4,6 +4,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesRunApprovalCapabilityStore
 import io.github.excludebarrier.orsikrelay.di.AppDependenciesHolder
+import org.junit.After
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -24,6 +25,13 @@ import org.junit.Test
 class AppDependenciesHolderTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @After
+    fun tearDown() {
+        // Do not leak the process-scoped graph (and its live run controller)
+        // into later tests in the same instrumentation process.
+        AppDependenciesHolder.resetForTest()
+    }
 
     @Test
     fun productionGraphIsSharedAcrossRepeatedCallsInTheSameProcess() {

@@ -151,12 +151,13 @@ class HermesMessageClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
     }
 
     /**
@@ -224,7 +225,7 @@ class HermesMessageClient(
             ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
 
     private fun strictNonBlankString(json: JSONObject, key: String): String =
-        strictString(json, key).takeIf { it.isNotEmpty() }
+        strictString(json, key).takeIf { it.isNotEmpty() && isSafeServerString(it) }
             ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
 
     private fun strictRole(json: JSONObject, key: String): MessageRole {

@@ -5,7 +5,8 @@ Orsik Relay und markiert ausdrücklich die Stellen, an denen der
 `internal plan` (Soll) vom Code (Ist) abweicht. Maßgeblich ist der
 Code; Abweichungen sind teils bewusst, teils offen.
 
-Stand: `v0.1.0-alpha.5` (`versionCode 5`), Commit `1356bff`.
+Stand: `v0.1.0-alpha.5` (`versionCode 5`) auf Basis Commit `1356bff`, ergänzt um
+die noch nicht committeten Gap-Fixes (CI-Workflow, Lizenz, Härtungen).
 
 ## 1. Modul- und Build-Struktur
 
@@ -46,7 +47,7 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
 | `docs/security-threat-model.md`, `docs/testing.md`, `docs/release-checklist.md` | nicht vorhanden | offen |
 | Network Security Config (Datei) | `android:usesCleartextTraffic="false"` + HTTPS-only im Client | bewusst/minimal: Klartext ist ohnehin blockiert |
 | Zertifikats-Pinning | nicht implementiert | offen (Plan: „optional nach stabiler Strategie“) |
-| Release-Signing / AAB / CI | kein Signing, keine AAB; CI siehe `.github/workflows/android.yml` | offen/neu (Signing bleibt ein separates Ticket) |
+| Release-Signing / AAB / CI | kein Signing, keine AAB; CI vorhanden (`​.github/workflows/android.yml`: Unit-Tests, Lint, `assembleDebug`, Instrumented API 36) | CI erledigt; Signing/AAB bleiben ein separates Ticket |
 | `HermesApplication.kt` | nicht vorhanden (Application-Klasse unnötig) | bewusst |
 
 ## 4. Bekannte, bewusst getragene Grenzen

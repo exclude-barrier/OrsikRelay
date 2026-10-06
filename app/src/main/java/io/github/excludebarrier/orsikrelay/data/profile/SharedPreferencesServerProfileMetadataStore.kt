@@ -9,7 +9,10 @@ import org.json.JSONObject
 
 /**
  * Stores only non-secret profile metadata in one versioned JSON envelope.
- * A single synchronous commit keeps every list update atomic.
+ *
+ * The atomic `commit()` alone only makes the write atomic; the surrounding
+ * read-modify-write in [save]/[delete] is additionally serialized by [lock],
+ * so two concurrent updates can never lose one another.
  */
 @SuppressLint("UseKtx")
 class SharedPreferencesServerProfileMetadataStore(
@@ -17,6 +20,7 @@ class SharedPreferencesServerProfileMetadataStore(
     preferencesName: String = DEFAULT_PREFERENCES_NAME
 ) : ServerProfileMetadataStore {
 
+    private val lock = Any()
     private val preferences: SharedPreferences
 
     init {
@@ -33,9 +37,11 @@ class SharedPreferencesServerProfileMetadataStore(
 
     override fun save(profile: ServerProfile) {
         metadataCall {
-            val profiles = readProfiles().associateByTo(linkedMapOf()) { it.id }
-            profiles[profile.id] = profile
-            writeProfiles(profiles.values.sortedBy { it.id })
+            synchronized(lock) {
+                val profiles = readProfiles().associateByTo(linkedMapOf()) { it.id }
+                profiles[profile.id] = profile
+                writeProfiles(profiles.values.sortedBy { it.id })
+            }
         }
     }
 
@@ -53,9 +59,12 @@ class SharedPreferencesServerProfileMetadataStore(
     override fun delete(profileId: String) {
         validateProfileId(profileId)
         metadataCall {
-            val current = readProfiles()
-            if (current.none { it.id == profileId }) return@metadataCall
-            writeProfiles(current.filterNot { it.id == profileId })
+            synchronized(lock) {
+                val current = readProfiles()
+                if (current.any { it.id == profileId }) {
+                    writeProfiles(current.filterNot { it.id == profileId })
+                }
+            }
         }
     }
 

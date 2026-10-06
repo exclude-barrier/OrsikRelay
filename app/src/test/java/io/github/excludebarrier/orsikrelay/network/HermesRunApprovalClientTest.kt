@@ -234,17 +234,33 @@ class HermesRunApprovalClientTest {
             500 to RunApprovalResult.Failure(RunApprovalError.Http),
             503 to RunApprovalResult.Failure(RunApprovalError.Http)
         ).forEach { (code, expected) ->
+            val body = if (code == 409) {
+                // Only the documented conflict code maps to NoPending.
+                "{\"error\":{\"code\":\"approval_not_pending\"}}"
+            } else {
+                "{\"error\":{\"message\":\"dynamic server detail $code $RUN_ID\"}}"
+            }
             server.enqueue(
                 MockResponse()
                     .setResponseCode(code)
-                    .setBody(
-                        "{\"error\":{\"message\":\"dynamic server detail $code $RUN_ID\"}}"
-                    )
+                    .setBody(body)
             )
             assertEquals("code $code", expected, respond(once = true))
         }
         // One request per failure: the decision write is never retried.
         assertEquals(7, server.requestCount)
+    }
+
+    @Test
+    fun conflictWithUnknownCodeIsClosedHttpFailure() {
+        // A 409 whose error.code is not the documented conflict code must NOT
+        // be reported as NoPending.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(409)
+                .setBody("{\"error\":{\"code\":\"something_else\"}}")
+        )
+        assertEquals(RunApprovalResult.Failure(RunApprovalError.Http), respond(once = true))
     }
 
     @Test

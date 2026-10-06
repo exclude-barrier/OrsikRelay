@@ -162,12 +162,13 @@ class HermesSessionCreateClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw CreateFailure(SessionCreateError.IncompatibleApi)
     }
 
     /**

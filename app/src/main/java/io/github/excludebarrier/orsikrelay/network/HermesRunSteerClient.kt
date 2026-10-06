@@ -131,7 +131,17 @@ class HermesRunSteerClient(
                     }
                     401, 403 -> RunSteerResult.Failure(RunSteerError.InvalidCredentials)
                     NOT_FOUND_CODE -> RunSteerResult.Failure(RunSteerError.NotFound)
-                    CONFLICT_CODE -> RunSteerResult.NotAccepting(runId)
+                    CONFLICT_CODE -> {
+                        // Only the documented conflict codes mean "not
+                        // accepting"; any other 409 fails closed instead of
+                        // being misreported as a benign outcome.
+                        val code = extractErrorCode(readBoundedUtf8(response.body))
+                        if (code != null && code in NOT_ACCEPTING_CODES) {
+                            RunSteerResult.NotAccepting(runId)
+                        } else {
+                            RunSteerResult.Failure(RunSteerError.Http)
+                        }
+                    }
                     RATE_LIMITED_CODE -> RunSteerResult.Failure(RunSteerError.RateLimited)
                     else -> RunSteerResult.Failure(RunSteerError.Http)
                 }
@@ -214,12 +224,13 @@ class HermesRunSteerClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw SteerFailure(RunSteerError.IncompatibleApi)
     }
 
     private fun isSafeRunId(runId: String): Boolean {
@@ -274,6 +285,8 @@ class HermesRunSteerClient(
         const val OK_CODE = 200
         const val NOT_FOUND_CODE = 404
         const val CONFLICT_CODE = 409
+        // Documented 409 `error.code` values that mean "run not accepting steer".
+        val NOT_ACCEPTING_CODES = setOf("run_not_accepting_steer", "steer_not_accepted")
         const val RATE_LIMITED_CODE = 429
 
         fun defaultRunSteerHttpClient(): OkHttpClient = OkHttpClient.Builder()

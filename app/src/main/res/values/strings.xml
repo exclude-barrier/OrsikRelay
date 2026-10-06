@@ -101,6 +101,7 @@
     <string name="profiles_manage">Server verwalten</string>
     <string name="profiles_title">Server</string>
     <string name="profiles_loading">Server werden geladen…</string>
+    <string name="profiles_error_generic">Die Server konnten nicht geladen werden.</string>
     <string name="profiles_empty">Keine Server gespeichert.</string>
     <string name="profiles_select_active">Als aktiven Server verwenden</string>
     <string name="profiles_active">Aktiver Server</string>

@@ -138,12 +138,13 @@ class HermesSessionClient(
             }
         }
         val bytes = output.toByteArray()
-        return try {
-            String(bytes, Charsets.UTF_8)
+        val text = try {
+            decodeUtf8Strict(bytes)
         } finally {
             bytes.fill(0)
             buffer.fill(0)
         }
+        return text ?: throw PageFailure(SessionListError.IncompatibleApi)
     }
 
     /**
@@ -193,7 +194,7 @@ class HermesSessionClient(
             ?: throw PageFailure(SessionListError.IncompatibleApi)
 
     private fun strictNonBlankString(json: JSONObject, key: String): String =
-        strictString(json, key).takeIf { it.isNotEmpty() }
+        strictString(json, key).takeIf { it.isNotEmpty() && isSafeServerString(it) }
             ?: throw PageFailure(SessionListError.IncompatibleApi)
 
     private fun strictBoolean(json: JSONObject, key: String): Boolean =
@@ -224,8 +225,10 @@ class HermesSessionClient(
 
     private fun optionalString(json: JSONObject, key: String): String? {
         if (!json.has(key) || json.isNull(key)) return null
-        return json.opt(key) as? String
+        val value = json.opt(key) as? String
             ?: throw PageFailure(SessionListError.IncompatibleApi)
+        // An unsafe optional display string is dropped, never rendered.
+        return value.takeIf { isSafeServerString(it) }
     }
 
     private fun optionalBoolean(json: JSONObject, key: String): Boolean {

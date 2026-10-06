@@ -295,7 +295,15 @@ fun HermesNavHost(
                 admin = profileAdmin
                     ?: productionDependencies.value.profileAdmin,
                 activeProfileId = activeProfileId,
-                onBack = { navController.popBackStack() },
+                // Guard against popping the back stack empty, exactly like the
+                // Chat back handler below: a fast double tap on "Zurück" must
+                // never pop Sessions (the start destination) and leave the
+                // NavHost without a destination.
+                onBack = {
+                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                        navController.popBackStack()
+                    }
+                },
                 onProfileDeleted = { profileId ->
                     navHostCoroutineScope.launch { profileDeleted(profileId) }
                 },

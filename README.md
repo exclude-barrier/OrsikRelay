@@ -63,7 +63,7 @@ Alternativ kann das gekoppelte Gerät in der App über **Gerät trennen** sein e
 
 ## Verifikation des Alpha-5-Stands
 
-- 755 JVM-/Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
+- 758 JVM-/Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
 - 244 Connected-/Compose-Tests auf `emulator-5554` (API 36): 0 Fehler, 0 Errors, 1 dokumentierter Skip (System-Benachrichtigungstest, benötigt deaktiviertes System-Notification-Setting)
 - zusätzlich 99 fokussierte Instrumentationstests (IME-Layout, Landscape Compact Composer, Attachment-Chip, Composer-States, Run/Steer, Approvals, Draft-Persistenz, Recreation): 0 Fehler
 - `lint`: 0 Errors
@@ -129,8 +129,11 @@ Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeri
 
 ## Verbindliche Dokumente
 
+- `docs/architecture.md` – implementierte Architektur (Ist) und Abweichungen
 - `docs/first-slice-contract.md` – Vertrag für den ersten vertikalen Slice
 - `docs/api-capability-matrix.md` – bestätigte Server-API-Fähigkeiten
+- `docs/mobile-wire-contract.md` – versionierter Mobile-v1-Vertrag
+- `docs/toolchain.md` – lokale Toolchain (beispielhafter Stand)
 
 ## Sicherheitsgrenzen
 
