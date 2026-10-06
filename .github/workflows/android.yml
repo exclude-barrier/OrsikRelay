@@ -109,6 +109,11 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
+          # Pin the device profile the suite is written for (1080x2400 @ 420dpi).
+          # Without a profile the runner uses a small default screen on which
+          # off-screen LazyColumn items are never composed, which made several
+          # layout/scroll tests fail.
+          profile: medium_phone
           disable-animations: true
           # Capture-only tests (real IME / screenshot markers, no assertions) are
           # environment-dependent and excluded from CI via @CaptureOnly.

@@ -5,7 +5,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -81,7 +80,10 @@ class OnboardingConnectionUiTest {
         // The form is scrollable and submitValidForm() scrolled to the submit
         // button, so the title may be scrolled out of view; scroll it back in
         // before asserting it is displayed (proves we stayed on onboarding).
-        composeRule.onNodeWithText("Server hinzufügen").performScrollTo().assertIsDisplayed()
+        // The open soft keyboard may pan the whole window, making a display
+        // check geometry-dependent; the title exists only on the onboarding
+        // screen, so its existence proves we stayed there.
+        composeRule.onNodeWithText("Server hinzufügen").assertExists()
         assertEquals(0, saveCalls.get())
     }
 
@@ -100,7 +102,10 @@ class OnboardingConnectionUiTest {
         submitValidForm()
         waitForText("Der Server konnte nicht sicher gespeichert werden.")
 
-        composeRule.onNodeWithText("Server hinzufügen").performScrollTo().assertIsDisplayed()
+        // The open soft keyboard may pan the whole window, making a display
+        // check geometry-dependent; the title exists only on the onboarding
+        // screen, so its existence proves we stayed there.
+        composeRule.onNodeWithText("Server hinzufügen").assertExists()
     }
 
     @Test

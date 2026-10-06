@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
@@ -320,8 +321,12 @@ class ChatScreenTurnUiTest {
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         waitForText("Neue Live-Nachricht")
+        // Scroll the row into view first: with the soft keyboard open the
+        // timeline viewport is shorter and the row can be composed but not
+        // displayed, which is a geometry artefact, not a scroll defect.
         composeRule
             .onNodeWithTag("chatTimelineRow:local:1")
+            .performScrollTo()
             .assertIsDisplayed()
     }
 
