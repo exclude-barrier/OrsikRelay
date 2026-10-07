@@ -28,6 +28,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
+import io.github.excludebarrier.orsikrelay.ui.chat.COMPACT_COMPOSER_MAX_HEIGHT
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
@@ -58,11 +59,58 @@ class ChatImeLayoutUiTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    // Deterministic fake keyboard height (px). The status- and
-    // navigation-bar insets are read from the real window: the window
-    // keeps its own insets source control for those types, so only the
-    // IME inset is injectable.
-    private val imeBottom = 600
+    /**
+     * Deterministic fake keyboard height (px), derived from the real window
+     * instead of a fixed device-specific constant.
+     *
+     * The production chat column switches to its compact composer/spacing
+     * regime as soon as the AVAILABLE height drops below
+     * [COMPACT_COMPOSER_MAX_HEIGHT] (`ChatScreen`: `compactComposer =
+     * maxHeight < COMPACT_COMPOSER_MAX_HEIGHT`, which then changes the header
+     * top padding from 12 dp to 2 dp). On the 320x640 mdpi CI AVD a fixed
+     * 600 px IME left only `640 - 24 - 600 = 16 px`, so the column legitimately
+     * went compact and the header moved by 20 px - a layout-mode change, not
+     * window panning. The "header must not pan" assertion must therefore not
+     * cross that boundary.
+     *
+     * The height is chosen large enough to be a realistic keyboard (a real
+     * phone IME occupies roughly a third to a half of the window) and to move
+     * the composer a substantial distance, while keeping the column in the
+     * SAME mode the test starts in: when the column starts non-compact, the
+     * IME is capped so `rootHeight - status - max(nav, ime)` stays at or above
+     * the compact threshold.
+     */
+    private fun fakeImeBottom(): Int {
+        val density = composeRule.activity.resources.displayMetrics.density
+        val rootInsets = ViewCompat.getRootWindowInsets(composeRule.activity.window.decorView)
+        val statusTop = rootInsets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        val navBottom = rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        val rootHeight = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.height.toInt()
+        val thresholdPx = (COMPACT_COMPOSER_MAX_HEIGHT.value * density).toInt()
+        val marginPx = (16 * density).toInt()
+        // A real phone keyboard is about 40 % of the window height.
+        val realistic = (rootHeight * 0.4f).toInt()
+        val availableClosed = rootHeight - statusTop - navBottom
+        if (availableClosed < thresholdPx) {
+            // Even with the IME closed the column is compact, and any IME
+            // (>= nav) keeps it compact, so no mode boundary is crossed.
+            return realistic.coerceAtLeast(navBottom + marginPx)
+        }
+        // Largest IME for which available = rootHeight - status -
+        // max(nav, ime) still stays at or above the threshold, i.e. the
+        // column stays non-compact exactly as it was before the IME.
+        val maxNonCompact = rootHeight - statusTop - thresholdPx - marginPx
+        val floor = navBottom + marginPx
+        if (maxNonCompact < floor) {
+            // Window so short that keeping the non-compact mode leaves less
+            // room than the nav bar plus margin: preserve the mode (cap the
+            // IME) instead of forcing a height that would switch the layout.
+            return maxNonCompact.coerceAtLeast(1)
+        }
+        // Realistic, but neither crossing the mode boundary nor smaller than
+        // the nav bar (so the composer really moves up).
+        return realistic.coerceIn(floor, maxNonCompact)
+    }
 
     private fun realNavBottom(): Int =
         ViewCompat.getRootWindowInsets(composeRule.activity.window.decorView)
@@ -72,6 +120,7 @@ class ChatImeLayoutUiTest {
     fun imeOpenResizesChatWithoutPanningOrDoubleInsets() {
         setScreen()
         waitForText("Nachricht")
+        val imeBottom = fakeImeBottom()
         val navBottom = realNavBottom()
         // State A: no IME.
         val headerTopA = boundsTop("Chat")
@@ -163,6 +212,7 @@ class ChatImeLayoutUiTest {
     fun imeScreenshotsForVisualVerification() {
         setScreen()
         waitForText("Nachricht")
+        val imeBottom = fakeImeBottom()
         shoot("01_kb_closed_light")
         Thread.sleep(2_500)
 

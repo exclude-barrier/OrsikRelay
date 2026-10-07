@@ -19,6 +19,7 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationCoordinator
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationPoster
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController.StartTurnResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerError
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
@@ -104,6 +105,14 @@ internal class ChatViewModel(
     // re-created screen never renders the user's message twice.
     private var rehydratedUserLineKey: String? = null
     private var terminalPendingSteer: String? = null
+    // P6: true only once THIS screen has actually handed a turn to the
+    // controller ([RunSessionController.startTurn] was called / a matching
+    // active run was rehydrated). It gates [handleRunEvent]: while an
+    // attachment is still being read the screen shows an optimistic turn
+    // (turnActive) but does NOT own the stream yet, so events of a foreign
+    // run that wins the global slot in the meantime can never be misread as
+    // this screen's own turn.
+    private var ownsRun = false
 
     // Job handles for the in-flight stop and steer requests. Deliberately
     // not part of the immutable state: they exist so a settled turn can
@@ -172,6 +181,8 @@ internal class ChatViewModel(
                     localLines = rows
                 )
             }
+            // P6: a rehydrated matching run is owned by this screen.
+            ownsRun = true
         }
         // P5 rehydration: a recreation re-creates this view model, and the
         // picker's read permission lives as long as the process, so the
@@ -186,6 +197,19 @@ internal class ChatViewModel(
         scope.launch {
             runController.events.collect { event ->
                 handleRunEvent(event)
+            }
+        }
+        // P6: the conflict notice is transient. It clears as soon as the
+        // app-wide run slot is free again (the owning run reached a real
+        // terminal state or was explicitly stopped). The waiting draft is
+        // deliberately NOT sent automatically - the user decides.
+        scope.launch {
+            runController.activeRun.collect { active ->
+                if (active == null) {
+                    _state.update { current ->
+                        if (current.startConflict) current.copy(startConflict = false) else current
+                    }
+                }
             }
         }
     }
@@ -506,10 +530,24 @@ internal class ChatViewModel(
             // and the final body is validated once the image is encoded.
             ChatMessageValidator.validateOptional(current.draft).getOrNull() ?: return
         }
+        // P6 fast path (UX only): if a run already owns the app-wide slot,
+        // reject before any optimistic local state - no premature user line,
+        // no composer disable, no notification-permission prompt. The
+        // controller's atomic reservation stays the authoritative boundary
+        // for the race (handled by [onStartConflict] below).
+        if (runController.activeRun.value != null) {
+            _state.update { it.copy(startConflict = true) }
+            return
+        }
+        // A new turn starts without stream ownership: ownership is taken only
+        // when the controller actually starts the run (or a matching run is
+        // rehydrated), so foreign events can never be misattributed.
+        ownsRun = false
         _state.update {
             it.copy(
                 turnActive = true,
                 turnFailure = null,
+                startConflict = false,
                 reconnecting = false,
                 runStarted = false,
                 // A new turn starts with a fresh stop state: the previous run
@@ -549,7 +587,11 @@ internal class ChatViewModel(
             // service while the app is still in the foreground. The VALIDATED
             // (trimmed) text is handed over - the same text the visible user row
             // shows - so a re-created view model rehydrates the identical line.
-            runController.startTurn(profileId, sessionId, message)
+            ownsRun = true
+            when (runController.startTurn(profileId, sessionId, message)) {
+                StartTurnResult.Started -> Unit
+                StartTurnResult.ActiveRunConflict -> onStartConflict()
+            }
             return
         }
         // P5: the attachment bytes are read and encoded BEFORE the POST. On
@@ -587,12 +629,21 @@ internal class ChatViewModel(
                 dropPrematureUserLine()
                 return@launch
             }
-            runController.startTurn(
-                profileId = profileId,
-                sessionId = sessionId,
-                message = outbound.text,
-                imageDataUrls = outbound.imageDataUrls
-            )
+            // Ownership is taken only now, immediately before the controller
+            // claims the slot: no event of a foreign run can be attributed to
+            // this screen while the attachment bytes were still being read.
+            ownsRun = true
+            when (
+                runController.startTurn(
+                    profileId = profileId,
+                    sessionId = sessionId,
+                    message = outbound.text,
+                    imageDataUrls = outbound.imageDataUrls
+                )
+            ) {
+                StartTurnResult.Started -> Unit
+                StartTurnResult.ActiveRunConflict -> onStartConflict()
+            }
         }
     }
 
@@ -615,7 +666,7 @@ internal class ChatViewModel(
      */
     private fun handleRunEvent(event: ChatTurnEvent) {
         val current = _state.value
-        if (!current.turnActive) return
+        if (!current.turnActive || !ownsRun) return
         // P4: any progress after a re-attach announcement means the
         // stream is flowing again; only the announcement itself sets
         // the transient status.
@@ -759,6 +810,7 @@ replaceLastAssistantLine(s.localLines, event.finalText)
      */
 private fun turnSettled() {
         if (!_state.value.turnActive) return
+        ownsRun = false
         _state.update {
             it.copy(turnActive = false, pendingApproval = null, backPending = false, reconnecting = false)
         }
@@ -812,6 +864,32 @@ private fun turnSettled() {
                 s.copy(localLines = s.localLines.filter { it.key != key })
             }
         }
+    }
+
+    /**
+     * P6: rolls back an optimistic send that the controller rejected because
+     * a run already owns the app-wide slot. NOTHING was POSTed and nothing on
+     * the server changed. The rejected turn leaves no pending stream, no
+     * optimistic local user line and no bound run; the draft AND the picked
+     * attachment are preserved exactly, and a generic, closed notice is shown.
+     * The notice clears on its own once the global run is terminal; the
+     * waiting draft is never sent automatically.
+     */
+    private fun onStartConflict() {
+        ownsRun = false
+        val key = activeUserLineKey
+        _state.update { s ->
+            s.copy(
+                turnActive = false,
+                runStarted = false,
+                boundRunId = null,
+                reconnecting = false,
+                pendingApproval = null,
+                startConflict = true,
+                localLines = if (key == null) s.localLines else s.localLines.filterNot { it.key == key }
+            )
+        }
+        activeUserLineKey = null
     }
 
     /**

@@ -531,6 +531,151 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
+    fun sendInAnotherSessionIsRejectedWhileTheGlobalRunIsActive() {
+        // ONE app-wide controller shared by both sessions (the production
+        // ownership boundary), unlike the per-key controller above.
+        val source = FakeTurnSource()
+        val controller = controllerFor(source)
+        val key = androidx.compose.runtime.mutableStateOf("session-a")
+        composeRule.setContent {
+            HermesTheme {
+                ChatScreen(
+                    historySource = history(emptyList()),
+                    runController = controller,
+                    runStopRequester = FakeRunStopRequester(),
+                    runSteerRequester = FakeRunSteerRequester(),
+                    chatDraftRepository = NoOpChatDraftRepository(),
+                    profileId = "fixture-profile-id",
+                    sessionId = key.value,
+                    onBack = {}
+                )
+            }
+        }
+
+        // Session A starts a run that stays open.
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue("run A was not started", source.opened.await(3, TimeUnit.SECONDS))
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Lauf A")
+        assertEquals(1, source.calls.get())
+
+        // Switch to session B while run A still runs.
+        key.value = "session-b"
+        composeRule.waitForIdle()
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+
+        // A send attempt in B is rejected: generic notice, no second POST,
+        // B's draft is kept and run A is not interrupted.
+        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        composeRule.onNodeWithText("Senden").performClick()
+        waitForText(CONFLICT_TEXT)
+        assertEquals("exactly one POST in total", 1, source.calls.get())
+        assertEquals("session B keeps its draft", "Lauf B", draftText())
+        assertFalse(
+            "run A must not be canceled by the client",
+            source.canceled.await(100, TimeUnit.MILLISECONDS)
+        )
+
+        // Run A reaches a real terminal state: the notice clears without
+        // auto-sending the waiting draft.
+        source.enqueue(ChatTurnEvent.TurnCompleted())
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(CONFLICT_TEXT).fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+        assertEquals("the waiting draft is not auto-sent", 1, source.calls.get())
+        assertEquals("Lauf B", draftText())
+
+        // A deliberate new send in B now starts exactly one new run.
+        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { source.calls.get() == 2 }
+        assertEquals(2, source.calls.get())
+    }
+
+    /**
+     * P6 capture-only state: run A active, session B shows the conflict notice
+     * with its draft preserved. No assertions; run on a headed emulator for
+     * manual inspection (light and dark system themes).
+     */
+    @CaptureOnly
+    @Test
+    fun conflictVisualStatePortrait() {
+        val source = FakeTurnSource()
+        val controller = controllerFor(source)
+        val key = androidx.compose.runtime.mutableStateOf("session-a")
+        composeRule.setContent {
+            HermesTheme {
+                ChatScreen(
+                    historySource = history(emptyList()),
+                    runController = controller,
+                    runStopRequester = FakeRunStopRequester(),
+                    runSteerRequester = FakeRunSteerRequester(),
+                    chatDraftRepository = NoOpChatDraftRepository(),
+                    profileId = "fixture-profile-id",
+                    sessionId = key.value,
+                    onBack = {}
+                )
+            }
+        }
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Lauf A")
+        key.value = "session-b"
+        composeRule.waitForIdle()
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        composeRule.onNodeWithText("Senden").performClick()
+        waitForText(CONFLICT_TEXT)
+        println("SHOOT: p6_conflict_portrait")
+        Thread.sleep(20_000)
+    }
+
+    /**
+     * P6 capture-only state in the dark colour scheme (explicit override, like
+     * the existing dark IME capture). No assertions.
+     */
+    @CaptureOnly
+    @Test
+    fun conflictVisualStatePortraitDark() {
+        val source = FakeTurnSource()
+        val controller = controllerFor(source)
+        val key = androidx.compose.runtime.mutableStateOf("session-a")
+        composeRule.setContent {
+            HermesTheme(darkTheme = true) {
+                ChatScreen(
+                    historySource = history(emptyList()),
+                    runController = controller,
+                    runStopRequester = FakeRunStopRequester(),
+                    runSteerRequester = FakeRunSteerRequester(),
+                    chatDraftRepository = NoOpChatDraftRepository(),
+                    profileId = "fixture-profile-id",
+                    sessionId = key.value,
+                    onBack = {}
+                )
+            }
+        }
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        waitForText("Lauf A")
+        key.value = "session-b"
+        composeRule.waitForIdle()
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        composeRule.onNodeWithText("Senden").performClick()
+        waitForText(CONFLICT_TEXT)
+        println("SHOOT: p6_conflict_portrait_dark")
+        Thread.sleep(20_000)
+    }
+
+    @Test
     fun pendingApprovalDisappearsOnTurnCompleted() {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
@@ -1058,6 +1203,9 @@ class ChatScreenTurnUiTest {
         const val RUN_ID = "run_synthetic"
         const val NEW_RUN_ID = "run_synthetic_2"
         const val APPROVAL_TITLE = "Freigabe anfragen"
+        // P6: the exact generic conflict text (no IDs, no server detail).
+        const val CONFLICT_TEXT =
+            "In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst."
         const val APPROVAL_RUN_ID = "run_0123456789abcdef0123456789abcdef"
         val APPROVAL_REQUEST = ApprovalRequest(
             runId = APPROVAL_RUN_ID,

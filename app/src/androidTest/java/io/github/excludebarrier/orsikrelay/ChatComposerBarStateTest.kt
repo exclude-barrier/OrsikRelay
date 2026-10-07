@@ -48,7 +48,9 @@ class ChatComposerBarStateTest {
         busy: Boolean = false,
         errorLabel: String? = null,
         turnActive: Boolean = false,
-        dark: Boolean = false
+        dark: Boolean = false,
+        compact: Boolean = false,
+        conflictNotice: Boolean = false
     ) {
         composeRule.setContent {
             HermesTheme(darkTheme = dark) {
@@ -66,7 +68,9 @@ class ChatComposerBarStateTest {
                     attachmentRemoveLabel = REMOVE_LABEL,
                     attachmentBusyLabel = BUSY_LABEL,
                     onPickAttachment = {},
-                    onRemoveAttachment = {}
+                    onRemoveAttachment = {},
+                    compact = compact,
+                    conflictNotice = conflictNotice
                 )
             }
         }
@@ -160,6 +164,37 @@ class ChatComposerBarStateTest {
         }
     }
 
+    @Test
+    fun conflictNoticeIsShownInTheCompactComposerWithoutCoveringIt() {
+        draft = "Lauf B"
+        setBar(compact = true, conflictNotice = true)
+
+        composeRule.onNodeWithText(CONFLICT_LABEL).assertIsDisplayed()
+        // The send control stays present and inside the window; the notice is
+        // an extra line above the row, it never covers the composer.
+        composeRule.onNodeWithTag(TAG_COMPOSER_SEND).assertIsDisplayed()
+        val root = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
+        val send = composeRule.onNodeWithTag(TAG_COMPOSER_SEND).fetchSemanticsNode().boundsInRoot
+        assertTrue(send.top >= root.top && send.bottom <= root.bottom)
+    }
+
+    @Test
+    fun noConflictNoticeWithoutAConflict() {
+        setBar(compact = true, conflictNotice = false)
+
+        composeRule.onNodeWithText(CONFLICT_LABEL).assertDoesNotExist()
+    }
+
+    @Test
+    fun conflictNoticeTakesPrecedenceOverTheAttachmentErrorInCompact() {
+        draft = "Lauf B"
+        setBar(compact = true, conflictNotice = true, errorLabel = UNREADABLE_LABEL)
+
+        composeRule.onNodeWithText(CONFLICT_LABEL).assertIsDisplayed()
+        // Only one status line: the conflict reason, not two stacked lines.
+        composeRule.onNodeWithText(UNREADABLE_LABEL).assertDoesNotExist()
+    }
+
     private fun attachment(name: String) = ChatAttachmentDraft(
         localId = "local-1",
         contentUri = "content://media/external/images/media/42",
@@ -180,5 +215,7 @@ class ChatComposerBarStateTest {
         const val REMOVE_LABEL = "Entfernen"
         const val BUSY_LABEL = "Anhang wird gelesen …"
         const val UNREADABLE_LABEL = "Der Anhang konnte nicht gelesen werden."
+        const val CONFLICT_LABEL =
+            "In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst."
     }
 }

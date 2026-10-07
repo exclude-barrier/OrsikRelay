@@ -327,6 +327,13 @@ onClick = { viewModel.handleBack() }
                         onRefreshHistory = { viewModel.refreshHistory() }
                     )
                 }
+                // P6: a rejected send (another run owns the app-wide slot).
+                // Generic, closed message only - no run/session/profile ID,
+                // URL, key or tool detail. The composer stays usable; the
+                // note clears once the global run is terminal.
+                if (state.startConflict) {
+                    ConflictBlock()
+                }
                 // Stop control (Mission 007B) and steer control (Mission 008B):
                 // visible only for an active turn whose server-confirmed,
                 // non-blank run ID is bound.
@@ -403,6 +410,7 @@ onClick = { viewModel.handleBack() }
                     },
                     onRemoveAttachment = { viewModel.removeAttachment() },
                     compact = compactComposer,
+                    conflictNotice = state.startConflict,
                     // In the compact regime the timeline (and with it the stop
                     // and steer controls) is not composed at all. Those two are
                     // run-critical, so they move into the compact composer row
@@ -505,6 +513,25 @@ private fun TurnFailureBlock(
             }
         }
     }
+}
+
+/**
+ * P6: the generic notice shown when a send was rejected because another run
+ * already owns the app-wide run slot. It carries no identifier and no server
+ * detail - exactly one fixed, understandable sentence.
+ */
+@Composable
+private fun ConflictBlock() {
+    Text(
+        text = stringResource(R.string.chat_run_conflict),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.error,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .testTag(TAG_RUN_CONFLICT)
+    )
 }
 
 /**
@@ -682,6 +709,7 @@ internal fun ComposerBar(
     onPickAttachment: () -> Unit,
     onRemoveAttachment: () -> Unit,
     compact: Boolean = false,
+    conflictNotice: Boolean = false,
     compactRunControls: (@Composable RowScope.() -> Unit)? = null
 ) {
     Column(
@@ -701,12 +729,22 @@ internal fun ComposerBar(
             // minimum height, so every control in it keeps a full 48 dp
             // touch target; only secondary information (the size line, the
             // paddings, the visible draft lines) is reduced.
-            if (attachmentErrorLabel != null) {
-                // Above the row, like the non-compact composer: an inline error
-                // would take width away from the draft field and push the send
-                // action off the row.
+            //
+            // The middle region (timeline, status blocks) is not composed in
+            // this regime, so the P6 conflict notice is surfaced here instead:
+            // exactly ONE bounded line above the row, the same slot and style
+            // the attachment error already uses, so no new height class and
+            // no IME regression is introduced. The conflict takes precedence
+            // over the attachment error (it is the reason the send was
+            // rejected); both can never be shown as two lines.
+            val compactStatusLabel = if (conflictNotice) {
+                stringResource(R.string.chat_run_conflict)
+            } else {
+                attachmentErrorLabel
+            }
+            if (compactStatusLabel != null) {
                 Text(
-                    text = attachmentErrorLabel,
+                    text = compactStatusLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     maxLines = 1,
@@ -1002,6 +1040,7 @@ internal val COMPACT_FIELD_HEIGHT = 56.dp
 internal val COMPACT_THUMBNAIL_SIZE = 24.dp
 
 internal const val TAG_RUN_STOP = "composer_run_stop"
+internal const val TAG_RUN_CONFLICT = "chat_run_conflict"
 internal const val TAG_COMPOSER_SEND = "composer_send"
 internal const val TAG_COMPOSER_FIELD = "composer_field"
 

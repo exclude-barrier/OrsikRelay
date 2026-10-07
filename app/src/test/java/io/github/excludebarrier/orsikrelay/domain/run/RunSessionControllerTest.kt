@@ -8,6 +8,7 @@ import io.github.excludebarrier.orsikrelay.domain.notification.NotificationCoord
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationPoster
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -149,23 +152,24 @@ class RunSessionControllerTest {
     }
 
     @Test
-    fun startingATurnForAnotherSessionReplacesTheSlotWithoutLeakingState() = runTest {
+    fun startingATurnForAnotherSessionIsRejectedWithActiveRunConflict() = runTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "hi")
         built.source.enqueue(ChatTurnEvent.RunStarted(runId))
         built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
         built.source.enqueue(ChatTurnEvent.ApprovalRequested(approvalRequest()))
         testScheduler.advanceUntilIdle()
-        built.controller.startTurn(profileId, otherSessionId, "other")
+        val before = built.controller.activeRun.value
+
+        // P6: the previous replacement semantics is gone. A second start
+        // for another session must be rejected and must change nothing.
+        val result = built.controller.startTurn(profileId, otherSessionId, "other")
         testScheduler.advanceUntilIdle()
-        val after = built.controller.activeRun.value
-        assertEquals(otherSessionId, after?.sessionId)
-        assertEquals("other", after?.userMessage)
-        // Nothing of the previous session's turn survives in the new slot.
-        assertEquals("", after?.assistantText)
-        assertNull(after?.runId)
-        assertNull(after?.pendingApproval)
-        assertFalse(after?.reconnecting == true)
+
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals("the first run must keep the slot", before, built.controller.activeRun.value)
+        assertEquals(sessionId, built.controller.activeRun.value?.sessionId)
+        assertEquals("no second stream may be opened", 1, built.source.calls.get())
         built.controller.close()
     }
 
@@ -385,7 +389,11 @@ class RunSessionControllerTest {
             ChatTurnEvent.ApprovalRequested(approvalRequest())
         )
         testScheduler.advanceUntilIdle()
-        // A new run B takes the slot and raises its own approval.
+        // Run A is released explicitly (P6: no replacement); a late "answer"
+        // of run A arrives only after run B owns the slot.
+        built.controller.cancelTurn()
+        testScheduler.advanceUntilIdle()
+        // Run B takes the freed slot and raises its own approval.
         val runB = "run_" + "e".repeat(32)
         val requestB = "f".repeat(32)
         built.controller.startTurn(profileId, sessionId, "second")
@@ -405,23 +413,267 @@ class RunSessionControllerTest {
     }
 
     // ------------------------------------------------------------------
-    // Single-slot client: at most one active run
+    // P6: global run ownership (single slot, no replacement)
     // ------------------------------------------------------------------
 
     @Test
-    fun newRunCancelsPreviousRunAndTakesTheSlot() = runTest {
+    fun firstStartReturnsStartedAndOpensExactlyOneStream() = runTest {
         val built = build(this.testScheduler)
-        built.controller.startTurn(profileId, sessionId, "hi")
-        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
-        // A second run (single slot): the previous stream is canceled and
-        // the foreground service is re-asserted for the new run.
-        built.controller.startTurn(profileId, otherSessionId, "next")
+        val result = built.controller.startTurn(profileId, sessionId, "hi")
         testScheduler.advanceUntilIdle()
-        assertTrue(built.source.canceled.get())
-        assertEquals(2, built.starter.starts.get())
-        assertEquals(0, built.starter.stops.get())
-        assertEquals(otherSessionId, built.controller.activeRun.value?.sessionId)
+        assertTrue(result is RunSessionController.StartTurnResult.Started)
+        assertEquals(1, built.source.calls.get())
+        assertEquals(1, built.starter.starts.get())
+        assertNotNull(built.controller.activeRun.value)
         built.controller.close()
+    }
+
+    @Test
+    fun secondStartForTheSameSessionIsRejectedWithoutASecondPost() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        val result = built.controller.startTurn(profileId, sessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals("no second POST/source call", 1, built.source.calls.get())
+        assertEquals(sessionId, built.controller.activeRun.value?.sessionId)
+        built.controller.close()
+    }
+
+    @Test
+    fun secondStartForAnotherSessionIsRejected() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals(1, built.source.calls.get())
+        assertEquals(sessionId, built.controller.activeRun.value?.sessionId)
+        built.controller.close()
+    }
+
+    @Test
+    fun secondStartForAnotherProfileIsRejected() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        val result = built.controller.startTurn("other-profile", sessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals(1, built.source.calls.get())
+        assertEquals(profileId, built.controller.activeRun.value?.profileId)
+        built.controller.close()
+    }
+
+    @Test
+    fun conflictNeverCancelsTheActiveStream() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        assertTrue(built.source.opened.await(1, TimeUnit.SECONDS))
+        built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertFalse("the running stream must not be canceled", built.source.canceled.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun conflictLeavesTheActiveRunUntouched() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
+        testScheduler.advanceUntilIdle()
+        val before = built.controller.activeRun.value
+        built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertEquals(before, built.controller.activeRun.value)
+        built.controller.close()
+    }
+
+    @Test
+    fun conflictDoesNotStartTheForegroundServiceAgain() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, built.starter.starts.get())
+        built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertEquals("a rejected start must not re-start the FGS", 1, built.starter.starts.get())
+        assertEquals(0, built.starter.stops.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun reconnectingActiveRunBlocksASecondStart() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.StreamReconnecting)
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            RunSessionController.ActiveRun.Status.RECONNECTING,
+            built.controller.activeRun.value?.status
+        )
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals(1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun pendingApprovalBlocksASecondStart() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.ApprovalRequested(approvalRequest())
+        )
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            RunSessionController.ActiveRun.Status.WAITING_FOR_APPROVAL,
+            built.controller.activeRun.value?.status
+        )
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals(1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun unconfirmedRunWithoutRunIdBlocksASecondStart() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        // No RunStarted yet: runId is still null.
+        assertNull(built.controller.activeRun.value?.runId)
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals(1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun afterTurnCompletedANewStartIsAllowed() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.TurnCompleted())
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.Started)
+        assertEquals(2, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun afterTurnFailedANewStartIsAllowed() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+        )
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.Started)
+        assertEquals(2, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun afterExplicitCancelANewStartIsAllowed() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        built.controller.cancelTurn()
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        val result = built.controller.startTurn(profileId, sessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.Started)
+        assertEquals(2, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun lateEventsOfAFinishedRunCannotDamageTheSuccessor() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.AssistantDelta("alt "))
+        testScheduler.advanceUntilIdle()
+        // End run A explicitly and start run B: a late event of the finished
+        // run A must never write into run B's slot.
+        built.controller.cancelTurn()
+        testScheduler.advanceUntilIdle()
+        built.controller.startTurn(profileId, otherSessionId, "second")
+        built.source.enqueue(ChatTurnEvent.RunStarted("run_" + "f".repeat(32)))
+        testScheduler.advanceUntilIdle()
+        val active = built.controller.activeRun.value
+        assertEquals(otherSessionId, active?.sessionId)
+        assertEquals("no text of the old run may leak", "", active?.assistantText)
+        built.controller.close()
+    }
+
+    @Test
+    fun concurrentStartAttemptsYieldExactlyOneWinner() {
+        val sourceCalls = AtomicInteger()
+        val sourceOpened = java.util.concurrent.CountDownLatch(1)
+        val starter = FakeServiceStarter()
+        val controller = RunSessionController(
+            chatSource = StreamingChatSource { _, _, _ ->
+                sourceCalls.incrementAndGet()
+                sourceOpened.countDown()
+                flow { kotlinx.coroutines.awaitCancellation() }
+            },
+            serviceStarter = starter,
+            notificationCoordinator = NotificationCoordinator(
+                poster = NotificationPoster { },
+                isForeground = { true },
+                serverNameProvider = { "" },
+                fallbackTitle = ""
+            ),
+            dispatcher = Dispatchers.Default
+        )
+        val threads = 8
+        val barrier = CyclicBarrier(threads)
+        val started = AtomicInteger()
+        val conflicts = AtomicInteger()
+        val pool = Executors.newFixedThreadPool(threads)
+        try {
+            val futures = (1..threads).map { i ->
+                pool.submit(
+                    Runnable {
+                        barrier.await()
+                        when (controller.startTurn(profileId, "s$i", "msg$i")) {
+                            RunSessionController.StartTurnResult.Started -> started.incrementAndGet()
+                            RunSessionController.StartTurnResult.ActiveRunConflict -> conflicts.incrementAndGet()
+                        }
+                    }
+                )
+            }
+            futures.forEach { it.get(5, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+            controller.close()
+        }
+        assertEquals("exactly one winner", 1, started.get())
+        assertEquals(threads - 1, conflicts.get())
+        assertEquals("exactly one FGS start", 1, starter.starts.get())
+        // The winner's stream is opened asynchronously on its dispatcher;
+        // wait for it before asserting the single-source-call invariant.
+        assertTrue("the winner's stream must open", sourceOpened.await(5, TimeUnit.SECONDS))
+        assertEquals("exactly one stream may be opened", 1, sourceCalls.get())
     }
 
     // ------------------------------------------------------------------

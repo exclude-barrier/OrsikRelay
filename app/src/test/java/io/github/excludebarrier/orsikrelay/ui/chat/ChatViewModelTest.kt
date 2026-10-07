@@ -1434,6 +1434,168 @@ class ChatViewModelTest {
         assertTrue(second.state.value.localLines.isEmpty())
     }
 
+    // ------------------------------------------------------------------
+    // P6: global run ownership (a foreign active run rejects a second send)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun aForeignActiveRunRejectsTheSendAndKeepsDraftAndAttachment() {
+        val attachmentSource = FakeAttachmentSource().apply {
+            metadata = mapOf(
+                "content://b" to ChatAttachmentMetadata("b.png", "image/png", 10L)
+            )
+        }
+        withRecreatedModel(
+            sessionKeyOfSecond = "other-chat",
+            attachmentSource = attachmentSource
+        ) { second, chat, _, controller ->
+            second.onAttachmentPicked("content://b")
+            testScheduler.advanceUntilIdle()
+            assertNotNull("the attachment must be staged first", second.state.value.attachment)
+            second.onDraftChange("Nachricht aus B")
+            second.send()
+            testScheduler.advanceUntilIdle()
+
+            assertFalse("no second run may become active", second.state.value.turnActive)
+            assertTrue("a visible conflict state is required", second.state.value.startConflict)
+            assertEquals("the draft must stay exactly", "Nachricht aus B", second.state.value.draft)
+            assertNotNull("the picked attachment must not be lost", second.state.value.attachment)
+            assertTrue("no local user line may persist", second.state.value.localLines.isEmpty())
+            assertEquals("exactly one POST (run A)", 1, chat.calls.get())
+            assertTrue("run A must still own the slot", controller.activeRun.value != null)
+            assertEquals(sessionId, controller.activeRun.value?.sessionId)
+        }
+    }
+
+    @Test
+    fun aRecreatedSameSessionModelCannotStartASecondRun() = withRecreatedModel { second, chat, _, _ ->
+        // The run is still active on this session after the recreation.
+        second.onDraftChange("unerlaubt")
+        second.send()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(second.state.value.turnActive)
+        assertEquals(runId, second.state.value.boundRunId)
+        assertEquals("a same-session send must not open a second stream", 1, chat.calls.get())
+        assertFalse(second.state.value.startConflict)
+    }
+
+    @Test
+    fun theConflictNoticeClearsWhenTheGlobalRunIsTerminalAndNeverAutoSends() =
+        withRecreatedModel(sessionKeyOfSecond = "other-chat") { second, chat, _, _ ->
+            second.onDraftChange("warten")
+            second.send()
+            testScheduler.advanceUntilIdle()
+            assertTrue(second.state.value.startConflict)
+            assertEquals(1, chat.calls.get())
+
+            // Run A reaches a real terminal state: the slot is free again.
+            chat.enqueue(ChatTurnEvent.TurnCompleted())
+            testScheduler.advanceUntilIdle()
+
+            assertFalse(
+                "the notice must clear once the global run is terminal",
+                second.state.value.startConflict
+            )
+            assertEquals(
+                "the waiting draft stays and is never auto-sent",
+                "warten",
+                second.state.value.draft
+            )
+            assertEquals("no additional POST was triggered", 1, chat.calls.get())
+            assertFalse(second.state.value.turnActive)
+        }
+
+    @Test
+    fun aStartConflictDuringAnAttachmentSendRollsBackWithoutLosingTheAttachment() = runTest {
+        val chat = FakeTurnSource()
+        val starter = FakeRunServiceStarter()
+        val controller = RunSessionController(
+            chatSource = chat,
+            serviceStarter = starter,
+            notificationCoordinator = NoOpNotificationCoordinator,
+            dispatcher = UnconfinedTestDispatcher(testScheduler)
+        )
+        lastController = controller
+        val gate = CompletableDeferred<Unit>()
+        val attachmentSource = FakeAttachmentSource().apply {
+            metadata = mapOf(
+                "content://b" to ChatAttachmentMetadata("b.png", "image/png", 10L)
+            )
+            dataUrls = mapOf("content://b" to "data:image/png;base64,AA==")
+            dataUrlGate = gate
+        }
+        val b = build(
+            testScheduler,
+            chat = chat,
+            controller = controller,
+            attachmentSource = attachmentSource,
+            sessionKey = "other-chat"
+        )
+        b.loadHistory()
+        testScheduler.advanceUntilIdle()
+        b.onAttachmentPicked("content://b")
+        testScheduler.advanceUntilIdle()
+        b.onDraftChange("mit Bild")
+        b.send()
+        // The data-URL read is parked: B reserved the turn locally, but
+        // nothing reached the controller yet.
+        testScheduler.advanceUntilIdle()
+        assertTrue(b.state.value.turnActive)
+        assertEquals(0, chat.calls.get())
+
+        // Meanwhile another screen starts a run and takes the global slot.
+        val a = build(testScheduler, chat = chat, controller = controller, sessionKey = sessionId)
+        a.loadHistory()
+        testScheduler.advanceUntilIdle()
+        a.onDraftChange("A")
+        a.send()
+        chat.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, chat.calls.get())
+
+        // Release B's read: its start attempt is now rejected by the
+        // authoritative controller check, and the optimistic state rolls back.
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(b.state.value.turnActive)
+        assertTrue(b.state.value.startConflict)
+        assertNotNull("the attachment must survive the rejected race", b.state.value.attachment)
+        assertEquals("mit Bild", b.state.value.draft)
+        assertTrue("the optimistic user line must be rolled back", b.state.value.localLines.isEmpty())
+        assertEquals("no second POST", 1, chat.calls.get())
+        assertEquals("no attachment POST was ever opened", 0, chat.attachmentCalls.get())
+        assertEquals("only run A started the foreground service", 1, starter.starts.get())
+        assertEquals("the conflict must not stop the foreground service", 0, starter.stops.get())
+        assertFalse("run A must not be canceled by the client", chat.canceled.get())
+
+        b.close()
+        a.close()
+        controller.close()
+        lastController = null
+    }
+
+    @Test
+    fun refreshHistoryKeepsProcessingTheStillActiveRun() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        chat.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        assertEquals(runId, model.state.value.boundRunId)
+
+        // Refreshing after a failure reloads history but the run is still
+        // owned and active, so its later stream events must keep applying.
+        model.refreshHistory()
+        testScheduler.advanceUntilIdle()
+        chat.enqueue(ChatTurnEvent.AssistantDelta("laufend"))
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(model.state.value.turnActive)
+        assertEquals(1, model.state.value.localLines.count { it.role == MessageRole.ASSISTANT })
+        assertEquals("laufend", model.state.value.localLines.last().content)
+    }
+
     /** Synthetic streaming fake: [streamTurn] is latched, events enqueued, closed by the test. */
     private class FakeTurnSource : StreamingChatSource {
         val calls = AtomicInteger()
@@ -1502,6 +1664,9 @@ class ChatViewModelTest {
         /** When non-null, `readMetadata` suspends until it completes. */
         @Volatile
         var metadataGate: CompletableDeferred<Unit>? = null
+        /** P6: when non-null, `readInlineDataUrlResult` suspends until it completes. */
+        @Volatile
+        var dataUrlGate: CompletableDeferred<Unit>? = null
         @Volatile
         var lastDataUrlRequest: Triple<String, String, Long>? = null
 
@@ -1534,6 +1699,7 @@ class ChatViewModelTest {
         ): ChatAttachmentReadResult {
             dataUrlCalls.incrementAndGet()
             lastDataUrlRequest = Triple(contentUri, mimeType, maxBytes)
+            dataUrlGate?.await()
             if (contentUri in throwingDataUrlUris) throw IllegalStateException("provider gone")
             dataUrlResults[contentUri]?.let { return it }
             return dataUrls[contentUri]

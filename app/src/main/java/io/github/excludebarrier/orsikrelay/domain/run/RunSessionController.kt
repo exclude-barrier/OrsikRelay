@@ -80,6 +80,29 @@ class RunSessionController(
     private val ioDispatcher: CoroutineDispatcher = dispatcher
 ) {
     /**
+     * Closed outcome of [startTurn] (P6 global run ownership).
+     *
+     * The caller gets exactly one of two values instead of an exception or
+     * a dynamic server detail: either it reserved the single global run
+     * slot and started the run ([Started]), or a run is already active
+     * somewhere in the app ([ActiveRunConflict]) and NOTHING was started,
+     * stopped or changed. No run identity (run ID, session ID, profile ID)
+     * ever crosses this boundary: the UI only needs "started" vs. "busy".
+     */
+    sealed interface StartTurnResult {
+        /** The slot was free, was reserved atomically and the run started. */
+        data object Started : StartTurnResult
+
+        /**
+         * A run is already active anywhere in the app — the same session,
+         * another session, another profile, reconnecting, waiting for an
+         * approval or not yet confirmed by the server. The existing run is
+         * left completely untouched.
+         */
+        data object ActiveRunConflict : StartTurnResult
+    }
+
+    /**
      * The single active run: the small, closed in-memory state a chat
      * screen needs to re-attach to a running turn (P4 recreation fix).
      *
@@ -124,6 +147,14 @@ class RunSessionController(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+
+    /**
+     * Guards the compound "is the global slot free? then reserve it" step
+     * in [startTurn], so the check and the reservation are one indivisible
+     * operation even if two callers invoke [startTurn] concurrently (race,
+     * double tap, two screens).
+     */
+    private val slotLock = Any()
     private val _activeRun = MutableStateFlow<ActiveRun?>(null)
     private val _events = MutableSharedFlow<ChatTurnEvent>(
         replay = 0,
@@ -141,29 +172,54 @@ class RunSessionController(
      */
     val events: SharedFlow<ChatTurnEvent> = _events
 
-    // Visible across the (single-threaded) dispatcher and any thread that
-    // calls startTurn/cancelTurn; the controller processes events serially, so
-    // the compound token update below is not concurrent in practice.
+    // Handle of the active run's collector, used by [cancelTurn] and
+    // [close]. [startTurn] writes it right after the lock-guarded
+    // reservation; the reservation itself (the "at most one active run"
+    // invariant) is fully serialized by [slotLock]. The small handoff
+    // between reservation and this assignment is unreachable from the UI:
+    // [cancelTurn] and [close] are only reached for an already-confirmed
+    // run (a bound run ID), which the controller can only have after this
+    // assignment, and every caller runs on the same dispatcher.
     @Volatile
     private var runJob: Job? = null
 
     /**
-     * Identity of the turn currently owning the slot (P4). A replaced run's
-     * collector may still execute its synchronous body after
-     * [startTurn] cancelled it; the token makes such a late event a no-op
-     * instead of letting it write the previous run's text into the new
-     * slot.
+     * Identity of the turn currently owning the slot (P4). A finishing
+     * run's collector may still execute a late synchronous body after the
+     * slot was released; the token makes such a late event a no-op instead
+     * of letting it write one run's text into a successor's slot (P6: the
+     * slot is never replaced while active, but a terminal/cancel followed
+     * by a new start must still isolate the two turns).
      */
     @Volatile
     private var slotTurnToken: Long = 0L
 
     /**
-     * Starts one streaming turn for [message] in [sessionId] (single slot:
-     * a still-active run is terminated first, exactly like leaving its
-     * screen used to do). The foreground service is started synchronously
-     * before the stream is opened — the caller is the user's send tap, so
-     * the app is in the foreground and the Android 14+ background-start
-     * restriction cannot apply.
+     * Tries to start one streaming turn for [message] in [sessionId] (P6
+     * global run ownership).
+     *
+     * Orsik is a single-slot client: the app-wide slot is owned by exactly
+     * one run. If any run is already active — same session, another
+     * session, another profile, reconnecting, waiting for an approval, or
+     * not yet confirmed by the server — this returns [StartTurnResult.ActiveRunConflict]
+     * and does NOTHING: no second chat POST, no cancellation or replacement
+     * of the existing stream, no foreground-service re-start and no change
+     * to [activeRun]. The old "startTurn replaces the active run" behavior
+     * is deliberately gone: since P4 a Hermes run is independent of its
+     * socket, so a local stream cancel would NOT reliably stop the server
+     * run and must never silently drop its ownership.
+     *
+     * The check and the reservation are atomic ([slotLock]), so concurrent
+     * or near-simultaneous start attempts yield exactly one [Started] and
+     * one [ActiveRunConflict]. The foreground service is started
+     * synchronously only for the winner, before the stream is opened — the
+     * caller is the user's send tap, so the app is in the foreground and
+     * the Android 14+ background-start restriction cannot apply.
+     *
+     * A new run may start again only after the slot was released by a real
+     * terminal state (`RunCompleted`/`TurnFailed`) or an explicit,
+     * confirmed stop ([cancelTurn]); a local coroutine/socket cancel alone
+     * is never treated as a server-side stop.
      */
     fun startTurn(
         profileId: String,
@@ -176,24 +232,28 @@ class RunSessionController(
          * never into a P4 re-attach.
          */
         imageDataUrls: List<String> = emptyList()
-    ) {
-        val previous = runJob
-        if (previous != null && previous.isActive) {
-            previous.cancel()
+    ): StartTurnResult {
+        val token: Long
+        synchronized(slotLock) {
+            // The reservation is taken BEFORE any side effect, so a losing
+            // caller can never start the service, open a socket or touch
+            // the winner's state.
+            if (_activeRun.value != null) {
+                return StartTurnResult.ActiveRunConflict
+            }
+            token = slotTurnToken + 1L
+            slotTurnToken = token
+            _activeRun.value = ActiveRun(
+                profileId = profileId,
+                sessionId = sessionId,
+                userMessage = message
+            )
         }
-        // Optimistic start: a send that fails immediately stops the service
-        // again on the terminal event (below), so a failed turn leaves no
-        // background footprint. The validated user text is kept in the
-        // active-run state (P4), so a re-created view model can restore the
-        // visible turn without a new POST.
-        val token = slotTurnToken + 1L
-        slotTurnToken = token
+        // Only the winner reaches this point. The foreground service is
+        // started synchronously in the user's send action (the app is in
+        // the foreground), so a failed turn stops it again on its terminal
+        // event and leaves no background footprint.
         serviceStarter.start(profileId, sessionId)
-        _activeRun.value = ActiveRun(
-            profileId = profileId,
-            sessionId = sessionId,
-            userMessage = message
-        )
         val job = scope.launch {
             var terminalSeen = false
             try {
@@ -221,10 +281,9 @@ class RunSessionController(
                     )
                 }
             } catch (e: CancellationException) {
-                // Single-slot replacement, [cancelTurn] or [close]: no
-                // terminal is emitted, and the foreground service is NOT
-                // stopped here — a replacement re-asserts it via [start],
-                // and the cancel/teardown callers stop it themselves.
+                // [cancelTurn] or [close]: no terminal is emitted, and the
+                // foreground service is NOT stopped here — the cancel/
+                // teardown callers stop it themselves.
                 throw e
             } catch (_: Exception) {
                 // Defensive: the source contract guarantees a terminal
@@ -238,14 +297,15 @@ class RunSessionController(
             } finally {
                 // Bookkeeping only: stop ownership lives in the terminal
                 // handlers ([handleEvent]) and in [cancelTurn]/[close].
-                // Guarded, so a late finally of a replaced run cannot clear
-                // the slot of its successor.
+                // Guarded, so a late finally of a finished run cannot clear
+                // the slot of a successor that already took it.
                 if (runJob === currentCoroutineContext()[Job]) {
                     _activeRun.value = null
                 }
             }
         }
         runJob = job
+        return StartTurnResult.Started
     }
 
     /**

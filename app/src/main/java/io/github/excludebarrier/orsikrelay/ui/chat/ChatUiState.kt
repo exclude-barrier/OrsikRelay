@@ -82,6 +82,13 @@ internal data class ChatUiState(
     val attachmentBusy: Boolean = false,
     val localLines: List<TimelineRow> = emptyList(),
     val turnFailure: ChatStreamError? = null,
+    /**
+     * P6: the last send was rejected because another run already owns the
+     * app-wide run slot. The draft and the picked attachment are kept; the
+     * notice is generic and clears once the global run is terminal. The
+     * waiting draft is never sent automatically.
+     */
+    val startConflict: Boolean = false,
     val turnActive: Boolean = false,
     /** P4: the active turn's stream is being re-attached to the run. */
     val reconnecting: Boolean = false,
