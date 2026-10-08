@@ -47,7 +47,9 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunApprovalRequester
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationPermissionRequester
@@ -98,6 +100,7 @@ fun ChatScreen(
     runSteerRequester: RunSteerRequester,
     chatDraftRepository: ChatDraftRepository,
     runApprovalRequester: RunApprovalRequester = NoOpRunApprovalRequester,
+    runStatusRequester: RunStatusRequester = NoOpRunStatusRequester,
     attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
     notificationPermissionStore: NotificationPermissionStore = NoOpNotificationPermissionStore,
     profileId: String,
@@ -132,6 +135,7 @@ fun ChatScreen(
             runController = runController,
             runStopRequester = runStopRequester,
             runSteerRequester = runSteerRequester,
+            runStatusRequester = runStatusRequester,
             chatDraftRepository = chatDraftRepository,
             attachmentSource = attachmentSource,
             profileId = profileId,
@@ -320,7 +324,19 @@ onClick = { viewModel.handleBack() }
                     }
                 }
                 val failure = state.turnFailure
-                if (failure != null) {
+                if (state.turnUncertain) {
+                    // P7: unknown run outcome. Generic, honest notice; the
+                    // confirmed binding is kept and NO new message is sent.
+                    // A manual status reconciliation is offered only when a
+                    // server-confirmed run ID exists.
+                    RunUncertainBlock(
+                        inFlight = state.reconcileInFlight,
+                        canReconcile = state.recoveryVisible,
+                        stillActive = state.reconcileStillActive,
+                        unavailable = state.reconcileFailed,
+                        onReconcile = { viewModel.reconcileUncertainRun() }
+                    )
+                } else if (failure != null) {
                     TurnFailureBlock(
                         error = failure,
                         showRefreshHistory = state.runStarted,
@@ -411,42 +427,61 @@ onClick = { viewModel.handleBack() }
                     onRemoveAttachment = { viewModel.removeAttachment() },
                     compact = compactComposer,
                     conflictNotice = state.startConflict,
-                    // In the compact regime the timeline (and with it the stop
-                    // and steer controls) is not composed at all. Those two are
-                    // run-critical, so they move into the compact composer row
-                    // while a server-confirmed run is bound: stop first, steer
-                    // next to it. Secondary steer status text stays out of the
-                    // compact row on purpose.
-                    compactRunControls = if (state.controlsVisible) {
-                        {
-                            OutlinedButton(
-                                onClick = { viewModel.stop() },
-                                enabled = !state.stopInFlight,
-                                modifier = Modifier.testTag(TAG_RUN_STOP)
-                            ) {
-                                Text(if (state.stopInFlight) stoppingLabel else stopLabel)
-                            }
-                            OutlinedTextField(
-                                value = state.steerDraft,
-                                onValueChange = { viewModel.onSteerDraftChange(it) },
-                                label = { Text(steerInputLabel) },
-                                enabled = !state.steerInFlight,
-                                maxLines = COMPACT_DRAFT_MAX_LINES,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 8.dp)
-                                    .testTag("chatSteerInput")
-                            )
-                            OutlinedButton(
-                                onClick = { viewModel.steer() },
-                                enabled = !state.steerInFlight,
-                                modifier = Modifier.testTag("chatSteerSend")
-                            ) {
-                                Text(steerLabel)
+                    uncertainNotice = state.turnUncertain,
+                    // In the compact regime the timeline (and with it the stop,
+                    // steer and recovery controls) is not composed at all. The
+                    // run-critical controls move into the compact composer row:
+                    // while a server-confirmed run is bound, stop and steer;
+                    // while the outcome is uncertain, the single "check status"
+                    // recovery action.
+                    compactRunControls = when {
+                        state.recoveryVisible -> {
+                            {
+                                OutlinedButton(
+                                    onClick = { viewModel.reconcileUncertainRun() },
+                                    enabled = !state.reconcileInFlight,
+                                    modifier = Modifier.testTag(TAG_RUN_RECONCILE)
+                                ) {
+                                    Text(
+                                        if (state.reconcileInFlight) {
+                                            stringResource(R.string.chat_run_uncertain_checking)
+                                        } else {
+                                            stringResource(R.string.chat_run_uncertain_check)
+                                        }
+                                    )
+                                }
                             }
                         }
-                    } else {
-                        null
+                        state.controlsVisible -> {
+                            {
+                                OutlinedButton(
+                                    onClick = { viewModel.stop() },
+                                    enabled = !state.stopInFlight,
+                                    modifier = Modifier.testTag(TAG_RUN_STOP)
+                                ) {
+                                    Text(if (state.stopInFlight) stoppingLabel else stopLabel)
+                                }
+                                OutlinedTextField(
+                                    value = state.steerDraft,
+                                    onValueChange = { viewModel.onSteerDraftChange(it) },
+                                    label = { Text(steerInputLabel) },
+                                    enabled = !state.steerInFlight,
+                                    maxLines = COMPACT_DRAFT_MAX_LINES,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 8.dp)
+                                        .testTag("chatSteerInput")
+                                )
+                                OutlinedButton(
+                                    onClick = { viewModel.steer() },
+                                    enabled = !state.steerInFlight,
+                                    modifier = Modifier.testTag("chatSteerSend")
+                                ) {
+                                    Text(steerLabel)
+                                }
+                            }
+                        }
+                        else -> null
                     }
                 )
             }
@@ -495,6 +530,8 @@ private fun TurnFailureBlock(
                 ChatStreamError.IncompatibleApi ->
                     stringResource(R.string.error_connection_incompatible_api)
                 ChatStreamError.Http,
+                ChatStreamError.ServerError,
+                ChatStreamError.ServerUnavailable,
                 ChatStreamError.InvalidInput,
                 ChatStreamError.Conflict,
                 ChatStreamError.ResumeUnavailable,
@@ -532,6 +569,57 @@ private fun ConflictBlock() {
             .padding(top = 8.dp)
             .testTag(TAG_RUN_CONFLICT)
     )
+}
+
+/**
+ * P7: the honest recovery notice for a run whose server-side outcome is
+ * unknown. It never presents a failed connection as a stopped run and never
+ * claims success. A manual reconciliation action is offered only when a
+ * server-confirmed run ID exists ([canReconcile]); without one the notice
+ * states the limitation instead of simulating a release.
+ */
+@Composable
+private fun RunUncertainBlock(
+    inFlight: Boolean,
+    canReconcile: Boolean,
+    stillActive: Boolean,
+    unavailable: Boolean,
+    onReconcile: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .testTag(TAG_RUN_UNCERTAIN),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = when {
+                stillActive -> stringResource(R.string.chat_run_uncertain_still_active)
+                unavailable -> stringResource(R.string.chat_run_uncertain_unavailable)
+                else -> stringResource(R.string.chat_run_uncertain)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
+        if (canReconcile) {
+            Button(
+                onClick = onReconcile,
+                enabled = !inFlight,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .testTag(TAG_RUN_RECONCILE)
+            ) {
+                Text(
+                    if (inFlight) {
+                        stringResource(R.string.chat_run_uncertain_checking)
+                    } else {
+                        stringResource(R.string.chat_run_uncertain_check)
+                    }
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -710,6 +798,7 @@ internal fun ComposerBar(
     onRemoveAttachment: () -> Unit,
     compact: Boolean = false,
     conflictNotice: Boolean = false,
+    uncertainNotice: Boolean = false,
     compactRunControls: (@Composable RowScope.() -> Unit)? = null
 ) {
     Column(
@@ -737,10 +826,10 @@ internal fun ComposerBar(
             // no IME regression is introduced. The conflict takes precedence
             // over the attachment error (it is the reason the send was
             // rejected); both can never be shown as two lines.
-            val compactStatusLabel = if (conflictNotice) {
-                stringResource(R.string.chat_run_conflict)
-            } else {
-                attachmentErrorLabel
+            val compactStatusLabel = when {
+                uncertainNotice -> stringResource(R.string.chat_run_uncertain)
+                conflictNotice -> stringResource(R.string.chat_run_conflict)
+                else -> attachmentErrorLabel
             }
             if (compactStatusLabel != null) {
                 Text(
@@ -1041,6 +1130,8 @@ internal val COMPACT_THUMBNAIL_SIZE = 24.dp
 
 internal const val TAG_RUN_STOP = "composer_run_stop"
 internal const val TAG_RUN_CONFLICT = "chat_run_conflict"
+internal const val TAG_RUN_UNCERTAIN = "chat_run_uncertain"
+internal const val TAG_RUN_RECONCILE = "chat_run_reconcile"
 internal const val TAG_COMPOSER_SEND = "composer_send"
 internal const val TAG_COMPOSER_FIELD = "composer_field"
 

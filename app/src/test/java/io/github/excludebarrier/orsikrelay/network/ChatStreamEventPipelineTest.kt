@@ -226,7 +226,7 @@ class ChatStreamEventPipelineTest {
             )
         )
         assertEquals(
-            listOf<ChatTurnEvent>(ChatTurnEvent.TurnFailed(ChatStreamError.Http)),
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnFailed(ChatStreamError.ServerError)),
             events
         )
         assertFalse(events.toString().contains("dynamic server detail"))

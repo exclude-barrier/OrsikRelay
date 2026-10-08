@@ -27,6 +27,7 @@ import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
@@ -56,6 +57,7 @@ fun HermesNavHost(
     runStopRequester: RunStopRequester? = null,
     runSteerRequester: RunSteerRequester? = null,
     runApprovalRequester: RunApprovalRequester? = null,
+    runStatusRequester: RunStatusRequester? = null,
     chatDraftRepository: ChatDraftRepository? = null,
     profileAdmin: ProfileAdmin? = null,
     themeController: ThemeModeController? = null,
@@ -341,6 +343,8 @@ fun HermesNavHost(
                     ?: productionDependencies.value.chatDraftRepository,
                 runApprovalRequester = runApprovalRequester
                     ?: productionDependencies.value.runApprovalRequester,
+                runStatusRequester = runStatusRequester
+                    ?: productionDependencies.value.runStatusRequester,
                 notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
                 attachmentSource = productionDependencies.value.chatAttachmentSource,
                 profileId = activeProfileId.orEmpty(),

@@ -369,10 +369,16 @@ class ChatStreamEventPipeline(
                 if (sawError || runCompleted) {
                     throw protocol()
                 }
-                // Only a closed generic failure is produced; the
+                // The server's own in-stream `error` frame (always followed
+                // by `done`) is an AUTHORITATIVE terminal: the server set a
+                // terminal run status. It maps to the dedicated
+                // [ChatStreamError.ServerError] so the caller can tell it
+                // apart from a non-2xx HTTP answer ([ChatStreamError.Http],
+                // a proven pre-run rejection; [ChatStreamError.ServerUnavailable],
+                // an ambiguous 5xx) and from a local transport/protocol failure. The
                 // dynamic `message` field is intentionally ignored.
                 sawError = true
-                return listOf(ChatTurnEvent.TurnFailed(ChatStreamError.Http))
+                return listOf(ChatTurnEvent.TurnFailed(ChatStreamError.ServerError))
             }
             TOOL_PROGRESS,
             REASONING_STARTED,

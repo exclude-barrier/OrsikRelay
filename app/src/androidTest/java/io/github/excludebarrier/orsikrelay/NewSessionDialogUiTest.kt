@@ -10,6 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
@@ -30,10 +32,21 @@ import org.junit.Test
  * All values are synthetic fixtures; the creator seam is a fake, so no
  * network, no real hosts and no credentials are involved.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class NewSessionDialogUiTest {
 
+    // The dialog's create call is a BLOCKING seam executed on `Dispatchers.IO`
+    // (see `NewSessionDialog.submit`). The default `createComposeRule()` uses an
+    // UnconfinedTestDispatcher for the composition, so the post-I/O continuation
+    // (`submitting = false`, `onCreated`) resumes on the IO worker and the
+    // resulting recomposition would dispose the dialog's own composition off the
+    // main thread (`IllegalStateException: removeObserver must be called on the
+    // main thread`). A confined StandardTestDispatcher queues that continuation
+    // on the test scheduler, so every state write and disposal runs on the test
+    // (main) thread. This keeps the blocking fake and exercises the real
+    // completion path.
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createComposeRule(StandardTestDispatcher())
 
     @Test
     fun cancelClosesTheDialogAndSendsNoRequest() {

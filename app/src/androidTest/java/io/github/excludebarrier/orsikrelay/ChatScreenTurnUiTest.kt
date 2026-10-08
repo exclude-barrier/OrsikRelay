@@ -23,6 +23,10 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunServerStatus
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
@@ -230,7 +234,7 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
-    fun failureBeforeStartKeepsDraftAndSendsNoRefreshButton() {
+    fun uncertainFailureBeforeStartKeepsDraftBlocksTheComposerAndOffersNoRecovery() {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
@@ -244,32 +248,43 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        // Generische Meldung, Composer wieder frei, Entwurf erhalten.
-        composeRule
-            .onNodeWithText("Der Hermes-Server ist derzeit nicht erreichbar.")
-            .assertIsDisplayed()
+        // P7: without a confirmed start the POST may still have been accepted,
+        // so the outcome is UNKNOWN. The draft survives, the composer is locked
+        // (no second POST) and the honest uncertain notice is shown - never a
+        // claim that the server run ended. No history refresh and, without a
+        // confirmed run ID, no manual status recovery are offered.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
         assertEquals("Bleibt im Entwurf", draftText())
-        composeRule.onNodeWithText("Senden").assertIsEnabled()
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
-        // Vor Start gibt es keinen History-Refresh-Button.
+        composeRule.onNodeWithText("Senden").assertIsDisplayed()
+        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
         assertTrue(
-            "no refresh button before run start",
+            "no history refresh while the run outcome is unknown",
             composeRule.onAllNodesWithText("Verlauf aktualisieren")
                 .fetchSemanticsNodes().isEmpty()
+        )
+        assertTrue(
+            "no confirmed run ID: no status recovery",
+            composeRule.onAllNodesWithTag(RECONCILE_TAG).fetchSemanticsNodes().isEmpty()
         )
         assertEquals(1, source.calls.get())
     }
 
     @Test
-    fun failureAfterStartOffersHistoryRefreshWithoutResending() {
+    fun confirmedTransportFailureOffersManualStatusRecoveryWithoutResending() {
         val historyCalls = AtomicInteger()
+        val status = FakeRunStatusRequester()
         val source = FakeTurnSource()
         setScreen(
             MessageHistorySource { _, _ ->
                 historyCalls.incrementAndGet()
                 MessageHistoryResult.Success(MessagePage(emptyList()))
             },
-            source
+            source,
+            runStatusRequester = status
         )
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
@@ -285,21 +300,45 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        composeRule
-            .onNodeWithText("Der Hermes-Server ist derzeit nicht erreichbar.")
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("Verlauf aktualisieren").assertIsDisplayed()
+        // P7: the run was confirmed, so a transport failure leaves the server
+        // outcome UNKNOWN. The composer stays locked, no bare history refresh
+        // is offered and the chat POST is never resent. The confirmed run ID
+        // enables the explicit manual status recovery.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
         assertEquals(1, historyCalls.get())
+        assertEquals("no automatic resending", 1, source.calls.get())
+        assertTrue(
+            "no bare history refresh while the run outcome is unknown",
+            composeRule.onAllNodesWithText("Verlauf aktualisieren")
+                .fetchSemanticsNodes().isEmpty()
+        )
+        composeRule.onNodeWithTag(RECONCILE_TAG).assertIsDisplayed()
+        // The confirmed run ID enables recovery but is never rendered (no ID,
+        // URL or credential may reach the UI).
+        assertTrue(
+            "the run id must never be rendered",
+            composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
+        )
 
-        composeRule.onNodeWithText("Verlauf aktualisieren").performClick()
-        // Der bestehende idempotente History-Read wird erneut ausgeführt;
-        // der Read läuft asynchron auf IO, daher wird auf den zweiten
-        // History-Call gewartet, statt sofort gegen den Zähler zu
-        // asserten. Der POST wird niemals erneut gesendet.
+        // Manual recovery reads the server status. A TERMINAL status is the
+        // authoritative answer: it releases the run, reconciles the visible
+        // turn from the idempotent history read and never resends the POST.
+        status.result = RunStatusResult.Known(RunServerStatus.COMPLETED)
+        composeRule.onNodeWithTag(RECONCILE_TAG).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) { historyCalls.get() == 2 }
         composeRule.waitForIdle()
+        assertEquals(1, status.calls.get())
+        assertEquals("run_synthetic", status.runId.get())
         assertEquals(2, historyCalls.get())
-        assertEquals("no automatic resending", 1, source.calls.get())
+        assertEquals("the authoritative terminal never resends the chat POST", 1, source.calls.get())
+        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        assertTrue(
+            "the uncertain notice must be gone after the authoritative terminal",
+            composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isEmpty()
+        )
     }
 
     @Test
@@ -362,7 +401,7 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
-    fun normalFlowEndWithoutTerminalEventIsAGenericFailureAndKeepsComposerBlocked() {
+    fun normalFlowEndWithoutTerminalEventBecomesUncertainAndKeepsComposerBlocked() {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
@@ -381,15 +420,25 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        // Kein stiller Erfolg: generische Fehlermeldung, Composer bleibt
-        // blockiert (kein Submit möglich), History-Refresh ist vorhanden,
-        // kein Auto-Retry.
-        composeRule
-            .onNodeWithText("Der Hermes-Server ist derzeit nicht erreichbar.")
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("Verlauf aktualisieren").assertIsDisplayed()
+        // P7: a confirmed run whose stream vanished without a terminal event
+        // has an UNKNOWN outcome. The composer stays locked, the run is never
+        // reported as stopped or finished, no history refresh is offered and
+        // the confirmed run ID enables the manual "check status" recovery.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        assertTrue(
+            "the confirmed run ID must offer the manual status recovery",
+            composeRule.onAllNodesWithTag(RECONCILE_TAG).fetchSemanticsNodes().isNotEmpty()
+        )
+        assertTrue(
+            "no history refresh while the run outcome is unknown",
+            composeRule.onAllNodesWithText("Verlauf aktualisieren")
+                .fetchSemanticsNodes().isEmpty()
+        )
         assertEquals("no automatic retry", 1, source.calls.get())
     }
 
@@ -454,7 +503,11 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
-    fun failedEventReleasesComposerWithoutSourceCompletion() {
+    fun confirmedTransportFailureWithoutSourceCompletionKeepsComposerBlocked() {
+        // P7 regression: a confirmed run plus a LOCAL transport failure does
+        // NOT prove the server run ended, so it must never release the
+        // composer - even when the transport has not been closed. The
+        // counterpart of the authoritative release below.
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
@@ -469,6 +522,40 @@ class ChatScreenTurnUiTest {
         )
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
+        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        assertTrue(
+            "a transport failure must never be shown as a finished run",
+            composeRule.onAllNodesWithText("Verlauf aktualisieren")
+                .fetchSemanticsNodes().isEmpty()
+        )
+        assertEquals("no second POST", 1, source.calls.get())
+    }
+
+    @Test
+    fun authoritativeServerErrorReleasesComposerWithoutSourceCompletion() {
+        // P7 regression: ONLY a server-authoritative terminal releases the run
+        // slot. `ChatStreamError.ServerError` is the server's own terminal
+        // `error` frame (the run status is terminal server-side), so the
+        // composer is freed even though the transport was not closed by the
+        // source and no `TurnCompleted` arrived.
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+
+        waitForText("Diese Session enthält noch keine Nachrichten.")
+        composeRule.onNodeWithText("Nachricht").performTextInput("Serverfehler")
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+
+        source.enqueue(
+            ChatTurnEvent.RunStarted("run_synthetic"),
+            ChatTurnEvent.TurnFailed(ChatStreamError.ServerError)
+        )
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule.onNodeWithText("Nachricht").assertIsEnabled()
                 true
@@ -476,7 +563,14 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
+        // The release came from the server-authoritative event, not from the
+        // stream ending: the synthetic source was never completed.
         assertEquals("stream must survive the terminal event", 1L, source.canceled.count)
+        assertFalse(source.completed.get())
+        assertTrue(
+            "an authoritative terminal must not leave the uncertain notice",
+            composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isEmpty()
+        )
     }
 
     @Test
@@ -743,7 +837,8 @@ class ChatScreenTurnUiTest {
         onBack: () -> Unit = {},
         runStopRequester: RunStopRequester = FakeRunStopRequester(),
         runSteerRequester: RunSteerRequester = FakeRunSteerRequester(),
-        chatDraftRepository: ChatDraftRepository = NoOpChatDraftRepository()
+        chatDraftRepository: ChatDraftRepository = NoOpChatDraftRepository(),
+        runStatusRequester: RunStatusRequester = NoOpRunStatusRequester
     ) {
         composeRule.setContent {
             HermesTheme {
@@ -752,6 +847,7 @@ class ChatScreenTurnUiTest {
                     runStopRequester = runStopRequester,
                     runSteerRequester = runSteerRequester,
                     chatDraftRepository = chatDraftRepository,
+                    runStatusRequester = runStatusRequester,
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     runController = controllerFor(chatSource),
@@ -1203,6 +1299,11 @@ class ChatScreenTurnUiTest {
         const val RUN_ID = "run_synthetic"
         const val NEW_RUN_ID = "run_synthetic_2"
         const val APPROVAL_TITLE = "Freigabe anfragen"
+        // P7: stable test tags of the uncertain-run notice and its manual
+        // status-recovery action (mirroring ChatScreen's TAG_RUN_UNCERTAIN /
+        // TAG_RUN_RECONCILE).
+        const val UNCERTAIN_TAG = "chat_run_uncertain"
+        const val RECONCILE_TAG = "chat_run_reconcile"
         // P6: the exact generic conflict text (no IDs, no server detail).
         const val CONFLICT_TEXT =
             "In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst."
@@ -1930,6 +2031,24 @@ class ChatScreenTurnUiTest {
             .config[SemanticsProperties.EditableText]
             ?.text
             ?.toString()
+    }
+
+    /**
+     * Synthetic P7 run-status fake: no network, no credentials. Records the
+     * requested run ID and returns the pre-set [result] immediately (a status
+     * read is a fast, idempotent GET).
+     */
+    private class FakeRunStatusRequester : RunStatusRequester {
+        val calls = AtomicInteger()
+        val runId = AtomicReference<String>()
+        @Volatile
+        var result: RunStatusResult = RunStatusResult.Known(RunServerStatus.RUNNING)
+
+        override suspend fun getRunStatus(profileId: String, runId: String): RunStatusResult {
+            calls.incrementAndGet()
+            this.runId.set(runId)
+            return result
+        }
     }
 
     /**

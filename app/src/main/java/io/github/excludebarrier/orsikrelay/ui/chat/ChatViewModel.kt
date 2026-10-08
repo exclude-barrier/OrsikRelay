@@ -26,6 +26,10 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusError
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -76,6 +80,8 @@ internal class ChatViewModel(
     private val runController: RunSessionController,
     private val runStopRequester: RunStopRequester,
     private val runSteerRequester: RunSteerRequester,
+    /** P7: reads the server-side status of a confirmed uncertain run (manual recovery). */
+    private val runStatusRequester: RunStatusRequester = NoOpRunStatusRequester,
     private val chatDraftRepository: ChatDraftRepository,
     /** P5: reads the picked attachment's metadata/bytes; no-op when unwired. */
     private val attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
@@ -178,6 +184,7 @@ internal class ChatViewModel(
                     boundRunId = active.runId,
                     pendingApproval = active.pendingApproval,
                     reconnecting = active.reconnecting,
+                    turnUncertain = active.uncertain,
                     localLines = rows
                 )
             }
@@ -388,6 +395,10 @@ internal class ChatViewModel(
      * then re-runs the idempotent history read. The POST is never resent.
      */
     fun refreshHistory() {
+        // P7: an uncertain run is NOT reconcilable by a bare history refresh
+        // (that would clear the screen state without releasing the app-wide
+        // ownership). The explicit reconciliation is the only path.
+        if (_state.value.turnUncertain) return
         rehydratedUserLineKey = null
         _state.update {
             it.copy(
@@ -396,6 +407,10 @@ internal class ChatViewModel(
                 runStarted = false,
                 boundRunId = null,
                 pendingApproval = null,
+                turnUncertain = false,
+                reconcileInFlight = false,
+                reconcileFailed = false,
+                reconcileStillActive = false,
                 stopInFlight = false,
                 steerInFlight = false,
                 steerQueued = false,
@@ -443,6 +458,91 @@ internal class ChatViewModel(
             runId = request.runId,
             requestId = request.requestId
         )
+    }
+
+    /**
+     * P7: manual reconciliation of an UNCERTAIN run. Reads the server-side
+     * status of the confirmed run (`GET /v1/runs/{run_id}`) and releases the
+     * app-wide ownership ONLY when the server proves a terminal status. A
+     * still-active or unreadable status changes nothing: the ownership is
+     * kept (no second POST, no implicit stop) and the honest recovery notice
+     * stays. Requires a confirmed, non-blank run ID; without one there is no
+     * safe recovery path and the call is a no-op.
+     */
+    fun reconcileUncertainRun() {
+        val current = _state.value
+        if (!current.turnUncertain || current.reconcileInFlight) return
+        val runId = current.boundRunId?.takeIf { it.isNotBlank() } ?: return
+        _state.update {
+            it.copy(
+                reconcileInFlight = true,
+                reconcileFailed = false,
+                reconcileStillActive = false
+            )
+        }
+        scope.launch {
+            val result = try {
+                runStatusRequester.getRunStatus(profileId, runId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                RunStatusResult.Failure(RunStatusError.Network)
+            }
+            // A late result must never mutate a screen that was already left
+            // (back) or disposed.
+            if (coroutineContext[Job]?.isCancelled == true) return@launch
+            when (result) {
+                is RunStatusResult.Known -> {
+                    if (result.status.isTerminal) {
+                        // The server proved the run terminal: release the
+                        // ownership authoritatively and reconcile the visible
+                        // turn from the authoritative history. The chat POST
+                        // is never resent.
+                        if (runController.confirmTerminalForUncertainRun(profileId, sessionId, runId)) {
+                            releaseUncertainRun()
+                        } else {
+                            _state.update { it.copy(reconcileInFlight = false) }
+                        }
+                    } else {
+                        _state.update {
+                            it.copy(reconcileInFlight = false, reconcileStillActive = true)
+                        }
+                    }
+                }
+                is RunStatusResult.Failure -> {
+                    _state.update {
+                        it.copy(reconcileInFlight = false, reconcileFailed = true)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * P7: settles an uncertain turn after a reconciliation proved the server
+     * run terminal. Mirrors the authoritative `AlreadyTerminal` path: the
+     * ephemeral turn lines and the run binding are reset, the recoverable
+     * steer draft is preserved, and the idempotent history read is re-run.
+     */
+    private fun releaseUncertainRun() {
+        val leftoverSteerDraft = _state.value.steerDraft.takeIf { it.isNotBlank() }
+        _state.update {
+            it.copy(
+                turnUncertain = false,
+                turnFailure = null,
+                reconcileInFlight = false,
+                reconcileFailed = false,
+                reconcileStillActive = false,
+                runStarted = false,
+                boundRunId = null,
+                localLines = emptyList()
+            )
+        }
+        leftoverSteerDraft?.let { appendSteerRecovery(it) }
+        // The history read is launched BEFORE the turn settles: settling
+        // cancels the in-flight collectors of the finished run.
+        loadHistory()
+        turnSettled()
     }
 
     /**
@@ -549,6 +649,12 @@ internal class ChatViewModel(
                 turnFailure = null,
                 startConflict = false,
                 reconnecting = false,
+                // A new turn starts with a fresh P7 state: no leftover
+                // uncertainty or reconciliation result of the finished run.
+                turnUncertain = false,
+                reconcileInFlight = false,
+                reconcileFailed = false,
+                reconcileStillActive = false,
                 runStarted = false,
                 // A new turn starts with a fresh stop state: the previous run
                 // ID and any in-flight stop belong to the finished turn and
@@ -742,20 +848,22 @@ replaceLastAssistantLine(s.localLines, event.finalText)
                 // A second request while one is still pending is a protocol
                 // contradiction: the actionable request must never be
                 // overwritten, so the turn fails with the closed
-                // `IncompatibleApi` code and the stream is canceled — the
-                // server interrupts the run exactly as the old screen-
-                // lifetime collector cancellation did. The notification for
-                // the FIRST request was already posted by the controller.
+                // `IncompatibleApi` code. P7: this is a LOCAL contradiction,
+                // not a confirmed server stop, so the possibly-live server
+                // run must NOT be released - the controller keeps the
+                // ownership and marks it uncertain (no second POST, no
+                // automatic approval). The notification for the FIRST
+                // request was already posted by the controller.
                 if (current.pendingApproval != null) {
+                    runController.markTurnUncertain(profileId, sessionId)
                     _state.update {
                         it.copy(
                             pendingApproval = null,
-                            turnFailure = ChatStreamError.IncompatibleApi
+                            turnFailure = ChatStreamError.IncompatibleApi,
+                            turnUncertain = true,
+                            reconnecting = false
                         )
                     }
-                    dropPrematureUserLine()
-                    runController.cancelTurn()
-                    turnSettled()
                 } else {
                     _state.update { s -> s.copy(pendingApproval = event.request) }
                 }
@@ -792,11 +900,31 @@ replaceLastAssistantLine(s.localLines, event.finalText)
                 turnSettled()
             }
             is ChatTurnEvent.TurnFailed -> {
-                _state.update {
-                    s -> s.copy(pendingApproval = null, turnFailure = event.error)
+                // P7: the controller only keeps the run slot for a failure
+                // whose server outcome is UNKNOWN (a confirmed run plus a
+                // transport/protocol failure, or an unconfirmed start that
+                // may already have been accepted). In that case this screen
+                // stays on the uncertain run: the confirmed binding is kept
+                // (so a manual reconciliation can use it), the turn stays
+                // active (composer disabled - no second POST) and a generic
+                // recovery notice is shown. The run is NOT released locally.
+                if (runController.activeRun.value?.uncertain == true) {
+                    _state.update { s ->
+                        s.copy(
+                            pendingApproval = null,
+                            turnFailure = event.error,
+                            turnUncertain = true,
+                            reconnecting = false
+                        )
+                    }
+                    dropPrematureUserLine()
+                } else {
+                    _state.update {
+                        s -> s.copy(pendingApproval = null, turnFailure = event.error)
+                    }
+                    dropPrematureUserLine()
+                    turnSettled()
                 }
-                dropPrematureUserLine()
-                turnSettled()
             }
         }
     }
@@ -812,7 +940,16 @@ private fun turnSettled() {
         if (!_state.value.turnActive) return
         ownsRun = false
         _state.update {
-            it.copy(turnActive = false, pendingApproval = null, backPending = false, reconnecting = false)
+            it.copy(
+                turnActive = false,
+                turnUncertain = false,
+                reconcileInFlight = false,
+                reconcileFailed = false,
+                reconcileStillActive = false,
+                pendingApproval = null,
+                backPending = false,
+                reconnecting = false
+            )
         }
         stopJob?.cancel()
         steerJob?.cancel()
@@ -902,6 +1039,9 @@ private fun turnSettled() {
     fun stop() {
         val current = _state.value
         if (!current.turnActive) return
+        // P7: while the run outcome is unknown the stop control is hidden and
+        // no write is issued from here; recovery is an explicit reconciliation.
+        if (current.turnUncertain) return
         if (current.stopInFlight) return
         val runId = current.boundRunId?.takeIf { it.isNotBlank() } ?: return
         _state.update { it.copy(stopInFlight = true, stopFailed = false) }
@@ -980,6 +1120,9 @@ private fun turnSettled() {
     fun steer() {
         val current = _state.value
         if (!current.turnActive) return
+        // P7: no steer write while the run outcome is unknown (no live
+        // transport and the server status is not confirmed).
+        if (current.turnUncertain) return
         if (current.steerInFlight) return
         val runId = current.boundRunId?.takeIf { it.isNotBlank() } ?: return
         val text = ChatMessageValidator.validate(current.steerDraft).getOrNull() ?: return

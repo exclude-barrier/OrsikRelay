@@ -200,8 +200,8 @@ class HermesSessionStreamClientTest {
             404 to ChatStreamError.SessionNotFound,
             409 to ChatStreamError.Conflict,
             429 to ChatStreamError.RateLimited,
-            500 to ChatStreamError.Http,
-            503 to ChatStreamError.Http
+            500 to ChatStreamError.ServerUnavailable,
+            503 to ChatStreamError.ServerUnavailable
         ).forEach { (code, reason) ->
             server.enqueue(MockResponse().setResponseCode(code))
             val listener = RecordingListener()
@@ -690,7 +690,7 @@ class HermesSessionStreamClientTest {
             listOf<ChatTurnEvent>(
                 ChatTurnEvent.RunStarted(RUN_ID),
                 ChatTurnEvent.AssistantStarted,
-                ChatTurnEvent.TurnFailed(ChatStreamError.Http)
+                ChatTurnEvent.TurnFailed(ChatStreamError.ServerError)
             ),
             listener.events
         )

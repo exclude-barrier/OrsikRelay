@@ -92,6 +92,20 @@ internal data class ChatUiState(
     val turnActive: Boolean = false,
     /** P4: the active turn's stream is being re-attached to the run. */
     val reconnecting: Boolean = false,
+    /**
+     * P7: the active turn's server-side outcome is UNKNOWN (the transport or
+     * the reliable event processing failed while the server run may still be
+     * alive). The logical run ownership is kept; no new message is sent and
+     * no automatic approval/stop is performed. The composer stays disabled
+     * and a manual reconciliation is offered when a confirmed run ID exists.
+     */
+    val turnUncertain: Boolean = false,
+    /** P7: a manual reconciliation read of the uncertain run is in flight. */
+    val reconcileInFlight: Boolean = false,
+    /** P7: the last reconciliation read failed with a closed, generic reason. */
+    val reconcileFailed: Boolean = false,
+    /** P7: the last reconciliation proved the run still active server-side. */
+    val reconcileStillActive: Boolean = false,
     val runStarted: Boolean = false,
     val boundRunId: String? = null,
     val pendingApproval: ApprovalRequest? = null,
@@ -112,7 +126,14 @@ internal data class ChatUiState(
      * possible.
      */
     val controlsVisible: Boolean
-        get() = turnActive && boundRunId?.isNotBlank() == true
+        get() = turnActive && boundRunId?.isNotBlank() == true && !turnUncertain
+
+    /**
+     * P7: the run outcome is unknown and a server-confirmed run ID is bound,
+     * so a manual status reconciliation is possible and safe.
+     */
+    val recoveryVisible: Boolean
+        get() = turnUncertain && boundRunId?.isNotBlank() == true
 
     /**
      * The composer send action is enabled only when no turn is active, no
@@ -126,6 +147,7 @@ internal data class ChatUiState(
      */
     val sendEnabled: Boolean
         get() = !turnActive &&
+            !turnUncertain &&
             !attachmentBusy &&
             (turnFailure == null || !runStarted) &&
             ChatOutboundMessage.create(draft, pendingImageDataUrlOrNone) != null

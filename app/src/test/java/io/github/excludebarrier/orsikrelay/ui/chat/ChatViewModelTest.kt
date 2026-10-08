@@ -26,6 +26,11 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunServerStatus
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusError
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
@@ -34,6 +39,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -93,6 +99,7 @@ class ChatViewModelTest {
         chat: StreamingChatSource = FakeTurnSource(),
         stop: RunStopRequester = FakeStopRequester(),
         steer: RunSteerRequester = FakeSteerRequester(),
+        status: RunStatusRequester = NoOpRunStatusRequester,
         draft: ChatDraftRepository = FakeDraftRepository(),
         serviceStarter: RunForegroundServiceStarter = FakeRunServiceStarter(),
         attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
@@ -114,6 +121,7 @@ class ChatViewModelTest {
             runController = resolvedController,
             runStopRequester = stop,
             runSteerRequester = steer,
+            runStatusRequester = status,
             chatDraftRepository = draft,
             attachmentSource = attachmentSource,
             profileId = profileId,
@@ -266,19 +274,24 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun streamEndingWithoutTerminalEventIsNetworkFailure() = withModel { model, chat, _, _, _ ->
+    fun streamEndingWithoutTerminalEventBecomesUncertainAndKeepsOwnership() = withModel { model, chat, _, _, _ ->
         model.onDraftChange("hi")
         model.send()
         testScheduler.advanceUntilIdle()
-        // The flow closes with NO terminal event.
+        // The flow closes with NO terminal event and no confirmed start: the
+        // POST may have been accepted, so P7 keeps the ownership uncertain
+        // instead of freeing the slot on a client-side failure.
         chat.complete()
         testScheduler.advanceUntilIdle()
         assertEquals(ChatStreamError.Network, model.state.value.turnFailure)
-        assertFalse(model.state.value.turnActive)
+        assertTrue(model.state.value.turnUncertain)
+        assertTrue("the ownership is kept", model.state.value.turnActive)
+        assertFalse(model.state.value.runStarted)
+        assertEquals("no second POST", 1, chat.calls.get())
     }
 
     @Test
-    fun failureBeforeRunStartDropsPrematureUserLineAndKeepsDraft() = withModel { model, chat, _, _, _ ->
+    fun failureBeforeRunStartBecomesUncertainAndKeepsDraft() = withModel { model, chat, _, _, _ ->
         model.onDraftChange("hi")
         model.send()
         testScheduler.advanceUntilIdle()
@@ -287,10 +300,12 @@ class ChatViewModelTest {
         chat.complete()
         testScheduler.advanceUntilIdle()
         assertEquals(ChatStreamError.Timeout, model.state.value.turnFailure)
-        // Premature user line dropped; draft kept for a deliberate retry.
+        // P7: unknown outcome - the premature user line is dropped, the draft
+        // is kept, and the ownership stays uncertain (no new POST).
         assertTrue(model.state.value.localLines.isEmpty())
         assertEquals("hi", model.state.value.draft)
-        assertFalse(model.state.value.turnActive)
+        assertTrue(model.state.value.turnUncertain)
+        assertTrue(model.state.value.turnActive)
     }
 
     @Test
@@ -352,6 +367,157 @@ class ChatViewModelTest {
     }
 
     // ------------------------------------------------------------------
+    // P7: unknown run outcome and manual reconciliation
+    // ------------------------------------------------------------------
+
+    /** Builds a model with a controllable [FakeRunStatusRequester]. */
+    private fun withStatusModel(
+        stop: FakeStopRequester = FakeStopRequester(),
+        status: FakeRunStatusRequester = FakeRunStatusRequester(),
+        block: suspend kotlinx.coroutines.test.TestScope.(
+            model: ChatViewModel,
+            chat: FakeTurnSource,
+            stop: FakeStopRequester,
+            status: FakeRunStatusRequester
+        ) -> Unit
+    ) = kotlinx.coroutines.test.runTest {
+        val chat = FakeTurnSource()
+        val model = build(this.testScheduler, chat = chat, stop = stop, status = status)
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+        block(model, chat, stop, status)
+        model.close()
+        lastController?.close()
+        lastController = null
+        testScheduler.advanceUntilIdle()
+    }
+
+    /** Drives the model into the confirmed-but-uncertain state. */
+    private fun kotlinx.coroutines.test.TestScope.enterUncertainRun(
+        model: ChatViewModel,
+        chat: FakeTurnSource
+    ) {
+        model.onDraftChange("hi")
+        model.send()
+        advanceUntilIdle()
+        chat.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun confirmedTransportFailureEntersUncertainAndBlocksTheComposer() = withStatusModel { model, chat, stop, _ ->
+        enterUncertainRun(model, chat)
+        val state = model.state.value
+        assertEquals(ChatStreamError.Network, state.turnFailure)
+        assertTrue(state.turnUncertain)
+        assertTrue("ownership is kept", state.turnActive)
+        assertEquals(runId, state.boundRunId)
+        assertTrue("manual reconciliation is offered", state.recoveryVisible)
+        assertFalse("the stop control is not offered", state.controlsVisible)
+        assertFalse(state.sendEnabled)
+        // No write is issued from the hidden controls.
+        model.stop()
+        model.steer()
+        advanceUntilIdle()
+        assertEquals(0, stop.calls.get())
+        assertEquals("still exactly one POST", 1, chat.calls.get())
+    }
+
+    @Test
+    fun confirmedProtocolFailureEntersUncertainWithoutReleasing() = withStatusModel { model, chat, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        advanceUntilIdle()
+        chat.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.TurnFailed(ChatStreamError.IncompatibleApi)
+        )
+        advanceUntilIdle()
+        assertTrue(model.state.value.turnUncertain)
+        assertTrue(model.state.value.turnActive)
+        assertEquals(runId, model.state.value.boundRunId)
+        assertTrue(model.state.value.recoveryVisible)
+        assertEquals("no second POST", 1, chat.calls.get())
+    }
+
+    @Test
+    fun reconcileWithTerminalServerStatusReleasesAndReloadsHistory() = withStatusModel { model, chat, _, status ->
+        enterUncertainRun(model, chat)
+        status.result = RunStatusResult.Known(RunServerStatus.COMPLETED)
+        model.reconcileUncertainRun()
+        advanceUntilIdle()
+        assertEquals(1, status.calls.get())
+        assertEquals(runId, status.lastRunId)
+        assertFalse(model.state.value.turnUncertain)
+        assertFalse(model.state.value.turnActive)
+        assertNull(model.state.value.boundRunId)
+        assertNull(model.state.value.turnFailure)
+        // A new, deliberate message is possible again.
+        model.onDraftChange("weiter")
+        assertTrue(model.state.value.sendEnabled)
+    }
+
+    @Test
+    fun reconcileWithStillActiveServerStatusKeepsTheOwnership() = withStatusModel { model, chat, _, status ->
+        enterUncertainRun(model, chat)
+        status.result = RunStatusResult.Known(RunServerStatus.RUNNING)
+        model.reconcileUncertainRun()
+        advanceUntilIdle()
+        assertEquals(1, status.calls.get())
+        assertTrue(model.state.value.turnUncertain)
+        assertTrue(model.state.value.turnActive)
+        assertTrue(model.state.value.reconcileStillActive)
+        assertEquals(runId, model.state.value.boundRunId)
+        assertEquals("no second POST", 1, chat.calls.get())
+    }
+
+    @Test
+    fun reconcileWithUnreadableStatusKeepsTheOwnership() = withStatusModel { model, chat, _, status ->
+        enterUncertainRun(model, chat)
+        status.result = RunStatusResult.Failure(RunStatusError.Network)
+        model.reconcileUncertainRun()
+        advanceUntilIdle()
+        assertEquals(1, status.calls.get())
+        assertTrue(model.state.value.turnUncertain)
+        assertTrue(model.state.value.reconcileFailed)
+        assertTrue(model.state.value.turnActive)
+    }
+
+    @Test
+    fun unconfirmedUncertainRunOffersNoReconcileAndNeverReadsStatus() = withStatusModel { model, chat, _, status ->
+        model.onDraftChange("hi")
+        model.send()
+        advanceUntilIdle()
+        // No RunStarted: the initial POST may or may not have been accepted.
+        chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Timeout))
+        chat.complete()
+        advanceUntilIdle()
+        assertTrue(model.state.value.turnUncertain)
+        assertNull(model.state.value.boundRunId)
+        assertFalse("no run ID: no safe reconciliation", model.state.value.recoveryVisible)
+        model.reconcileUncertainRun()
+        advanceUntilIdle()
+        assertEquals("no status read without a run ID", 0, status.calls.get())
+        assertTrue(model.state.value.turnUncertain)
+    }
+
+    @Test
+    fun recreatedViewModelRehydratesTheUncertainRunWithoutANewPost() =
+        withRecreatedModel(
+            beforeRecreation = {
+                it.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                it.complete()
+            }
+        ) { second, chat, _, _ ->
+            val state = second.state.value
+            assertTrue("the uncertain run survives the recreation", state.turnUncertain)
+            assertTrue(state.turnActive)
+            assertEquals(runId, state.boundRunId)
+            assertTrue(state.recoveryVisible)
+            assertEquals("a recreation must never start a second stream", 1, chat.calls.get())
+        }
+
+    // ------------------------------------------------------------------
     // Approval
     // ------------------------------------------------------------------
 
@@ -370,18 +536,23 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun secondPendingApprovalIsIncompatibleApi() = withModel { model, chat, _, _, _ ->
+    fun secondPendingApprovalIsIncompatibleApiWithoutReleasingTheRun() = withModel { model, chat, _, _, _ ->
         model.onDraftChange("hi")
         model.send()
         chat.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.ApprovalRequested(approval()))
         testScheduler.advanceUntilIdle()
-        // A second request while one is still pending is a protocol contradiction.
+        // A second request while one is still pending is a protocol
+        // contradiction. P7: it is a LOCAL contradiction, not a confirmed
+        // server stop, so the possibly-live run is NOT released - the turn
+        // stays active/uncertain and the confirmed binding is kept.
         chat.enqueue(ChatTurnEvent.ApprovalRequested(approval()))
         chat.complete()
         testScheduler.advanceUntilIdle()
         assertEquals(ChatStreamError.IncompatibleApi, model.state.value.turnFailure)
         assertNull(model.state.value.pendingApproval)
-        assertFalse(model.state.value.turnActive)
+        assertTrue(model.state.value.turnUncertain)
+        assertTrue(model.state.value.turnActive)
+        assertEquals(runId, model.state.value.boundRunId)
     }
 
     @Test
@@ -1026,9 +1197,11 @@ class ChatViewModelTest {
             chat.complete()
             testScheduler.advanceUntilIdle()
             assertEquals(ChatStreamError.Timeout, model.state.value.turnFailure)
-            assertFalse(model.state.value.turnActive)
-            // The turn never got a confirmed start: the attachment (state
-            // AND holder) and the text draft survive for a deliberate retry.
+            // P7: an unconfirmed timeout is an unknown outcome - the turn
+            // stays active/uncertain (no new POST). The attachment (state AND
+            // holder) and the text draft survive, so nothing is lost.
+            assertTrue(model.state.value.turnUncertain)
+            assertTrue(model.state.value.turnActive)
             assertNotNull(model.state.value.attachment)
             assertNotNull(ChatAttachmentDraftHolder.get(profileId, sessionId))
             assertEquals("bitte", model.state.value.draft)
@@ -1757,6 +1930,23 @@ class ChatViewModelTest {
             calls.incrementAndGet()
             this.text = text
             started.countDown()
+            return result
+        }
+    }
+
+    /** Synthetic run-status fake: returns a pre-set result; records calls and parameters. */
+    private class FakeRunStatusRequester : RunStatusRequester {
+        val calls = AtomicInteger()
+
+        @Volatile
+        var lastRunId: String? = null
+
+        @Volatile
+        var result: RunStatusResult = RunStatusResult.Known(RunServerStatus.RUNNING)
+
+        override suspend fun getRunStatus(profileId: String, runId: String): RunStatusResult {
+            calls.incrementAndGet()
+            lastRunId = runId
             return result
         }
     }

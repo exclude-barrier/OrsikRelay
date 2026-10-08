@@ -22,6 +22,7 @@ import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesRunAppr
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
 import io.github.excludebarrier.orsikrelay.data.run.RunApprovalCapabilityRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunApprovalRepository
+import io.github.excludebarrier.orsikrelay.data.run.RunStatusRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunStopRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunSteerRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
@@ -36,6 +37,7 @@ import io.github.excludebarrier.orsikrelay.domain.notification.NotificationCoord
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
@@ -44,6 +46,7 @@ import io.github.excludebarrier.orsikrelay.network.HermesConnectionClient
 import io.github.excludebarrier.orsikrelay.network.HermesDevicePairClient
 import io.github.excludebarrier.orsikrelay.network.HermesDeviceSelfRevokeClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunApprovalClient
+import io.github.excludebarrier.orsikrelay.network.HermesRunStatusClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunStopClient
 import io.github.excludebarrier.orsikrelay.network.HermesRunSteerClient
 import io.github.excludebarrier.orsikrelay.platform.attachment.AndroidChatAttachmentSource
@@ -79,6 +82,8 @@ internal data class AppDependencies(
     val runStopRequester: RunStopRequester,
     val runSteerRequester: RunSteerRequester,
     val runApprovalRequester: RunApprovalRequester,
+    /** P7: reads `GET /v1/runs/{run_id}` for the manual uncertain-run recovery. */
+    val runStatusRequester: RunStatusRequester,
     val notificationCoordinator: NotificationCoordinator,
     val notificationPermissionStore: NotificationPermissionStore,
     val capabilityStore: RunApprovalCapabilityStore,
@@ -278,6 +283,11 @@ internal fun buildAppDependencies(
             profileRepository = profileRepository,
             credentialStore = credentialStore,
             runApprovalTransport = HermesRunApprovalClient()
+        ),
+        runStatusRequester = RunStatusRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore,
+            runStatusTransport = HermesRunStatusClient()
         ),
         notificationCoordinator = notificationCoordinator,
         notificationPermissionStore = notificationPermissionStore,

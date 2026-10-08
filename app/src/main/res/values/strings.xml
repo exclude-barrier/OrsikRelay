@@ -50,6 +50,11 @@
     <string name="chat_loading">Nachrichten werden geladen…</string>
     <string name="chat_stream_reconnecting">Verbinde neu …</string>
     <string name="chat_run_conflict">In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst.</string>
+    <string name="chat_run_uncertain">Der Ausgang dieses Laufs ist unklar. Die Verbindung wurde unterbrochen; es wird keine neue Nachricht gesendet.</string>
+    <string name="chat_run_uncertain_check">Status prüfen</string>
+    <string name="chat_run_uncertain_checking">Status wird geprüft …</string>
+    <string name="chat_run_uncertain_still_active">Der Lauf läuft auf dem Server noch. Keine neue Nachricht gesendet.</string>
+    <string name="chat_run_uncertain_unavailable">Der Status des Laufs konnte nicht geprüft werden. Bitte erneut versuchen.</string>
     <string name="chat_empty">Diese Session enthält noch keine Nachrichten.</string>
     <string name="chat_role_user">Du</string>
     <string name="chat_role_assistant">Hermes</string>

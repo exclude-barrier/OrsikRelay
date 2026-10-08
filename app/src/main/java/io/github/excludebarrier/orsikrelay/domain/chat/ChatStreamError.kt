@@ -32,9 +32,30 @@ sealed interface ChatStreamError {
     /** The network is unreachable or the stream was interrupted. */
     data object Network : ChatStreamError
 
-    /** Any other unexpected HTTP status (including redirects) or a
-     * server-side `error` event inside the stream. */
+    /** Any other non-2xx HTTP status of the streaming request that
+     * proves the server rejected the start before a run existed
+     * (e.g. a redirect or a 4xx). It never covers a 5xx: a 5xx may be a
+     * gateway error after the run was already admitted. */
     data object Http : ChatStreamError
+
+    /**
+     * The streaming request answered with a 5xx HTTP status. A gateway or
+     * upstream failure is NOT a proven pre-run rejection: the POST may
+     * already have created a run before the error was returned, so the
+     * run outcome is unknown (no ownership release without an explicit
+     * reconciliation).
+     */
+    data object ServerUnavailable : ChatStreamError
+
+    /**
+     * The server sent its own terminal `error` frame inside the stream
+     * (followed by `done`). This is an AUTHORITATIVE server terminal:
+     * the server set the run status to a terminal failure and closed the
+     * turn, so the client may release the run ownership. It is distinct
+     * from [Http] (a non-2xx HTTP answer, i.e. no run) and from every
+     * transport/protocol failure (the run status stays unknown).
+     */
+    data object ServerError : ChatStreamError
 
     /** The response is not the expected SSE/JSON contract: wrong content
      * type, invalid framing, size limits, wrong event order. */

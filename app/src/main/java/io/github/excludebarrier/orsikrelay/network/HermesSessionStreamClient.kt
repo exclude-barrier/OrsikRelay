@@ -578,6 +578,9 @@ class HermesSessionStreamClient(
         404 -> ChatStreamError.SessionNotFound
         409 -> ChatStreamError.Conflict
         429 -> ChatStreamError.RateLimited
+        // A 5xx is NOT a proven pre-run rejection: a gateway/upstream error
+        // can be returned after the run was already admitted (P7).
+        in 500..599 -> ChatStreamError.ServerUnavailable
         else -> ChatStreamError.Http
     }
 

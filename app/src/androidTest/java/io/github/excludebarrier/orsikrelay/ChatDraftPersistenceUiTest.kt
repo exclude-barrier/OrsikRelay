@@ -2,7 +2,9 @@ package io.github.excludebarrier.orsikrelay
 
 import android.content.Context
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -239,7 +241,7 @@ class ChatDraftPersistenceUiTest {
     }
 
     @Test
-    fun failedOrBlockedSendKeepsComposerAndPersistence() {
+    fun failedOrBlockedSendKeepsDraftAndBlocksTheComposerUnderUncertainty() {
         val drafts = InMemoryChatDraftRepository()
         val source = FakeTurnSource()
         setScreen(drafts, runController = controllerFor(source))
@@ -249,15 +251,31 @@ class ChatDraftPersistenceUiTest {
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
-        // Failure BEFORE the confirmed start: the draft (in the composer
-        // AND on disk) must survive.
+        // P7: the initial POST failed with NO confirmed run ID, but it may
+        // already have been accepted server-side. The outcome is therefore
+        // UNKNOWN: the draft (composer AND disk) survives, the composer stays
+        // locked (no second POST) and the honest uncertain notice is shown.
+        // Without a confirmed run ID there is no safe reconciliation action.
         source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
         source.complete()
         waitForFlowCompletion(source)
 
         assertEquals("Bleibt erhalten", draftText())
         assertEquals("Bleibt erhalten", drafts.stored(PROFILE, SESSION))
-        composeRule.onNodeWithText("Senden").assertIsEnabled()
+        composeRule.onNodeWithText("Senden").assertIsDisplayed()
+        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
+        assertTrue(
+            "the honest uncertain notice must be shown, never a stopped run",
+            composeRule.onAllNodesWithTag("chat_run_uncertain")
+                .fetchSemanticsNodes().isNotEmpty()
+        )
+        assertTrue(
+            "no run ID was confirmed, so no reconciliation action is offered",
+            composeRule.onAllNodesWithTag("chat_run_reconcile")
+                .fetchSemanticsNodes().isEmpty()
+        )
+        assertEquals("no automatic second POST", 1, source.calls.get())
     }
 
     // ------------------------------------------------------------------

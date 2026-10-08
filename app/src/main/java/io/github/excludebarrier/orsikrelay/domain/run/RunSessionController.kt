@@ -59,10 +59,13 @@ interface RunForegroundServiceStarter {
  *   background-start restriction can never apply.
  * - The service stays up across `approval.request`: the server needs the
  *   live SSE connection while the user decides.
- * - The service is stopped as soon as the run is terminal:
- *   `run.completed`, `run.failed`, a closed stream, a user stop that the
- *   server confirms, or a definitive transport/auth failure — all of them
- *   surface as the stream's single terminal event.
+ * - The service is stopped whenever the stream is no longer consumed: on
+ *   an authoritative terminal (`run.completed`, the server's terminal
+ *   `error` frame, a confirmed stop), on a proven pre-run rejection, and on
+ *   an UNKNOWN outcome (P7). On an unknown outcome the logical run
+ *   ownership deliberately survives without a live transport (see
+ *   [markTurnUncertain]); it is never released by a local transport or
+ *   protocol failure.
  *
  * Notification side effects (run completed, approval requested) are owned
  * here as well, because they must fire even when no chat screen is open.
@@ -132,18 +135,28 @@ class RunSessionController(
         val toolNames: List<String> = emptyList(),
         val runId: String? = null,
         val reconnecting: Boolean = false,
-        val pendingApproval: ApprovalRequest? = null
+        val pendingApproval: ApprovalRequest? = null,
+        /**
+         * P7: the client lost the transport (or the reliable event
+         * processing) while the server run may still be running. The
+         * logical ownership is deliberately KEPT (no new POST, no
+         * implicit server stop); only an explicit reconciliation may
+         * release it. The foreground service is stopped, because there
+         * is no active transport to keep alive.
+         */
+        val uncertain: Boolean = false
     ) {
         /** Closed, derived status of the active run. */
         val status: Status
             get() = when {
+                uncertain -> Status.UNCERTAIN
                 pendingApproval != null -> Status.WAITING_FOR_APPROVAL
                 reconnecting -> Status.RECONNECTING
                 else -> Status.RUNNING
             }
 
         /** Closed set of active-run statuses for the UI projection. */
-        enum class Status { RUNNING, RECONNECTING, WAITING_FOR_APPROVAL }
+        enum class Status { RUNNING, RECONNECTING, WAITING_FOR_APPROVAL, UNCERTAIN }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -216,10 +229,13 @@ class RunSessionController(
      * caller is the user's send tap, so the app is in the foreground and
      * the Android 14+ background-start restriction cannot apply.
      *
-     * A new run may start again only after the slot was released by a real
-     * terminal state (`RunCompleted`/`TurnFailed`) or an explicit,
-     * confirmed stop ([cancelTurn]); a local coroutine/socket cancel alone
-     * is never treated as a server-side stop.
+     * A new run may start again only after the slot was released by an
+     * AUTHORITATIVE outcome: a real terminal state (`run.completed` or the
+     * server's own terminal `error` frame), a proven pre-run rejection, or an
+     * explicit, confirmed stop ([cancelTurn]). A local transport/protocol
+     * failure does NOT release the slot (P7): it is kept as an uncertain run
+     * ([markTurnUncertain]) that only an explicit reconciliation
+     * ([confirmTerminalForUncertainRun]) may release.
      */
     fun startTurn(
         profileId: String,
@@ -295,12 +311,16 @@ class RunSessionController(
                     ChatTurnEvent.TurnFailed(ChatStreamError.Network)
                 )
             } finally {
-                // Bookkeeping only: stop ownership lives in the terminal
-                // handlers ([handleEvent]) and in [cancelTurn]/[close].
-                // Guarded, so a late finally of a finished run cannot clear
-                // the slot of a successor that already took it.
+                // Bookkeeping only: the release of the slot is decided
+                // exclusively by the terminal handlers ([handleEvent])
+                // and by [cancelTurn]/[markTurnUncertain]/[close]. A
+                // collector that ends with an UNKNOWN outcome must leave
+                // the slot owned ([handleEvent] marks it uncertain), so
+                // this finally never clears the slot - it only drops its
+                // own (now finished) job handle, guarded so it can never
+                // clear a successor's handle.
                 if (runJob === currentCoroutineContext()[Job]) {
-                    _activeRun.value = null
+                    runJob = null
                 }
             }
         }
@@ -309,10 +329,15 @@ class RunSessionController(
     }
 
     /**
-     * Cancels the active stream: the underlying transport call is closed and
-     * the server interrupts the interrupted run. No terminal event is
-     * emitted for a canceled stream; the foreground service is stopped and
-     * the single slot cleared immediately.
+     * AUTHORITATIVE release of the active run: the caller has a
+     * server-confirmed terminal answer for exactly this run (e.g.
+     * `RunStopResult.AlreadyTerminal`). Cancels the (possibly still
+     * draining) local stream, stops the foreground service and clears
+     * the single slot immediately.
+     *
+     * This must NOT be used for a local transport/protocol failure or
+     * a contradictory event: those do not prove the server run ended.
+     * Use [markTurnUncertain] for them.
      */
     fun cancelTurn() {
         val job = runJob
@@ -320,6 +345,68 @@ class RunSessionController(
         job?.cancel()
         serviceStarter.stop()
         _activeRun.value = null
+    }
+
+    /**
+     * Keeps the logical run ownership but drops the dead transport after a
+     * LOCAL contradiction or a transport/protocol failure (P7): the server
+     * run may still be alive, so nothing is started, stopped server-side or
+     * POSTed. The slot stays owned in the [ActiveRun.Status.UNCERTAIN]
+     * state, the foreground service is stopped (there is no active transport
+     * to keep alive), and only an explicit reconciliation
+     * ([confirmTerminalForUncertainRun]) or a confirmed authoritative
+     * terminal may release it.
+     *
+     * A no-op when no run owns the slot. Strictly correlated to the current
+     * slot's [profileId]/[sessionId]: a late or foreign contradiction can
+     * never cancel a successor's transport or mark its run uncertain.
+     */
+    fun markTurnUncertain(profileId: String, sessionId: String) {
+        synchronized(slotLock) {
+            val current = _activeRun.value
+            if (current == null || current.profileId != profileId || current.sessionId != sessionId) {
+                return
+            }
+            val job = runJob
+            runJob = null
+            job?.cancel()
+            _activeRun.value = current.copy(
+                uncertain = true,
+                reconnecting = false,
+                pendingApproval = null
+            )
+        }
+        serviceStarter.stop()
+    }
+
+    /**
+     * Releases an UNCERTAIN run after an explicit reconciliation proved the
+     * server run terminal (P7). Strictly correlated: only the exact
+     * [profileId]/[sessionId]/[runId] currently owned AND marked uncertain is
+     * released; every mismatch is a no-op returning `false`, so a stale
+     * reconciliation can never free a successor's slot.
+     *
+     * @return `true` when the uncertain run was released.
+     */
+    fun confirmTerminalForUncertainRun(
+        profileId: String,
+        sessionId: String,
+        runId: String
+    ): Boolean {
+        synchronized(slotLock) {
+            val current = _activeRun.value
+            val matches = current != null &&
+                current.uncertain &&
+                current.profileId == profileId &&
+                current.sessionId == sessionId &&
+                current.runId == runId
+            if (!matches) return false
+            runJob?.cancel()
+            runJob = null
+            _activeRun.value = null
+        }
+        serviceStarter.stop()
+        return true
     }
 
     /**
@@ -456,8 +543,39 @@ class RunSessionController(
                     // terminal must not be observed by the successor.
                     return
                 }
-                serviceStarter.stop()
-                _activeRun.value = null
+                // P7: a failure only releases the single run slot when the
+                // server PROVABLY ended the run (its own terminal error
+                // frame) or when the start was provably rejected before a
+                // run existed. A confirmed run plus a transport/protocol
+                // failure is UNKNOWN: the run may still be alive, so its
+                // ownership is kept (uncertain) and the foreground service
+                // is stopped because there is no active transport.
+                val runConfirmed = _activeRun.value?.runId != null
+                when (RunTermination.ofFailure(event.error, runConfirmed)) {
+                    RunTermination.TransportOutcomeUnknown -> {
+                        serviceStarter.stop()
+                        _activeRun.update { current ->
+                            if (
+                                current != null &&
+                                current.sessionId == sessionId &&
+                                slotTurnToken == turnToken
+                            ) {
+                                current.copy(
+                                    uncertain = true,
+                                    reconnecting = false,
+                                    pendingApproval = null
+                                )
+                            } else {
+                                current
+                            }
+                        }
+                    }
+                    RunTermination.AuthoritativeTerminal,
+                    RunTermination.LocalRequestRejected -> {
+                        serviceStarter.stop()
+                        _activeRun.value = null
+                    }
+                }
             }
         }
         // Bookkeeping only: the event itself is still emitted to the live

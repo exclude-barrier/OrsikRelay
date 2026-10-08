@@ -271,7 +271,6 @@ Client-Bootstrap); die Vertragssicherheit kommt aus den Pair-/Revoke-Endpoints
 (§2.3/§2.4) und dem Code-Contract (§7.3).
 
 ### 7.7 Server-seitige Generierung (Private Extension)
-
 Die **kanonische** Mobile-v1-Quelle (`hermes devices pair`) gibt **nur** den
 24-Char-Code aus. Die Deep-Link- + ASCII-QR-Generierung
 (`_build_bootstrap_link` / `_render_qr_ascii` / `_public_base_url`) ist eine
@@ -279,3 +278,86 @@ Die **kanonische** Mobile-v1-Quelle (`hermes devices pair`) gibt **nur** den
 `API_SERVER_PUBLIC_BASE_URL` + Code zum obigen Link bündelt. Sie ist **nicht**
 Teil des kanonischen Mobile-v1-Commits und wird nicht als stehender
 Vertrag vorausgesetzt — der Client-Contract (§7.1–§7.6) bleibt davon unabhängig.
+
+## 8. Run-Autorität & Recovery (P7)
+
+**Status:** Read-only gegen den lokal vorhandenen Mobile-v1-Quellstand geprüft
+(`/home/user/hermes-mobile-v1-src/gateway/platforms/api_server.py`,
+`api_server_runs.py`, `api_server_run_idempotency.py`). P7 stützt die Freigabe
+der Single-Slot-Run-Ownership auf diese Aussagen. Kein E2E-Lauf gegen einen
+echten Server (nicht verifiziert, s. unten).
+
+### 8.1 Run-Unabhängigkeit vom SSE-Socket
+
+`POST /api/sessions/{session_id}/chat/stream` führt den Run in einer
+Hintergrund-Task aus. Bei einem Socket-Disconnect:
+
+- **mit** Header `X-Hermes-Interactive-Approvals` (Client sendet ihn nur bei
+  bestätigter Fähigkeit `session_chat_interactive_approvals`): der Run läuft
+  weiter, der begrenzte Replay-Puffer (`_SessionEventQueue`, nicht
+  destruktiv) bewahrt den Tail inkl. terminalem `run.completed`/`error` und
+  `done`;
+- **ohne** diesen Header: `_drain_session_stream_task_on_disconnect`
+  unterbricht den laufenden Run.
+
+Die P4/P7-Annahme „ein Hermes-Run ist unabhängig vom Socket" gilt also nur für
+das Mobile-v1-Opt-in. Ein terminaler Abschluss ist `assistant.completed` →
+`run.completed` → `done` bzw. `error` → `done` (Server setzt den Status auf
+`failed`).
+
+### 8.2 Re-Attach (bestehend, P4)
+
+`GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`:
+streng exklusives Replay (`seq > N`), danach Follow bis zum Terminal. Nicht
+replaybarer Puffer → 409 `resume_gap`; unbekannter/fremder Run bzw.
+Session-Mismatch → 404. Client: ungültige `after_seq` wird lokal abgelehnt.
+
+### 8.3 Run-Status lesen (P7-Recovery, `_handle_get_run`)
+
+`GET /v1/runs/{run_id}` (Bearer, `permission="status"`) liefert das pollable
+Statusobjekt `{"object":"hermes.run","run_id":<id>,"status":<s>, …}` für den
+eigenen Run. Geschlossene Statusmenge (`_set_run_status`):
+
+```
+queued, running, waiting_for_approval, stopping,
+completed, failed, cancelled, interrupted
+```
+
+`TERMINAL_STATUSES` (`api_server_run_idempotency.py`) =
+`{completed, failed, cancelled, interrupted}`. Terminale Status werden bis
+`_RUN_STATUS_TTL = 3600 s` zum Polling aufbewahrt
+(`_RUN_STREAM_TTL = 300 s` betrifft nur den Transport-Puffer). Fremder/
+unbekannter/abgelaufener Run → 404 `run_not_found`.
+
+Client-Vertrag (P7): **nur** ein terminaler Status gibt die Run-Ownership
+autoritativ frei; `queued`/`running`/`waiting_for_approval`/`stopping` oder ein
+Lesefehler ändern nichts. Der Client liest ausschließlich `run_id` und
+`status`; `output`, `error`, `usage`, `session_id`, `pending_steer` usw. werden
+weder gelesen noch propagiert.
+
+> **Vertragslücke:** `GET /v1/runs/{run_id}` ist (wie `stop`/`steer`) **nicht**
+> Teil der verhandelten Capability-Menge aus §2.2; der Client nutzt es wie die
+> übrigen `/v1/runs/{run_id}/*`-Endpunkte aus demselben authentifizierten
+> Namensraum. Für einen vollständig upstream-fähigen, fail-closed
+> verhandelten Vertrag sollte der Server diese Run-Status-Fähigkeit (inkl.
+> `protocol_version`) explizit ausweisen.
+
+### 8.4 Grenze ohne bestätigte Run-ID
+
+Fehlt nach dem initialen POST eine bestätigte Run-ID (`run.started` nie
+gesehen), existiert **kein** Discovery-/Reconciliation-Endpunkt
+(`session → run`). Der POST kann serverseitig trotzdem akzeptiert worden sein.
+P7 gibt die Ownership dann **nicht** frei und sendet **keinen** neuen POST;
+der Ausgang wird ehrlich als unbestimmt dargestellt. Eine sichere Recovery
+erfordert eine zusätzliche Server-Fähigkeit (z. B. Session→aktiver-Run-
+Discovery oder eine idempotente Startbestätigung).
+
+Auch ein 5xx auf den initialen Streaming-POST gilt als unbestimmt (ein
+Gateway/Upstream kann ihn nach bereits erfolgter Admission liefern); nur eine
+3xx/4xx-Antwort belegt eine Ablehnung vor dem Run.
+
+### 8.5 E2E-Vorbehalt
+
+Es wurde **kein** echter Hermes-Mobile-v1-E2E-Test ausgeführt. Die
+Korrektheit der Endpunkt-/Status-Annahmen stützt sich auf die lokale
+Quelle und MockWebServer-Tests, nicht auf einen Live-Server.

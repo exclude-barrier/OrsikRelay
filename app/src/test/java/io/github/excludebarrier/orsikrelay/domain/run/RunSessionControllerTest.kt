@@ -243,26 +243,32 @@ class RunSessionControllerTest {
     }
 
     @Test
-    fun failedRunStopsForegroundServiceAndClearsSlot() = runTest {
+    fun unconfirmedTransportFailureStopsForegroundServiceButKeepsOwnershipUncertain() = runTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "hi")
+        // No RunStarted: the POST may already have been accepted server-side,
+        // so a local transport failure must NOT free the slot (P7).
         built.source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
         testScheduler.advanceUntilIdle()
         assertTrue(built.starter.stops.get() >= 1)
-        assertNull(built.controller.activeRun.value)
+        val active = built.controller.activeRun.value
+        assertNotNull("the possibly-live run keeps the slot", active)
+        assertTrue(active?.uncertain == true)
+        assertEquals(RunSessionController.ActiveRun.Status.UNCERTAIN, active?.status)
         built.controller.close()
     }
 
     @Test
-    fun streamClosedWithoutTerminalFailsClosed() = runTest {
+    fun streamClosedWithoutTerminalKeepsOwnershipUncertain() = runTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "hi")
         built.source.complete()
         testScheduler.advanceUntilIdle()
-        // The defensive synthetic terminal settles the slot and stops the
-        // foreground service; a run-less foreground state never survives.
+        // The defensive synthetic terminal is UNKNOWN (no confirmed run), so
+        // the slot stays owned; only the background continuity is dropped.
         assertTrue(built.starter.stops.get() >= 1)
-        assertNull(built.controller.activeRun.value)
+        assertNotNull(built.controller.activeRun.value)
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
         built.controller.close()
     }
 
@@ -574,7 +580,7 @@ class RunSessionControllerTest {
     }
 
     @Test
-    fun afterTurnFailedANewStartIsAllowed() = runTest {
+    fun afterUnknownTurnFailureANewStartIsStillRejected() = runTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "first")
         built.source.enqueue(
@@ -582,11 +588,169 @@ class RunSessionControllerTest {
             ChatTurnEvent.TurnFailed(ChatStreamError.Network)
         )
         testScheduler.advanceUntilIdle()
+        // P7: a confirmed run plus a transport failure is UNKNOWN - the
+        // ownership is kept and no second POST may start.
+        assertNotNull(built.controller.activeRun.value)
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals("no second POST", 1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun afterAuthoritativeServerFailureANewStartIsAllowed() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.TurnFailed(ChatStreamError.ServerError)
+        )
+        testScheduler.advanceUntilIdle()
+        // The server's own terminal `error` frame is authoritative: the slot
+        // is released and a new run may start.
         assertNull(built.controller.activeRun.value)
         val result = built.controller.startTurn(profileId, otherSessionId, "second")
         testScheduler.advanceUntilIdle()
         assertTrue(result is RunSessionController.StartTurnResult.Started)
         assertEquals(2, built.source.calls.get())
+        built.controller.close()
+    }
+
+    // ------------------------------------------------------------------
+    // P7: authoritative-only release and the uncertain recovery state
+    // ------------------------------------------------------------------
+
+    @Test
+    fun confirmedTransportFailureKeepsOwnershipUncertainAndStopsTheService() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+        )
+        testScheduler.advanceUntilIdle()
+        val active = built.controller.activeRun.value
+        assertNotNull("a confirmed run must not be forgotten on a transport failure", active)
+        assertEquals(runId, active?.runId)
+        assertTrue(active?.uncertain == true)
+        assertEquals(RunSessionController.ActiveRun.Status.UNCERTAIN, active?.status)
+        assertTrue("no active transport survives, so the FGS stops", built.starter.stops.get() >= 1)
+        built.controller.close()
+    }
+
+    @Test
+    fun markTurnUncertainKeepsOwnershipAndCancelsTheLocalStream() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        assertTrue(built.source.opened.await(1, TimeUnit.SECONDS))
+        built.controller.markTurnUncertain(profileId, sessionId)
+        testScheduler.advanceUntilIdle()
+        val active = built.controller.activeRun.value
+        assertNotNull(active)
+        assertEquals(runId, active?.runId)
+        assertTrue(active?.uncertain == true)
+        assertTrue("the dead local stream is dropped", built.source.canceled.get())
+        assertTrue(built.starter.stops.get() >= 1)
+        built.controller.close()
+    }
+
+    @Test
+    fun markTurnUncertainWithAForeignIdentityIsANoOp() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        assertTrue(built.source.opened.await(1, TimeUnit.SECONDS))
+        // A foreign profile/session must not cancel the transport or mark the
+        // active run uncertain.
+        built.controller.markTurnUncertain(profileId, otherSessionId)
+        built.controller.markTurnUncertain("other-profile", sessionId)
+        testScheduler.advanceUntilIdle()
+        assertFalse(built.source.canceled.get())
+        assertTrue(built.controller.activeRun.value?.uncertain != true)
+        built.controller.close()
+    }
+
+    @Test
+    fun confirmTerminalForUncertainRunReleasesOnlyTheExactUncertainRun() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+        )
+        testScheduler.advanceUntilIdle()
+        // Every mismatch is a no-op and leaves the ownership intact.
+        assertFalse(built.controller.confirmTerminalForUncertainRun(profileId, otherSessionId, runId))
+        assertFalse(built.controller.confirmTerminalForUncertainRun(profileId, sessionId, "run_" + "z".repeat(32)))
+        assertFalse(built.controller.confirmTerminalForUncertainRun("other-profile", sessionId, runId))
+        assertNotNull(built.controller.activeRun.value)
+        // The exact correlation releases the slot and allows a new run.
+        assertTrue(built.controller.confirmTerminalForUncertainRun(profileId, sessionId, runId))
+        assertNull(built.controller.activeRun.value)
+        val result = built.controller.startTurn(profileId, sessionId, "second")
+        assertTrue(result is RunSessionController.StartTurnResult.Started)
+        built.controller.close()
+    }
+
+    @Test
+    fun confirmTerminalForUncertainRunRejectsANonUncertainRun() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        assertFalse(built.controller.confirmTerminalForUncertainRun(profileId, sessionId, runId))
+        assertNotNull(built.controller.activeRun.value)
+        assertTrue(built.controller.activeRun.value?.uncertain != true)
+        built.controller.close()
+    }
+
+    @Test
+    fun aSecondStartAfterATransportErrorStillYieldsAtMostOneRun() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.TurnFailed(ChatStreamError.Timeout)
+        )
+        testScheduler.advanceUntilIdle()
+        val result = built.controller.startTurn(profileId, otherSessionId, "second")
+        testScheduler.advanceUntilIdle()
+        assertTrue(result is RunSessionController.StartTurnResult.ActiveRunConflict)
+        assertEquals("exactly one POST", 1, built.source.calls.get())
+        assertEquals(runId, built.controller.activeRun.value?.runId)
+        built.controller.close()
+    }
+
+    @Test
+    fun anUnconfirmedFailureThatMayHaveBeenAcceptedIsNotReleased() = runTest {
+        // Invariant 7: no confirmed run ID after the initial POST. The POST
+        // may already have been accepted server-side, so a Network failure
+        // must NOT be treated as a stopped run.
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        testScheduler.advanceUntilIdle()
+        assertNotNull(built.controller.activeRun.value)
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
+        assertNull("no run ID is bound yet", built.controller.activeRun.value?.runId)
+        assertEquals(1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun anUnconfirmedServerUnavailableIsNotReleased() = runTest {
+        // A 5xx on the streaming POST can be a gateway error after the run
+        // was admitted, so it is NOT a proven pre-run rejection.
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "first")
+        built.source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.ServerUnavailable))
+        testScheduler.advanceUntilIdle()
+        assertNotNull(built.controller.activeRun.value)
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
+        assertEquals(1, built.source.calls.get())
         built.controller.close()
     }
 
@@ -663,17 +827,25 @@ class RunSessionControllerTest {
                 )
             }
             futures.forEach { it.get(5, TimeUnit.SECONDS) }
+            // The winner's stream is opened asynchronously on its dispatcher.
+            // Wait for it HERE, while the controller's scope is still alive:
+            // [RunSessionController.close] cancels that scope, so awaiting the
+            // open after teardown races it and can abort the stream before the
+            // source was ever called (the flake: line 839 timed out although
+            // exactly one startTurn had returned Started).
+            assertTrue("the winner's stream must open", sourceOpened.await(5, TimeUnit.SECONDS))
+            // The P6 invariant is asserted from the reserved slot, not from the
+            // async stream: exactly one caller won, the other seven conflicted,
+            // and the winner still owns the single slot.
+            assertEquals("exactly one winner", 1, started.get())
+            assertEquals(threads - 1, conflicts.get())
+            assertEquals("exactly one FGS start", 1, starter.starts.get())
+            assertEquals("exactly one stream may be opened", 1, sourceCalls.get())
+            assertNotNull("the winner still owns the single slot", controller.activeRun.value)
         } finally {
             pool.shutdownNow()
             controller.close()
         }
-        assertEquals("exactly one winner", 1, started.get())
-        assertEquals(threads - 1, conflicts.get())
-        assertEquals("exactly one FGS start", 1, starter.starts.get())
-        // The winner's stream is opened asynchronously on its dispatcher;
-        // wait for it before asserting the single-source-call invariant.
-        assertTrue("the winner's stream must open", sourceOpened.await(5, TimeUnit.SECONDS))
-        assertEquals("exactly one stream may be opened", 1, sourceCalls.get())
     }
 
     // ------------------------------------------------------------------

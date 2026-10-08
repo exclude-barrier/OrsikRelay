@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -21,6 +22,7 @@ import io.github.excludebarrier.orsikrelay.data.chat.NoopChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentKind
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentRules
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
@@ -44,6 +46,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -330,6 +334,34 @@ class ChatAttachmentChipUiTest {
     }
 
     @Test
+    fun uncertainSendKeepsTheStagedAttachmentAndBlocksTheComposer() {
+        val chat = ControllableTurnSource()
+        stageAttachment("holiday.png", 1_500_000L)
+        setScreen(attachmentSource = GoodAttachmentSource(), chatSource = chat)
+
+        waitForEmptySession()
+        // An attachment-only turn enables the send action.
+        composeRule.onNodeWithText("Senden").assertIsEnabled()
+        composeRule.onNodeWithText("Senden").performClick()
+        assertTrue(chat.opened.await(3, TimeUnit.SECONDS))
+
+        // P7: no confirmed run ID, but the initial POST may still have been
+        // accepted - the outcome is UNKNOWN. The staged attachment (chip AND
+        // holder) survives and the composer stays locked: no second POST.
+        chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        chat.complete()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(TAG_UNCERTAIN).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_REMOVE).assertIsDisplayed()
+        composeRule.onNodeWithText("holiday.png").assertIsDisplayed()
+        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        assertEquals("no second POST", 1, chat.calls.get())
+    }
+
+    @Test
     fun noProviderPathsOrUrisAreVisibleInTheTree() {
         stageAttachment("holiday.png", 1_500_000L)
         setScreen()
@@ -373,6 +405,61 @@ class ChatAttachmentChipUiTest {
         }
     }
 
+    /**
+     * Controllable synthetic turn source: the test enqueues events and closes
+     * the stream. No network, no credentials.
+     */
+    private class ControllableTurnSource : StreamingChatSource {
+        val calls = AtomicInteger()
+        val opened = CountDownLatch(1)
+        @Volatile
+        private var activeChannel: kotlinx.coroutines.channels.Channel<ChatTurnEvent>? = null
+
+        override fun streamTurn(
+            profileId: String,
+            sessionId: String,
+            message: String
+        ): Flow<ChatTurnEvent> {
+            calls.incrementAndGet()
+            val channel = kotlinx.coroutines.channels.Channel<ChatTurnEvent>(
+                kotlinx.coroutines.channels.Channel.UNLIMITED
+            )
+            activeChannel = channel
+            opened.countDown()
+            return flow {
+                for (event in channel) {
+                    emit(event)
+                }
+            }
+        }
+
+        fun enqueue(vararg events: ChatTurnEvent) {
+            activeChannel?.let { channel -> events.forEach { channel.trySend(it) } }
+        }
+
+        fun complete() {
+            activeChannel?.close()
+        }
+    }
+
+    /** A source whose byte read always yields a valid inline data URL. */
+    private class GoodAttachmentSource : ChatAttachmentSource {
+        override suspend fun readMetadata(contentUri: String): ChatAttachmentMetadata? =
+            ChatAttachmentMetadata("holiday.png", "image/png", 1_500_000L)
+
+        override suspend fun readInlineDataUrl(
+            contentUri: String,
+            mimeType: String,
+            maxBytes: Long
+        ): String = "data:image/png;base64,QUJD"
+
+        override suspend fun readInlineDataUrlResult(
+            contentUri: String,
+            mimeType: String,
+            maxBytes: Long
+        ): ChatAttachmentReadResult = ChatAttachmentReadResult.DataUrl("data:image/png;base64,QUJD")
+    }
+
     /** A source whose byte read always yields the closed TooLarge outcome. */
     private class TooLargeAttachmentSource : ChatAttachmentSource {
         val readCalls = AtomicInteger()
@@ -399,6 +486,8 @@ class ChatAttachmentChipUiTest {
         const val PROFILE_ID = "fixture-profile-id"
         const val TAG_ADD = "composer_attachment_add"
         const val TAG_REMOVE = "composer_attachment_remove"
+        // P7: the uncertain-run notice test tag (ChatScreen's TAG_RUN_UNCERTAIN).
+        const val TAG_UNCERTAIN = "chat_run_uncertain"
         const val EMPTY_SESSION_TEXT = "Diese Session enthält noch keine Nachrichten."
         const val ADD_LABEL = "Anhang"
         const val REMOVE_LABEL = "Entfernen"
