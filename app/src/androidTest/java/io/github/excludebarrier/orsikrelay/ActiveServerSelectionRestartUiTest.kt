@@ -33,6 +33,8 @@ import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -66,10 +68,22 @@ import org.junit.Test
  * persist never navigates and never applies an optimistic state change;
  * a double tap while a selection is in flight is ignored.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ActiveServerSelectionRestartUiTest {
 
+    // The production startup effect (`HermesNavHost`) resolves the persisted
+    // selection on `Dispatchers.IO` and then writes `resolvedStart` /
+    // `activeProfileId`. With the default `createAndroidComposeRule()` effect
+    // context (an UnconfinedTestDispatcher) that post-I/O continuation - and
+    // the recomposition / navigation it triggers - resumes on the IO worker,
+    // so navigation-compose registers a `NavBackStackEntry` lifecycle observer
+    // off the main thread (`IllegalStateException: Method addObserver must be
+    // called on the main thread`). A confined StandardTestDispatcher queues
+    // every such continuation on the test scheduler, which is pumped from the
+    // main thread by `waitForIdle`/`waitUntil`, exactly as already done in
+    // `NewSessionDialogUiTest`.
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComponentActivity>(StandardTestDispatcher())
 
     private lateinit var context: Context
     private lateinit var metadataStore: SharedPreferencesServerProfileMetadataStore

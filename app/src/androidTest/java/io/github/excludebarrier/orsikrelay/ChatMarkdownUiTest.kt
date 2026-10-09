@@ -13,6 +13,8 @@ import androidx.compose.ui.text.AnnotatedString
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -27,10 +29,23 @@ import org.junit.Test
  * parses asynchronously, so every assertion goes through [waitForText], which
  * pumps the main looper until the rendered node appears.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatMarkdownUiTest {
 
+    // The markdown renderer parses asynchronously: `rememberMarkdownState`'s
+    // `LaunchedEffect` calls `MarkdownStateImpl.parse`, which runs its work on
+    // `Dispatchers.Default` and publishes the result through a StateFlow. With
+    // the default `createComposeRule()` effect context (UnconfinedTestDispatcher)
+    // the collection of that flow - and the recomposition it drives - resumes
+    // on the Default worker, so the composition (SlotTable) can be mutated off
+    // the main thread while the activity teardown disposes it on the main
+    // thread. That race corrupted the SlotTable
+    // (`ArrayIndexOutOfBoundsException` in `SlotWriter.moveSlotGapTo` during
+    // `CompositionImpl.dispose`). A confined StandardTestDispatcher queues the
+    // continuation on the test scheduler, pumped on the main thread by
+    // `waitForIdle`/`waitUntil`.
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createComposeRule(StandardTestDispatcher())
 
     @Test
     fun headingAndEmphasisRenderAsText() {

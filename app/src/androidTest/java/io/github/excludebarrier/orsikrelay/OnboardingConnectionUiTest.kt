@@ -25,15 +25,29 @@ import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingConnectionUiTest {
 
+    // `OnboardingRoute` writes its `connectionState` right after
+    // `withContext(Dispatchers.IO) { connect(...) }` inside a
+    // `rememberCoroutineScope` coroutine. With the default
+    // `createComposeRule()` effect context (UnconfinedTestDispatcher) that
+    // continuation - and the recomposition it triggers - resumes on the IO
+    // worker, so the composition can be applied/disposed off the main thread.
+    // This class is the recorded P9 site of the rare
+    // `androidx.compose.runtime.SlotTable` disposal crash (a matching crash was
+    // reproduced under P10 in `ChatMarkdownUiTest`). A confined
+    // StandardTestDispatcher queues the continuation on the test scheduler,
+    // which is pumped on the main thread by `waitForIdle`/`waitUntil`.
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createComposeRule(StandardTestDispatcher())
 
     @Test
     fun fakeSuccessSavesOnceAndEmitsConnectedDestination() {

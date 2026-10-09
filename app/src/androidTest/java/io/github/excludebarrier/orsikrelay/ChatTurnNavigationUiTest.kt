@@ -34,6 +34,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -47,6 +49,7 @@ import org.junit.Test
  * turn cancels the injected synthetic stream before returning to the
  * session list. No network, no real hosts, no credentials.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatTurnNavigationUiTest {
 
     private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
@@ -60,8 +63,17 @@ class ChatTurnNavigationUiTest {
         notificationCoordinator = NoOpNotificationCoordinator
     )
 
+    // The navigation host resolves the startup profile on `Dispatchers.IO`
+    // and writes its navigation state afterwards. With the default
+    // `createAndroidComposeRule()` effect context (UnconfinedTestDispatcher)
+    // that continuation - and the recomposition/navigation it drives - resumes
+    // on the IO worker, so the composition can be applied off the main thread
+    // and a `performClick` issued while that move is in flight can miss the
+    // composer's send action. A confined StandardTestDispatcher queues the
+    // continuation on the test scheduler, pumped on the main thread by
+    // `waitForIdle`/`waitUntil`.
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComponentActivity>(StandardTestDispatcher())
 
     @Test
     fun submitReceivesExactValuesAndBackDuringTurnKeepsStreamAlive() {

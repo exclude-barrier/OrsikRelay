@@ -255,6 +255,7 @@ class ChatLandscapeComposerUiTest {
         )
 
         composeRule.onNodeWithText(INPUT_LABEL).performTextInput("Stop-Test")
+        settleAfterTyping()
         composeRule.onNodeWithTag(TAG_COMPOSER_SEND).performClick()
         assertTrue("the turn must reach the streaming source", source.opened.await(3, TimeUnit.SECONDS))
         // Synthetic focus changes make the window redispatch its REAL insets
@@ -294,6 +295,7 @@ class ChatLandscapeComposerUiTest {
 
         // And both are actually operable from the compact row.
         composeRule.onNodeWithTag(STEER_INPUT_TAG).performTextInput("weiter")
+        settleAfterTyping()
         composeRule.onNodeWithTag(STEER_SEND_TAG).performClick()
         assertTrue("steer must reach the requester", steerer.started.await(3, TimeUnit.SECONDS))
         assertEquals(1, steerer.calls.get())
@@ -309,6 +311,7 @@ class ChatLandscapeComposerUiTest {
         enterLandscape(attachment = false, multiline = false, chatSource = source)
 
         composeRule.onNodeWithText(INPUT_LABEL).performTextInput("Stop-Ende")
+        settleAfterTyping()
         composeRule.onNodeWithTag(TAG_COMPOSER_SEND).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         dispatchImeInsets(imeBottom)
@@ -395,14 +398,30 @@ class ChatLandscapeComposerUiTest {
         activity.runOnUiThread {
             imm.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
         }
-        val deadline = System.currentTimeMillis() + 5_000
-        while (System.currentTimeMillis() < deadline) {
+        // Deterministic sync point: wait until the platform reports the real
+        // IME inset as gone, instead of a fixed wall-clock sleep. The condition
+        // is re-evaluated with a Compose idle round-trip each iteration.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
             val imeShown = ViewCompat.getRootWindowInsets(activity.window.decorView)
                 ?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
-            if (imeShown == 0) return
-            Thread.sleep(100)
+            imeShown == 0
         }
         composeRule.waitForIdle()
+    }
+
+    /**
+     * Re-establishes the deterministic landscape+IME scenario after a text
+     * input. `performTextInput` focuses the field, which makes the platform
+     * open the REAL Gboard; the real IME then redispatches its own (much
+     * larger) inset and the layout moves. `performClick` injects a real touch
+     * at the node's centre, so a click issued while that asynchronous move is
+     * still in flight can land beside the target and never invoke the action.
+     * Hiding the real IME and re-applying the measured inset first gives the
+     * click a stable geometry again.
+     */
+    private fun settleAfterTyping() {
+        hideRealImeAndWait()
+        dispatchImeInsets(imeBottom)
     }
 
     private fun setScreen(
@@ -503,7 +522,7 @@ class ChatLandscapeComposerUiTest {
         assertTrue(
             "the scenario must exercise the compact composer: available " +
                 "$availableDp dp vs threshold $COMPACT_COMPOSER_MAX_HEIGHT",
-            availableDp < COMPACT_COMPOSER_MAX_HEIGHT.value
+            isCompactRegime()
         )
     }
 
@@ -555,9 +574,22 @@ class ChatLandscapeComposerUiTest {
             val content = composeRule.activity.findViewById<View>(android.R.id.content)
             ViewCompat.dispatchApplyWindowInsets(content, insets)
         }
+        // `dispatchApplyWindowInsets` is synchronous: it applies the inset to
+        // the view tree and drives the Compose relayout read from
+        // `WindowInsets.ime`. `waitForIdle` therefore settles on the injected
+        // geometry deterministically; the previous fixed `Thread.sleep(300)`
+        // settle was removed. (`isCompactRegime` reads the root view height,
+        // which the internal IME padding does not shrink, so it is NOT a valid
+        // observable for inset consumption and is only used by
+        // `assertCompactRegime`.)
         composeRule.waitForIdle()
-        Thread.sleep(300)
-        composeRule.waitForIdle()
+    }
+
+    private fun isCompactRegime(): Boolean {
+        val availableDp = with(composeRule.activity.resources.displayMetrics) {
+            keyboardTop() / density
+        }
+        return availableDp < COMPACT_COMPOSER_MAX_HEIGHT.value
     }
 
     private fun messages(): List<HermesChatMessage> = listOf(

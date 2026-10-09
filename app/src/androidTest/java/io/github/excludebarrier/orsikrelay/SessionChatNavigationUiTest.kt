@@ -19,14 +19,22 @@ import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SessionChatNavigationUiTest {
 
+    // Same reason as `ActiveServerSelectionRestartUiTest`: the production
+    // startup resolution runs on `Dispatchers.IO`, and with the default
+    // UnconfinedTestDispatcher its continuation drives the navigation host
+    // off the main thread. A confined StandardTestDispatcher keeps every
+    // state write and the resulting navigation on the test scheduler.
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComponentActivity>(StandardTestDispatcher())
 
     @Test
     fun sessionTapLoadsExactIdAndBackReturnsToList() {

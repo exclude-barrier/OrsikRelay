@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug-only manifest overlay for the instrumented-test host activity.
+
+    `androidx.compose.ui:ui-test-manifest` (debugImplementation) declares
+    `androidx.activity.ComponentActivity` without a `windowSoftInputMode`, so
+    the platform default (pan) applies. The shipped `MainActivity` declares
+    `android:windowSoftInputMode="adjustResize"`, so the test host did NOT
+    mirror production: focusing a text field made the window pan, moving the
+    composer under the instrumented test's touch-injected clicks and producing
+    suite-level "action never invoked" flakes. Mirroring the production window
+    mode here (instead of per test, as `ChatImeLayoutUiTest` had to do) keeps
+    every Compose UI test on the production resize path. This file affects the
+    debug variant only; the release APK is unchanged.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>
