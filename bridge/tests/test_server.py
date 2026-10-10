@@ -7,10 +7,12 @@ query allowlisting, admin-only code issuance with rate limits, true store caps,
 and the exact pairing/self-revoke/credential contract.
 """
 
+import asyncio
 import unittest
 import uuid
 
 from aiohttp import web
+from aiohttp import ClientTimeout
 from aiohttp.test_utils import TestClient, TestServer
 
 from orsik_mobile_bridge import core
@@ -18,7 +20,8 @@ from orsik_mobile_bridge import server as bridge_server
 
 FRAMES = (
     b"event: run.started\ndata: {\"run_id\": \"run_1\", \"seq\": 1}\n\n",
-    b"event: done\ndata: {\"seq\": 2}\n\n",
+    b"event: approval.request\ndata: {\"run_id\": \"run_1\", \"seq\": 2, \"request_id\": \"ap1\", \"choices\": [\"once\", \"deny\"]}\n\n",
+    b"event: done\ndata: {\"seq\": 3}\n\n",
 )
 
 ADMIN_TOKEN = "admin_test_token"
@@ -44,15 +47,21 @@ def _upstream_app():
         return web.json_response({"data": []})
 
     async def chat(request):
+        UPSTREAM["chat_posts"] = int(UPSTREAM.get("chat_posts", 0)) + 1
         resp = web.StreamResponse()
         resp.content_type = "text/event-stream"
         await resp.prepare(request)
+        if UPSTREAM.get("empty_stream"):
+            await resp.write_eof()
+            return resp
         for frame in FRAMES:
             await resp.write(frame)
         await resp.write_eof()
         return resp
 
     async def run(_):
+        if UPSTREAM.get("run_404"):
+            return web.json_response({"error": {"code": "run_not_found"}}, status=404)
         return web.json_response({"status": "completed"})
 
     async def approval(request):
@@ -78,20 +87,20 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.upstream = TestServer(_upstream_app())
         await self.upstream.start_server()
         upstream_url = str(self.upstream.make_url("/")).rstrip("/")
-        self.state = bridge_server.BridgeState(
-            upstream=upstream_url, master_key="master_key_test", admin_token=ADMIN_TOKEN
-        )
+        self.state = bridge_server.BridgeState(upstream=upstream_url, master_key="master_key_test")
         self.client = TestClient(TestServer(bridge_server.create_app(self.state)))
         await self.client.start_server()
 
     async def asyncTearDown(self):
         await self.client.close()
         await self.upstream.close()
+        self.state.store.close()
 
     async def _admin_code(self):
-        resp = await self.client.post("/admin/pairing-code", headers={bridge_server.ADMIN_HEADER: ADMIN_TOKEN})
-        self.assertEqual(resp.status, 200)
-        return (await resp.json())["code"]
+        # P13: the operator issues codes locally (no HTTP admin surface).
+        issued = self.state.codes.issue()
+        self.assertIsNotNone(issued)
+        return issued[0]
 
     async def _pair(self):
         resp = await self.client.post("/v1/devices/pair", json={"code": await self._admin_code()})
@@ -115,7 +124,20 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         caps = await resp.json()
         self.assertEqual(caps["object"], "hermes.api_server.capabilities")
         self.assertEqual(caps["runtime"]["mode"], "server_agent")
-        self.assertNotIn("session_chat_interactive_approvals", caps["features"])
+        # P13: the official core supports session interactive approvals, so the
+        # bridge advertises the exact Mobile-v1 contract with once/deny only.
+        approvals = caps["features"]["session_chat_interactive_approvals"]
+        self.assertEqual(
+            approvals,
+            {
+                "enabled": True,
+                "protocol_version": 1,
+                "event": "approval.request",
+                "choices": ["once", "deny"],
+                "response_endpoint": "run_approval",
+            },
+        )
+        self.assertTrue(caps["features"]["run_approval_response"])
 
     async def test_pair_contract_exact(self):
         cred = await self._pair()
@@ -164,10 +186,14 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(resp.status, 403, path)
             self.assertEqual(set((await resp.json())["error"]), {"code"})
 
-    async def test_admin_token_required(self):
-        self.assertEqual((await self.client.post("/admin/pairing-code")).status, 403)
-        resp = await self.client.post("/admin/pairing-code", headers={bridge_server.ADMIN_HEADER: "wrong"})
+    async def test_admin_route_not_exposed(self):
+        # P13: no HTTP admin surface; pairing codes are issued only by the local
+        # operator CLI. The old route must be out of scope for any client.
+        self.assertEqual((await self.client.post("/admin/pairing-code")).status, 401)
+        cred = await self._pair()
+        resp = await self.client.post("/admin/pairing-code", headers=self._bearer(cred["device_key"]))
         self.assertEqual(resp.status, 403)
+        self.assertEqual((await resp.json())["error"]["code"], "endpoint_out_of_scope")
 
     async def test_self_revoke_then_denied(self):
         cred = await self._pair()
@@ -271,12 +297,6 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         resp = await self.client.post("/v1/devices/pair", json={"code": "BAD"})
         self.assertEqual(resp.status, 429)
 
-    async def test_admin_rate_limited(self):
-        self.state.admin_limiter = core.RateLimiter(1, 60.0)
-        self.assertEqual((await self._admin_code()) is not None, True)
-        resp = await self.client.post("/admin/pairing-code", headers={bridge_server.ADMIN_HEADER: ADMIN_TOKEN})
-        self.assertEqual(resp.status, 429)
-
     async def test_token_cap_enforced(self):
         self.state.tokens = core.TokenStore(max_tokens=1)
         self.assertEqual((await self.client.post("/v1/devices/pair", json={"code": await self._admin_code()})).status, 201)
@@ -286,9 +306,8 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_code_cap_enforced(self):
         self.state.codes = core.CodeStore(ttl_seconds=300, max_codes=1)
-        self.assertEqual((await self.client.post("/admin/pairing-code", headers={bridge_server.ADMIN_HEADER: ADMIN_TOKEN})).status, 200)
-        resp = await self.client.post("/admin/pairing-code", headers={bridge_server.ADMIN_HEADER: ADMIN_TOKEN})
-        self.assertEqual(resp.status, 503)
+        self.assertIsNotNone(self.state.codes.issue())
+        self.assertIsNone(self.state.codes.issue())
 
     # --- P12.1 review regressions ------------------------------------------
     async def test_approval_trailing_slash_bypass_refused(self):
@@ -303,14 +322,6 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertIn(resp.status, (400, 403), (path, choice))
         self.assertEqual(int(UPSTREAM.get("approval_posts", 0)), 0)
-
-    async def test_admin_unauthenticated_does_not_consume_limit(self):
-        self.state.admin_limiter = core.RateLimiter(1, 60.0)
-        for _ in range(3):
-            resp = await self.client.post("/admin/pairing-code", headers={bridge_server.ADMIN_HEADER: "wrong"})
-            self.assertEqual(resp.status, 403)
-        ok = await self.client.post("/admin/pairing-code", headers={bridge_server.ADMIN_HEADER: ADMIN_TOKEN})
-        self.assertEqual(ok.status, 200)  # the authenticated operator was not locked out
 
     async def test_oversize_body_is_413_not_400(self):
         self.state.tokens = core.TokenStore()
@@ -331,6 +342,348 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         finally:
             bridge_server._MAX_BODY_BYTES = original
             await client.close()
+
+    # --- Phase 2 (P13): SSE reconnect / after_seq replay --------------------
+    async def test_reattach_replays_after_seq_without_second_post(self):
+        cred = await self._pair()
+        resp = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(cred["device_key"]), json={"message": "hi"}
+        )
+        text = await resp.text()
+        self.assertIn("run.started", text)
+        self.assertIn("done", text)
+        self.assertEqual(int(UPSTREAM.get("chat_posts", 0)), 1)
+
+        # Reconnect on the same run_id: exclusive replay (seq > 1) of the retained tail.
+        again = await self.client.get(
+            "/api/sessions/s1/runs/run_1/stream?after_seq=1", headers=self._bearer(cred["device_key"])
+        )
+        self.assertEqual(again.status, 200)
+        replay_text = await again.text()
+        self.assertNotIn("run.started", replay_text)  # seq 1 is excluded
+        self.assertIn("done", replay_text)            # seq 2 is replayed
+        self.assertEqual(int(UPSTREAM.get("chat_posts", 0)), 1)  # no second POST
+
+    async def test_chat_stream_empty_upstream_does_not_hang(self):
+        # Regression (review M1): a 200 text/event-stream with no frames must not
+        # block the client handler forever.
+        UPSTREAM["empty_stream"] = True
+        cred = await self._pair()
+        async with asyncio.timeout(5):
+            resp = await self.client.post(
+                "/api/sessions/s1/chat/stream", headers=self._bearer(cred["device_key"]), json={}
+            )
+            await resp.text()
+        self.assertEqual(resp.status, 200)
+
+    async def test_approval_request_event_relayed_on_session_stream(self):
+        # Phase 3: the session stream carries approval.request with the exact
+        # request_id a client answers via POST /v1/runs/{run_id}/approval.
+        cred = await self._pair()
+        resp = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(cred["device_key"]), json={"message": "hi"}
+        )
+        text = await resp.text()
+        self.assertIn("event: approval.request", text)
+        self.assertIn('"request_id": "ap1"', text)
+
+    async def test_reattach_requires_device_token(self):
+        resp = await self.client.get("/api/sessions/s1/runs/run_1/stream?after_seq=0")
+        self.assertEqual(resp.status, 401)
+
+    async def test_reattach_bad_after_seq_is_400(self):
+        cred = await self._pair()
+        resp = await self.client.get(
+            "/api/sessions/s1/runs/run_1/stream?after_seq=abc", headers=self._bearer(cred["device_key"])
+        )
+        self.assertEqual(resp.status, 400)
+
+    async def test_reattach_unknown_run_is_404(self):
+        UPSTREAM["run_404"] = True
+        cred = await self._pair()
+        resp = await self.client.get(
+            "/api/sessions/s1/runs/run_unknown/stream?after_seq=0", headers=self._bearer(cred["device_key"])
+        )
+        self.assertEqual(resp.status, 404)
+
+    async def test_reattach_known_but_unbuffered_run_is_indeterminate_409(self):
+        # Upstream knows the run (stub returns 200) but the bridge has no buffer
+        # (e.g. it restarted): fail closed, never fabricate events.
+        cred = await self._pair()
+        resp = await self.client.get(
+            "/api/sessions/s1/runs/run_orphan/stream?after_seq=0", headers=self._bearer(cred["device_key"])
+        )
+        self.assertEqual(resp.status, 409)
+        self.assertEqual((await resp.json())["error"]["code"], "resume_gap")
+
+    # --- Phase 8 (P13): security regressions --------------------------------
+    async def test_chat_stream_forwards_master_key_not_device_token(self):
+        seen = {}
+
+        async def chat(request):
+            seen["auth"] = request.headers.get("Authorization")
+            resp = web.StreamResponse()
+            resp.content_type = "text/event-stream"
+            await resp.prepare(request)
+            await resp.write(b'event: run.started\ndata: {"run_id": "run_1", "seq": 1}\n\n')
+            await resp.write(b'event: done\ndata: {"seq": 2}\n\n')
+            await resp.write_eof()
+            return resp
+
+        upstream = TestServer(web.Application())
+        upstream.app.router.add_post("/api/sessions/{sid}/chat/stream", chat)
+        await upstream.start_server()
+        try:
+            url = str(upstream.make_url("/")).rstrip("/")
+            state = bridge_server.BridgeState(url, "master_key_test")
+            client = TestClient(TestServer(bridge_server.create_app(state)))
+            await client.start_server()
+            try:
+                code = state.codes.issue()[0]
+                token = (await (await client.post("/v1/devices/pair", json={"code": code})).json())["device_key"]
+                await client.post("/api/sessions/s1/chat/stream", headers=self._bearer(token), json={})
+            finally:
+                await client.close()
+                state.store.close()
+        finally:
+            await upstream.close()
+        self.assertEqual(seen["auth"], "Bearer master_key_test")
+
+    async def test_store_failure_fails_closed_503(self):
+        class _Boom:
+            def lookup(self, token):
+                raise bridge_server.store_mod.StoreUnavailable("boom")
+
+            def mint(self, *a, **k):
+                raise bridge_server.store_mod.StoreUnavailable("boom")
+
+            def revoke(self, *a, **k):
+                raise bridge_server.store_mod.StoreUnavailable("boom")
+
+        self.state.tokens = _Boom()
+        resp = await self.client.get("/api/sessions", headers=self._bearer("hd_x"))
+        self.assertEqual(resp.status, 503)
+        self.assertEqual((await resp.json())["error"]["code"], "store_unavailable")
+
+    async def test_reattach_path_traversal_refused(self):
+        cred = await self._pair()
+        for path in (
+            "/api/sessions/%2e%2e/runs/run_1/stream?after_seq=0",
+            "/api/sessions/s1/runs/%2e%2e/stream?after_seq=0",
+        ):
+            resp = await self.client.get(path, headers=self._bearer(cred["device_key"]))
+            self.assertIn(resp.status, (400, 403, 404), path)
+
+    # --- Phase 4 (P13): durable device credentials -------------------------
+    async def test_device_survives_bridge_restart_and_revoke_is_durable(self):
+        import os
+        import tempfile
+
+        from orsik_mobile_bridge import store as store_mod
+
+        upstream_url = str(self.upstream.make_url("/")).rstrip("/")
+
+        async def _state_client():
+            state = bridge_server.BridgeState(
+                upstream_url, "master_key_test", store=store_mod.BridgeStore(db_path)
+            )
+            client = TestClient(TestServer(bridge_server.create_app(state)))
+            await client.start_server()
+            return state, client
+
+        with tempfile.TemporaryDirectory() as d:
+            db_path = os.path.join(d, "state.db")
+            state1, c1 = await _state_client()
+            code = state1.codes.issue()[0]
+            token = (await (await c1.post("/v1/devices/pair", json={"code": code})).json())["device_key"]
+            await c1.close()
+            state1.store.close()
+
+            # Restart: the same on-disk store must still authenticate the device.
+            state2, c2 = await _state_client()
+            resp = await c2.get("/api/sessions", headers=self._bearer(token))
+            self.assertEqual(resp.status, 200)
+            self.assertEqual((await c2.post("/v1/devices/self/revoke", headers=self._bearer(token))).status, 200)
+            await c2.close()
+            state2.store.close()
+
+            # Restart again: the revoke persists.
+            state3, c3 = await _state_client()
+            resp = await c3.get("/api/sessions", headers=self._bearer(token))
+            self.assertEqual(resp.status, 401)
+            await c3.close()
+            state3.store.close()
+
+
+class ReconnectStreamTest(unittest.IsolatedAsyncioTestCase):
+    """A real mid-stream disconnect: the run must continue server-side and be
+    re-attachable on the same run_id with no second chat POST."""
+
+    async def asyncSetUp(self):
+        self.release = asyncio.Event()
+        self.posts = 0
+        app = web.Application()
+
+        async def chat(request):
+            self.posts += 1
+            resp = web.StreamResponse()
+            resp.content_type = "text/event-stream"
+            await resp.prepare(request)
+            await resp.write(b'event: run.started\ndata: {"run_id": "run_z", "seq": 1}\n\n')
+            await self.release.wait()
+            await resp.write(b'event: assistant.delta\ndata: {"run_id": "run_z", "seq": 2}\n\n')
+            await resp.write(b'event: done\ndata: {"run_id": "run_z", "seq": 3}\n\n')
+            await resp.write_eof()
+            return resp
+
+        async def run_status(_r):
+            return web.json_response({"status": "completed"})
+
+        app.router.add_get("/v1/runs/{rid}", run_status)
+        app.router.add_post("/api/sessions/{sid}/chat/stream", chat)
+        self.upstream = TestServer(app)
+        await self.upstream.start_server()
+        upstream_url = str(self.upstream.make_url("/")).rstrip("/")
+        self.state = bridge_server.BridgeState(upstream_url, "master_key_test")
+        self.client = TestClient(TestServer(bridge_server.create_app(self.state)))
+        await self.client.start_server()
+        code = self.state.codes.issue()[0]
+        self.token = (await (await self.client.post("/v1/devices/pair", json={"code": code})).json())["device_key"]
+
+    async def asyncTearDown(self):
+        await self.client.close()
+        await self.upstream.close()
+        self.state.store.close()
+
+    def _bearer(self):
+        return {"Authorization": "Bearer " + self.token}
+
+    async def test_disconnect_then_reattach_same_run(self):
+        post = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+        # Read only the first frame, then drop the downstream connection.
+        buf = b""
+        while b"\n\n" not in buf:
+            buf += await post.content.read(64)
+        self.assertIn(b"run.started", buf)
+        post.close()
+
+        # The upstream keeps producing; the bridge must buffer it with no client.
+        self.release.set()
+        await asyncio.sleep(0.2)
+
+        again = await self.client.get(
+            "/api/sessions/s1/runs/run_z/stream?after_seq=1", headers=self._bearer()
+        )
+        self.assertEqual(again.status, 200)
+        body = await again.text()
+        self.assertNotIn("run.started", body)      # seq 1 excluded
+        self.assertIn("assistant.delta", body)     # seq 2 replayed
+        self.assertIn("done", body)                # seq 3 replayed
+        self.assertEqual(self.posts, 1)            # never re-POSTed
+
+
+class IndeterminateRunTest(unittest.IsolatedAsyncioTestCase):
+    """P13.1: a re-attach with no bridge buffer must fail closed from the
+    authoritative upstream status — never a false 404, never fabricated events."""
+
+    async def asyncSetUp(self):
+        self.upstream_status = 200
+        self.upstream_headers = {}
+        self.upstream_hits = 0
+        self.upstream_delay = 0.0
+        app = web.Application()
+
+        async def run(_):
+            self.upstream_hits += 1
+            if self.upstream_delay:
+                await asyncio.sleep(self.upstream_delay)
+            return web.Response(status=self.upstream_status, headers=self.upstream_headers)
+
+        app.router.add_get("/v1/runs/{rid}", run)
+        self.upstream = TestServer(app)
+        await self.upstream.start_server()
+        url = str(self.upstream.make_url("/")).rstrip("/")
+        self.state = bridge_server.BridgeState(url, "master_key_test")
+        self.client = TestClient(TestServer(bridge_server.create_app(self.state)))
+        await self.client.start_server()
+        code = self.state.codes.issue()[0]
+        self.token = (await (await self.client.post("/v1/devices/pair", json={"code": code})).json())["device_key"]
+
+    async def asyncTearDown(self):
+        await self.client.close()
+        await self.upstream.close()
+        self.state.store.close()
+
+    def _bearer(self):
+        return {"Authorization": "Bearer " + self.token}
+
+    async def _reattach(self):
+        return await self.client.get(
+            "/api/sessions/s1/runs/run_x/stream?after_seq=0", headers=self._bearer()
+        )
+
+    async def test_upstream_200_is_resume_gap_409(self):
+        self.upstream_status = 200
+        resp = await self._reattach()
+        self.assertEqual(resp.status, 409)
+        self.assertEqual((await resp.json())["error"]["code"], "resume_gap")
+
+    async def test_confirmed_404_is_run_not_found(self):
+        self.upstream_status = 404
+        self.upstream_hits = 0
+        resp = await self._reattach()
+        self.assertEqual(resp.status, 404)
+        self.assertEqual((await resp.json())["error"]["code"], "run_not_found")
+        self.assertEqual(self.upstream_hits, 1)  # a *confirmed* upstream 404
+
+    async def test_upstream_401_403_5xx_never_false_404(self):
+        for status in (201, 204, 401, 403, 418, 429, 500, 503):
+            self.upstream_status = status
+            self.upstream_hits = 0
+            resp = await self._reattach()
+            self.assertEqual(resp.status, 502, status)
+            self.assertEqual((await resp.json())["error"]["code"], "run_state_indeterminate", status)
+            self.assertEqual(self.upstream_hits, 1, status)
+
+    async def test_upstream_timeout_is_indeterminate_not_404(self):
+        self.upstream_delay = 2.0
+        original = bridge_server._INDETERMINATE_TIMEOUT
+        bridge_server._INDETERMINATE_TIMEOUT = ClientTimeout(total=0.3, sock_connect=0.3)
+        try:
+            resp = await self._reattach()
+        finally:
+            bridge_server._INDETERMINATE_TIMEOUT = original
+        self.assertEqual(resp.status, 502)
+        self.assertEqual((await resp.json())["error"]["code"], "run_state_indeterminate")
+
+    async def test_upstream_redirect_fails_closed_not_404(self):
+        self.upstream_status = 302
+        self.upstream_headers = {"Location": "http://evil.example/steal"}
+        self.upstream_hits = 0
+        resp = await self._reattach()
+        self.assertEqual(resp.status, 502)
+        self.assertEqual((await resp.json())["error"]["code"], "upstream_redirect")
+        self.assertNotIn("Location", resp.headers)
+        self.assertEqual(self.upstream_hits, 1)  # served once, never followed
+
+    async def test_network_error_is_indeterminate_not_404(self):
+        dead = bridge_server.BridgeState("http://127.0.0.1:1", "master_key_test")
+        client = TestClient(TestServer(bridge_server.create_app(dead)))
+        await client.start_server()
+        try:
+            code = dead.codes.issue()[0]
+            token = (await (await client.post("/v1/devices/pair", json={"code": code})).json())["device_key"]
+            resp = await client.get(
+                "/api/sessions/s1/runs/run_x/stream?after_seq=0",
+                headers={"Authorization": "Bearer " + token},
+            )
+            self.assertEqual(resp.status, 502)
+            self.assertEqual((await resp.json())["error"]["code"], "run_state_indeterminate")
+        finally:
+            await client.close()
+            dead.store.close()
 
 
 if __name__ == "__main__":

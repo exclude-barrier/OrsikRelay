@@ -126,7 +126,7 @@ jobs:
           disable-animations: true
           # Capture-only tests (real IME / screenshot markers, no assertions) are
           # environment-dependent and excluded from CI via @CaptureOnly.
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.github.excludebarrier.orsikrelay.CaptureOnly
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.github.excludebarrier.orsikrelay.CaptureOnly,io.github.excludebarrier.orsikrelay.LiveBridge
 
       - name: Upload instrumented test reports
         if: always()

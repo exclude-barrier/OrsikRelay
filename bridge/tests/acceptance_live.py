@@ -39,6 +39,20 @@ def read_env(path: str) -> dict[str, str]:
     return values
 
 
+def issue_code(env: dict[str, str]) -> str | None:
+    """Operator-side issuance, exactly as the local CLI does (no HTTP admin)."""
+    from orsik_mobile_bridge import store as store_mod
+
+    db = env.get("BRIDGE_STATE_DB") or os.path.join(
+        env.get("BRIDGE_HOME") or os.path.expanduser("~/.local/orsik-mobile-bridge"), "state.db")
+    store = store_mod.BridgeStore(db)
+    try:
+        issued = store.issue_code()
+    finally:
+        store.close()
+    return issued[0] if issued else None
+
+
 def request(method, path, body=None, token=None, admin=None, accept=None):
     headers = {}
     data = None
@@ -97,15 +111,13 @@ def main() -> int:
         os.path.dirname(os.path.abspath(__file__)), "..", "bridge.env"
     )
     env = read_env(env_path)
-    admin = env["BRIDGE_ADMIN_TOKEN"]
 
     status, body = request("GET", "/health")
     health = json.loads(body) if status == 200 else {}
     check("health_200_ok", status == 200 and health.get("status") == "ok")
 
-    status, body = request("POST", "/admin/pairing-code", body={}, admin=admin)
-    code = json.loads(body).get("code") if status == 200 else None
-    check("admin_issues_code", status == 200 and len(code or "") == 24)
+    code = issue_code(env)
+    check("operator_issues_code", bool(code) and len(code) == 24)
 
     status, body = request("POST", "/v1/devices/pair", body={"code": code})
     cred = json.loads(body) if status == 201 else {}
@@ -130,7 +142,12 @@ def main() -> int:
     check("caps_object", caps.get("object") == "hermes.api_server.capabilities")
     check("caps_runtime", caps.get("runtime", {}).get("mode") == "server_agent")
     check("caps_device_credentials", caps.get("features", {}).get("device_credentials", {}).get("enabled") is True)
-    check("caps_interactive_approvals_absent", "session_chat_interactive_approvals" not in caps.get("features", {}))
+    check(
+        "caps_interactive_approvals_exact",
+        caps.get("features", {}).get("session_chat_interactive_approvals") == {
+            "enabled": True, "protocol_version": 1, "event": "approval.request",
+            "choices": ["once", "deny"], "response_endpoint": "run_approval"},
+    )
 
     # P12.1 hardening probes: escalation refused locally, once reaches the core,
     # unknown query keys refused.
@@ -150,9 +167,9 @@ def main() -> int:
     status, _ = request("GET", "/api/sessions", token=device_key)
     check("proxied_sessions_200", status == 200)
 
-    status, body = request("POST", "/api/sessions", body={"title": "p12-poc"}, token=device_key)
+    status, body = request("POST", "/api/sessions", body={"title": f"p13-{uuid.uuid4().hex[:8]}"}, token=device_key)
     sid = json.loads(body).get("session", {}).get("id") if status == 201 else None
-    check("create_session_201", status == 201 and bool(sid))
+    check("create_session_201", status == 201 and bool(sid), str(status))
     assert sid is not None
 
     status, _ = request("GET", f"/api/sessions/{sid}/messages", token=device_key)
@@ -167,13 +184,29 @@ def main() -> int:
 
     status, events, run_id = stream_chat(device_key, sid, "Bitte kurz antworten.")
     check("chat_stream_200", status == 200)
-    for name in ("run.started", "message.started", "assistant.completed", "run.completed", "done"):
+    for name in ("run.started", "message.started", "assistant.completed", "done"):
         check("chat_event_" + name, name in events, str(events))
+    # Terminal transport event: the run reaches a terminal state (completed or failed
+    # without a configured provider); never a fabricated success.
+    check("chat_terminal_event", any(n in events for n in ("run.completed", "run.failed", "error")), str(events))
     check("chat_stream_run_id", bool(run_id))
 
     if run_id:
         status, _ = request("GET", f"/v1/runs/{run_id}", token=device_key)
         check("run_status_200", status == 200)
+        # P13: re-attach the session run on the same run_id with exclusive replay.
+        status, stream_body = request(
+            "GET", f"/api/sessions/{sid}/runs/{run_id}/stream?after_seq=1", token=device_key,
+            accept="text/event-stream",
+        )
+        check("reattach_same_run_200", status == 200, str(status))
+        check("reattach_replays_events", "data:" in stream_body or "event:" in stream_body)
+
+    # P13: an unknown run on reconnect is a clean 404 (no fabricated events).
+    status, _ = request(
+        "GET", f"/api/sessions/{sid}/runs/run_p13_unknown/stream?after_seq=0", token=device_key
+    )
+    check("reattach_unknown_run_404", status == 404, str(status))
 
     status, body = request("POST", "/v1/devices/self/revoke", token=device_key)
     check("self_revoke_200", status == 200 and json.loads(body).get("revoked") is True)

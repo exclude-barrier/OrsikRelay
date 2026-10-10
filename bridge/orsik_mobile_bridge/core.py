@@ -319,15 +319,33 @@ def build_device_credentials_contract() -> dict:
     }
 
 
+def build_interactive_approvals_contract() -> dict:
+    """The Mobile-v1 session_chat_interactive_approvals contract.
+
+    Truthful: the official Hermes core registers a session-stream approval
+    notifier and accepts ``POST /v1/runs/{run_id}/approval`` for the session
+    run's ``run_id``, so ``approval.request`` genuinely reaches the client. The
+    bridge narrows the choices to the least-privilege set ``once``/``deny`` and
+    refuses anything else locally, so those are exactly the choices advertised.
+    """
+    return {
+        "enabled": True,
+        "protocol_version": PROTOCOL_VERSION,
+        "event": "approval.request",
+        "choices": [APPROVAL_CHOICE_ONCE, APPROVAL_CHOICE_DENY],
+        "response_endpoint": "run_approval",
+    }
+
+
 def build_capabilities() -> dict:
     """The Orsik Mobile Protocol v1 capability envelope, in the exact shape the
     shipped HermesConnectionClient hard-requires.
 
-    Truthful advertisement: the bridge implements device credentials and the
-    core session/run/approval paths, but NOT the private session-stream
-    interactive-approvals opt-in, so that soft contract is omitted entirely
-    (the client then negotiates it as unsupported, fail-closed) rather than
-    simulated.
+    Truthful advertisement (P13): the official Hermes core registers a
+    session-stream approval notifier and accepts ``POST /v1/runs/{run_id}/approval``
+    for the session run, so ``approval.request`` genuinely reaches the client.
+    The bridge narrows the choices to the least-privilege set ``once``/``deny``
+    and refuses anything else locally, so that is exactly what it advertises.
     """
     return {
         "object": CAPABILITIES_OBJECT,
@@ -346,6 +364,7 @@ def build_capabilities() -> dict:
             "run_status": True,
             "run_stop": True,
             "run_steer": True,
+            "session_chat_interactive_approvals": build_interactive_approvals_contract(),
             "device_credentials": build_device_credentials_contract(),
         },
         "endpoints": {

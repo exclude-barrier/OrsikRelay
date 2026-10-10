@@ -361,3 +361,26 @@ Gateway/Upstream kann ihn nach bereits erfolgter Admission liefern); nur eine
 Es wurde **kein** echter Hermes-Mobile-v1-E2E-Test ausgeführt. Die
 Korrektheit der Endpunkt-/Status-Annahmen stützt sich auf die lokale
 Quelle und MockWebServer-Tests, nicht auf einen Live-Server.
+
+## 9. P13-Status (2026-10-10)
+
+Der Client-Vertrag dieses Dokuments ist unverändert gültig. Neu ist, dass der
+**Server** (Orsik Mobile Bridge, Branch `p13/full-mobile-bridge`) ihn jetzt
+vollständig in Front eines **unveränderten** offiziellen Hermes (`f86276d2`)
+erfüllt:
+
+- `session_chat_interactive_approvals` wird exakt v1 beworben (`once`/`deny`);
+  `approval.request` erreicht den Client auf dem Session-Chat-Stream, die Antwort
+  erfolgt über `POST /v1/runs/{run_id}/approval`. Der offizielle Core emittiert
+  die Events (nicht simuliert).
+- Der in §8.2 beschriebene Re-Attach
+  `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N` ist jetzt
+  **server-seitig verfügbar**: Die Bridge übernimmt den Chat-Stream, puffert
+  Events pro `run_id`/`seq` und replayt exklusiv ab `after_seq`, dann Live-Follow.
+  Lücke → `409 resume_gap`; unbekannter Run → `404 run_not_found`. Kein
+  erneuter Chat-POST, keine erfundenen Events.
+- Persistente Device-Credentials: Pairing und (individueller) Revoke überleben
+  den Bridge-Neustart; Tokens/Code nur als SHA-256-Hash at rest.
+
+Grenzen bleiben: **keine** Per-Device-Ressourcen-Isolation (Single-Owner-
+Delegation) und **kein** Session→Run-Discovery-Endpunkt.

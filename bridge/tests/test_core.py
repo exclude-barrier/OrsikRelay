@@ -139,9 +139,18 @@ class CapabilitiesTest(unittest.TestCase):
             endpoints["device_self_revoke"], {"method": "POST", "path": "/v1/devices/self/revoke"}
         )
 
-    def test_interactive_approvals_omitted_fail_closed(self):
+    def test_interactive_approvals_contract_exact(self):
         features = core.build_capabilities()["features"]
-        self.assertNotIn("session_chat_interactive_approvals", features)
+        self.assertEqual(
+            features["session_chat_interactive_approvals"],
+            {
+                "enabled": True,
+                "protocol_version": 1,
+                "event": "approval.request",
+                "choices": ["once", "deny"],
+                "response_endpoint": "run_approval",
+            },
+        )
 
     def test_core_endpoints_paths_exact(self):
         endpoints = core.build_capabilities()["endpoints"]

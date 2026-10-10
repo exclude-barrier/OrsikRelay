@@ -232,3 +232,83 @@ simuliert; der Client handelt sie fail-closed als nicht unterstützt aus.
 - Bridge-Alternative: `after_seq`-Replay und interaktive Approvals als
   Bridge-eigene, gescopte Endpunkte (kein Core-Patch).
 - Persistente, dauerhafte Geräteverwaltung (verschlüsselt, über Neustart).
+
+## 11. P13 – Full Mobile Bridge (2026-10-10)
+
+Branch `p13/full-mobile-bridge` (Basis `f339343`). Ziel: vom abgesicherten
+P12.1-Prototyp zur vollständigen mobilen Anbindung einer frischen, unveränderten
+offiziellen Hermes-Installation. Kein Core-Patch, kein hermes-server-Eingriff.
+
+### 11.1 Aktualisierte Core-Analyse (offiziell `f86276d2`)
+
+Der offizielle Core hat sich seit P12 weiterentwickelt; **neu belegt** durch
+read-only Quellanalyse und Live-Akzeptanz:
+
+- `POST /api/sessions/{id}/chat/stream` vergibt eine `run_id` (`run_<uuid>`),
+  registriert sie in `_run_owners`/`_run_statuses` und stempelt **jedes** Event
+  mit `session_id`/`run_id`/`seq`/`ts` (`_SessionEventQueue`).
+- Der Session-Chat-Stream registriert einen Approval-Notifier
+  (`_register_session_stream_approval`, `_run_approval_sessions[run_id]=run_id`)
+  und emittiert bei einer geflaggten Aktion `approval.request`. `api_server`
+  bleibt formal „unattended", ist aber **interaktiv**, solange ein Notifier
+  registriert ist (`_presence`-Diskriminator, `approval_context._NOTIFIER_BLIND_APPROVAL_PLATFORMS`
+  enthält nur webhook/msgraph). → Interaktive Session-Approvals sind im Core
+  vorhanden.
+- `POST /v1/runs/{run_id}/approval` akzeptiert für einen Session-Run genau die
+  `run_id`; Choices im Core sonst `once/session/always/deny`.
+- `GET /v1/runs/{run_id}` liefert den persistierten, pollbaren Status eines
+  Session-Runs.
+- `GET /v1/runs/{run_id}/events` hat für `/v1/runs`-Runs einen **Replay-Puffer**
+  (`_RunStream`, `Last-Event-ID`/`last_seq`, `replay.truncated`) — **nicht** aber
+  für den Session-Chat-Stream (kein Eintrag in `_run_streams`).
+
+### 11.2 Aktualisierte Gap-Matrix (P13)
+
+| Fähigkeit | Offizieller Core `f86276d2` | Bridge (P13) |
+|---|---|---|
+| Session-CRUD/Messages/Chat/Stream (+`seq`) | ja | proxied |
+| Interaktive Session-Approvals `approval.request` | **ja** | bewirbt v1-Vertrag, verengt auf `once`/`deny` |
+| `POST /v1/runs/{run_id}/approval` für Session-Run | ja | validiert + proxied |
+| `GET /v1/runs/{run_id}` Status | ja | proxied |
+| Session-Run-Re-Attach `…/runs/{run_id}/stream?after_seq=N` | **fehlt** | **bridge-eigen implementiert** (Takeover + Replay-Buffer) |
+| Device-Pairing/Credentials/Scope | fehlt | **bridge-eigen** |
+| `protocol_version`-Negotiation | fehlt | **bridge-eigen** (Capability-Hülle) |
+| Persistente Geräteverwaltung | fehlt | **bridge-eigen** (SQLite, 0600) |
+| Per-Device-Ressourcen-Ownership | fehlt | **nicht möglich** (Single-Owner-Delegation) |
+| Run-Discovery (Session→aktiver Run) | fehlt | nicht implementiert (kein Endpunkt) |
+
+### 11.3 Umsetzung (Bridge)
+
+- **Reconnect/Run-Ownership:** Der Chat-Stream wird serverseitig übernommen; der
+  Upstream-SSE läuft unabhängig vom Client weiter und wird pro `run_id`/`seq`
+  begrenzt gepuffert. `GET …/runs/{run_id}/stream?after_seq=N` replayt exklusiv
+  und folgt live; Lücken → `409 resume_gap`, unbekannt → `404`; nie erfundene
+  Events, nie ein zweiter Chat-POST.
+- **Interaktive Approvals:** Capability `session_chat_interactive_approvals`
+  exakt v1 (`once`/`deny`), Durchreichen der `approval.request`-Events,
+  lokale Validierung der Antwort.
+- **Persistente Geräte:** SQLite-Store (nur Hashes, TTL, Caps, atomarer
+  Single-Use-Redeem, Migration, fail-closed) → Pairing/Revoke überleben den
+  Bridge-Neustart.
+- **Installation/Operator:** `install.sh` (dedizierter venv, `--update`,
+  `--systemd`, `--uninstall`), User-Unit, **lokale** Operator-CLI
+  (`admin pairing-code/list-devices/revoke-device`), Deep-Link + optionaler QR.
+  Kein HTTP-Admin mehr.
+
+### 11.4 Verbleibende Core-Grenzen (nicht simuliert)
+
+1. **Per-Device-Isolation** fehlt im Core → Single-Owner-Delegation (dokumentiert).
+2. **Run-Discovery** (Session→aktiver Run) fehlt → ohne bestätigte `run_id`
+   bleibt der Ausgang unbestimmt (P7-Invariante).
+3. **Assistant-Inhalt** ist ohne konfigurierten Provider nicht real prüfbar
+   (Transport vollständig verifiziert).
+
+### 11.5 Live-Nachweis
+
+Frischer offizieller Core `f86276d2` + Bridge: `bridge/tests/acceptance_live.py`
+**37/37 grün** (Health, Pairing 201 mit exakten Feldern, Capabilities mit
+`device_credentials` + `session_chat_interactive_approvals` exakt,
+Approval-Eskalation lokal `400`, `once` erreicht den Core, Query-`403`,
+Out-of-Scope-`403`, fehlendes Token `401`, Session-Create/-Messages,
+vollständiger Chat-SSE-Lebenszyklus inkl. `run.completed`, **Re-Attach 200 mit
+Replay**, unbekannter Run `404`, Self-Revoke `200` + danach `401`).

@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 *.egg-info/
 bridge.env
+state.db
+state.db-wal
+state.db-shm
