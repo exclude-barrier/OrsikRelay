@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orsik-mobile-bridge"
+version = "0.1.0"
+description = "Minimal Orsik Mobile Bridge: a safe, installable Mobile-v1 surface over an unmodified official Hermes API server."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = ["aiohttp>=3.10,<4"]
+
+[project.scripts]
+orsik-mobile-bridge = "orsik_mobile_bridge.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["orsik_mobile_bridge*"]
