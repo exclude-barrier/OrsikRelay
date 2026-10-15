@@ -95,6 +95,31 @@ downstream disconnect (the run is not interrupted). A client re-attaches with
   still known, else `404 run_not_found`. The client then falls back to its own
   `GET /v1/runs/{run_id}` status recovery.
 
+### Memory bounds and backpressure
+
+Every accumulator is capped; the limits are module constants in
+`sse.py`/`runhub.py`:
+
+- One SSE frame block from upstream may be at most `MAX_FRAME_BYTES` (1 MiB,
+  measured after CR/LF normalisation). A larger frame is never relayed and the
+  upstream is closed: before the first frame the POST answers
+  `502 upstream_frame_too_large`; afterwards the frames received so far are
+  relayed and the stream ends with a `: bridge_upstream_frame_too_large`
+  comment — never with a fabricated `done`.
+- A non-SSE upstream error body is read up to 64 KiB; larger →
+  `502 upstream_error_too_large`.
+- Per-run backlog: 1000 frames and 4 MiB (oldest evicted first). Once frames
+  were evicted, any `after_seq` below the last evicted seq — including an
+  omitted `after_seq` — fails closed with `409 resume_gap`.
+- Per-subscriber queue: 256 items and 2 MiB, at most 4 subscribers per run
+  (the oldest is dropped). A slow subscriber is dropped with a
+  `: bridge_overflow` comment instead of blocking the pump; it re-attaches with
+  `after_seq`.
+- At most 16 active runs; a further chat POST gets `503 bridge_busy` with
+  `Retry-After: 5` **before** any upstream POST. Finished runs are retained up
+  to 64 MiB in total (oldest evicted first) besides the 256-run / 600 s
+  retention.
+
 ## Device authorization model (explicit)
 
 The official Hermes API has **no per-device resource ownership**. The bridge

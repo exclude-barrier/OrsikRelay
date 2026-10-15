@@ -16,6 +16,7 @@ from aiohttp import ClientTimeout
 from aiohttp.test_utils import TestClient, TestServer
 
 from orsik_mobile_bridge import core
+from orsik_mobile_bridge import runhub
 from orsik_mobile_bridge import server as bridge_server
 
 FRAMES = (
@@ -684,6 +685,120 @@ class IndeterminateRunTest(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
             dead.store.close()
+
+
+class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
+    """HTTP failure paths for the memory/backpressure bounds.
+
+    Each path asserts the exact status/code the bridge promises: a 503 + Retry
+    with *no* upstream POST on admission control; a 502 when the upstream error
+    body exceeds the read cap; and a 502 / trailing abort comment for an
+    oversized SSE frame -- without ever fabricating a terminal ``done``."""
+
+    async def asyncSetUp(self):
+        UPSTREAM.clear()
+        self.mode = "normal"
+        self.error_status = 500
+        self.error_body = b"{}"
+        app = web.Application()
+
+        async def chat(request):
+            UPSTREAM["chat_posts"] = int(UPSTREAM.get("chat_posts", 0)) + 1
+            if self.mode == "error":
+                return web.Response(
+                    status=self.error_status, body=self.error_body, content_type="application/json"
+                )
+            resp = web.StreamResponse()
+            resp.content_type = "text/event-stream"
+            await resp.prepare(request)
+            if self.mode == "big_frame_only":
+                await resp.write(b"data: " + b"x" * (2 * 1024 * 1024) + b"\n\n")
+            elif self.mode == "frame_after_started":
+                await resp.write(b'event: run.started\ndata: {"run_id": "run_big", "seq": 1}\n\n')
+                await resp.write(b"data: " + b"x" * (2 * 1024 * 1024) + b"\n\n")
+            else:
+                for frame in FRAMES:
+                    await resp.write(frame)
+            await resp.write_eof()
+            return resp
+
+        app.router.add_post("/api/sessions/{sid}/chat/stream", chat)
+        self.upstream = TestServer(app)
+        await self.upstream.start_server()
+        url = str(self.upstream.make_url("/")).rstrip("/")
+        self.state = bridge_server.BridgeState(url, "master_key_test")
+        self.client = TestClient(TestServer(bridge_server.create_app(self.state)))
+        await self.client.start_server()
+        code = self.state.codes.issue()[0]
+        self.token = (await (await self.client.post("/v1/devices/pair", json={"code": code})).json())["device_key"]
+
+    async def asyncTearDown(self):
+        await self.client.close()
+        await self.upstream.close()
+        self.state.store.close()
+
+    def _bearer(self):
+        return {"Authorization": "Bearer " + self.token}
+
+    async def test_busy_run_refused_before_any_upstream_post(self):
+        # Admission control: the active-run cap is reached, so the request is
+        # refused with 503 + Retry-After and the upstream is never contacted.
+        self.state.runhub = runhub.RunHub(max_active_runs=1)
+        self.state.runhub.create_pending("s1")
+        resp = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+        self.assertEqual(resp.status, 503)
+        self.assertEqual(resp.headers.get("Retry-After"), "5")
+        self.assertEqual((await resp.json())["error"]["code"], "bridge_busy")
+        self.assertEqual(int(UPSTREAM.get("chat_posts", 0)), 0)
+
+    async def test_oversized_upstream_error_body_is_502(self):
+        self.mode = "error"
+        self.error_status = 500
+        self.error_body = b"x" * 200
+        original = bridge_server._MAX_UPSTREAM_ERROR_BODY_BYTES
+        bridge_server._MAX_UPSTREAM_ERROR_BODY_BYTES = 32
+        try:
+            resp = await self.client.post(
+                "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+            )
+        finally:
+            bridge_server._MAX_UPSTREAM_ERROR_BODY_BYTES = original
+        self.assertEqual(resp.status, 502)
+        self.assertEqual((await resp.json())["error"]["code"], "upstream_error_too_large")
+
+    async def test_oversized_first_frame_is_502_with_no_fabricated_done(self):
+        self.mode = "big_frame_only"
+        resp = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+        self.assertEqual(resp.status, 502)
+        body = (await resp.json())["error"]["code"]
+        self.assertEqual(body, "upstream_frame_too_large")
+
+    async def test_oversized_frame_after_start_relays_abort_without_done(self):
+        self.mode = "frame_after_started"
+        post = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+        self.assertEqual(post.status, 200)
+        text = await post.text()
+        self.assertIn("run.started", text)
+        self.assertIn(": bridge_upstream_frame_too_large", text)
+        self.assertNotIn("event: done", text)
+        self.assertEqual(int(UPSTREAM.get("chat_posts", 0)), 1)
+
+        # A re-attach to the terminal buffer replays the retained frames and the
+        # same abort comment -- still no invented ``done``.
+        again = await self.client.get(
+            "/api/sessions/s1/runs/run_big/stream?after_seq=0", headers=self._bearer()
+        )
+        self.assertEqual(again.status, 200)
+        replay = await again.text()
+        self.assertIn("run.started", replay)
+        self.assertIn(": bridge_upstream_frame_too_large", replay)
+        self.assertNotIn("event: done", replay)
 
 
 if __name__ == "__main__":

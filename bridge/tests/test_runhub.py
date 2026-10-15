@@ -6,7 +6,7 @@ import time
 import unittest
 
 from orsik_mobile_bridge.runhub import RunBuffer, RunHub
-from orsik_mobile_bridge.sse import Frame, SSEDecoder
+from orsik_mobile_bridge.sse import Frame, SSEDecoder, SSEFrameTooLarge
 
 
 def _frame(seq, run_id="run_1", event="assistant.delta"):
@@ -57,6 +57,61 @@ class SSEDecoderTest(unittest.TestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual(frames[0].json["seq"], 1)
 
+    def test_byte_at_a_time_matches_single_chunk(self):
+        # The decoder only rescans new bytes; mixed LF/CRLF/CR line endings fed
+        # one byte at a time must decode to exactly the frames of a single feed.
+        stream = (_frame(1) + _frame(2).replace(b"\n", b"\r\n")
+                  + b": keepalive\r\r" + _frame(3).replace(b"\n", b"\r")
+                  + b"data: tail\n\n\n")
+        whole = SSEDecoder().feed(stream)
+        dec = SSEDecoder()
+        split = []
+        for i in range(len(stream)):
+            split += dec.feed(stream[i:i + 1])
+        self.assertEqual([f.json and f.json.get("seq") for f in whole], [1, 2, 3, None])
+        self.assertEqual(split, whole)
+
+    def test_exact_limit_frame_accepted_regardless_of_chunking(self):
+        # A frame body of exactly max_frame_bytes must be accepted
+        # whether it arrives whole or split across the terminating blank line.
+        limit = 32
+        block = b"data: " + b"x" * (limit - 6)
+        self.assertEqual(len(block), limit)
+        # one chunk
+        self.assertEqual(len(SSEDecoder(max_frame_bytes=limit).feed(block + b"\n\n")), 1)
+        # split between the two LFs
+        dec = SSEDecoder(max_frame_bytes=limit)
+        self.assertEqual(dec.feed(block + b"\n"), [])
+        self.assertEqual(len(dec.feed(b"\n")), 1)
+        # CRLF, split before the final LF (the CR sits in _hold)
+        dec = SSEDecoder(max_frame_bytes=limit)
+        self.assertEqual(dec.feed(block + b"\r\n\r"), [])
+        self.assertEqual(len(dec.feed(b"\n")), 1)
+
+    def test_over_limit_frame_still_rejected_and_stays_closed(self):
+        limit = 32
+        block = b"data: " + b"x" * (limit + 1 - 6)
+        self.assertEqual(len(block), limit + 1)
+        dec = SSEDecoder(max_frame_bytes=limit)
+        with self.assertRaises(SSEFrameTooLarge):
+            dec.feed(block + b"\n\n")
+        # an incomplete body already past the limit also raises, with no frames
+        dec = SSEDecoder(max_frame_bytes=limit)
+        with self.assertRaises(SSEFrameTooLarge) as ctx:
+            dec.feed(b"x" * (limit + 1))
+        self.assertEqual(ctx.exception.frames, [])
+        with self.assertRaises(SSEFrameTooLarge) as ctx:
+            dec.feed(b"more")
+        self.assertEqual(ctx.exception.frames, [])
+
+    def test_frames_before_overflow_are_returned(self):
+        limit = 32
+        good = b"data: ok\n\n"
+        oversized = b"data: " + b"x" * limit + b"\n\n"
+        with self.assertRaises(SSEFrameTooLarge) as ctx:
+            SSEDecoder(max_frame_bytes=limit).feed(good + oversized)
+        self.assertEqual(len(ctx.exception.frames), 1)
+
 
 class RunBufferTest(unittest.TestCase):
     def test_exclusive_replay(self):
@@ -81,11 +136,18 @@ class RunBufferTest(unittest.TestCase):
             _append(buf, seq)
         self.assertIsNone(buf.attach(0))  # oldest is now 2, client expected 1
 
-    def test_fresh_attach_never_gaps(self):
+    def test_fresh_attach_after_eviction_is_gap(self):
+        # Once frames were evicted, a replay with the default after_seq=-1
+        # would silently leave a hole; fail closed with a gap instead.
         buf = RunBuffer("s1")
         for seq in range(1, 1002):
             _append(buf, seq)
-        self.assertIsNotNone(buf.attach(-1))
+        self.assertEqual(buf.evicted_through, 1)
+        self.assertIsNone(buf.attach(-1))
+        attached = buf.attach(1)
+        self.assertIsNotNone(attached)
+        self.assertEqual(attached[1][0][0], 2)
+        self.assertEqual(len(attached[1]), 1000)
 
     def test_terminal_finish_fans_out(self):
         buf = RunBuffer("s1")

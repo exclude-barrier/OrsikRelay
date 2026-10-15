@@ -40,13 +40,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from aiohttp import ClientSession, ClientTimeout, web
+from aiohttp import ClientResponse, ClientSession, ClientTimeout, web
 
 from . import core
 from . import pairing
 from . import runhub
 from . import store as store_mod
-from .sse import SSEDecoder
+from .sse import SSEDecoder, SSEFrameTooLarge
 
 logger = logging.getLogger("orsik_mobile_bridge")
 
@@ -58,6 +58,9 @@ _PAIR_PER_MINUTE = 60
 _RUN_STREAM_KEEPALIVE = 15.0
 # Bounds the authoritative upstream status read used by _indeterminate_run.
 _INDETERMINATE_TIMEOUT = ClientTimeout(total=10, sock_connect=5)
+# Bound for a non-SSE upstream error body; a larger body fails closed instead of
+# being buffered without limit.
+_MAX_UPSTREAM_ERROR_BODY_BYTES = 64 * 1024
 
 
 class BridgeState:
@@ -262,11 +265,22 @@ async def _handle_chat_stream(request: web.Request) -> web.StreamResponse:
         return _closed(403, "query_not_allowed")
     body = await request.read() if request.can_read_body else None
     upstream_path = f"/api/sessions/{session_id}/chat/stream"
-    buf = state.runhub.create_pending(session_id)
+    try:
+        buf = state.runhub.create_pending(session_id)
+    except runhub.RunHubBusy:
+        # Admission control: refuse before any upstream POST is made so a burst
+        # of runs cannot exhaust bridge or Hermes resources.
+        resp = _closed(503, "bridge_busy")
+        resp.headers["Retry-After"] = "5"
+        return resp
     task = asyncio.create_task(
         _pump_chat_stream(state, buf, upstream_path, body, _upstream_headers(request)))
     state.background.add(task)
     task.add_done_callback(state.background.discard)
+    # The originating client attaches once the first frame (or a failure) is
+    # observed, i.e. after the pump's first chunk. Should that chunk alone
+    # overflow the backlog bounds, attach(-1) fails closed with 409 resume_gap
+    # rather than relaying a stream with a hole.
     return await _stream_buffer_to_client(request, buf, after_seq=-1)
 
 
@@ -293,13 +307,35 @@ async def _pump_chat_stream(
             return
         content_type = upstream.headers.get("Content-Type", "application/json")
         if upstream.status != 200 or "text/event-stream" not in content_type:
-            payload = await upstream.read()
+            payload = await _read_bounded_body(upstream, _MAX_UPSTREAM_ERROR_BODY_BYTES)
             upstream.release()
+            if payload is None:
+                buf.fail(502, "application/json",
+                         b'{"error":{"code":"upstream_error_too_large"}}')
+                return
             buf.fail(upstream.status, content_type, payload)
             return
         decoder = SSEDecoder()
         async for chunk in upstream.content.iter_any():
-            for frame in decoder.feed(chunk):
+            try:
+                frames = decoder.feed(chunk)
+            except SSEFrameTooLarge as exc:
+                # Frames that completed before the violation are still relayed;
+                # the oversized frame itself is dropped and the upstream closed,
+                # never followed by a resync (that would be a hole).
+                upstream.release()
+                for frame in exc.frames:
+                    buf.append(frame)
+                    if buf.run_id:
+                        state.runhub.register(buf)
+                if buf.state == "pending":
+                    buf.fail(502, "application/json",
+                             b'{"error":{"code":"upstream_frame_too_large"}}')
+                else:
+                    buf.abort_reason = "upstream_frame_too_large"
+                    logger.warning("upstream SSE frame exceeded %d bytes", exc.limit)
+                return
+            for frame in frames:
                 buf.append(frame)
                 if buf.run_id:
                     state.runhub.register(buf)
@@ -308,6 +344,16 @@ async def _pump_chat_stream(
     finally:
         buf.finish()
         await session.close()
+
+
+async def _read_bounded_body(upstream: ClientResponse, limit: int) -> bytes | None:
+    """Read an upstream body up to ``limit`` bytes; None if it would exceed it."""
+    data = bytearray()
+    async for chunk in upstream.content.iter_chunked(65536):
+        data += chunk
+        if len(data) > limit:
+            return None
+    return bytes(data)
 
 
 async def _handle_run_reattach(request: web.Request) -> web.StreamResponse:
@@ -355,7 +401,7 @@ async def _stream_buffer_to_client(
     attached = buf.attach(after_seq)
     if attached is None:
         return _closed(409, "resume_gap")
-    queue, replay = attached
+    subscriber, replay = attached
     downstream = web.StreamResponse(status=200)
     downstream.content_type = "text/event-stream"
     downstream.headers["Cache-Control"] = "no-cache"
@@ -363,11 +409,12 @@ async def _stream_buffer_to_client(
     try:
         for _seq, raw in replay:
             await downstream.write(raw)
-        if buf.terminal and queue.empty():
+        if buf.terminal and subscriber.empty():
+            await _write_abort_comment(downstream, buf)
             return downstream
         while True:
             try:
-                item = await asyncio.wait_for(queue.get(), timeout=_RUN_STREAM_KEEPALIVE)
+                item = await asyncio.wait_for(subscriber.get(), timeout=_RUN_STREAM_KEEPALIVE)
             except TimeoutError:
                 await downstream.write(b": keepalive\n\n")
                 continue
@@ -377,13 +424,24 @@ async def _stream_buffer_to_client(
                 # ending with a clean EOF, so the client re-attaches with after_seq.
                 if raw is runhub.OVERFLOW:
                     await downstream.write(b": bridge_overflow\n\n")
+                else:
+                    await _write_abort_comment(downstream, buf)
                 break
-            await downstream.write(raw)
+            if isinstance(raw, bytes):
+                await downstream.write(raw)
     except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
         pass
     finally:
-        buf.detach(queue)
+        buf.detach(subscriber)
     return downstream
+
+
+async def _write_abort_comment(
+    downstream: web.StreamResponse, buf: runhub.RunBuffer
+) -> None:
+    """Emit a trailing ``: bridge_<reason>`` comment for an aborted-but-not-EOF run."""
+    if buf.abort_reason:
+        await downstream.write(b": bridge_" + buf.abort_reason.encode() + b"\n\n")
 
 
 async def _indeterminate_run(state: BridgeState, run_id: str) -> web.Response:

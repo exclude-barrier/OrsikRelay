@@ -35,6 +35,7 @@ Rechte-Allowlist `{chat, runs, approvals}`.
 | Öffentliche Admin-Oberfläche | Kein HTTP-Admin; Codes nur lokale Operator-CLI |
 | Run-Verlust/Duplikat bei Disconnect | Server-seitiger Stream-Takeover + `after_seq`-Replay; kein zweiter POST |
 | Fingierte Run-Completion | Nie erfundene Events; nicht rekonstruierbar → `409`/`404` |
+| Speichererschöpfung durch Upstream/Runs | Frame ≤ 1 MiB (sonst `502 upstream_frame_too_large` bzw. Abbruchkommentar, kein `done`); Fehlerkörper ≤ 64 KiB; Backlog je Run 1000 Frames/4 MiB; Subscriber-Queue 256/2 MiB, max. 4 je Run (Drop statt Block); max. 16 aktive Runs (`503 bridge_busy` vor dem Upstream-POST); terminale Runs ≤ 64 MiB |
 | Öffentlicher API-Port | Bind nur `127.0.0.1`; TLS extern; kein Funnel |
 | TLS-Bypass | Bridge terminiert kein TLS; App erzwingt HTTPS + Systemtrust |
 
