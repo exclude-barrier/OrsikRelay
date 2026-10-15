@@ -141,6 +141,7 @@ class ChatTurnNavigationUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Synthese 1")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(turnSource.opened.await(3, TimeUnit.SECONDS))
         assertEquals(PROFILE_ID, turnSource.profileId.get())
@@ -222,6 +223,7 @@ class ChatTurnNavigationUiTest {
         // Start a turn that stays open (the fake never emits a terminal
         // event and never completes on its own).
         composeRule.onNodeWithText("Nachricht").performTextInput("System back")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(
             "stream was not started before the system back",

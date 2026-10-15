@@ -105,6 +105,7 @@ class ChatScreenTurnUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("  Doppelte Eingabe  ")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue("first stream was not started", source.opened.await(3, TimeUnit.SECONDS))
         // Zweiter, schneller Tipp während des laufenden Turns.
@@ -141,6 +142,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Hallo")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
 
         // Beide Deltas wachsen sichtbar in derselben Zeile. Der Stream
@@ -193,6 +195,7 @@ class ChatScreenTurnUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Werkzeugtest")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
 
         source.enqueue(
@@ -242,6 +245,7 @@ class ChatScreenTurnUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Bleibt im Entwurf")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
 
         source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
@@ -291,6 +295,7 @@ class ChatScreenTurnUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Nachrichten")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
 
         source.enqueue(
@@ -356,6 +361,7 @@ class ChatScreenTurnUiTest {
         setScreen(history(longHistory), source)
 
         composeRule.onNodeWithText("Nachricht").performTextInput("Neue Live-Nachricht")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
@@ -383,6 +389,7 @@ class ChatScreenTurnUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Läuft noch")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         assertEquals(1, source.calls.get())
@@ -409,6 +416,7 @@ class ChatScreenTurnUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Plötzliches Ende")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
 
         source.enqueue(
@@ -467,6 +475,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Sofortig")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
 
         // The final text is rendered and the turn is released: the
@@ -486,6 +495,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Abschluss")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
@@ -513,6 +523,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Fehler")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
@@ -547,6 +558,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Serverfehler")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
@@ -597,6 +609,7 @@ class ChatScreenTurnUiTest {
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Läuft in erster Session")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(firstSource.opened.await(3, TimeUnit.SECONDS))
         waitForText("Du")
@@ -649,6 +662,7 @@ class ChatScreenTurnUiTest {
         // Session A starts a run that stays open.
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue("run A was not started", source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
@@ -663,6 +677,7 @@ class ChatScreenTurnUiTest {
         // A send attempt in B is rejected: generic notice, no second POST,
         // B's draft is kept and run A is not interrupted.
         composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         waitForText(CONFLICT_TEXT)
         assertEquals("exactly one POST in total", 1, source.calls.get())
@@ -715,6 +730,7 @@ class ChatScreenTurnUiTest {
         }
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
@@ -723,6 +739,7 @@ class ChatScreenTurnUiTest {
         composeRule.waitForIdle()
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         waitForText(CONFLICT_TEXT)
         println("SHOOT: p6_conflict_portrait")
@@ -755,6 +772,7 @@ class ChatScreenTurnUiTest {
         }
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
@@ -763,6 +781,7 @@ class ChatScreenTurnUiTest {
         composeRule.waitForIdle()
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         waitForText(CONFLICT_TEXT)
         println("SHOOT: p6_conflict_portrait_dark")
@@ -822,6 +841,7 @@ class ChatScreenTurnUiTest {
     private fun openApproval(source: FakeTurnSource, request: ApprovalRequest) {
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Approval lifecycle")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(
@@ -955,6 +975,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Test")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
@@ -991,6 +1012,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Doppeltipp")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Stoppen")
@@ -1030,6 +1052,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Accepted")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Stoppen")
@@ -1085,6 +1108,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Fehler")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Stoppen")
@@ -1144,6 +1168,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Stop-AlreadyTerminal")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Stoppen")
@@ -1182,6 +1207,7 @@ class ChatScreenTurnUiTest {
         // kein Gate, daher wird das Ergebnis vor dem Tipp synchron
         // vorbereitet, damit der (ungegatede) Aufruf es zurückgibt.
         composeRule.onNodeWithText("Nachricht").performTextInput("Erster Lauf")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Stoppen")
@@ -1212,6 +1238,7 @@ class ChatScreenTurnUiTest {
         // wird nur die Run-ID des neuen Runs gebunden.
         stopper.release(RunStopResult.Accepted(NEW_RUN_ID))
         composeRule.onNodeWithText("Nachricht").performTextInput("Zweiter Lauf")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertEquals(2, source.calls.get())
         source.enqueue(ChatTurnEvent.RunStarted(NEW_RUN_ID))
@@ -1246,6 +1273,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Back")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Stoppen")
@@ -1341,6 +1369,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Sichtbarkeit")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
@@ -1378,9 +1407,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Queued")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Kurs nach links")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue("steer request must start", steerer.started.await(3, TimeUnit.SECONDS))
         // Gated: die Request-Parameter sind gesetzt, bevor das Ergebnis
@@ -1432,9 +1463,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-409")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Kurs nach rechts")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         assertEquals("Kurs nach rechts", steerer.text.get())
@@ -1481,6 +1514,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Pending-Steer")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         source.enqueue(ChatTurnEvent.TurnCompleted(pendingSteer = "Weiter mit Plan B"))
@@ -1519,9 +1553,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Doppeltipp")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Doppeltipp")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
 
@@ -1554,9 +1590,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Fehler")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Kursversuch")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
 
@@ -1594,9 +1632,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Erster Lauf")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Alter Steuerentwurf")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         // 409: Recovery-Text gesetzt.
@@ -1617,6 +1657,7 @@ class ChatScreenTurnUiTest {
         // hineingleiten — aber der erhaltene Recovery-Text ist
         // Nutzereingabe und geht nicht verloren (Mission 008B).
         composeRule.onNodeWithText("Nachricht").performTextInput("Zweiter Lauf")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertEquals(2, source.calls.get())
         source.enqueue(ChatTurnEvent.RunStarted(NEW_RUN_ID))
@@ -1646,9 +1687,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Bleibt-Stehen")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Bleibt stehen")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -1688,9 +1731,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Ende-in-Flight")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Halb weg")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
 
@@ -1724,9 +1769,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Vier-Hunderteinundneunzig")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Rettet mich")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -1782,9 +1829,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Zwei-Erhaltung")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steuer-A")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -1830,9 +1879,11 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Zwei-Items")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steuer-Erstes")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -1886,6 +1937,7 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Doppelt-Kein")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         // Eingabe mit führenden/abschließenden Leerraum: der Server
@@ -1895,6 +1947,7 @@ class ChatScreenTurnUiTest {
         // `steerDraft` — sonst entspräche `"  Gleich  "` != `"Gleich"`
         // und es entstünde ein falsches zweites Item (Mission 008B).
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("  Gleich  ")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         // Exakt der validierte/gesendete (getrimmte) Wire-Text.
@@ -1947,10 +2000,12 @@ class ChatScreenTurnUiTest {
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").performTextInput("Erste Session")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(firstSource.opened.await(3, TimeUnit.SECONDS))
         firstSource.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steht in Session 1")
+        ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(firstSteer.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
