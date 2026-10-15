@@ -279,6 +279,11 @@ Die **kanonische** Mobile-v1-Quelle (`hermes devices pair`) gibt **nur** den
 Teil des kanonischen Mobile-v1-Commits und wird nicht als stehender
 Vertrag vorausgesetzt — der Client-Contract (§7.1–§7.6) bleibt davon unabhängig.
 
+Der **Orsik Mobile Bridge**-Sidecar (P13) implementiert denselben Pairing-Vertrag
+für eine frische, unveränderte offizielle Hermes-Installation; dort erzeugt die
+lokale Operator-CLI (`orsik-mobile-bridge admin pairing-code`) Code, Deep-Link und
+optional einen QR-Code (`docs/bridge-installation.md`).
+
 ## 8. Run-Autorität & Recovery (P7)
 
 **Status:** Read-only gegen den lokal vorhandenen Mobile-v1-Quellstand geprüft

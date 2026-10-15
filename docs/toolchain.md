@@ -6,7 +6,7 @@ Die Werkzeuge sind benutzerlokal installiert; es wurden keine Systempakete und k
 
 > Hinweis: Die folgenden Pfade und Versionen sind ein **beispielhafter**
 > Maschinenstand und nicht generell gültig. Maßgeblich für Builds ist
-> ausschließlich der versionierte Gradle Wrapper (`./gradlew`, Gradle 8.14.5).
+> ausschließlich der versionierte Gradle Wrapper (`./gradlew`, Gradle 9.7.0).
 > `scripts/verify-environment.sh` leitet `$HOME` und das Repo-Verzeichnis selbst
 > ab und prüft die unten genannten SDK-Pfade.
 

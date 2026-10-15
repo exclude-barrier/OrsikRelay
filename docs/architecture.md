@@ -18,7 +18,7 @@ Apache-2.0-Lizenz und Audit-Härtungen.
   `di/AppDependencies.kt` gebaut und prozessweit in `AppDependenciesHolder`
   gecacht. `HermesNavHost` löst bei Bedarf `AppDependenciesHolder.get(...)` auf;
   Test-Injektionen umgehen den Cache und bauen einen isolierten Graphen.
-- Wrapper `8.14.5`, Kotlin `2.2.10`, AGP `8.13.2`, Compose BOM `2025.12.00`,
+- Wrapper `9.7.0`, Kotlin `2.4.20`, AGP `9.3.1`, Compose BOM `2025.12.00`,
   `minSdk 26`, `compileSdk`/`targetSdk 36`, JDK 17.
 
 ## 2. Schichten
@@ -67,12 +67,24 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
   Sessionliste. In Produktion ist sie immer `null`; der Seam ist bewusst und als
   vertretbar dokumentiert, weil ein realer Activity-Recreation-Test sonst einen
   echten Netzwerkpfad bräuchte.
-- **Serververtrag nicht öffentlich.** Der Mobile-v1-Vertrag
-  (`device_credentials`, `session_chat_interactive_approvals`,
-  `X-Hermes-Interactive-Approvals`) ist **nicht** in der öffentlichen
-  Hermes-Version enthalten. Ohne einen passenden Serverstand ist die App nicht
-  nutzbar. Die Veröffentlichung des Serververtrags ist Voraussetzung für einen
-  allgemein nutzbaren Release (siehe `README.md`).
+- **Serververtrag nicht öffentlich (Mobile-v1-Erweiterungen).** Die
+  device- und reconnect-spezifischen Mobile-v1-Erweiterungen
+  (`device_credentials`, `protocol_version`-Negotiation samt Capability
+  `session_chat_interactive_approvals`, Session-Run-Re-Attach mit `after_seq`)
+  sind **nicht** in der öffentlichen Hermes-Version enthalten. Für eine frische,
+  unveränderte offizielle Hermes-Installation liefert sie die **Orsik Mobile
+  Bridge** als Sidecar (`docs/bridge-installation.md`, `docs/bridge-e2e.md`); der
+  Core bleibt unpatched. Die darunterliegenden Core-Funktionen (Session-Chat/
+  Stream, interaktive Session-Approvals `approval.request`) sind vorhanden und
+  werden durchgereicht bzw. auf `once`/`deny` verengt; ob der Core multimodale
+  Content-Parts verarbeitet, ist auf dem Bridge-Pfad nicht verifiziert. Der
+  Client-Opt-in-Header `X-Hermes-Interactive-Approvals` des privaten
+  Mobile-v1-Stands wird auf dem Bridge-Pfad nicht benötigt (der Core ist
+  interaktiv, sobald der Stream-Notifier registriert ist). Ohne Bridge oder
+  einen gleichwertigen Serverstand ist die App nicht nutzbar. Die
+  Veröffentlichung des Serververtrags im offiziellen Core (Upstream) ist
+  Voraussetzung für einen allgemein nutzbaren Release ohne Bridge (siehe
+  `README.md`).
 
 ## 5. Run-Lifecycle-Invarianten (P7)
 
