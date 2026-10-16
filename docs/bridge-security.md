@@ -123,8 +123,10 @@ der Upstream-Status feststeht, also vor der Antwort an das Gerät.
 
 Unverändert gilt §4: Jedes gepairte Gerät kann Approvals/Stop/Steer für
 **jeden** Run des Owners senden (keine Per-Device-Isolation); das Audit macht
-das zurechenbar, verhindert es aber nicht. Nicht live geprüft: Antwort eines
-zweiten Geräts auf den Run eines ersten.
+das zurechenbar, verhindert es aber nicht. **Live belegt (2026-10-16):** Gerät B
+liest Run-Status und Session-Verlauf von Gerät A (`200`) und beantwortet dessen
+`approval.request` mit `once` (`200`, Kommando ausgeführt); das Audit führt
+`chat` unter Gerät A und `approval … choice=once` unter Gerät B.
 
 ## 5. Nicht-Ziele / Grenzen
 
