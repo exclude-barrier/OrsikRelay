@@ -251,3 +251,34 @@ Zwei dabei gefundene Defekte (behoben in `or-night-integration`):
    Normalisierung auf die Mobile-v1-Form in der Bridge.
 2. Nach Stop sendet der Core `run.cancelled` (statt `run.completed`); die App
    kannte nur `run.completed` → jeder Stop endete UNCERTAIN (OR-08c).
+
+## 11. Echter Process Death während eines Runs (OR-09)
+
+`LiveBridgeProcessDeathE2ETest` (`@LiveBridge`) läuft in **zwei getrennten
+Instrumentation-Aufrufen**, die App bleibt dazwischen installiert (kein
+`connectedDebugAndroidTest`: das deinstalliert nach dem Lauf):
+
+```
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+adb install -r -t app/build/outputs/apk/debug/app-debug.apk
+adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+R=io.github.excludebarrier.orsikrelay.test/androidx.test.runner.AndroidJUnitRunner
+C=io.github.excludebarrier.orsikrelay.LiveBridgeProcessDeathE2ETest
+adb shell am instrument -w -e class "$C#startLongRunThenDie" -e or09Phase start \
+  -e or09Title "'OR-09 <id>'" -e liveBaseUrl https://<bridge-host>.<tailnet>.ts.net:8443 \
+  -e livePairingCode <frischer-code> $R
+adb shell pidof io.github.excludebarrier.orsikrelay      # leer: Prozess ist tot
+adb shell am instrument -w -e class "$C#recoverAfterProcessDeath" -e or09Phase recover \
+  -e or09Title "'OR-09 <id>'" $R
+```
+
+Phase 1 sendet über die echte UI einen langen Turn (`sleep 45`), wartet auf die
+server-bestätigte `run_id` und das persistierte Lease und endet ohne Cleanup;
+das Ende der Instrumentation beendet den App-Prozess. Phase 2 startet kalt,
+prüft das überlebende Lease, öffnet die Session über die echte Liste, erwartet
+UNCERTAIN, reconciled explizit bis zum terminalen Server-Status, prüft das
+gelöschte Lease und genau eine User-Nachricht.
+
+**Live 2026-10-16: beide Phasen OK**, `pidof` nach Phase 1 leer. Bridge-Log: genau
+ein `chat`-POST, danach nur `GET /v1/runs/{id}` (Reconcile-Polls, ~50 s
+`running`, dann terminal) – kein zweiter POST.
