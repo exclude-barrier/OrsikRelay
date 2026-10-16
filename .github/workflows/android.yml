@@ -52,6 +52,11 @@ jobs:
       - name: JVM unit tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
+      - name: Unit-test coverage report (report only)
+        # JaCoCo coverage of the JVM unit tests (AGP built-in). Report only,
+        # no threshold gate; the existing "reports" upload picks it up.
+        run: ./gradlew --no-daemon :app:createDebugUnitTestCoverageReport
+
       - name: Lint
         run: ./gradlew --no-daemon :app:lintDebug
 

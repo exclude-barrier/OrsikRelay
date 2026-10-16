@@ -37,3 +37,29 @@ scripts/verify-environment.sh
 ```
 
 Für echte Android-Builds ist später der im Repository erzeugte Gradle Wrapper (`./gradlew`) maßgeblich. Die benutzerlokale Gradle-Installation dient nur dem initialen Bootstrap.
+
+## Coverage (Report, kein Gate)
+
+```bash
+./gradlew :app:createDebugUnitTestCoverageReport
+```
+
+Erzeugt den JaCoCo-HTML/XML-Report der JVM-Unit-Tests unter
+`app/build/reports/coverage/test/debug/` (`report.xml` für Maschinenauswertung).
+Der `debug`-Build-Typ aktiviert dafür `enableUnitTestCoverage = true` (AGP-eigenes
+JaCoCo). Der Schritt ist reiner Report und **kein Schwellwert-Gate**; die CI lädt
+ihn über den bestehenden `app/build/reports/**`-Upload mit hoch. Instrumentation-
+Coverage (`enableAndroidTestCoverage`) ist bewusst **nicht** aktiviert.
+
+Baseline (`:app:testDebugUnitTest` + Coverage, 823 Tests, 0 Fehler,
+Stand 2026-10-16, Basis `main@f1311d1`):
+
+| Bereich | LINE | BRANCH |
+| --- | --- | --- |
+| Gesamt | 52,8 % | 55,3 % |
+| `io.github.excludebarrier.orsikrelay.domain.run` | 94,6 % | 84,4 % |
+| `io.github.excludebarrier.orsikrelay.network` | 88,4 % | 83,6 % |
+| `io.github.excludebarrier.orsikrelay.data.message` | 95,4 % | 86,0 % |
+
+Schwellwerte werden erst nach einer risikobasierten Bewertung eingeführt, nicht
+auf Basis dieser Baseline automatisch.

@@ -21,6 +21,11 @@ android {
     buildToolsVersion = "36.1.0"
 
     buildTypes {
+        debug {
+            // Report-only JaCoCo coverage for JVM unit tests (AGP built-in);
+            // no coverage threshold gate. Instrumentation coverage stays off.
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
