@@ -801,5 +801,66 @@ class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("event: done", replay)
 
 
+class StoreExecutorHttpTest(unittest.IsolatedAsyncioTestCase):
+    """OR-20b: a blocked store call must not stall the aiohttp event loop.
+
+    The device store is synchronous (sqlite3 + a lock + a 5 s busy timeout), so
+    running it inline in a handler freezes every stream and request for as long
+    as a call blocks. The fixture mirrors BridgeHttpTest: stub upstream plus an
+    in-memory store injected into BridgeState.
+    """
+
+    async def asyncSetUp(self):
+        UPSTREAM.clear()
+        self.upstream = TestServer(_upstream_app())
+        await self.upstream.start_server()
+        upstream_url = str(self.upstream.make_url("/")).rstrip("/")
+        self.state = bridge_server.BridgeState(upstream=upstream_url, master_key="master_key_test")
+        self.client = TestClient(TestServer(bridge_server.create_app(self.state)))
+        await self.client.start_server()
+
+    async def asyncTearDown(self):
+        await self.client.close()
+        await self.upstream.close()
+        self.state.store.close()
+
+    def _bearer(self, token):
+        return {"Authorization": "Bearer " + token}
+
+    async def test_blocked_store_lookup_does_not_stall_the_event_loop(self):
+        import threading
+
+        issued = self.state.codes.issue()
+        self.assertIsNotNone(issued)
+        pair = await self.client.post("/v1/devices/pair", json={"code": issued[0]})
+        self.assertEqual(pair.status, 201)
+        token = (await pair.json())["device_key"]
+
+        original_lookup = self.state.tokens.lookup
+        entered = threading.Event()
+        release = threading.Event()
+
+        def blocking_lookup(value):
+            entered.set()
+            release.wait(timeout=5)
+            return original_lookup(value)
+
+        self.state.tokens.lookup = blocking_lookup
+
+        # An authenticated request held inside the (blocked) store call.
+        slow = asyncio.create_task(
+            self.client.get("/v1/capabilities", headers=self._bearer(token))
+        )
+        # Wait (off the loop) until the request really sits in the store call.
+        self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+        # Meanwhile the unauthenticated liveness probe must still answer in < 1 s.
+        health = await asyncio.wait_for(self.client.get("/health"), timeout=1)
+        self.assertEqual(health.status, 200)
+        self.assertFalse(slow.done())
+        release.set()
+        slow_resp = await asyncio.wait_for(slow, timeout=5)
+        self.assertEqual(slow_resp.status, 200)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import concurrent.futures
+import functools
 import ipaddress
 import json
 import logging
@@ -80,9 +82,21 @@ class BridgeState:
         # (both expose the same mint/lookup/revoke / issue/redeem interface).
         self.codes: Any = self.store.codes
         self.tokens: Any = self.store.tokens
+        # The store is synchronous (sqlite3 + a lock + a 5 s busy timeout). A
+        # single worker serialises every store call onto its own thread so a
+        # blocked call can never stall the aiohttp event loop.
+        self.db_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="bridge-db")
         self.runhub = runhub.RunHub()
         self.background: set[asyncio.Task] = set()
         self.pair_limiter = core.RateLimiter(_PAIR_PER_MINUTE, 60.0)
+
+
+async def _db(state: BridgeState, fn, *args, **kwargs):
+    """Run a synchronous store call on the dedicated DB thread, off the loop."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        state.db_executor, functools.partial(fn, *args, **kwargs))
 
 
 def _safe_upstream_label(upstream: str) -> str:
@@ -201,6 +215,12 @@ def create_app(state: BridgeState) -> web.Application:
         "/api/sessions/{session_id}/runs/{run_id}/stream", _handle_run_reattach)
     # Closed proxy surface: one catch-all that consults the allowlist.
     app.router.add_route("*", "/{tail:.*}", _handle_proxy)
+
+    async def _close_db_executor(_: web.Application) -> None:
+        # Drain the DB thread off the loop so shutdown cannot stall it.
+        await asyncio.to_thread(state.db_executor.shutdown, wait=True)
+
+    app.on_cleanup.append(_close_db_executor)
     return app
 
 
@@ -211,7 +231,7 @@ async def _handle_health(request: web.Request) -> web.StreamResponse:
 
 async def _handle_capabilities(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
-    if state.tokens.lookup(_device_token(request)) is None:
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
     return web.json_response(core.build_capabilities())
 
@@ -226,9 +246,9 @@ async def _handle_pair(request: web.Request) -> web.Response:
         return _closed(413, "body_too_large")
     except Exception:
         return _closed(400, "invalid_json")
-    if not isinstance(body, dict) or not state.codes.redeem(body.get("code")):
+    if not isinstance(body, dict) or not await _db(state, state.codes.redeem, body.get("code")):
         return _closed(400, "pairing_code_invalid")
-    minted = state.tokens.mint(label="paired-device", profile="default")
+    minted = await _db(state, state.tokens.mint, label="paired-device", profile="default")
     if minted is None:
         return _closed(503, "device_capacity_reached")
     token, record = minted
@@ -237,7 +257,7 @@ async def _handle_pair(request: web.Request) -> web.Response:
 
 async def _handle_self_revoke(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
-    record = state.tokens.revoke(_device_token(request))
+    record = await _db(state, state.tokens.revoke, _device_token(request))
     if record is None:
         return _closed(401, "invalid_credentials")
     return web.json_response({"revoked": True, "device_id": record.device_id})
@@ -251,7 +271,7 @@ async def _handle_approval(request: web.Request) -> web.StreamResponse:
     NEVER reach Hermes.
     """
     state: BridgeState = request.app[STATE_KEY]
-    if state.tokens.lookup(_device_token(request)) is None:
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
     run_id = request.match_info.get("run_id", "")
     if not core.is_safe_run_id(run_id):
@@ -288,7 +308,7 @@ async def _handle_chat_stream(request: web.Request) -> web.StreamResponse:
     run's frames are buffered and can be replayed on re-attach.
     """
     state: BridgeState = request.app[STATE_KEY]
-    if state.tokens.lookup(_device_token(request)) is None:
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
     session_id = request.match_info.get("session_id", "")
     if not core._safe_segment(session_id):
@@ -396,7 +416,7 @@ async def _handle_run_reattach(request: web.Request) -> web.StreamResponse:
     never fabricates events and never re-issues the originating chat POST.
     """
     state: BridgeState = request.app[STATE_KEY]
-    if state.tokens.lookup(_device_token(request)) is None:
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
     session_id = request.match_info.get("session_id", "")
     run_id = request.match_info.get("run_id", "")
@@ -513,7 +533,7 @@ async def _indeterminate_run(state: BridgeState, run_id: str) -> web.Response:
 
 async def _handle_proxy(request: web.Request) -> web.StreamResponse:
     state: BridgeState = request.app[STATE_KEY]
-    if state.tokens.lookup(_device_token(request)) is None:
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
     match = core.match_proxy_route(request.method, request.path)
     if match is None:

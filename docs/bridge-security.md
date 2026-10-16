@@ -33,6 +33,7 @@ Rechte-Allowlist `{chat, runs, approvals}`.
 | Token-/Code-Diebstahl at rest | Nur SHA-256-Hashes; DB 0600/0700; nie geloggt |
 | Persistentes Credential kompromittiert | Einzelwiderruf durabel über Neustart |
 | Store-Ausfall | Fail-closed (`503 store_unavailable`), nie fail-open |
+| Blockierender Store-Zugriff | Store-Aufrufe laufen seriell in einem eigenen DB-Thread und blockieren den aiohttp-Eventloop nie |
 | Öffentliche Admin-Oberfläche | Kein HTTP-Admin; Codes nur lokale Operator-CLI |
 | Run-Verlust/Duplikat bei Disconnect | Server-seitiger Stream-Takeover + `after_seq`-Replay; kein zweiter POST |
 | Fingierte Run-Completion | Nie erfundene Events; nicht rekonstruierbar → `409`/`404` |
