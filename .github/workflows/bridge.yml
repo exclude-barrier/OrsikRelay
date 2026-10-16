@@ -1,7 +1,9 @@
 name: Bridge CI
 
 # Reproducible gate for the Orsik Mobile Bridge PoC (Python). Mirrors the
-# local `python -m unittest discover -s tests`. No deployment, no secrets.
+# local `uv lock --check` / `uv sync --locked` / `python -m unittest discover
+# -s tests` flow and publishes the wheel, its checksums and a CycloneDX SBOM.
+# No deployment, no secrets.
 
 on:
   push:
@@ -20,7 +22,7 @@ permissions:
 
 jobs:
   bridge:
-    name: Bridge unit tests
+    name: Bridge tests and reproducible build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -31,7 +33,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - name: Install bridge
-        run: python -m pip install -e .
+      - name: Install uv
+        run: python -m pip install uv==0.13.1
+      - name: Check lockfile is up to date
+        run: uv lock --check
+      - name: Install from the locked graph
+        run: uv sync --locked
       - name: Unit tests
-        run: python -m unittest discover -s tests -v
+        run: uv run --locked python -m unittest discover -s tests -v
+      - name: Build wheel
+        run: uv build --wheel --out-dir dist
+      - name: CycloneDX SBOM
+        run: uv export --frozen --no-dev --format cyclonedx1.5 -o dist/SBOM.cdx.json
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-dist
+          path: bridge/dist

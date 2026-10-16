@@ -44,6 +44,13 @@ if [ ! -f "$SRC/pyproject.toml" ]; then
   exit 1
 fi
 
+# The exact dependency set is frozen in uv.lock; without it the install would
+# silently resolve whatever PyPI serves today.
+if [ ! -f "$SRC/uv.lock" ]; then
+  echo "install.sh: $SRC/uv.lock is missing; refusing an unreproducible install" >&2
+  exit 1
+fi
+
 # Do not clobber an existing install unless the operator asked to update it.
 if [ -d "$BRIDGE_HOME/venv" ] && [ "$UPDATE" -ne 1 ]; then
   echo "install.sh: $BRIDGE_HOME already exists; re-run with --update to refresh it" >&2
@@ -56,7 +63,15 @@ chmod 700 "$BRIDGE_HOME"
 # A dedicated venv keeps the bridge's dependencies isolated from Hermes.
 # Any interpreter the package supports (>=3.11) works; override with BRIDGE_PYTHON.
 uv venv --python "${BRIDGE_PYTHON:-3.14}" "$BRIDGE_HOME/venv"
-uv pip install --python "$BRIDGE_HOME/venv" "$SRC"
+
+# Dependencies come from the frozen lockfile, verified against its hashes
+# (--require-hashes). The bridge itself is installed last, with --no-deps, so
+# nothing outside the lock can slip in.
+REQ="$(mktemp)"
+trap 'rm -f "$REQ"' EXIT
+uv export --project "$SRC" --frozen --no-dev --no-emit-project --format requirements.txt -o "$REQ"
+uv pip install --python "$BRIDGE_HOME/venv" --require-hashes -r "$REQ"
+uv pip install --python "$BRIDGE_HOME/venv" --no-deps "$SRC"
 
 # bridge.env holds the master-key path, bind address and state DB. It is 0600.
 ENV="$BRIDGE_HOME/bridge.env"

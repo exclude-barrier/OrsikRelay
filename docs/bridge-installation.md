@@ -20,11 +20,20 @@ scannen → Chat nutzen. Kein Hermes-Fork, keine Core-Patches, kein öffentliche
 ```
 
 - Legt `$BRIDGE_HOME` (Default `~/.local/orsik-mobile-bridge`, 0700) und einen
-  **dedizierten venv** an; installiert die Bridge aus der lokalen, geprüften
-  Quelle (`uv pip install`), **kein** `curl | bash`.
+  **dedizierten venv** an; installiert die Abhängigkeiten **hash-gepinnt** aus
+  dem eingecheckten `bridge/uv.lock` (`uv export --frozen` mit
+  `--require-hashes`, danach die Bridge selbst mit `--no-deps`), **kein**
+  `curl | bash`. Fehlt `uv.lock`, bricht der Installer ab.
 - Existiert bereits eine Installation, bricht `install.sh` ohne `--update` ab
   (bestehende Installationen/Ports werden nicht überschrieben).
 - Schreibt `$BRIDGE_HOME/bridge.env` (0600) als Vorlage.
+
+Damit ist die Installation reproduzierbar: derselbe Quellstand liefert an jedem
+Tag und auf jedem Rechner exakt dieselben Abhängigkeitsversionen. Abhängigkeiten
+ändern sich nur bewusst — `uv lock --upgrade-package <pkg>` plus Review des
+Lock-Diffs (`uv lock --check` in CI schlägt bei veraltetem Lock fehl). Die CI
+baut zusätzlich Wheel, `SHA256SUMS` und ein CycloneDX-SBOM und legt sie als
+Artefakt `bridge-dist` ab.
 
 `bridge.env`:
 

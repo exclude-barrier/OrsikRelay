@@ -138,7 +138,14 @@ Consequences, documented as residual risk:
 
 ## Install / run
 
-See `docs/bridge-installation.md`. Quick start:
+Dependencies are pinned, not resolved on install day: `install.sh` exports the
+frozen `uv.lock` (hashes included) and installs it with `--require-hashes`,
+then installs the bridge itself with `--no-deps`. A dependency therefore only
+changes when someone does it on purpose, via
+`uv lock --upgrade-package <pkg>` and a review of the lock diff (`uv lock
+--check` in CI fails on a stale lock). CI also builds the wheel, a
+`SHA256SUMS` file and a CycloneDX SBOM and uploads them as the
+`bridge-dist` artifact. See `docs/bridge-installation.md`. Quick start:
 
 ```sh
 ./install.sh --systemd /path/to/bridge/source

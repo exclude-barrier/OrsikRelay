@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+dist/
 *.egg-info/
 bridge.env
 state.db
