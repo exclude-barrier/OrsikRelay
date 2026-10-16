@@ -8,6 +8,7 @@ and the exact pairing/self-revoke/credential contract.
 """
 
 import asyncio
+import json
 import unittest
 import uuid
 
@@ -860,6 +861,169 @@ class StoreExecutorHttpTest(unittest.IsolatedAsyncioTestCase):
         release.set()
         slow_resp = await asyncio.wait_for(slow, timeout=5)
         self.assertEqual(slow_resp.status, 200)
+
+
+class EchoRedactionTest(unittest.IsolatedAsyncioTestCase):
+    """OR-10a: the core echoes the full image body in the first run.started frame.
+
+    ``ChatAttachmentRules`` accept raw images up to 5 MiB, so the echoed
+    ``run.started`` legitimately exceeds the 1 MiB relay bound while every later
+    frame stays small. The session chat pump decodes with a frame bound coupled to
+    the request body, strips ``user_message`` from that one frame and re-applies
+    the 1 MiB relay bound to what is actually relayed.
+    """
+
+    ECHO_IMAGE_BYTES = 7 * 1024 * 1024
+
+    async def asyncSetUp(self):
+        self.frames: list[bytes] = []
+        self.run_events_frame = b""
+        app = web.Application()
+
+        async def chat(request):
+            resp = web.StreamResponse()
+            resp.content_type = "text/event-stream"
+            await resp.prepare(request)
+            for frame in self.frames:
+                await resp.write(frame)
+            await resp.write_eof()
+            return resp
+
+        async def run_events(request):
+            resp = web.StreamResponse()
+            resp.content_type = "text/event-stream"
+            await resp.prepare(request)
+            await resp.write(self.run_events_frame)
+            await resp.write_eof()
+            return resp
+
+        app.router.add_post("/api/sessions/{sid}/chat/stream", chat)
+        app.router.add_get("/v1/runs/{rid}/events", run_events)
+        self.upstream = TestServer(app)
+        await self.upstream.start_server()
+        url = str(self.upstream.make_url("/")).rstrip("/")
+        self.state = bridge_server.BridgeState(url, "master_key_test")
+        self.client = TestClient(TestServer(bridge_server.create_app(self.state)))
+        await self.client.start_server()
+        code = self.state.codes.issue()[0]
+        self.token = (
+            await (await self.client.post("/v1/devices/pair", json={"code": code})).json()
+        )["device_key"]
+
+    async def asyncTearDown(self):
+        await self.client.close()
+        await self.upstream.close()
+        self.state.store.close()
+
+    def _bearer(self):
+        return {"Authorization": "Bearer " + self.token}
+
+    async def _chat(self):
+        return await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+
+    @staticmethod
+    def _blocks(body: bytes) -> list[bytes]:
+        return [block for block in body.split(b"\n\n") if block.strip()]
+
+    @staticmethod
+    def _data(block: bytes) -> dict:
+        for line in block.split(b"\n"):
+            if line.startswith(b"data:"):
+                return json.loads(line[len(b"data:"):].decode())
+        raise AssertionError("frame has no data line")
+
+    async def test_image_echo_is_redacted_and_replays_redacted(self):
+        image = "data:image/png;base64," + "A" * self.ECHO_IMAGE_BYTES
+        started = {
+            "session_id": "s1", "run_id": "run_img", "seq": 1,
+            "user_message": {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "was ist das?"},
+                    {"type": "image_url", "image_url": {"url": image}},
+                ],
+            },
+        }
+        self.frames = [
+            b"id: 7\nevent: run.started\ndata: " + json.dumps(started).encode() + b"\n\n",
+            b'event: message.started\ndata: {"session_id": "s1", "run_id": "run_img", "seq": 2}\n\n',
+            b'event: assistant.completed\ndata: {"session_id": "s1", "run_id": "run_img", "seq": 3}\n\n',
+            b'event: run.completed\ndata: {"session_id": "s1", "run_id": "run_img", "seq": 4}\n\n',
+            b'event: done\ndata: {"session_id": "s1", "run_id": "run_img", "seq": 5}\n\n',
+        ]
+        resp = await self._chat()
+        self.assertEqual(resp.status, 200)
+        body = await resp.read()
+        events = [line for line in body.split(b"\n") if line.startswith(b"event:")]
+        self.assertEqual(
+            events,
+            [b"event: run.started", b"event: message.started", b"event: assistant.completed",
+             b"event: run.completed", b"event: done"],
+        )
+        self.assertNotIn(b"base64", body)  # the image echo never reaches the client
+        first = self._blocks(body)[0]
+        # id/event lines and their order survive the reserialisation.
+        self.assertTrue(first.startswith(b"id: 7\nevent: run.started\ndata: "))
+        payload = self._data(first)
+        self.assertNotIn("user_message", payload)
+        self.assertEqual(payload["seq"], 1)
+        self.assertEqual(payload["run_id"], "run_img")
+
+        # A re-attach replays the same redacted run.started from the buffer.
+        again = await self.client.get(
+            "/api/sessions/s1/runs/run_img/stream?after_seq=0", headers=self._bearer()
+        )
+        self.assertEqual(again.status, 200)
+        replay = await again.read()
+        self.assertNotIn(b"base64", replay)
+        self.assertEqual(
+            [line for line in replay.split(b"\n") if line.startswith(b"event:")], events
+        )
+        self.assertEqual(self._blocks(replay)[0], first)
+
+    async def test_oversized_non_echo_frame_still_aborts_without_done(self):
+        self.frames = [
+            b'event: run.started\ndata: {"session_id": "s1", "run_id": "run_big", "seq": 1}\n\n',
+            b"event: assistant.delta\ndata: " + b"x" * (2 * 1024 * 1024) + b"\n\n",
+        ]
+        resp = await self._chat()
+        self.assertEqual(resp.status, 200)
+        body = await resp.read()
+        self.assertIn(b"event: run.started", body)
+        self.assertIn(b": bridge_upstream_frame_too_large", body)
+        self.assertNotIn(b"event: done", body)
+
+    async def test_run_started_without_echo_is_byte_identical(self):
+        started = b'event: run.started\ndata: {"session_id": "s1", "run_id": "run_plain", "seq": 1}\n\n'
+        done = b'event: done\ndata: {"session_id": "s1", "run_id": "run_plain", "seq": 2}\n\n'
+        self.frames = [started, done]
+        resp = await self._chat()
+        self.assertEqual(resp.status, 200)
+        body = await resp.read()
+        self.assertEqual(body, started + done)
+
+    async def test_frame_above_echo_bound_is_still_502(self):
+        pad = "A" * (bridge_server._MAX_ECHO_FRAME_BYTES + 4096)
+        self.frames = [
+            (b'event: run.started\ndata: {"session_id": "s1", "run_id": "run_huge", "seq": 1,'
+             b' "user_message": {"image_url": {"url": "' + pad.encode() + b'"}}}\n\n'),
+        ]
+        resp = await self._chat()
+        self.assertEqual(resp.status, 502)
+        self.assertEqual((await resp.json())["error"]["code"], "upstream_frame_too_large")
+
+    async def test_proxied_run_events_stream_is_a_raw_relay(self):
+        # GET /v1/runs/{id}/events is a raw byte relay with no SSEDecoder, so the
+        # echo defect is specific to the decoder-backed session chat pump: the
+        # same oversized run.started passes through here unmodified.
+        echo = (b'event: run.started\ndata: {"run_id": "run_raw", "seq": 1, "user_message": "'
+                + b"A" * (2 * 1024 * 1024) + b'"}\n\n')
+        self.run_events_frame = echo
+        resp = await self.client.get("/v1/runs/run_raw/events", headers=self._bearer())
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(await resp.read(), echo)
 
 
 if __name__ == "__main__":

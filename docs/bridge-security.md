@@ -38,9 +38,34 @@ Rechte-Allowlist `{chat, runs, approvals}`.
 | Öffentliche Admin-Oberfläche | Kein HTTP-Admin; Codes nur lokale Operator-CLI |
 | Run-Verlust/Duplikat bei Disconnect | Server-seitiger Stream-Takeover + `after_seq`-Replay; kein zweiter POST |
 | Fingierte Run-Completion | Nie erfundene Events; nicht rekonstruierbar → `409`/`404` |
-| Speichererschöpfung durch Upstream/Runs | Frame ≤ 1 MiB (sonst `502 upstream_frame_too_large` bzw. Abbruchkommentar, kein `done`); Fehlerkörper ≤ 64 KiB; Backlog je Run 1000 Frames/4 MiB; Subscriber-Queue 256/2 MiB, max. 4 je Run (Drop statt Block); max. 16 aktive Runs (`503 bridge_busy` vor dem Upstream-POST); terminale Runs ≤ 64 MiB |
+| Speichererschöpfung durch Upstream/Runs | Frame ≤ 1 MiB **nach** Redaktion (sonst `502 upstream_frame_too_large` bzw. Abbruchkommentar, kein `done`; Bild-Echo siehe §3.1); Fehlerkörper ≤ 64 KiB; Backlog je Run 1000 Frames/4 MiB; Subscriber-Queue 256/2 MiB, max. 4 je Run (Drop statt Block); max. 16 aktive Runs (`503 bridge_busy` vor dem Upstream-POST); terminale Runs ≤ 64 MiB |
 | Öffentlicher API-Port | Bind nur `127.0.0.1`; TLS extern; kein Funnel |
 | TLS-Bypass | Bridge terminiert kein TLS; App erzwingt HTTPS + Systemtrust |
+
+## 3.1 Bild-Echo in `run.started` (OR-10a)
+
+Der Core echot im ersten `run.started`-Frame den kompletten Request inklusive
+`user_message` (u. a. `content[1].image_url.url` als
+`data:image/...;base64,...`). Ein Rohbild bis 5 MiB (`MAX_IMAGE_BYTES` der App)
+ergibt dabei einen Frame deutlich über 1 MiB, obwohl der Request zulässig ist
+(base64-Body bis 8 MiB, Bridge-Body-Limit 10 MB). Ohne Gegenmaßnahme antwortete
+die Bridge auf jeden Bildturn mit `502 upstream_frame_too_large`.
+
+Der Session-Chat-Pump (`_pump_chat_stream`) dekodiert deshalb **nur dort** mit
+`_MAX_ECHO_FRAME_BYTES = _MAX_BODY_BYTES + 64 KiB` (der Core echot höchstens den
+Request-Body plus Envelope). Für jeden `run.started`-Frame, dessen `data`-JSON ein
+Objekt mit `user_message` ist, entfernt die Bridge genau diesen Schlüssel; alle
+übrigen Felder (`seq`, `run_id`, …), vorhandene `id:`/`event:`-Zeilen und deren
+Reihenfolge bleiben erhalten. Dies ist die **einzige** Stelle, an der die Bridge
+Upstream-Inhalt re-serialisiert statt byte-identisch weiterzureichen.
+
+**Nach** der Redaktion gilt für jeden Frame unverändert `sse.MAX_FRAME_BYTES`
+(1 MiB, gemessen an `len(frame.raw)`): ein größerer Frame führt zum selben
+Verhalten wie zuvor (`502 upstream_frame_too_large` vor dem ersten Frame, sonst
+Abbruchkommentar `: bridge_upstream_frame_too_large`, nie ein erfundenes `done`).
+`sse.MAX_FRAME_BYTES` und alle Puffer-/Queue-Grenzen in `runhub.py` bleiben
+unverändert. Der roh proxied `GET /v1/runs/{run_id}/events` läuft nicht über den
+SSEDecoder und hat keinen Frame-Grenzwert; dort greift der Defekt nicht.
 
 ## 4. Single-Owner-Delegation (Restrisiko)
 

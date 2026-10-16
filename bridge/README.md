@@ -106,6 +106,13 @@ Every accumulator is capped; the limits are module constants in
   `502 upstream_frame_too_large`; afterwards the frames received so far are
   relayed and the stream ends with a `: bridge_upstream_frame_too_large`
   comment — never with a fabricated `done`.
+- The core echoes the whole request (base64 image included) in the first
+  `run.started` frame, so an image turn legitimately exceeds 1 MiB. The session
+  chat pump therefore decodes with a body-coupled bound
+  (`_MAX_BODY_BYTES + 64 KiB`), removes the `user_message` field from that one
+  frame (the only place the bridge re-serialises upstream content instead of
+  relaying it byte-for-byte) and then applies the 1 MiB relay bound above to
+  what is actually sent. The bound itself (`MAX_FRAME_BYTES`) is unchanged.
 - A non-SSE upstream error body is read up to 64 KiB; larger →
   `502 upstream_error_too_large`.
 - Per-run backlog: 1000 frames and 4 MiB (oldest evicted first). Once frames

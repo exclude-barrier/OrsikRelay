@@ -3,8 +3,11 @@
 The bridge reads the upstream Hermes session chat stream, needs to know each
 event's ``seq``/``run_id`` (to buffer and replay) and must re-emit frames
 byte-for-byte on reconnect. It therefore keeps each frame's raw bytes and only
-parses the ``data:`` JSON for correlation — it never re-serialises upstream
-content.
+parses the ``data:`` JSON for correlation. The single deliberate exception is
+:func:`redact_echo`: the core echoes the whole request (image body included) in
+the first ``run.started`` frame, so that one frame is rebuilt without its
+``user_message`` field. That is the only place the bridge re-serialises upstream
+content, and it never happens in this decoder itself.
 
 Parsing is total: a malformed ``data:`` line yields a frame with ``json=None``
 and is still relayed, never dropped and never raised. The one deliberate
@@ -50,6 +53,44 @@ class Frame:
     data: str
     json: dict | None
     raw: bytes
+
+
+ECHO_EVENT = "run.started"
+"""Event whose ``user_message`` echo the bridge strips before relaying."""
+
+
+def redact_echo(frame: Frame) -> Frame:
+    """Rebuild a ``run.started`` frame without its ``user_message`` echo.
+
+    The official core echoes the request's ``user_message`` (including the whole
+    base64 image) in the first ``run.started`` frame, which alone can exceed the
+    relay frame bound. Every other field is carried over unchanged and existing
+    ``id:``/``event:`` lines keep their order; only the ``data:`` payload is
+    re-serialised. Any other frame is returned as is, byte-identical.
+    """
+    payload = frame.json
+    if (
+        frame.event != ECHO_EVENT
+        or not isinstance(payload, dict)
+        or "user_message" not in payload
+    ):
+        return frame
+    redacted = {key: value for key, value in payload.items() if key != "user_message"}
+    data = json.dumps(redacted, separators=(",", ":"), ensure_ascii=False)
+    data_line = b"data: " + data.encode("utf-8")
+    rebuilt: list[bytes] = []
+    replaced = False
+    for line in frame.raw.rstrip(b"\n").split(b"\n"):
+        if not line.startswith(b"data:"):
+            rebuilt.append(line)
+        elif not replaced:
+            rebuilt.append(data_line)
+            replaced = True
+    if not replaced:
+        rebuilt.append(data_line)
+    return Frame(
+        event=frame.event, data=data, json=redacted, raw=b"\n".join(rebuilt) + b"\n\n"
+    )
 
 
 class SSEDecoder:

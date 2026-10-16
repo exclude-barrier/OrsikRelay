@@ -23,6 +23,12 @@ locally, upstream redirects are never followed (no master-key hop), the query
 surface is allowlisted, the device store is persistent and fails closed, and
 pairing is rate-limited with true store caps.
 
+The session chat pump decodes with a frame bound coupled to the request body and
+redacts the ``user_message`` echo the core puts in the first ``run.started``
+frame (the whole image body, so a valid image turn would exceed the 1 MiB relay
+bound); every frame must still fit that bound afterwards. This is the only place
+a frame is re-serialised instead of relayed byte-for-byte.
+
 TLS is provided out-of-band (e.g. Tailscale Serve to 127.0.0.1); this process
 binds loopback plaintext only.
 """
@@ -49,7 +55,7 @@ from . import core
 from . import pairing
 from . import runhub
 from . import store as store_mod
-from .sse import SSEDecoder, SSEFrameTooLarge
+from .sse import MAX_FRAME_BYTES, Frame, SSEDecoder, SSEFrameTooLarge, redact_echo
 
 logger = logging.getLogger("orsik_mobile_bridge")
 
@@ -57,6 +63,12 @@ APPROVAL_PATH = "/v1/runs/{run_id}/approval"
 # Match the official api_server request bound (10_000_000) so the bridge does
 # not silently reject the client's supported image bodies (<= 8 MiB encoded).
 _MAX_BODY_BYTES = 10_000_000
+# The session chat pump decodes with a frame bound coupled to the request body:
+# the core echoes at most the request body (image included) plus the event
+# envelope in the first run.started frame, so a valid image turn legitimately
+# decodes to more than the 1 MiB relay bound. The relay bound (MAX_FRAME_BYTES)
+# is re-applied to every frame after the echo is redacted.
+_MAX_ECHO_FRAME_BYTES = _MAX_BODY_BYTES + 64 * 1024
 _PAIR_PER_MINUTE = 60
 _RUN_STREAM_KEEPALIVE = 15.0
 # Bounds the authoritative upstream status read used by _indeterminate_run.
@@ -336,11 +348,48 @@ async def _handle_chat_stream(request: web.Request) -> web.StreamResponse:
     return await _stream_buffer_to_client(request, buf, after_seq=-1)
 
 
+def _relay_frame(state: BridgeState, buf: runhub.RunBuffer, frame: Frame) -> bool:
+    """Redact the run.started echo, enforce the relay bound, then buffer the frame.
+
+    Returns False when a frame is still above :data:`MAX_FRAME_BYTES` after
+    redaction; the caller then closes the upstream exactly like the decoder's own
+    oversize path. Such a frame is never buffered.
+    """
+    frame = redact_echo(frame)
+    if len(frame.raw) > MAX_FRAME_BYTES:
+        return False
+    buf.append(frame)
+    if buf.run_id:
+        state.runhub.register(buf)
+    return True
+
+
+def _oversized_frame(upstream: ClientResponse, buf: runhub.RunBuffer, limit: int) -> None:
+    """Fail closed on a frame above ``limit``: 502 while pending, else abort.
+
+    Mirrors the decoder's :class:`SSEFrameTooLarge` handling: the offending frame
+    is never relayed and the upstream is closed, never resynced (that would be a
+    hole in the stream).
+    """
+    upstream.release()
+    if buf.state == "pending":
+        buf.fail(502, "application/json",
+                 b'{"error":{"code":"upstream_frame_too_large"}}')
+    else:
+        buf.abort_reason = "upstream_frame_too_large"
+        logger.warning("upstream SSE frame exceeded %d bytes", limit)
+
+
 async def _pump_chat_stream(
     state: BridgeState, buf: runhub.RunBuffer, upstream_path: str,
     body: bytes | None, headers: dict[str, str],
 ) -> None:
-    """Read the upstream SSE stream into the run buffer, independent of clients."""
+    """Read the upstream SSE stream into the run buffer, independent of clients.
+
+    Frames are decoded with a bound coupled to the request body and the
+    ``run.started`` echo is redacted before buffering, so an image turn is not
+    mistaken for an oversized frame.
+    """
     timeout = ClientTimeout(total=None, sock_connect=10, sock_read=600)
     session = ClientSession(timeout=timeout)
     try:
@@ -367,7 +416,7 @@ async def _pump_chat_stream(
                 return
             buf.fail(upstream.status, content_type, payload)
             return
-        decoder = SSEDecoder()
+        decoder = SSEDecoder(max_frame_bytes=_MAX_ECHO_FRAME_BYTES)
         async for chunk in upstream.content.iter_any():
             try:
                 frames = decoder.feed(chunk)
@@ -375,22 +424,19 @@ async def _pump_chat_stream(
                 # Frames that completed before the violation are still relayed;
                 # the oversized frame itself is dropped and the upstream closed,
                 # never followed by a resync (that would be a hole).
-                upstream.release()
                 for frame in exc.frames:
-                    buf.append(frame)
-                    if buf.run_id:
-                        state.runhub.register(buf)
-                if buf.state == "pending":
-                    buf.fail(502, "application/json",
-                             b'{"error":{"code":"upstream_frame_too_large"}}')
-                else:
-                    buf.abort_reason = "upstream_frame_too_large"
-                    logger.warning("upstream SSE frame exceeded %d bytes", exc.limit)
+                    if not _relay_frame(state, buf, frame):
+                        _oversized_frame(upstream, buf, MAX_FRAME_BYTES)
+                        return
+                _oversized_frame(upstream, buf, exc.limit)
                 return
             for frame in frames:
-                buf.append(frame)
-                if buf.run_id:
-                    state.runhub.register(buf)
+                # The body-coupled decoder bound only buys room for the echoed
+                # run.started payload: every frame still has to fit the 1 MiB
+                # relay bound after the echo is redacted.
+                if not _relay_frame(state, buf, frame):
+                    _oversized_frame(upstream, buf, MAX_FRAME_BYTES)
+                    return
     except Exception:
         logger.debug("session chat stream pump ended with error")
     finally:
