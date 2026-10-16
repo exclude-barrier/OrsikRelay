@@ -23,6 +23,7 @@ Rechte-Allowlist `{chat, runs, approvals}`.
 | Bedrohung | Maßnahme |
 |---|---|
 | Master-Key-Leak an Gerät/Log | Key nur serverseitig; nie im Body/Response; geschlossene Fehler |
+| Master-Key-Exfiltration durch fehlkonfiguriertes `BRIDGE_UPSTREAM` | Ziel wird beim Start geprüft: nur Loopback-HTTP-**IP** mit explizitem Port (kein Hostname, kein Pfad/Query/Fragment, kein Userinfo); sonst bricht der Start ab, ohne den Wert zu wiederholen |
 | Approval-Eskalation (`session`/`always`) | Lokale Validierung erlaubt nur `once`/`deny`; ungültig → `400`, **kein** Upstream-POST |
 | Redirect-Credential-Hop | `allow_redirects=False`; `3xx` → `502`, `Location` verworfen |
 | SSRF/Path Traversal | Geschlossene Route-Allowlist; Segment-Validierung; Exact-Match |

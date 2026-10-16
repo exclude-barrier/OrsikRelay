@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -111,8 +112,39 @@ def _state_db_path(env: dict[str, str]) -> str:
     return os.path.join(home, "state.db")
 
 
+_UPSTREAM_ERROR = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8899"
+
+
+def _validate_upstream(upstream: str) -> str:
+    """Reject anything that could send the master key off the loopback host.
+
+    Only a plaintext-HTTP loopback IP literal with an explicit port is allowed,
+    so a typo cannot silently forward the Hermes key to a DNS name or remote
+    host. The value is never echoed back (it may carry userinfo secrets).
+    """
+    try:
+        parts = urlsplit(upstream)
+        host = ipaddress.ip_address(parts.hostname or "")
+        port = parts.port
+    except ValueError:
+        raise SystemExit(_UPSTREAM_ERROR) from None
+    if (
+        parts.scheme != "http"
+        or parts.username is not None
+        or parts.password is not None
+        or parts.path
+        or parts.query
+        or parts.fragment
+        or not host.is_loopback
+        or port is None
+    ):
+        raise SystemExit(_UPSTREAM_ERROR)
+    return upstream
+
+
 def build_state_from_env(env: dict[str, str]) -> BridgeState:
-    upstream = env.get("BRIDGE_UPSTREAM", "http://127.0.0.1:8899")
+    upstream = _validate_upstream(
+        env.get("BRIDGE_UPSTREAM", "http://127.0.0.1:8899"))
     master_key = ""
     hermes_env = env.get("BRIDGE_HERMES_ENV", "")
     if hermes_env:

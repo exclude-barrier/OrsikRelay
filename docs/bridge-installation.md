@@ -38,13 +38,22 @@ Artefakt `bridge-dist` ab.
 `bridge.env`:
 
 ```
-BRIDGE_BIND=127.0.0.1                 # nur Loopback; die Bridge erzwingt das
+# nur Loopback; die Bridge erzwingt das
+BRIDGE_BIND=127.0.0.1
 BRIDGE_PORT=9842
-BRIDGE_UPSTREAM=http://127.0.0.1:8899 # offizieller api_server
-BRIDGE_HERMES_ENV=/home/USER/.hermes/.env   # Datei mit API_SERVER_KEY (0600)
+# offizieller api_server; nur Loopback-HTTP-IP mit Port, kein Hostname,
+# kein Pfad — sonst startet die Bridge nicht
+BRIDGE_UPSTREAM=http://127.0.0.1:8899
+# Datei mit API_SERVER_KEY (0600)
+BRIDGE_HERMES_ENV=/home/USER/.hermes/.env
 BRIDGE_STATE_DB=/home/USER/.local/orsik-mobile-bridge/state.db
-BRIDGE_PUBLIC_BASE_URL=https://<host> # für Deep-Link/QR
+# für Deep-Link/QR
+BRIDGE_PUBLIC_BASE_URL=https://<host>
 ```
+
+Kommentare nur in eigenen Zeilen: `bridge.env` wird als `KEY=VALUE` gelesen,
+ein Inline-Kommentar würde Teil des Werts (und z. B. `BRIDGE_BIND` /
+`BRIDGE_UPSTREAM` ungültig machen).
 
 ## 2a. Preflight: `./install.sh --check`
 
