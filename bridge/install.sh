@@ -227,7 +227,11 @@ chmod 700 "$BRIDGE_HOME"
 
 # A dedicated venv keeps the bridge's dependencies isolated from Hermes.
 # Any interpreter the package supports (>=3.11) works; override with BRIDGE_PYTHON.
-uv venv --python "${BRIDGE_PYTHON:-3.14}" "$BRIDGE_HOME/venv"
+# --update rebuilds the venv from scratch (uv refuses an existing one otherwise);
+# bridge.env and the state database live outside it and are kept.
+VENV_FLAGS=()
+[ "$UPDATE" -eq 1 ] && VENV_FLAGS=(--clear)
+uv venv "${VENV_FLAGS[@]}" --python "${BRIDGE_PYTHON:-3.14}" "$BRIDGE_HOME/venv"
 
 # Dependencies come from the frozen lockfile, verified against its hashes
 # (--require-hashes). The bridge itself is installed last, with --no-deps, so
