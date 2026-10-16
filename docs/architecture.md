@@ -52,16 +52,25 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
 
 ## 4. Bekannte, bewusst getragene Grenzen
 
-- **Keine Prozess-Tod-Recovery (P7 präzisiert).** Die Live-Run-Bindung
+- **Prozess-Tod-Recovery nur als Run-Lease (OR-09).** Die Live-Run-Bindung
   (`AppDependenciesHolder`, `RunSessionController.ActiveRun`) überlebt
-  Activity-/ViewModel-Recreation innerhalb desselben Prozesses, ist aber
-  **nicht** persistiert. Ein Prozess-Kill beendet den Android-Prozess **und**
-  den SSE-Socket, beweist aber **nicht** ein terminales Run-Ende auf dem
-  Server: Ein Mobile-v1-Run mit dem `X-Hermes-Interactive-Approvals`-Opt-in
-  läuft serverseitig unabhängig vom Socket weiter (siehe §5). Nach einem
-  Prozess-Tod ist der unbekannte Ausgang lokal verloren; es gibt kein
-  Room/DataStore-Wiederaufsetzen. Das ist eine bewusste Scope-Entscheidung
-  (volle Process-Death-Persistenz war nicht Teil von P7).
+  Activity-/ViewModel-Recreation innerhalb desselben Prozesses. Ein
+  Prozess-Kill beendet den SSE-Socket, beweist aber **nicht** ein terminales
+  Run-Ende auf dem Server (ein Mobile-v1-Run mit
+  `X-Hermes-Interactive-Approvals`-Opt-in läuft unabhängig vom Socket weiter,
+  siehe §5). Deshalb persistiert der Controller für einen **vom Server
+  bestätigten** Run genau ein minimales Lease (`profileId`, `sessionId`,
+  `runId`; `SharedPreferencesRunLeaseStore`, kein Text, keine Tool-Daten,
+  keine Credentials). Nach einem Neustart kommt der Slot als `UNCERTAIN`
+  zurück: kein Foreground-Service, kein Re-Attach, **kein zweiter POST**;
+  Senden bleibt gesperrt, bis die bestehende manuelle Reconciliation
+  (`GET /v1/runs/{run_id}`) ein terminales Ende beweist. Solange das Lease
+  noch gelesen wird, meldet `startTurn` einen Konflikt. Ein Lease eines
+  gelöschten Profils wird verworfen (ohne Credential nicht abgleichbar); ein
+  unlesbarer Store zählt als „kein Lease“. Grenzen: Ein Run, dessen
+  `RunStarted` vor dem Prozess-Tod noch nicht ankam, hat keine `runId` und
+  wird nicht wiederhergestellt; ein automatisches `after_seq`-Re-Attach nach
+  Prozess-Tod gibt es nicht.
 - **Test-Seam im Produktionscode.** `MainActivity.sessionPageSourceForTests`
   (`@VisibleForTesting`, Default `null`) überspringt in `androidTest` die
   Sessionliste. In Produktion ist sie immer `null`; der Seam ist bewusst und als

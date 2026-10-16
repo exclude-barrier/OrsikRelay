@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,7 +82,14 @@ class RunSessionController(
     // Dispatcher for the notification side effects (server-label lookup is
     // storage + JSON parsing). Defaults to [dispatcher] so tests stay on their
     // controlled dispatcher; production injects Dispatchers.IO.
-    private val ioDispatcher: CoroutineDispatcher = dispatcher
+    private val ioDispatcher: CoroutineDispatcher = dispatcher,
+    // OR-09: durable lease of the confirmed run, written and read on
+    // [ioDispatcher]. The default keeps the controller purely in-memory.
+    private val leaseStore: RunLeaseStore = NoOpRunLeaseStore,
+    // OR-09: whether a restored lease still belongs to a known profile (a
+    // deleted profile has no credential, so its run could never be
+    // reconciled and would block the slot forever). Called on [ioDispatcher].
+    private val isLeaseRestorable: (RunLease) -> Boolean = { true }
 ) {
     /**
      * Closed outcome of [startTurn] (P6 global run ownership).
@@ -118,7 +127,9 @@ class RunSessionController(
      * the request the user has not decided yet (both restored when a view
      * model re-attaches to a running session).
      *
-     * Nothing here is persisted (no disk, no process-death recovery), and no
+     * Only the run identity is persisted, as a [RunLease] (OR-09): after a
+     * process death the slot comes back as UNCERTAIN with its [runId] and
+     * nothing else. No text or tool data is persisted, and no
      * server payload beyond the already UI-safe values crosses this type:
      * no command, arguments, path, raw tool output, exception text, URL or
      * credential. [assistantText] is exactly the text the user already sees.
@@ -208,6 +219,23 @@ class RunSessionController(
     private var slotTurnToken: Long = 0L
 
     /**
+     * OR-09: `true` until the persisted lease was read. While pending,
+     * [startTurn] reports [StartTurnResult.ActiveRunConflict], so a send tap
+     * racing the restore can never POST a second turn next to a run that is
+     * still owned on the server. Guarded by [slotLock].
+     */
+    private var leaseRestorePending: Boolean = leaseStore !== NoOpRunLeaseStore
+
+    init {
+        if (leaseRestorePending) {
+            scope.launch {
+                restoreLease()
+                persistLeaseChanges()
+            }
+        }
+    }
+
+    /**
      * Tries to start one streaming turn for [message] in [sessionId] (P6
      * global run ownership).
      *
@@ -254,7 +282,7 @@ class RunSessionController(
             // The reservation is taken BEFORE any side effect, so a losing
             // caller can never start the service, open a socket or touch
             // the winner's state.
-            if (_activeRun.value != null) {
+            if (leaseRestorePending || _activeRun.value != null) {
                 return StartTurnResult.ActiveRunConflict
             }
             token = slotTurnToken + 1L
@@ -456,6 +484,71 @@ class RunSessionController(
         scope.cancel()
         serviceStarter.stop()
         _activeRun.value = null
+    }
+
+    /**
+     * OR-09: re-establishes a run that was confirmed before the process died
+     * as UNCERTAIN (no transport, no foreground service, no POST). An
+     * unreadable store counts as "no lease"; a lease whose profile is gone is
+     * dropped because nothing could ever reconcile it.
+     */
+    private suspend fun restoreLease() {
+        val lease = withContext(ioDispatcher) {
+            val stored = try {
+                leaseStore.load()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            stored?.takeIf {
+                try {
+                    isLeaseRestorable(it)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // Fail closed: an unanswerable profile check keeps the
+                    // ownership (the user can still reconcile it).
+                    true
+                }
+            }
+        }
+        synchronized(slotLock) {
+            if (lease != null && _activeRun.value == null) {
+                _activeRun.value = ActiveRun(
+                    profileId = lease.profileId,
+                    sessionId = lease.sessionId,
+                    runId = lease.runId,
+                    uncertain = true
+                )
+            }
+            leaseRestorePending = false
+        }
+    }
+
+    /**
+     * OR-09: mirrors the confirmed run identity of the slot into
+     * [leaseStore]: a bound run ID writes the lease, a released slot clears
+     * it. [close] cancels this collector before it empties the slot, so a
+     * teardown (which is not an authoritative terminal) keeps the lease.
+     */
+    private suspend fun persistLeaseChanges() {
+        _activeRun
+            .map { run -> run?.runId?.let { RunLease(run.profileId, run.sessionId, it) } }
+            .distinctUntilChanged()
+            .collect { lease ->
+                withContext(ioDispatcher) {
+                    try {
+                        if (lease == null) leaseStore.clear() else leaseStore.save(lease)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        // Best effort: a failed write only loses recovery
+                        // after a later process death; the in-memory slot
+                        // stays authoritative for this process.
+                    }
+                }
+            }
     }
 
     private suspend fun handleEvent(

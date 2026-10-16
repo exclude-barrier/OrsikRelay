@@ -55,7 +55,10 @@ class RunSessionControllerTest {
      */
     private fun build(
         scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
-        foreground: Boolean = false
+        foreground: Boolean = false,
+        leaseStore: RunLeaseStore = NoOpRunLeaseStore,
+        isLeaseRestorable: (RunLease) -> Boolean = { true },
+        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher? = null
     ): Built = run {
         val source = FakeTurnSource()
         val starter = FakeServiceStarter()
@@ -71,7 +74,10 @@ class RunSessionControllerTest {
                 chatSource = source,
                 serviceStarter = starter,
                 notificationCoordinator = coordinator,
-                dispatcher = UnconfinedTestDispatcher(scheduler)
+                dispatcher = UnconfinedTestDispatcher(scheduler),
+                ioDispatcher = ioDispatcher ?: UnconfinedTestDispatcher(scheduler),
+                leaseStore = leaseStore,
+                isLeaseRestorable = isLeaseRestorable
             ),
             source,
             starter,
@@ -902,8 +908,163 @@ class RunSessionControllerTest {
     }
 
     // ------------------------------------------------------------------
+    // OR-09: persisted run lease for process-death recovery
+    // ------------------------------------------------------------------
+
+    private val lease get() = RunLease(profileId, sessionId, runId)
+
+    @Test
+    fun confirmedRunPersistsTheLeaseAndAuthoritativeTerminalClearsIt() = runTest {
+        val store = FakeLeaseStore()
+        val built = build(this.testScheduler, leaseStore = store)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        testScheduler.advanceUntilIdle()
+        assertNull("an unconfirmed run has no run id to recover", store.current)
+
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        assertEquals(lease, store.current)
+
+        built.source.enqueue(ChatTurnEvent.TurnCompleted())
+        testScheduler.advanceUntilIdle()
+        assertNull(store.current)
+        built.controller.close()
+    }
+
+    @Test
+    fun transportFailureKeepsTheLeaseOfTheUncertainRun() = runTest {
+        val store = FakeLeaseStore()
+        val built = build(this.testScheduler, leaseStore = store)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        testScheduler.advanceUntilIdle()
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
+        assertEquals(lease, store.current)
+        built.controller.close()
+    }
+
+    @Test
+    fun closeKeepsThePersistedLease() = runTest {
+        val store = FakeLeaseStore()
+        val built = build(this.testScheduler, leaseStore = store)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        testScheduler.advanceUntilIdle()
+        built.controller.close()
+        testScheduler.advanceUntilIdle()
+        assertEquals("teardown is not an authoritative terminal", lease, store.current)
+    }
+
+    @Test
+    fun restoredLeaseOwnsTheSlotAsUncertainAndBlocksANewPost() = runTest {
+        val store = FakeLeaseStore(lease)
+        val built = build(this.testScheduler, leaseStore = store)
+        testScheduler.advanceUntilIdle()
+
+        val active = built.controller.activeRun.value
+        assertNotNull(active)
+        assertEquals(profileId, active?.profileId)
+        assertEquals(sessionId, active?.sessionId)
+        assertEquals(runId, active?.runId)
+        assertEquals(RunSessionController.ActiveRun.Status.UNCERTAIN, active?.status)
+
+        assertEquals(
+            RunSessionController.StartTurnResult.ActiveRunConflict,
+            built.controller.startTurn(profileId, sessionId, "again")
+        )
+        assertEquals("no chat POST after process death", 0, built.source.calls.get())
+        assertEquals(0, built.starter.starts.get())
+        assertEquals(lease, store.current)
+        built.controller.close()
+    }
+
+    @Test
+    fun reconciliationReleasesTheRestoredRunAndClearsTheLease() = runTest {
+        val store = FakeLeaseStore(lease)
+        val built = build(this.testScheduler, leaseStore = store)
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(built.controller.confirmTerminalForUncertainRun(profileId, sessionId, "run_other"))
+        assertTrue(built.controller.confirmTerminalForUncertainRun(profileId, sessionId, runId))
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        assertNull(store.current)
+        assertEquals(
+            RunSessionController.StartTurnResult.Started,
+            built.controller.startTurn(profileId, sessionId, "next")
+        )
+        built.controller.close()
+    }
+
+    @Test
+    fun leaseOfAnUnknownProfileIsDroppedOnRestore() = runTest {
+        val store = FakeLeaseStore(lease)
+        val built = build(this.testScheduler, leaseStore = store, isLeaseRestorable = { false })
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        assertNull(store.current)
+        built.controller.close()
+    }
+
+    @Test
+    fun unreadableLeaseStoreDoesNotCrashAndLeavesTheSlotFree() = runTest {
+        val store = FakeLeaseStore(failLoad = true)
+        val built = build(this.testScheduler, leaseStore = store)
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        assertEquals(
+            RunSessionController.StartTurnResult.Started,
+            built.controller.startTurn(profileId, sessionId, "hi")
+        )
+        built.controller.close()
+    }
+
+    @Test
+    fun startIsRefusedUntilTheLeaseRestoreFinished() = runTest {
+        val store = FakeLeaseStore(lease)
+        val built = build(
+            this.testScheduler,
+            leaseStore = store,
+            ioDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(this.testScheduler)
+        )
+        // The restore has not run yet: a start must not race it.
+        assertEquals(
+            RunSessionController.StartTurnResult.ActiveRunConflict,
+            built.controller.startTurn(profileId, sessionId, "early")
+        )
+        assertEquals(0, built.source.calls.get())
+        testScheduler.advanceUntilIdle()
+        assertEquals(runId, built.controller.activeRun.value?.runId)
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
+        built.controller.close()
+    }
+
+    // ------------------------------------------------------------------
     // Fakes
     // ------------------------------------------------------------------
+
+    /** In-memory lease store; [failLoad] simulates an unreadable store. */
+    private class FakeLeaseStore(
+        initial: RunLease? = null,
+        private val failLoad: Boolean = false
+    ) : RunLeaseStore {
+        @Volatile
+        var current: RunLease? = initial
+
+        override fun load(): RunLease? {
+            if (failLoad) throw IllegalStateException("unreadable")
+            return current
+        }
+
+        override fun save(lease: RunLease) {
+            current = lease
+        }
+
+        override fun clear() {
+            current = null
+        }
+    }
 
     /** Synthetic streaming fake: latched open, events enqueued, closed by the test. */
     private class FakeTurnSource : StreamingChatSource {

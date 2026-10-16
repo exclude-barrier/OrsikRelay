@@ -216,6 +216,28 @@ internal class ChatViewModel(
                     _state.update { current ->
                         if (current.startConflict) current.copy(startConflict = false) else current
                     }
+                } else if (
+                    // OR-09: the run lease of a dead process is restored
+                    // asynchronously. A screen created before that restore
+                    // finished adopts the restored UNCERTAIN run of its own
+                    // session, so the manual reconciliation is offered and
+                    // the composer stays blocked (no second POST).
+                    active.uncertain &&
+                    active.runId != null &&
+                    active.profileId == profileId &&
+                    active.sessionId == sessionId &&
+                    !_state.value.turnActive
+                ) {
+                    _state.update {
+                        it.copy(
+                            turnActive = true,
+                            runStarted = true,
+                            boundRunId = active.runId,
+                            turnUncertain = true,
+                            startConflict = false
+                        )
+                    }
+                    ownsRun = true
                 }
             }
         }

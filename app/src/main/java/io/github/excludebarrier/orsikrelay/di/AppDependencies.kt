@@ -25,6 +25,7 @@ import io.github.excludebarrier.orsikrelay.data.run.RunApprovalRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunStatusRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunStopRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunSteerRepository
+import io.github.excludebarrier.orsikrelay.data.run.SharedPreferencesRunLeaseStore
 import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
 import io.github.excludebarrier.orsikrelay.data.session.SessionListRepository
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
@@ -108,8 +109,8 @@ internal data class AppDependencies(
  *
  * Scope of this holder is deliberately the LIVE PROCESS only: it survives an
  * Activity or view-model recreation inside the same process and dies with the
- * process. Nothing is persisted to disk, so this is NOT a process-death
- * recovery mechanism (no Room, no DataStore, no saved state).
+ * process. The graph itself is not persisted; process-death recovery of a
+ * confirmed run is limited to the run lease the controller writes (OR-09).
  *
  * Injected test stores always bypass the cache: a caller that supplies its own
  * [selectionStore]/[capabilityStore] gets a fresh, isolated graph, exactly as
@@ -237,7 +238,13 @@ internal fun buildAppDependencies(
         serviceStarter = AndroidRunForegroundServiceStarter(applicationContext),
         notificationCoordinator = notificationCoordinator,
         // Notification titles resolve profile metadata off the main thread.
-        ioDispatcher = kotlinx.coroutines.Dispatchers.IO
+        ioDispatcher = kotlinx.coroutines.Dispatchers.IO,
+        // OR-09: the confirmed run survives a process death as an UNCERTAIN
+        // lease; a lease of a deleted profile could never be reconciled.
+        leaseStore = SharedPreferencesRunLeaseStore(applicationContext),
+        isLeaseRestorable = { lease ->
+            profileAdmin.listProfiles().any { it.id == lease.profileId }
+        }
     )
     return AppDependencies(
         profileAdmin = profileAdmin,

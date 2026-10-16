@@ -19,6 +19,8 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
+import io.github.excludebarrier.orsikrelay.domain.run.RunLease
+import io.github.excludebarrier.orsikrelay.domain.run.RunLeaseStore
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerError
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
@@ -438,6 +440,54 @@ class ChatViewModelTest {
         assertEquals(runId, model.state.value.boundRunId)
         assertTrue(model.state.value.recoveryVisible)
         assertEquals("no second POST", 1, chat.calls.get())
+    }
+
+    /** OR-09: in-memory lease store simulating a lease left by a dead process. */
+    private class PreloadedLeaseStore(@Volatile var current: RunLease?) : RunLeaseStore {
+        override fun load(): RunLease? = current
+        override fun save(lease: RunLease) { current = lease }
+        override fun clear() { current = null }
+    }
+
+    @Test
+    fun screenCreatedBeforeTheLeaseRestoreShowsTheRestoredRunAsUncertain() = runTest {
+        val chat = FakeTurnSource()
+        val status = FakeRunStatusRequester()
+        val leaseStore = PreloadedLeaseStore(RunLease(profileId, sessionId, runId))
+        val controller = RunSessionController(
+            chatSource = chat,
+            serviceStarter = FakeRunServiceStarter(),
+            notificationCoordinator = NoOpNotificationCoordinator,
+            dispatcher = UnconfinedTestDispatcher(testScheduler),
+            // The restore read is still pending when the screen is created
+            // (Android restored the chat destination after a process death).
+            ioDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+            leaseStore = leaseStore
+        )
+        lastController = controller
+        val model = build(testScheduler, chat = chat, status = status, controller = controller)
+        assertFalse(model.state.value.turnUncertain)
+        advanceUntilIdle()
+
+        val state = model.state.value
+        assertTrue(state.turnUncertain)
+        assertTrue("ownership is kept", state.turnActive)
+        assertEquals(runId, state.boundRunId)
+        assertTrue("manual reconciliation is offered", state.recoveryVisible)
+        model.onDraftChange("neu")
+        assertFalse("no second POST after a process death", model.state.value.sendEnabled)
+
+        status.result = RunStatusResult.Known(RunServerStatus.COMPLETED)
+        model.reconcileUncertainRun()
+        advanceUntilIdle()
+        assertEquals(runId, status.lastRunId)
+        assertFalse(model.state.value.turnActive)
+        assertNull(controller.activeRun.value)
+        assertNull("the authoritative terminal clears the lease", leaseStore.current)
+        assertEquals("no chat POST at all", 0, chat.calls.get())
+        model.close()
+        controller.close()
+        lastController = null
     }
 
     @Test
