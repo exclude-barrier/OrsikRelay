@@ -1,8 +1,9 @@
 name: Bridge CI
 
 # Reproducible gate for the Orsik Mobile Bridge PoC (Python). Mirrors the
-# local `uv lock --check` / `uv sync --locked` / `python -m unittest discover
-# -s tests` flow and publishes the wheel, its checksums and a CycloneDX SBOM.
+# local `uv lock --check` / `uv sync --locked` / `uv run coverage run -m
+# unittest discover -s tests` flow and publishes the wheel, its checksums, a
+# CycloneDX SBOM and a coverage report (report only, no fail-under gate).
 # No deployment, no secrets.
 
 on:
@@ -39,8 +40,12 @@ jobs:
         run: uv lock --check
       - name: Install from the locked graph
         run: uv sync --locked
-      - name: Unit tests
-        run: uv run --locked python -m unittest discover -s tests -v
+      - name: Unit tests with coverage
+        run: uv run --locked coverage run -m unittest discover -s tests -v
+      - name: Coverage report
+        run: uv run --locked coverage report
+      - name: Coverage XML
+        run: mkdir -p dist && uv run --locked coverage xml -o dist/coverage.xml
       - name: Build wheel
         run: uv build --wheel --out-dir dist
       - name: CycloneDX SBOM

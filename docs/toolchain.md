@@ -63,3 +63,46 @@ Stand 2026-10-16, Basis `main@f1311d1`):
 
 Schwellwerte werden erst nach einer risikobasierten Bewertung eingeführt, nicht
 auf Basis dieser Baseline automatisch.
+
+## Bridge-Coverage (Report, kein Gate)
+
+Die Python-Bridge (`bridge/`) misst ihre Testabdeckung mit `coverage`. Die
+Version ist exakt gepinnt (PEP-735-Dependency-Group `dev` in
+`bridge/pyproject.toml`, `uv.lock`): `coverage==7.16.2`. Es ist eine reine
+Entwicklungsabhängigkeit: `install.sh` exportiert mit `--no-dev`
+(`uv export --frozen --no-dev --no-emit-project`), die Installation der Bridge
+bleibt daher unberührt.
+
+Konfiguration in `bridge/pyproject.toml`:
+
+- `[tool.coverage.run]`: `source = ["orsik_mobile_bridge"]`, `branch = true`
+- `[tool.coverage.report]`: `show_missing = true`, `skip_covered = false`
+- kein `fail_under`: der Report ist bewusst kein Gate.
+
+Befehle (aus `bridge/` ausführen):
+
+```bash
+uv lock --check
+uv sync --locked          # installiert die dev-Gruppe standardmäßig mit
+uv run --locked coverage run -m unittest discover -s tests -v
+uv run --locked coverage report
+uv run --locked coverage xml -o dist/coverage.xml
+```
+
+Gemessene Baseline (Datum 2026-10-16, Basis `main@f1311d1` + OR-11; 137 Tests,
+`branch = true`):
+
+| Modul | Line | Branch | Combined |
+| --- | --- | --- | --- |
+| `core.py` | 99% (186/187) | 96% (54/56) | 99% |
+| `server.py` | 81% (334/411) | 69% (95/138) | 78% |
+| `store.py` | 79% (154/194) | 90% (27/30) | 81% |
+| `runhub.py` | 91% (169/185) | 74% (49/66) | 87% |
+| `sse.py` | 99% (90/91) | 84% (27/32) | 95% |
+| `pairing.py` | 85% (17/20) | 75% (3/4) | 83% |
+| **Gesamt** | **87% (951/1093)** | **78% (255/328)** | **85%** |
+
+`Combined` ist der von `coverage` gemeldete Mischwert; `Line` und `Branch`
+sind aus den Zählern abgeleitet. Der CI-Job (`Bridge CI`) ersetzt den
+Unit-Test-Schritt durch `coverage run`, gibt den Report aus und lädt
+`dist/coverage.xml` als Artefakt hoch.

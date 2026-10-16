@@ -17,3 +17,14 @@ orsik-mobile-bridge = "orsik_mobile_bridge.server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["orsik_mobile_bridge*"]
+
+[dependency-groups]
+dev = ["coverage==7.16.2"]
+
+[tool.coverage.run]
+source = ["orsik_mobile_bridge"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
