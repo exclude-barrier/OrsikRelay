@@ -24,8 +24,9 @@ data class ChatStreamResumeState(
 ) {
     /**
      * `true` once the pipeline confirmed the terminal frame
-     * (`run.completed` or `error`): a re-attach cannot deliver a new
-     * terminal event, so there is nothing left to re-attach for.
+     * (`run.completed`, `run.cancelled`, `run.failed` or `error`): a
+     * re-attach cannot deliver a new terminal event, so there is nothing
+     * left to re-attach for.
      */
     val terminal: Boolean
         get() = runCompleted || sawError

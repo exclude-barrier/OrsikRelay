@@ -192,6 +192,28 @@ class RunSessionControllerTest {
     }
 
     @Test
+    fun stoppedRunCancelledTerminalReleasesTheSlotAuthoritativelyNotUncertain() = runTest {
+        // OR-08c: after an accepted stop the official core ends the turn
+        // with the terminal run.cancelled, which the transport maps to a
+        // success TurnCompleted. The controller must release the run slot
+        // as an AUTHORITATIVE terminal and never leave it UNCERTAIN (the
+        // pre-fix IncompatibleApi outcome).
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId))
+        built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
+        built.source.enqueue(ChatTurnEvent.TurnCompleted())
+        testScheduler.advanceUntilIdle()
+
+        assertNull(
+            "a server-confirmed cancelled end releases the slot",
+            built.controller.activeRun.value
+        )
+        assertTrue(built.starter.stops.get() >= 1)
+        built.controller.close()
+    }
+
+    @Test
     fun cancelTurnClearsTheReconstructableTurnState() = runTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "hi")

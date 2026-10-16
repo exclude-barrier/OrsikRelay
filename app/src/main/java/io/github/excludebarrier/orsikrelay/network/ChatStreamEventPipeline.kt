@@ -29,11 +29,19 @@ import org.json.JSONObject
  *   payload) is dropped and never applied twice;
  * - `ts` is a finite, non-negative number (fractions allowed);
  * - the closed event order of the success path is enforced, including
- *   that `run.completed` is only allowed after `assistant.completed`;
+ *   that `run.completed`/`run.cancelled` are only allowed after
+ *   `assistant.completed`, and that at most one terminal frame is
+ *   accepted per turn;
+ * - the official terminal `run.<status>` variants of the core
+ *   (`terminal_run_status`): `run.completed` and `run.cancelled` map to
+ *   [ChatTurnEvent.TurnCompleted] (a stopped turn is an authoritative,
+ *   server-confirmed end, not a failure), and `run.failed` maps to the
+ *   same authoritative [ChatStreamError.ServerError] terminal as the
+ *   legacy `error` frame; every other `run.*` variant is rejected closed;
  * - unknown event names are rejected closed;
  * - with [requireDoneAfterTerminal], a stream that ends after the
- *   terminal `run.completed`/`error` frame but before `done` is
- *   rejected by [endOfStream];
+ *   terminal `run.completed`/`run.cancelled`/`run.failed`/`error` frame
+ *   but before `done` is rejected by [endOfStream];
  * - `tool.progress` and all reasoning events are silently ignored, but
  *   only inside the assistant message window (after `message.started`,
  *   before `assistant.completed`); outside that window every tool and
@@ -41,8 +49,8 @@ import org.json.JSONObject
  * - no server field except the closed, UI-safe parts is propagated:
  *   no `user_message`, `runtime`, `usage`, tool names, arguments,
  *   previews, error messages or raw payloads. The single exception is
- *   `pending_steer` on `run.completed` (Mission 008B): a non-blank
- *   string value is preserved exactly on
+ *   `pending_steer` on `run.completed`/`run.cancelled` (Mission 008B): a
+ *   non-blank string value is preserved exactly on
  *   [ChatTurnEvent.TurnCompleted]; absent, null, non-string or blank
  *   values stay `null`.
  *
@@ -55,10 +63,11 @@ class ChatStreamEventPipeline(
     /**
      * When `true` (production transport), end-of-stream is only
      * accepted after the stream sent `done` following a terminal
-     * `run.completed` or `error` frame: a stream that ends after the
-     * terminal frame but before `done` is incomplete and
-     * [endOfStream] fails closed. When `false`, [endOfStream]
-     * performs no additional check and no `done` is required.
+     * `run.completed`, `run.cancelled`, `run.failed` or `error` frame:
+     * a stream that ends after the terminal frame but before `done` is
+     * incomplete and [endOfStream] fails closed. When `false`,
+     * [endOfStream] performs no additional check and no `done` is
+     * required.
      */
     requireDoneAfterTerminal: Boolean = false,
     private val interactiveApprovals: Boolean = false,
@@ -174,8 +183,9 @@ class ChatStreamEventPipeline(
      * from a truncated one.
      *
      * A stream that ended without any terminal frame - no
-     * `run.completed` and no `error` - is deliberately NOT a protocol
-     * violation: the connection simply died mid-stream (P4). The run
+     * `run.completed`, `run.cancelled`, `run.failed` or `error` - is
+     * deliberately NOT a protocol violation: the connection simply died
+     * mid-stream (P4). The run
      * is still alive server-side, so the transport maps this end to a
      * reconnectable [ChatStreamError.Network] and the repository
      * re-attaches to the same run instead of failing the turn closed.
@@ -342,7 +352,17 @@ class ChatStreamEventPipeline(
                 // args, commands, previews and output remain private.
                 return listOf(ChatTurnEvent.ToolActivity(safeToolName(payload)))
             }
-            RUN_COMPLETED -> {
+            RUN_COMPLETED,
+            RUN_CANCELLED -> {
+                // `run.completed` (core status "completed") and
+                // `run.cancelled` (core status "cancelled" after an
+                // accepted stop, per `terminal_run_status`) have the same
+                // payload shape and the same success-path preconditions.
+                // A stopped turn is an authoritative, server-confirmed
+                // end, NOT a failure. The closed domain model has no
+                // dedicated "stopped" terminal (only TurnCompleted /
+                // TurnFailed), so it deliberately maps to TurnCompleted
+                // instead of inventing a new domain class.
                 if (runCompleted || sawError || !assistantCompleted) {
                     throw protocol()
                 }
@@ -354,6 +374,19 @@ class ChatStreamEventPipeline(
                 val pendingSteer = safePendingSteer(payload.opt(PENDING_STEER_FIELD) as? String)
                 runCompleted = true
                 return listOf(ChatTurnEvent.TurnCompleted(pendingSteer))
+            }
+            RUN_FAILED -> {
+                if (sawError || runCompleted) {
+                    throw protocol()
+                }
+                // The core's terminal `run.failed` (status "failed") is the
+                // official in-band equivalent of the legacy `error` frame:
+                // an AUTHORITATIVE server terminal, so it maps to the same
+                // [ChatStreamError.ServerError] and accepts a following
+                // `done`. The dynamic `error` field is intentionally
+                // ignored.
+                sawError = true
+                return listOf(ChatTurnEvent.TurnFailed(ChatStreamError.ServerError))
             }
             DONE -> {
                 if (!runCompleted && !sawError) {
@@ -596,6 +629,8 @@ class ChatStreamEventPipeline(
         const val REASONING_DELTA = "reasoning.delta"
         const val REASONING_COMPLETED = "reasoning.completed"
         const val RUN_COMPLETED = "run.completed"
+        const val RUN_CANCELLED = "run.cancelled"
+        const val RUN_FAILED = "run.failed"
         const val APPROVAL_REQUEST = "approval.request"
         const val DONE = "done"
         const val ERROR = "error"

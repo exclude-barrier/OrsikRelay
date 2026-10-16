@@ -710,6 +710,154 @@ class ChatStreamEventPipelineTest {
         )
     }
 
+    // ------------------------------------------------------------------
+    // OR-08c: official terminal run.cancelled / run.failed
+    // ------------------------------------------------------------------
+
+    @Test
+    fun stoppedRunSequenceMapsToTurnCompletedAfterToolActivity() {
+        // Measured live against the official core (f86276d2): after an
+        // accepted stop the server ends the turn with assistant.completed,
+        // then exactly one terminal run.cancelled, then done. A stopped
+        // turn is an authoritative server-confirmed end, never an error.
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted(RUN_ID)),
+            pipeline.process(frame("run.started", 1))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.AssistantStarted),
+            pipeline.process(messageStartedFrame(2, MSG_ID))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.ToolActivity()),
+            pipeline.process(frame("tool.started", 3))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.ToolActivity()),
+            pipeline.process(frame("tool.failed", 4))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.AssistantCompleted("Hallo Welt")),
+            pipeline.process(completedFrame(5, MSG_ID, "Hallo Welt"))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
+            pipeline.process(frame("run.cancelled", 6))
+        )
+        assertTrue(pipeline.process(frame("done", 7)).isEmpty())
+    }
+
+    @Test
+    fun runCancelledPreservesNonBlankPendingSteerExactly() {
+        feedRunStarted()
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        pipeline.process(completedFrame(3, MSG_ID, "Hallo"))
+
+        val raw = "  führe  um \n\tweiter  "
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted(raw)),
+            pipeline.process(
+                frame("run.cancelled", 4, JSONObject().put("pending_steer", raw))
+            )
+        )
+        assertTrue(pipeline.process(frame("done", 5)).isEmpty())
+    }
+
+    @Test
+    fun runCancelledRequiresAssistantCompletedLikeRunCompleted() {
+        pipeline.process(frame("run.started", 1))
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        // Without assistant.completed the cancelled terminal is rejected
+        // closed, exactly like run.completed.
+        assertProtocolViolation(pipeline, frame("run.cancelled", 3))
+    }
+
+    @Test
+    fun runCancelledAfterRunCompletedOrRepeatedIsRejected() {
+        pipeline.process(frame("run.started", 1))
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        pipeline.process(completedFrame(3, MSG_ID, "Hallo"))
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
+            pipeline.process(frame("run.cancelled", 4))
+        )
+        // A second terminal frame contradicts the confirmed order.
+        assertProtocolViolation(pipeline, frame("run.cancelled", 5))
+
+        val completedFirst = ChatStreamEventPipeline(SESSION_ID)
+        completedFirst.process(frame("run.started", 1))
+        completedFirst.process(messageStartedFrame(2, MSG_ID))
+        completedFirst.process(completedFrame(3, MSG_ID, "Hallo"))
+        completedFirst.process(frame("run.completed", 4))
+        assertProtocolViolation(completedFirst, frame("run.cancelled", 5))
+    }
+
+    @Test
+    fun runFailedAfterAssistantCompletedIsAuthoritativeServerError() {
+        pipeline.process(frame("run.started", 1))
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        pipeline.process(completedFrame(3, MSG_ID, "Hallo"))
+        val events = pipeline.process(
+            frame("run.failed", 4, JSONObject().put("error", "dynamic server detail"))
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnFailed(ChatStreamError.ServerError)),
+            events
+        )
+        assertFalse(events.toString().contains("dynamic server detail"))
+        // A following `done` is accepted and produces nothing.
+        assertTrue(pipeline.process(frame("done", 5)).isEmpty())
+    }
+
+    @Test
+    fun runFailedAfterTerminalFrameIsRejected() {
+        val afterCompleted = ChatStreamEventPipeline(SESSION_ID)
+        afterCompleted.process(frame("run.started", 1))
+        afterCompleted.process(messageStartedFrame(2, MSG_ID))
+        afterCompleted.process(completedFrame(3, MSG_ID, "Hallo"))
+        afterCompleted.process(frame("run.completed", 4))
+        assertProtocolViolation(afterCompleted, frame("run.failed", 5))
+
+        val afterError = ChatStreamEventPipeline(SESSION_ID)
+        afterError.process(frame("run.started", 1))
+        afterError.process(messageStartedFrame(2, MSG_ID))
+        afterError.process(
+            ParsedSseFrame("error", baseFrame(3).put("message", "x").toString())
+        )
+        assertProtocolViolation(afterError, frame("run.failed", 4))
+    }
+
+    @Test
+    fun unknownRunVariantRunInterruptedIsRejectedClosed() {
+        // Only run.completed, run.cancelled and run.failed are terminal;
+        // every other run.* variant stays rejected closed.
+        pipeline.process(frame("run.started", 1))
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+        pipeline.process(completedFrame(3, MSG_ID, "Hallo"))
+        assertProtocolViolation(pipeline, frame("run.interrupted", 4))
+    }
+
+    @Test
+    fun resumedPipelineTreatsRunCancelledAsTerminal() {
+        // The re-attach path (after_seq replay) uses the same dispatch, so
+        // a cancelled terminal must settle the resumed turn as completed.
+        val source = ChatStreamEventPipeline(SESSION_ID)
+        source.process(frame("run.started", 1))
+        source.process(messageStartedFrame(2, MSG_ID))
+        source.process(completedFrame(3, MSG_ID, "Hallo"))
+        val resumed = ChatStreamEventPipeline(
+            SESSION_ID,
+            requireDoneAfterTerminal = true,
+            resume = source.snapshot()
+        )
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.TurnCompleted()),
+            resumed.process(frame("run.cancelled", 4))
+        )
+        assertTrue(resumed.process(frame("done", 5)).isEmpty())
+        resumed.endOfStream()
+    }
+
     @Test
     fun toolAndReasoningBeforeRunStartedAreRejected() {
         listOf("tool.started", "reasoning.started").forEachIndexed { index, name ->

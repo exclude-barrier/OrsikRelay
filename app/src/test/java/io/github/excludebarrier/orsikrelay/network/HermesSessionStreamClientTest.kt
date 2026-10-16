@@ -1024,6 +1024,64 @@ class HermesSessionStreamClientTest {
     }
 
     @Test
+    fun runCancelledStopSequenceSettlesTheTurnAsCompletedNotUncertain() {
+        // Measured live against the official core (f86276d2) after an
+        // accepted POST /v1/runs/{id}/stop: run.started, message.started,
+        // tool.started, tool.failed, assistant.completed, run.cancelled,
+        // done. The authoritative cancelled terminal must settle the turn
+        // as a completed (not uncertain) end.
+        server.enqueue(sseResponse(stoppedStreamFrames(SESSION_ID)))
+        val listener = RecordingListener()
+        client.openTurn(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, "Hallo", listener)
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted(RUN_ID),
+                ChatTurnEvent.AssistantStarted,
+                ChatTurnEvent.ToolActivity(),
+                ChatTurnEvent.ToolActivity(),
+                ChatTurnEvent.AssistantCompleted("Hallo Welt"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            listener.events
+        )
+        assertFalse(
+            "a stopped turn is never a failure",
+            listener.events.any { it is ChatTurnEvent.TurnFailed }
+        )
+    }
+
+    @Test
+    fun runFailedSequenceMapsToAuthoritativeServerError() {
+        // The core's terminal run.failed is the in-band equivalent of the
+        // legacy `error` frame: authoritative ServerError after `done`.
+        server.enqueue(
+            sseResponse(
+                listOf(
+                    frame("run.started", 1, JSONObject(), SESSION_ID),
+                    frame("message.started", 2, messageExtra(), SESSION_ID),
+                    frame("assistant.completed", 3, completedExtra(), SESSION_ID),
+                    frame("run.failed", 4, JSONObject().put("error", "hidden"), SESSION_ID),
+                    frame("done", 5, JSONObject(), SESSION_ID)
+                )
+            )
+        )
+        val listener = RecordingListener()
+        client.openTurn(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, "Hallo", listener)
+        assertTrue(listener.finished.await(10, TimeUnit.SECONDS))
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted(RUN_ID),
+                ChatTurnEvent.AssistantStarted,
+                ChatTurnEvent.AssistantCompleted("Hallo Welt"),
+                ChatTurnEvent.TurnFailed(ChatStreamError.ServerError)
+            ),
+            listener.events
+        )
+        assertFalse(listener.events.toString().contains("hidden"))
+    }
+
+    @Test
     fun errorWithoutDoneIsIncompatibleAndDynamicMessageNeverVisible() {
         server.enqueue(
             sseResponse(
@@ -1231,6 +1289,27 @@ class HermesSessionStreamClientTest {
         ),
         frame("run.completed", 5, JSONObject(), sessionId),
         frame("done", 6, JSONObject(), sessionId)
+    )
+
+    /** Measured live stop sequence of the official core (f86276d2). */
+    private fun stoppedStreamFrames(sessionId: String = SESSION_ID): List<String> = listOf(
+        frame("run.started", 1, JSONObject(), sessionId),
+        frame("message.started", 2, messageExtra(), sessionId),
+        frame("tool.started", 3, JSONObject(), sessionId),
+        frame("tool.failed", 4, JSONObject(), sessionId),
+        frame(
+            "assistant.completed",
+            5,
+            JSONObject()
+                .put("message_id", "msg_synthetic")
+                .put("content", "Hallo Welt")
+                .put("completed", true)
+                .put("partial", false)
+                .put("interrupted", true),
+            sessionId
+        ),
+        frame("run.cancelled", 6, JSONObject(), sessionId),
+        frame("done", 7, JSONObject(), sessionId)
     )
 
     private fun frame(
