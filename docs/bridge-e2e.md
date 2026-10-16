@@ -282,3 +282,25 @@ gelöschte Lease und genau eine User-Nachricht.
 **Live 2026-10-16: beide Phasen OK**, `pidof` nach Phase 1 leer. Bridge-Log: genau
 ein `chat`-POST, danach nur `GET /v1/runs/{id}` (Reconcile-Polls, ~50 s
 `running`, dann terminal) – kein zweiter POST.
+
+## 12. Bildturn über den echten Photo Picker (OR-10)
+
+`LiveBridgeImageTurnE2ETest` (`@LiveBridge`) tippt die Produktions-Anhang-Aktion
+(`PickVisualMedia.ImageOnly`) und wartet begrenzt auf das Thumbnail. Den
+System-Picker (eigene App `com.google.android.photopicker`) bedient der Host:
+
+```
+adb push red.png /sdcard/Pictures/or10-red.png        # 256×256, einfarbig rot
+adb shell content call --method scan_file --uri content://media --arg /sdcard/Pictures/or10-red.png
+adb shell am instrument -w -e class io.github.excludebarrier.orsikrelay.LiveBridgeImageTurnE2ETest \
+  -e liveBaseUrl https://<bridge-host>.<tailnet>.ts.net:8443 -e livePairingCode <frischer-code> \
+  io.github.excludebarrier.orsikrelay.test/androidx.test.runner.AndroidJUnitRunner &
+# sobald der Picker den Fokus hat: Bounds des Eintrags "Photo taken …" aus
+# `adb shell uiautomator dump` lesen und dessen Mitte antippen
+adb shell input tap <x> <y>
+```
+
+Danach sendet der Test die Frage nach der Farbe, wartet auf den terminalen Turn
+(nie UNCERTAIN, Anhang verbraucht) und prüft als einzige Inhaltsaussage, dass
+die Antwort „rot“ enthält. **Live 2026-10-16 (DeepSeek `deepseek-flash`): 1/1
+grün**, genau ein `chat/stream`-POST mit 200.
