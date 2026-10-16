@@ -80,3 +80,26 @@ Annahme. Er läuft nur explizit gegen den Live-Stack.
 - Positiver interaktiver Approval `once`/`deny` mit echtem Tool-Aufruf (ohne
   Provider keine Pending-Approval); Negativpfade live grün.
 - UI-Automation der Onboarding-/Lifecycle-/Bild-Flows.
+
+## 6. Live-Onboarding-UI-E2E (OR-07)
+
+`LiveBridgeOnboardingE2ETest` fährt den vollständigen Onboarding-Weg über die
+**echten Compose-Screens und die Produktions-`AppDependencies`** (kein direkter
+Client-Aufruf): Deep Link `orsik://pair?server=…&code=…` an `MainActivity` →
+Bestätigung im Onboarding → HTTPS-Pairing → Keystore-/Metadaten-Persistenz des
+Device-Credentials → Sessions-Ansicht des neuen Profils → positive
+Capability-Negotiation. Der Test trägt `@LiveBridge`, ist aus der Regulärsuite
+und CI ausgeschlossen und skippt ohne Argumente über die JUnit-Annahme.
+
+Aufruf gegen den Live-Stack (frischer `livePairingCode`):
+
+```
+./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=io.github.excludebarrier.orsikrelay.LiveBridgeOnboardingE2ETest \
+  -Pandroid.testInstrumentationRunnerArguments.liveBaseUrl=https://<bridge-host>.<tailnet>.ts.net:8443 \
+  -Pandroid.testInstrumentationRunnerArguments.livePairingCode=<frischer-code>
+```
+
+**Live-Lauf ausstehend** (Stand 2026-10-16): real geprüft sind der Übersetzungs-
+und der Skip-Pfad (`compileDebugAndroidTestKotlin`, `connectedDebugAndroidTest`
+ohne Argumente → 1 Skip, 0 Fehler).
