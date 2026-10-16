@@ -26,14 +26,13 @@ import hashlib
 import os
 import secrets
 import sqlite3
+import tempfile
 import threading
 import time
 import uuid
 from pathlib import Path
 
 from . import core
-
-SCHEMA_VERSION = 1
 
 # Contract alphabet: A-Z without I/L/O/U plus 1-9 (31 characters).
 _CODE_TTL_SECONDS = core.CODE_TTL_SECONDS
@@ -57,6 +56,36 @@ def _harden_file(path: str) -> None:
             os.chmod(candidate, 0o600)
         except OSError:
             pass
+
+
+def _migration_v0_to_v1(conn: sqlite3.Connection) -> None:
+    """Create the initial pairing-code and device tables."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pairing_codes ("
+        " code_hash TEXT PRIMARY KEY,"
+        " expires_at REAL NOT NULL,"
+        " used INTEGER NOT NULL DEFAULT 0,"
+        " created_at REAL NOT NULL)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS devices ("
+        " token_hash TEXT PRIMARY KEY,"
+        " device_id TEXT NOT NULL,"
+        " label TEXT NOT NULL,"
+        " profile TEXT NOT NULL,"
+        " permissions TEXT NOT NULL,"
+        " revoked INTEGER NOT NULL DEFAULT 0,"
+        " issued_at REAL NOT NULL,"
+        " created_at REAL NOT NULL)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS devices_revoked ON devices(revoked)")
+
+
+# Ordered schema steps: element ``i`` migrates version ``i`` to ``i + 1``. A
+# released step is never reordered or removed — new steps are appended.
+_MIGRATIONS = (_migration_v0_to_v1,)
+
+SCHEMA_VERSION = len(_MIGRATIONS)
 
 
 class BridgeStore:
@@ -117,27 +146,64 @@ class BridgeStore:
         version = int(conn.execute("PRAGMA user_version").fetchone()[0])
         if version > SCHEMA_VERSION:
             raise StoreUnavailable("device store schema is newer than this bridge")
-        if version < 1:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS pairing_codes ("
-                " code_hash TEXT PRIMARY KEY,"
-                " expires_at REAL NOT NULL,"
-                " used INTEGER NOT NULL DEFAULT 0,"
-                " created_at REAL NOT NULL)"
-            )
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS devices ("
-                " token_hash TEXT PRIMARY KEY,"
-                " device_id TEXT NOT NULL,"
-                " label TEXT NOT NULL,"
-                " profile TEXT NOT NULL,"
-                " permissions TEXT NOT NULL,"
-                " revoked INTEGER NOT NULL DEFAULT 0,"
-                " issued_at REAL NOT NULL,"
-                " created_at REAL NOT NULL)"
-            )
-            conn.execute("CREATE INDEX IF NOT EXISTS devices_revoked ON devices(revoked)")
-            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        if version < SCHEMA_VERSION:
+            self._backup_before_migration(conn, version)
+        while version < SCHEMA_VERSION:
+            step = _MIGRATIONS[version]
+            try:
+                # One explicit transaction per step: either the step and its
+                # version bump both land, or neither does.
+                conn.execute("BEGIN IMMEDIATE")
+                step(conn)
+                conn.execute(f"PRAGMA user_version = {version + 1}")
+                conn.execute("COMMIT")
+            except Exception as exc:
+                try:
+                    conn.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise StoreUnavailable("device store migration failed") from exc
+            version += 1
+
+    def _backup_before_migration(self, conn: sqlite3.Connection, version: int) -> None:
+        """Snapshot an existing file DB before it is migrated forward.
+
+        A fresh database (version 0) has nothing to back up. An existing target
+        is never overwritten: a second, timestamped file keeps the older backup
+        intact. A failed backup aborts the migration — the store refuses to open
+        rather than migrate without a way back.
+        """
+        if self.path == ":memory:" or not 1 <= version < SCHEMA_VERSION:
+            return
+        target = f"{self.path}.pre-v{version}.bak"
+        if os.path.exists(target):
+            target = f"{self.path}.pre-v{version}.{int(time.time())}.bak"
+        try:
+            self._write_backup(conn, target)
+        except (OSError, sqlite3.Error) as exc:
+            raise StoreUnavailable("pre-migration backup failed") from exc
+
+    def _write_backup(self, conn: sqlite3.Connection, dest: str) -> None:
+        # Write to a 0600 temp file in the destination directory and then
+        # hard-link it into place: ``dest`` is either absent or a complete
+        # backup, and an existing file is never replaced (os.link refuses).
+        directory = os.path.dirname(os.path.abspath(dest))
+        fd, tmp = tempfile.mkstemp(dir=directory, prefix=".backup-", suffix=".tmp")
+        os.close(fd)
+        try:
+            os.chmod(tmp, 0o600)
+            dest_conn = sqlite3.connect(tmp)
+            try:
+                with dest_conn:
+                    conn.backup(dest_conn)
+            finally:
+                dest_conn.close()
+            os.link(tmp, dest)
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
     def close(self) -> None:
         with self._lock:
@@ -298,6 +364,20 @@ class BridgeStore:
                 raise StoreUnavailable("device revoke failed") from exc
 
     # -- maintenance -----------------------------------------------------------
+    def backup_to(self, dest: str) -> None:
+        """Write an atomic, 0600 snapshot of the live store to ``dest``.
+
+        Refuses to overwrite an existing file so a stale backup is never
+        silently replaced. Raises :class:`StoreUnavailable` on any failure.
+        """
+        with self._lock:
+            if os.path.exists(dest):
+                raise StoreUnavailable(f"backup target already exists: {dest}")
+            try:
+                self._write_backup(self._conn, dest)
+            except (OSError, sqlite3.Error) as exc:
+                raise StoreUnavailable("store backup failed") from exc
+
     def _prune_locked(self, now: float) -> None:
         self._conn.execute(
             "DELETE FROM pairing_codes WHERE used = 1 OR expires_at < ?", (now,)

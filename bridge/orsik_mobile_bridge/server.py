@@ -632,6 +632,8 @@ def _admin_main(argv: list[str]) -> int:
     sub.add_parser("list-devices", help="list paired devices (no secrets)")
     revoke = sub.add_parser("revoke-device", help="revoke a device by device_id")
     revoke.add_argument("device_id")
+    backup = sub.add_parser("backup", help="write an atomic snapshot of the store")
+    backup.add_argument("dest", help="destination path for the backup file")
     args = parser.parse_args(argv)
 
     env = _load_env()
@@ -663,6 +665,14 @@ def _admin_main(argv: list[str]) -> int:
                 return 0
             print("error: no such device_id", file=sys.stderr)
             return 1
+        if args.cmd == "backup":
+            try:
+                state.store.backup_to(args.dest)
+            except store_mod.StoreUnavailable as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            print(f"backup written: {args.dest}")
+            return 0
         return 2
     finally:
         state.store.close()

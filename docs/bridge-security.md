@@ -32,6 +32,7 @@ Rechte-Allowlist `{chat, runs, approvals}`.
 | Brute-Force Pairing | Rate-Limit; harte Code-/Device-Caps; Single-Use atomar |
 | Token-/Code-Diebstahl at rest | Nur SHA-256-Hashes; DB 0600/0700; nie geloggt |
 | Persistentes Credential kompromittiert | Einzelwiderruf durabel über Neustart |
+| Restore alter Store-Stand | Backup/Restore nur Operator-seitig (Dateisystemrecht); ein Restore stellt den Autorisierungszustand zum Backup-Zeitpunkt wieder her — danach widerrufene Geräte sind wieder gültig (`admin list-devices` prüfen, betroffene Geräte erneut widerrufen); Pre-Migration-Backup automatisch, kein Down-Migrate |
 | Store-Ausfall | Fail-closed (`503 store_unavailable`), nie fail-open |
 | Blockierender Store-Zugriff | Store-Aufrufe laufen seriell in einem eigenen DB-Thread und blockieren den aiohttp-Eventloop nie |
 | Öffentliche Admin-Oberfläche | Kein HTTP-Admin; Codes nur lokale Operator-CLI |

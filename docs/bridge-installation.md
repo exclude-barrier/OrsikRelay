@@ -135,14 +135,49 @@ systemctl --user status  orsik-mobile-bridge.service
 systemctl --user restart orsik-mobile-bridge.service
 ```
 
-## 6. Update / Rollback / Deinstallation
+## 6. Update / Rollback / Backup / Restore / Deinstallation
 
 - **Update:** `./install.sh --update [--systemd] /pfad/zum/source` (der Store
   bleibt erhalten; Pairing/Tokens überleben).
-- **Rollback:** alte Quelle erneut mit `--update` installieren; der Store bleibt
-  kompatibel (Schema ist abwärts gepflegt und verweigert nur echte Zukunftsversionen).
 - **Deinstallation:** `./install.sh --uninstall` (Unit stoppen/entfernen) und
   `rm -rf $BRIDGE_HOME` (venv + Store). Hermes und seine Modelle bleiben unberührt.
+
+### Backup / Restore
+
+Operator-Backup des Stores (atomar über eine temp-Datei + Hardlink, Ziel
+0600; ein bereits existierendes Ziel wird nie überschrieben):
+
+```sh
+BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
+  $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin backup $BRIDGE_HOME/state.db.bak
+# -> "backup written: /home/USER/.local/orsik-mobile-bridge/state.db.bak"
+# -> bei Fehler: "error: ..." auf stderr, Exit 1
+```
+
+- **Pre-Migration-Backup (automatisch):** Öffnet die Bridge einen Store mit
+  älterem Schema (1 ≤ `user_version` < aktuelle Version), legt sie **vor** der
+  Migration `state.db.pre-v<version>.bak` an (0600, ebenfalls atomar). Eine
+  frische DB (`user_version` 0) bekommt kein Backup. Ein bereits vorhandenes
+  Ziel wird nicht überschrieben, sondern als
+  `state.db.pre-v<version>.<timestamp>.bak` abgelegt. Schlägt das Backup fehl,
+  öffnet die Bridge den Store **nicht** und migriert nichts.
+- **Restore:** Bridge stoppen, eventuell vorhandene `state.db-wal` und
+  `state.db-shm` neben dem Ziel entfernen (sonst mischt SQLite den alten WAL in
+  das zurückgespielte Backup), das Backup über `$BRIDGE_STATE_DB` kopieren (oder
+  das Backup selbst als `BRIDGE_STATE_DB` setzen), Bridge starten, danach
+  `admin list-devices` prüfen.
+- **Rollback nach einer Schema-Migration:** nur durch Restore des
+  Pre-Migration-Backups (Bridge stoppen → Backup über `BRIDGE_STATE_DB`
+  kopieren → alte Bridge-Version starten). Eine ältere Bridge kann einen bereits
+  migrierten Store **nicht** öffnen: sie verweigert ein neueres Schema
+  fail-closed. Ohne Pre-Migration-Backup gibt es keinen Rollback-Weg.
+
+⚠️ **WARNUNG:** Ein Restore stellt den **Autorisierungszustand zum
+Backup-Zeitpunkt** wieder her. Revokes sind gelöschte Zeilen im Store, kein
+Widerruf-Log; deshalb sind Geräte, die **nach** dem Backup widerrufen wurden,
+nach dem Restore wieder gültig. Nach **jedem** Restore `admin list-devices`
+prüfen und betroffene Geräte erneut mit `admin revoke-device <device_id>`
+widerrufen.
 
 ## 7. Verifizierter Weg (build-host, 2026-10-10)
 
