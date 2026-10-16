@@ -312,3 +312,29 @@ Approval-Eskalation lokal `400`, `once` erreicht den Core, Query-`403`,
 Out-of-Scope-`403`, fehlendes Token `401`, Session-Create/-Messages,
 vollständiger Chat-SSE-Lebenszyklus inkl. `run.completed`, **Re-Attach 200 mit
 Replay**, unbekannter Run `404`, Self-Revoke `200` + danach `401`).
+
+## 12. OR-17 – Hermes-Kompatibilitätsmatrix (2026-10-16)
+
+Jeder Stand läuft isoliert auf `build-host` (eigener Git-Worktree, eigenes
+`HERMES_HOME`, eigener Loopback-Port, eigene Bridge-Instanz und `state.db`;
+das produktive Gateway bleibt unberührt). Venv je Stand: `uv sync --frozen
+--extra messaging` (ohne `messaging` fehlt `aiohttp`, der `api_server` startet
+dann nicht). Bridge: Stand `or-night-integration`. Kein Modellprovider
+konfiguriert (Assistant-Inhalt weiterhin nicht prüfbar, vgl. 11.4).
+
+| Hermes-Stand | Version (`hermes --version`) | `acceptance_live.py` | Capabilities ggü. `f86276d2` |
+|---|---|---|---|
+| `f86276d2` (getestete Basis) | – | **37/37** | – |
+| `v2026.9.24` (neuestes Release-Tag) | v0.21.5 (2026.9.24) | **37/37** | identisch (112 Schlüssel) |
+| `f974134f` (`main`, 2026-10-16) | v0.22.1+682 | **37/37** | +3 Schlüssel, s. u. |
+
+Capability-Differenz `main`: `features.run_unknown_resolution = true` und
+`endpoints.run_unknown_resolution = POST /v1/runs/{run_id}/resolve-unknown`.
+
+Fail-closed-Nachweis (live gegen `main`): Die Bridge erzeugt
+`/v1/capabilities` selbst und reicht das neue Feature nicht durch (0 Treffer);
+`POST /v1/runs/{id}/resolve-unknown` liegt außerhalb von `PROXIED_ROUTES` und
+endet mit einem gültigen Device-Token an der Bridge mit **403**. Eine Nutzung
+(potenziell relevant für die Run-Discovery-Grenze 11.4/2) erfordert eine
+bewusste Erweiterung von Bridge-Allowlist, Capability-Envelope und
+Client-Vertrag; nicht Teil von OR-17.
