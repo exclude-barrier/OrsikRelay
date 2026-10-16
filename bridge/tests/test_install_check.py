@@ -162,6 +162,24 @@ class InstallCheckTest(unittest.TestCase):
         self.assertNotIn("FAIL", result.stdout)
         self.assertEqual(before, self.snapshot(), "check mode changed the install")
 
+    def test_approvals_mode_manual_is_ok(self):
+        (self.root / "config.yaml").write_text(
+            "model:\n  provider: x\napprovals:\n  timeout: 300\n  mode: manual  # strict\n"
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("OK   approvals_mode", result.stdout)
+
+    def test_approvals_mode_smart_or_missing_warns(self):
+        # No config.yaml next to the Hermes env file: the core default (smart) applies.
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("WARN approvals_mode", result.stdout)
+        (self.root / "config.yaml").write_text("approvals:\n  mode: smart\nother:\n  mode: manual\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("WARN approvals_mode: approvals.mode is smart", result.stdout)
+
     def test_world_readable_env_fails(self):
         (self.home / "bridge.env").chmod(0o644)
         result = self.run_check()

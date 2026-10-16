@@ -72,6 +72,9 @@ def _upstream_app():
             {"object": "hermes.run.approval_response", "run_id": "run_1", "choice": "once", "resolved": 1}
         )
 
+    async def run_stop(_):
+        return web.json_response({"object": "hermes.run", "status": "stopping"})
+
     app = web.Application()
     app.router.add_get("/health", health)
     app.router.add_get("/api/sessions", sessions_get)
@@ -80,6 +83,7 @@ def _upstream_app():
     app.router.add_post("/api/sessions/{sid}/chat/stream", chat)
     app.router.add_get("/v1/runs/{rid}", run)
     app.router.add_post("/v1/runs/{rid}/approval", approval)
+    app.router.add_post("/v1/runs/{rid}/stop", run_stop)
     return app
 
 
@@ -226,6 +230,24 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             resp = await self._post_approval(cred["device_key"], {"choice": choice, "request_id": "r1"})
             self.assertEqual(resp.status, 200, choice)
         self.assertEqual(UPSTREAM.get("approval_posts"), 2)
+
+    async def test_mutations_are_audited_per_device_without_secrets(self):
+        # OR-14: every forwarded approval/stop is attributable to one device;
+        # neither the device token nor the master key ever reaches the log.
+        cred = await self._pair()
+        token = cred["device_key"]
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            await self._post_approval(token, {"choice": "once", "request_id": "r1"}, run_id="run_a")
+            await self._post_approval(token, {"choice": "always", "request_id": "r1"}, run_id="run_a")
+            await self.client.post("/v1/runs/run_a/stop", headers=self._bearer(token))
+        lines = [record.getMessage() for record in logs.records]
+        device = cred["device_id"]
+        self.assertIn(f"audit action=approval device={device} run=run_a choice=once status=200", lines)
+        self.assertIn(f"audit action=approval device={device} run=run_a choice=rejected status=400", lines)
+        self.assertIn(f"audit action=stop device={device} run=run_a status=200", lines)
+        for line in lines:
+            self.assertNotIn(token, line)
+            self.assertNotIn("master_key_test", line)
 
     async def test_approval_escalation_and_malformed_never_reach_upstream(self):
         cred = await self._pair()

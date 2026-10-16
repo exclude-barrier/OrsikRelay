@@ -12,6 +12,13 @@ scannen → Chat nutzen. Kein Hermes-Fork, keine Core-Patches, kein öffentliche
 - Ein privater HTTPS-Zugangsweg zum Server (siehe §4): Tailscale Serve,
   WireGuard+Reverse-Proxy oder LAN mit gültigem Zertifikat.
 - `uv` und ein Python ≥ 3.11 (Bridge-venv getrennt vom Hermes-venv).
+- **Approval-Modus `manual`** in der `config.yaml` des Hermes-Homes hinter der
+  Bridge (`approvals:` / `mode: manual`). Mit dem Core-Default `smart` genehmigt
+  ein Hilfs-LLM als harmlos eingestufte gefährliche Kommandos ohne
+  `approval.request`; das Gerät wird dann nicht gefragt (live belegt, siehe
+  `bridge-security.md` §4.1).
+- Hermes-Venv mit dem Extra `messaging` (`uv sync --frozen --extra messaging`);
+  ohne es fehlt `aiohttp` und der `api_server` startet nicht.
 
 ## 2. Installation
 
@@ -77,6 +84,7 @@ sobald eine Prüfung FAIL ist, sonst 0; am Ende `PREFLIGHT: PASS` bzw.
 | `bind` | `BRIDGE_BIND` leer, `127.0.0.1` oder `::1` |
 | `upstream` | `BRIDGE_UPSTREAM` (Default `http://127.0.0.1:8899`) passt auf `^http://(127.x.x.x\|[::1]):port$` |
 | `hermes_env` | `BRIDGE_HERMES_ENV` gesetzt, Datei 0600, mit `API_SERVER_KEY=…` |
+| `approvals_mode` | `config.yaml` neben der Hermes-Env-Datei setzt `approvals: mode: manual`; fehlt die Datei oder steht dort ein anderer Modus → WARN (Core-Default `smart` genehmigt teils ohne Rückfrage) |
 | `public_base_url` | leer → WARN (kein Deep-Link/QR); sonst muss es mit `https://` beginnen |
 | `port` | `BRIDGE_PORT` (Default 9842): `ss` fehlt → WARN; Listener auf Loopback/`0.0.0.0` → WARN („port in use") |
 | `hermes_health` | `curl` auf `$UPSTREAM/health` == 200; nur wenn `upstream` OK war, sonst WARN |
@@ -137,8 +145,9 @@ systemctl --user restart orsik-mobile-bridge.service
 
 ## 6. Update / Rollback / Backup / Restore / Deinstallation
 
-- **Update:** `./install.sh --update [--systemd] /pfad/zum/source` (der Store
-  bleibt erhalten; Pairing/Tokens überleben).
+- **Update:** `./install.sh --update [--systemd] /pfad/zum/source` baut das venv
+  neu auf (`uv venv --clear`); `bridge.env` und der Store bleiben erhalten,
+  Pairing/Tokens überleben. Danach die Bridge neu starten.
 - **Deinstallation:** `./install.sh --uninstall` (Unit stoppen/entfernen) und
   `rm -rf $BRIDGE_HOME` (venv + Store). Hermes und seine Modelle bleiben unberührt.
 

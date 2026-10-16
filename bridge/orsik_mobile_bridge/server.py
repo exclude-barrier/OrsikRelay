@@ -46,7 +46,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout, web
@@ -58,6 +58,16 @@ from . import store as store_mod
 from .sse import MAX_FRAME_BYTES, Frame, SSEDecoder, SSEFrameTooLarge, redact_echo
 
 logger = logging.getLogger("orsik_mobile_bridge")
+# OR-14: one line per state-changing call, attributable to a device. Only
+# validated, non-secret values (device_id, run/session ids, the choice) are
+# logged; never a token, the master key or message content.
+audit_logger = logging.getLogger("orsik_mobile_bridge.audit")
+_AUDITED_RUN_ACTIONS = ("stop", "steer")
+
+
+def _audit(action: str, record: core.DeviceRecord, **fields: object) -> None:
+    detail = "".join(f" {key}={value}" for key, value in fields.items())
+    audit_logger.info("audit action=%s device=%s%s", action, record.device_id, detail)
 
 APPROVAL_PATH = "/v1/runs/{run_id}/approval"
 # Match the official api_server request bound (10_000_000) so the bridge does
@@ -283,7 +293,8 @@ async def _handle_approval(request: web.Request) -> web.StreamResponse:
     NEVER reach Hermes.
     """
     state: BridgeState = request.app[STATE_KEY]
-    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+    record = await _db(state, state.tokens.lookup, _device_token(request))
+    if record is None:
         return _closed(401, "invalid_credentials")
     run_id = request.match_info.get("run_id", "")
     if not core.is_safe_run_id(run_id):
@@ -293,15 +304,22 @@ async def _handle_approval(request: web.Request) -> web.StreamResponse:
     except web.HTTPRequestEntityTooLarge:
         return _closed(413, "body_too_large")
     except Exception:
+        _audit("approval", record, run=run_id, choice="rejected", status=400)
         return _closed(400, "invalid_json")
     ok, code = core.validate_approval_body(body)
     if not ok:
+        # The raw (rejected) choice is client input and is never logged.
+        _audit("approval", record, run=run_id, choice="rejected", status=400)
         return _closed(400, code)
     # Forward a canonical body (only the two contract fields) upstream.
     payload = json.dumps(
         {"choice": body["choice"], "request_id": body["request_id"]}
     ).encode("utf-8")
-    return await _proxy(request, state, f"/v1/runs/{run_id}/approval", body_override=payload)
+    choice = body["choice"]
+    return await _proxy(
+        request, state, f"/v1/runs/{run_id}/approval", body_override=payload,
+        on_status=lambda status: _audit("approval", record, run=run_id, choice=choice, status=status),
+    )
 
 
 def _upstream_headers(request: web.Request) -> dict[str, str]:
@@ -320,13 +338,15 @@ async def _handle_chat_stream(request: web.Request) -> web.StreamResponse:
     run's frames are buffered and can be replayed on re-attach.
     """
     state: BridgeState = request.app[STATE_KEY]
-    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+    record = await _db(state, state.tokens.lookup, _device_token(request))
+    if record is None:
         return _closed(401, "invalid_credentials")
     session_id = request.match_info.get("session_id", "")
     if not core._safe_segment(session_id):
         return _closed(400, "invalid_session_id")
     if request.query:
         return _closed(403, "query_not_allowed")
+    _audit("chat", record, session=session_id)
     body = await request.read() if request.can_read_body else None
     upstream_path = f"/api/sessions/{session_id}/chat/stream"
     try:
@@ -579,7 +599,8 @@ async def _indeterminate_run(state: BridgeState, run_id: str) -> web.Response:
 
 async def _handle_proxy(request: web.Request) -> web.StreamResponse:
     state: BridgeState = request.app[STATE_KEY]
-    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+    record = await _db(state, state.tokens.lookup, _device_token(request))
+    if record is None:
         return _closed(401, "invalid_credentials")
     match = core.match_proxy_route(request.method, request.path)
     if match is None:
@@ -593,7 +614,12 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
     # validating handler, never forwarded by the generic proxy.
     if request.method == "POST" and match.upstream_path.endswith("/approval"):
         return _closed(403, "endpoint_out_of_scope")
-    return await _proxy(request, state, match.upstream_path)
+    action = match.upstream_path.rsplit("/", 1)[-1]
+    on_status = None
+    if request.method == "POST" and "run_id" in match.params and action in _AUDITED_RUN_ACTIONS:
+        run_id = match.params["run_id"]
+        on_status = lambda status: _audit(action, record, run=run_id, status=status)  # noqa: E731
+    return await _proxy(request, state, match.upstream_path, on_status=on_status)
 
 
 async def _proxy(
@@ -601,12 +627,23 @@ async def _proxy(
     state: BridgeState,
     upstream_path: str,
     body_override: bytes | None = None,
+    on_status: Callable[[int], None] | None = None,
 ) -> web.StreamResponse:
+    """Forward one request upstream and relay the response.
+
+    ``on_status`` (the OR-14 audit hook) is called with the final status before
+    any byte is sent downstream, so the record exists before the client is done.
+    """
+    def closed(status: int, code: str) -> web.Response:
+        if on_status is not None:
+            on_status(status)
+        return _closed(status, code)
+
     # Query surface is allowlisted per route; unknown keys never reach upstream.
     allowed = core.allowed_query_keys(request.method, upstream_path)
     for key in request.query.keys():
         if key not in allowed:
-            return _closed(403, "query_not_allowed")
+            return closed(403, "query_not_allowed")
 
     upstream_url = state.upstream + upstream_path
     if request.query_string:
@@ -632,18 +669,20 @@ async def _proxy(
                 request.method, upstream_url, data=body, headers=headers, allow_redirects=False
             )
         except Exception:
-            return _closed(502, "upstream_unavailable")  # type: ignore[return-value]
+            return closed(502, "upstream_unavailable")  # type: ignore[return-value]
 
         if 300 <= upstream.status < 400:
             # Fail closed; do not relay a Location that could induce an SSRF hop.
             upstream.release()
-            return _closed(502, "upstream_redirect")  # type: ignore[return-value]
+            return closed(502, "upstream_redirect")  # type: ignore[return-value]
 
         content_type = upstream.headers.get("Content-Type", "application/json")
         downstream = web.StreamResponse(status=upstream.status)
         downstream.content_type = content_type.split(";")[0].strip()
         if "text/event-stream" in content_type:
             downstream.headers["Cache-Control"] = "no-cache"
+        if on_status is not None:
+            on_status(upstream.status)
         await downstream.prepare(request)
         try:
             async for chunk in upstream.content.iter_chunked(4096):

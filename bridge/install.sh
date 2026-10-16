@@ -141,6 +141,30 @@ if [ "$CHECK" -eq 1 ]; then
     fi
   fi
 
+  # 6b. The phone only sees approvals the core escalates. With the core default
+  # (approvals.mode: smart) an auxiliary model may auto-approve a dangerous
+  # command, so anything but `manual` in the Hermes home's config.yaml (next to
+  # the env file) is reported. A WARN, not a FAIL: the bridge cannot enforce it.
+  if [ -n "$HERMES_ENV" ] && [ -f "$HERMES_ENV" ]; then
+    HERMES_CFG="$(dirname "$HERMES_ENV")/config.yaml"
+    if [ ! -f "$HERMES_CFG" ]; then
+      chk_warn approvals_mode "no config.yaml next to the Hermes env file (core default: smart)"
+    else
+      approvals_mode="$(awk '
+        /^approvals:/ { in_block = 1; next }
+        in_block && /^[^[:space:]#]/ { in_block = 0 }
+        in_block && /^[[:space:]]+mode:/ {
+          sub(/^[[:space:]]+mode:[[:space:]]*/, ""); sub(/[[:space:]]*#.*/, "")
+          gsub(/["'"'"']/, ""); print; exit
+        }' "$HERMES_CFG")"
+      if [ "$approvals_mode" = "manual" ]; then
+        chk_ok approvals_mode
+      else
+        chk_warn approvals_mode "approvals.mode is ${approvals_mode:-unset (core default: smart)}, expected manual"
+      fi
+    fi
+  fi
+
   # 7. Without a public base URL there is no deep link and no QR.
   BASE_URL="$(env_value BRIDGE_PUBLIC_BASE_URL)"
   case "$BASE_URL" in

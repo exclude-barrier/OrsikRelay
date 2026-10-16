@@ -79,6 +79,44 @@ Wirksame Einschränkungen: Pairing ist Operator-gated (lokale CLI), jedes Token
 ist durabel einzeln widerrufbar, die Approval-Auswahl ist auf `once`/`deny`
 verengt.
 
+## 4.1 Revalidierung gegen reale positive Approvals (OR-14, 2026-10-16)
+
+Live auf `build-host`: offizieller Core `f86276d2` mit echtem Provider
+(DeepSeek, `deepseek-flash`, nur im isolierten Test-Home), Bridge
+`or-night-integration`, echter Tool-Request (`rm -rf` auf ein vorher angelegtes
+Marker-Verzeichnis unter `/tmp`).
+
+| Antwort des Geräts | Bridge | Core / Wirkung |
+|---|---|---|
+| `once` | `200`, weitergeleitet | genau ein `approval.request`, `tool.completed`, Marker gelöscht, Run `completed` |
+| `deny` | `200`, weitergeleitet | `tool.failed`, Marker unverändert, Run `completed` |
+| `always` / `session` | **`400` lokal**, kein Upstream-POST | erst das folgende `deny` löst auf, Marker unverändert |
+
+Der Core bietet im `approval.request` `choices = [once, session, always, deny]`
+an; die Verengung auf `once`/`deny` leistet ausschließlich die Bridge.
+
+**Befund: Approval-Modus des Cores.** Mit dem Core-Default `approvals.mode:
+smart` bewertet ein Hilfs-LLM gefährliche Kommandos und genehmigt als harmlos
+eingestufte **ohne** `approval.request`: live wurde `rm -rf /tmp/<marker>` ohne
+Rückfrage ausgeführt. Die mobile Approval-Fläche sieht nur, was der Core
+eskaliert; die Bridge kann das nicht erzwingen. **Betriebsanforderung:** Das
+Hermes-Home hinter der Bridge setzt `approvals.mode: manual` (siehe
+`bridge-installation.md`). Mit `manual` kam jede Ausführung nur nach
+`approval.request` zustande (Tabelle oben).
+
+**Nachvollziehbarkeit.** Jede zustandsändernde Gerätanfrage erzeugt eine
+Audit-Zeile (Logger `orsik_mobile_bridge.audit`):
+`audit action=<chat|approval|stop|steer> device=<device_id> run=/session=<id>
+[choice=<once|deny|rejected>] [status=<http>]`. Abgelehnte Choices werden als
+`rejected` geführt (Rohwert = Client-Eingabe, nie geloggt); Tokens,
+Master-Key und Nachrichteninhalte erscheinen nie. Die Zeile entsteht, sobald
+der Upstream-Status feststeht, also vor der Antwort an das Gerät.
+
+Unverändert gilt §4: Jedes gepairte Gerät kann Approvals/Stop/Steer für
+**jeden** Run des Owners senden (keine Per-Device-Isolation); das Audit macht
+das zurechenbar, verhindert es aber nicht. Nicht live geprüft: Antwort eines
+zweiten Geräts auf den Run eines ersten.
+
 ## 5. Nicht-Ziele / Grenzen
 
 - Kein Schutz gegen einen kompromittierten Bridge-Prozess (der hätte
