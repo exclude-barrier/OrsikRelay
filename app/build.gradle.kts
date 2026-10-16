@@ -5,6 +5,20 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Release signing is fed exclusively from four environment variables; no key
+// material or keystore path lives in the repository. No variable set: the
+// release stays unsigned. Partially set, or a keystore inside the repository:
+// the build aborts with a message that never contains a value (docs/release.md).
+val releaseSigningVariables = listOf(
+    "ORSIK_RELEASE_STORE_FILE",
+    "ORSIK_RELEASE_STORE_PASSWORD",
+    "ORSIK_RELEASE_KEY_ALIAS",
+    "ORSIK_RELEASE_KEY_PASSWORD"
+)
+val releaseSigningValues = releaseSigningVariables.map { name ->
+    providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+}
+
 android {
     namespace = "io.github.excludebarrier.orsikrelay"
     compileSdk = 36
@@ -20,6 +34,29 @@ android {
 
     buildToolsVersion = "36.1.0"
 
+    signingConfigs {
+        if (releaseSigningValues.any { it != null }) {
+            if (releaseSigningValues.any { it == null }) {
+                throw GradleException(
+                    "Release signing needs all of " + releaseSigningVariables.joinToString(", ")
+                )
+            }
+            val keystoreFile = file(releaseSigningValues[0]!!)
+            if (keystoreFile.canonicalFile.toPath().startsWith(rootDir.canonicalFile.toPath())) {
+                throw GradleException("Release keystore must live outside the repository")
+            }
+            if (!keystoreFile.exists()) {
+                throw GradleException("Release keystore file does not exist")
+            }
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = releaseSigningValues[1]
+                keyAlias = releaseSigningValues[2]
+                keyPassword = releaseSigningValues[3]
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Report-only JaCoCo coverage for JVM unit tests (AGP built-in);
@@ -28,6 +65,9 @@ android {
         }
         release {
             isMinifyEnabled = false
+            if (releaseSigningValues.all { it != null }) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

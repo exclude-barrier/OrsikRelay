@@ -47,7 +47,7 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
 | `docs/security-threat-model.md`, `docs/testing.md`, `docs/release-checklist.md` | nicht vorhanden | offen |
 | Network Security Config (Datei) | `android:usesCleartextTraffic="false"` + HTTPS-only im Client | bewusst/minimal: Klartext ist ohnehin blockiert |
 | Zertifikats-Pinning | nicht implementiert | offen (Plan: „optional nach stabiler Strategie“) |
-| Release-Signing / AAB / CI | kein Signing, keine AAB; CI vorhanden (`​.github/workflows/android.yml`: Unit-Tests, Lint, `assembleDebug`, Instrumented API 36) | CI erledigt; Signing/AAB bleiben ein separates Ticket |
+| Release-Signing / AAB / CI | Signing-Konfiguration über Umgebungsvariablen vorhanden (`docs/release.md`); CI vorhanden (`​.github/workflows/android.yml`: Unit-Tests, Lint, `assembleDebug`, Instrumented API 36) | Signing/AAB vorhanden; produktiver Key und Pipeline offen |
 | `HermesApplication.kt` | nicht vorhanden (Application-Klasse unnötig) | bewusst |
 
 ## 4. Bekannte, bewusst getragene Grenzen

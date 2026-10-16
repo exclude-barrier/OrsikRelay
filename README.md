@@ -110,7 +110,7 @@ Die APK ist mit dem Android-Debug-Key signiert. Sie ist ausschließlich zum manu
 
 ## Bekannte Grenzen
 
-- Kein produktives Release-Signing, keine AAB und keine CI-basierte Release-Pipeline.
+- Signing-Konfiguration über Umgebungsvariablen vorhanden (docs/release.md); produktiver Key und Pipeline offen.
 - Die device- und reconnect-spezifischen Mobile-v1-Erweiterungen (Device-Pairing/-Credentials/-Scope, `protocol_version`-Negotiation, `after_seq`-Re-Attach) sind noch nicht in der öffentlichen Hermes-Version enthalten; sie liefert die Orsik Mobile Bridge (`docs/bridge-installation.md`). Bis zu einem Upstream-Beitrag ist die Bridge der erforderliche Serverbaustein.
 - Keine garantierte Per-Device-Isolation: Der offizielle Core kennt keine Ressourcen-Ownership pro Gerät; gepaarte Geräte handeln als Delegierte des einen Owners über alle Sessions/Runs (`docs/hermes-fresh-compat.md` §7).
 - PDF-, Text- und allgemeine Dateianhänge werden nicht unterstützt, und es wird maximal ein Bild pro Turn übertragen.
@@ -153,7 +153,7 @@ Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeri
 
 - Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.6`, später `v0.1.0-beta.1`.
 - CI (Unit-Tests, Lint, `assembleDebug` und Instrumentationstests auf API 36) liegt in `.github/workflows/android.yml`; die Gradle-Wrapper-Validation ist Teil des Workflows.
-- Produktives Release-Signing und AAB-Erstellung folgen in einem separaten Release-Ticket.
+- Signing-Konfiguration über Umgebungsvariablen vorhanden (docs/release.md); produktiver Key und Pipeline offen.
 - Der Signing-Key kommt niemals ins Repository.
 - Lizenz: **Apache-2.0** (siehe `LICENSE`). Vor einem öffentlichen bzw. Play-Store-Release sind zusätzlich Datenschutztext, Support- und Updatekonzept sowie vollständige Store-Metadaten erforderlich.
 
