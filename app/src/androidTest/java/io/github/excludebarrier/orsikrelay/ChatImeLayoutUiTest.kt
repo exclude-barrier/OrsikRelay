@@ -1,7 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
 import android.content.Context
-import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
@@ -13,7 +12,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.platform.app.InstrumentationRegistry
@@ -440,26 +438,16 @@ class ChatImeLayoutUiTest {
         return false
     }
 
-    /** Injects the IME inset; status/nav bars keep their real values. */
+    /**
+     * Injects the IME inset; status/nav bars keep their real values.
+     *
+     * The value is forced (re-applied on every window-insets dispatch) so a
+     * later real re-dispatch cannot silently drop it, and it is built so the
+     * Compose tree observes it on every API level (below API 30 the platform
+     * has no IME inset type; see [ImeClickSettle.injectedInsets]).
+     */
     private fun dispatchImeInsets(ime: Int) {
-        val rootInsets =
-            ViewCompat.getRootWindowInsets(composeRule.activity.window.decorView)
-        val statusTop =
-            rootInsets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
-        val navBottom =
-            rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
-        val insets = WindowInsetsCompat.Builder()
-            .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusTop, 0, 0))
-            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, navBottom))
-            .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, ime))
-            .build()
-        composeRule.activity.runOnUiThread {
-            val content = composeRule.activity.findViewById<View>(android.R.id.content)
-            ViewCompat.dispatchApplyWindowInsets(content, insets)
-        }
-        composeRule.waitForIdle()
-        Thread.sleep(250) // allow the layout pass driven by the insets
-        composeRule.waitForIdle()
+        ImeClickSettle.forceImeInset(composeRule, ime)
     }
 
     private fun listTop(): Int = boundsBottom("Chat")

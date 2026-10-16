@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
 import android.content.Context
+import android.os.Build
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
@@ -66,7 +67,7 @@ object ImeClickSettle {
         dispatchImeInsets(rule, activity, statusTop, navBottom, imeBottom)
     }
 
-    /** Injects the given insets; status/nav/IME are set explicitly. */
+    /** Injects the given insets once; status/nav/IME are set explicitly. */
     fun dispatchImeInsets(
         rule: ComposeTestRule,
         activity: ComponentActivity,
@@ -74,11 +75,12 @@ object ImeClickSettle {
         navBottom: Int,
         imeBottom: Int
     ) {
-        val insets = WindowInsetsCompat.Builder()
-            .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusTop, 0, 0))
-            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, navBottom))
-            .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, imeBottom))
-            .build()
+        val insets = injectedInsets(
+            measuredInsets(activity),
+            statusTop,
+            navBottom,
+            imeBottom
+        )
         activity.runOnUiThread {
             val content = activity.findViewById<View>(android.R.id.content)
             ViewCompat.dispatchApplyWindowInsets(content, insets)
@@ -89,6 +91,89 @@ object ImeClickSettle {
         // geometry deterministically.
         rule.waitForIdle()
     }
+
+    /**
+     * Forces a fixed IME inset ([imeBottom], `0` closes it) on the Compose tree
+     * for the rest of the test and applies it immediately.
+     *
+     * Unlike [dispatchImeInsets] — a single synchronous re-dispatch — this
+     * installs an `OnApplyWindowInsetsListener` on the activity content view
+     * that re-applies the value on EVERY window-insets dispatch.
+     * `performTextInput` focuses the field and the platform opens the real IME
+     * asynchronously; its later re-dispatch carries the real (closed or
+     * keyboard-sized) inset and would silently overwrite a one-shot injection,
+     * leaving the layout at the wrong geometry depending on test order. Re-
+     * applying on every dispatch makes the injected geometry independent of
+     * those asynchronous re-dispatches.
+     *
+     * Reading the real inset from the decor view (e.g.
+     * [hideRealImeAndWait]) is unaffected: only the content subtree sees the
+     * injected value.
+     */
+    fun forceImeInset(rule: ComposeTestRule, imeBottom: Int) {
+        val activity = activityOf(rule)
+        val content = activity.findViewById<View>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(content) { _, incoming ->
+            val statusTop = incoming.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            val navBottom = incoming.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            injectedInsets(incoming, statusTop, navBottom, imeBottom)
+        }
+        activity.runOnUiThread {
+            ViewCompat.dispatchApplyWindowInsets(content, measuredInsets(activity))
+        }
+        rule.waitForIdle()
+    }
+
+    /**
+     * Builds window insets carrying the given status/nav/IME values in a shape
+     * the Compose tree observes on every API level.
+     *
+     * On API 30+ the IME is a first-class platform inset type. Below API 30 the
+     * platform `android.view.WindowInsets` has no IME type: `WindowInsetsCompat`
+     * derives its `Type.ime()` inset from the system-window bottom inset (minus
+     * the stable bottom inset), and `WindowInsetsCompat.Builder` folds only the
+     * status/nav types into those system-window insets. Setting only
+     * `Type.ime()` is therefore silently dropped below API 30 — the injected
+     * IME never reaches the tree — and the IME has to be folded into the
+     * navigation-bar system-window inset instead (the navigation-bar inset the
+     * tree observes stays correct: AndroidX clamps it to the real stable inset
+     * of the root window).
+     *
+     * Below API 30 the builder is seeded with [base], the currently measured
+     * insets, and NOT left at its default. The default bases the platform
+     * insets on `WindowInsets.CONSUMED`; the resulting instance reports
+     * `isConsumed() == true`, and `ViewGroup.dispatchApplyWindowInsets` then
+     * stops before descending into its children, so the Compose view never
+     * receives the injected insets at all (measured on API 26). Seeding with
+     * the real insets keeps the dispatched instance non-consumed, so the normal
+     * top-down dispatch reaches the Compose view.
+     */
+    fun injectedInsets(
+        base: WindowInsetsCompat,
+        statusTop: Int,
+        navBottom: Int,
+        imeBottom: Int
+    ): WindowInsetsCompat {
+        if (Build.VERSION.SDK_INT >= 30) {
+            return WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusTop, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, navBottom))
+                .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, imeBottom))
+                .build()
+        }
+        return WindowInsetsCompat.Builder(base)
+            .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusTop, 0, 0))
+            .setInsets(
+                WindowInsetsCompat.Type.navigationBars(),
+                Insets.of(0, 0, 0, maxOf(navBottom, imeBottom))
+            )
+            .build()
+    }
+
+    /** The insets the window currently reports, or a zero instance if none. */
+    private fun measuredInsets(activity: ComponentActivity): WindowInsetsCompat =
+        ViewCompat.getRootWindowInsets(activity.window.decorView)
+            ?: WindowInsetsCompat.CONSUMED
 
     private fun realImeBottom(activity: ComponentActivity): Int =
         ViewCompat.getRootWindowInsets(activity.window.decorView)

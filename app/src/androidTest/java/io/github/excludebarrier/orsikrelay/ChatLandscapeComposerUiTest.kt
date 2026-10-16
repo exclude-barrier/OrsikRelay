@@ -3,7 +3,6 @@ package io.github.excludebarrier.orsikrelay
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
@@ -17,7 +16,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentDraftHolder
@@ -560,29 +558,18 @@ class ChatLandscapeComposerUiTest {
         )
     }
 
-    /** Injects the IME inset; status/nav bars keep their real values. */
+    /**
+     * Injects the IME inset; status/nav bars keep their real values.
+     *
+     * The value is forced: it is re-applied on every window-insets dispatch, so
+     * the asynchronous real re-dispatch triggered by `performTextInput`'s focus
+     * change cannot silently drop it and leave the layout at the closed
+     * geometry depending on test order. The insets are built so the Compose
+     * tree observes them on every API level (below API 30 the platform has no
+     * IME inset type; see [ImeClickSettle.injectedInsets]).
+     */
     private fun dispatchImeInsets(ime: Int) {
-        val rootInsets = ViewCompat.getRootWindowInsets(composeRule.activity.window.decorView)
-        val statusTop = rootInsets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
-        val navBottom = rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
-        val insets = WindowInsetsCompat.Builder()
-            .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusTop, 0, 0))
-            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, navBottom))
-            .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, ime))
-            .build()
-        composeRule.activity.runOnUiThread {
-            val content = composeRule.activity.findViewById<View>(android.R.id.content)
-            ViewCompat.dispatchApplyWindowInsets(content, insets)
-        }
-        // `dispatchApplyWindowInsets` is synchronous: it applies the inset to
-        // the view tree and drives the Compose relayout read from
-        // `WindowInsets.ime`. `waitForIdle` therefore settles on the injected
-        // geometry deterministically; the previous fixed `Thread.sleep(300)`
-        // settle was removed. (`isCompactRegime` reads the root view height,
-        // which the internal IME padding does not shrink, so it is NOT a valid
-        // observable for inset consumption and is only used by
-        // `assertCompactRegime`.)
-        composeRule.waitForIdle()
+        ImeClickSettle.forceImeInset(composeRule, ime)
     }
 
     private fun isCompactRegime(): Boolean {
