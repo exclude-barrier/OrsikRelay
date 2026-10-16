@@ -6,8 +6,9 @@ byte-for-byte on reconnect. It therefore keeps each frame's raw bytes and only
 parses the ``data:`` JSON for correlation. The single deliberate exception is
 :func:`redact_echo`: the core echoes the whole request (image body included) in
 the first ``run.started`` frame, so that one frame is rebuilt without its
-``user_message`` field. That is the only place the bridge re-serialises upstream
-content, and it never happens in this decoder itself.
+``user_message`` field; and :func:`normalize_approval` narrows ``approval.request``
+to the Mobile-v1 shape. Those are the only places the bridge re-serialises
+upstream content, and it never happens in this decoder itself.
 
 Parsing is total: a malformed ``data:`` line yields a frame with ``json=None``
 and is still relayed, never dropped and never raised. The one deliberate
@@ -76,7 +77,50 @@ def redact_echo(frame: Frame) -> Frame:
     ):
         return frame
     redacted = {key: value for key, value in payload.items() if key != "user_message"}
-    data = json.dumps(redacted, separators=(",", ":"), ensure_ascii=False)
+    return _rebuild(frame, redacted)
+
+
+APPROVAL_EVENT = "approval.request"
+"""Event the bridge narrows to the Mobile-v1 approval shape."""
+
+APPROVAL_SAFE_DESCRIPTION = "A dangerous action requires your approval."
+"""The only description a Mobile-v1 client accepts (it never shows core text)."""
+
+APPROVAL_V1_CHOICES = ["once", "deny"]
+"""The choices the bridge actually accepts on ``POST /v1/runs/{id}/approval``."""
+
+_APPROVAL_V1_COPIED = ("session_id", "run_id", "seq", "ts", "request_id")
+
+
+def normalize_approval(frame: Frame) -> Frame:
+    """Narrow a core ``approval.request`` frame to the Mobile-v1 shape.
+
+    The official core advertises ``choices = [once, session, always, deny]`` and
+    adds the command, pattern keys, permanence flags and its own description.
+    The bridge refuses everything but ``once``/``deny`` locally, so it also
+    advertises exactly those, with the fixed v1 description, and drops every
+    other field (the command text never reaches the phone). A frame missing a
+    v1 field is relayed unchanged: the client then rejects it closed, the bridge
+    never invents a value.
+    """
+    payload = frame.json
+    if frame.event != APPROVAL_EVENT or not isinstance(payload, dict):
+        return frame
+    if not all(key in payload for key in _APPROVAL_V1_COPIED):
+        return frame
+    narrowed = {key: payload[key] for key in _APPROVAL_V1_COPIED}
+    narrowed["description"] = APPROVAL_SAFE_DESCRIPTION
+    narrowed["choices"] = list(APPROVAL_V1_CHOICES)
+    return _rebuild(frame, narrowed)
+
+
+def _rebuild(frame: Frame, payload: dict) -> Frame:
+    """Re-serialise ``payload`` as the frame's single ``data:`` line.
+
+    ``id:``/``event:`` lines and their order are kept; only the ``data:``
+    payload is replaced.
+    """
+    data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     data_line = b"data: " + data.encode("utf-8")
     rebuilt: list[bytes] = []
     replaced = False
@@ -89,7 +133,7 @@ def redact_echo(frame: Frame) -> Frame:
     if not replaced:
         rebuilt.append(data_line)
     return Frame(
-        event=frame.event, data=data, json=redacted, raw=b"\n".join(rebuilt) + b"\n\n"
+        event=frame.event, data=data, json=payload, raw=b"\n".join(rebuilt) + b"\n\n"
     )
 
 

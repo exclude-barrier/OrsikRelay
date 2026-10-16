@@ -93,7 +93,16 @@ Marker-Verzeichnis unter `/tmp`).
 | `always` / `session` | **`400` lokal**, kein Upstream-POST | erst das folgende `deny` löst auf, Marker unverändert |
 
 Der Core bietet im `approval.request` `choices = [once, session, always, deny]`
-an; die Verengung auf `once`/`deny` leistet ausschließlich die Bridge.
+an; die Verengung auf `once`/`deny` leistet ausschließlich die Bridge – lokal
+bei der Antwort **und** im Stream: Die Bridge bringt jedes `approval.request`
+auf die Mobile-v1-Form (`session_id`, `run_id`, `seq`, `ts`, `request_id`,
+feste `description`, `choices = [once, deny]`) und verwirft alle übrigen Felder
+(`command`, `pattern_keys`, `allow_session`, `allow_permanent`, …). Vorher
+(bis 2026-10-16) reichte sie den Core-Frame roh durch; die App lehnt ihn strikt
+als Protokollfehler ab, ein echtes Approval hätte den Turn auf dem Gerät also
+in UNCERTAIN geworfen. Fehlt ein v1-Feld, bleibt der Frame unverändert (die App
+lehnt ihn ab, die Bridge erfindet nichts). Folge für das Produkt: Das Gerät
+zeigt nur den festen Hinweistext, **nicht** das Kommando (OR-19-Entscheidung).
 
 **Befund: Approval-Modus des Cores.** Mit dem Core-Default `approvals.mode:
 smart` bewertet ein Hilfs-LLM gefährliche Kommandos und genehmigt als harmlos

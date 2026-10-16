@@ -1005,6 +1005,47 @@ class EchoRedactionTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(self._blocks(replay)[0], first)
 
+    async def test_core_approval_request_is_narrowed_to_mobile_v1(self):
+        # OR-06b: the shape the official core emits (measured live 2026-10-16).
+        core_approval = {
+            "event": "approval.request", "session_id": "s1", "run_id": "run_ap", "seq": 2,
+            "ts": 1.5, "timestamp": 1.5, "message_id": "msg_1", "request_id": "req_1",
+            "command": "rm -rf /tmp/marker", "description": "delete in root path",
+            "pattern_key": "delete in root path", "pattern_keys": ["delete in root path"],
+            "allow_session": True, "allow_permanent": True,
+            "choices": ["once", "session", "always", "deny"],
+        }
+        self.frames = [
+            b'event: run.started\ndata: {"session_id": "s1", "run_id": "run_ap", "seq": 1}\n\n',
+            b"event: approval.request\ndata: " + json.dumps(core_approval).encode() + b"\n\n",
+            b'event: done\ndata: {"session_id": "s1", "run_id": "run_ap", "seq": 3}\n\n',
+        ]
+        resp = await self._chat()
+        self.assertEqual(resp.status, 200)
+        body = await resp.read()
+        approval = [b for b in self._blocks(body) if b.startswith(b"event: approval.request")]
+        self.assertEqual(len(approval), 1)
+        payload = self._data(approval[0])
+        self.assertEqual(
+            payload,
+            {"session_id": "s1", "run_id": "run_ap", "seq": 2, "ts": 1.5, "request_id": "req_1",
+             "description": "A dangerous action requires your approval.",
+             "choices": ["once", "deny"]},
+        )
+        self.assertNotIn(b"rm -rf", body)
+        # A re-attach replays the same narrowed frame from the buffer.
+        again = await self.client.get(
+            "/api/sessions/s1/runs/run_ap/stream?after_seq=1", headers=self._bearer()
+        )
+        self.assertEqual(self._data(self._blocks(await again.read())[0]), payload)
+
+    async def test_approval_request_missing_v1_field_is_relayed_unchanged(self):
+        frame = (b'event: approval.request\ndata: {"run_id": "run_m", "seq": 1,'
+                 b' "request_id": "r", "choices": ["once", "session", "always", "deny"]}\n\n')
+        self.frames = [frame]
+        resp = await self._chat()
+        self.assertEqual(await resp.read(), frame)
+
     async def test_oversized_non_echo_frame_still_aborts_without_done(self):
         self.frames = [
             b'event: run.started\ndata: {"session_id": "s1", "run_id": "run_big", "seq": 1}\n\n',

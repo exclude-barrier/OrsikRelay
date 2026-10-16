@@ -55,7 +55,7 @@ from . import core
 from . import pairing
 from . import runhub
 from . import store as store_mod
-from .sse import MAX_FRAME_BYTES, Frame, SSEDecoder, SSEFrameTooLarge, redact_echo
+from .sse import MAX_FRAME_BYTES, Frame, SSEDecoder, SSEFrameTooLarge, normalize_approval, redact_echo
 
 logger = logging.getLogger("orsik_mobile_bridge")
 # OR-14: one line per state-changing call, attributable to a device. Only
@@ -369,13 +369,14 @@ async def _handle_chat_stream(request: web.Request) -> web.StreamResponse:
 
 
 def _relay_frame(state: BridgeState, buf: runhub.RunBuffer, frame: Frame) -> bool:
-    """Redact the run.started echo, enforce the relay bound, then buffer the frame.
+    """Redact the run.started echo, narrow approval.request to Mobile-v1,
+    enforce the relay bound, then buffer the frame.
 
     Returns False when a frame is still above :data:`MAX_FRAME_BYTES` after
     redaction; the caller then closes the upstream exactly like the decoder's own
     oversize path. Such a frame is never buffered.
     """
-    frame = redact_echo(frame)
+    frame = normalize_approval(redact_echo(frame))
     if len(frame.raw) > MAX_FRAME_BYTES:
         return False
     buf.append(frame)
