@@ -46,6 +46,37 @@ BRIDGE_STATE_DB=/home/USER/.local/orsik-mobile-bridge/state.db
 BRIDGE_PUBLIC_BASE_URL=https://<host> # für Deep-Link/QR
 ```
 
+## 2a. Preflight: `./install.sh --check`
+
+Prüft eine bestehende Installation, **ohne etwas anzulegen oder zu verändern**,
+und liest dafür `$BRIDGE_HOME/bridge.env` zeilenweise als Daten (`KEY=VALUE`,
+Kommentare/Leerzeilen ignoriert; kein `source`, kein `eval`). Ausgabe pro
+Prüfung genau eine Zeile `OK <name>` / `WARN <name>: <grund>` /
+`FAIL <name>: <grund>`; Key-/Token-Werte werden nie ausgegeben. Exit-Code 1,
+sobald eine Prüfung FAIL ist, sonst 0; am Ende `PREFLIGHT: PASS` bzw.
+`PREFLIGHT: FAIL (<n> failed)`.
+
+```sh
+./install.sh --check
+```
+
+| Prüfung | Erwartung |
+|---|---|
+| `home_mode` | `$BRIDGE_HOME` existiert, Modus 700 |
+| `env_mode` | `bridge.env` existiert, Modus 600 |
+| `venv` | `$BRIDGE_HOME/venv/bin/orsik-mobile-bridge` ausführbar |
+| `bind` | `BRIDGE_BIND` leer, `127.0.0.1` oder `::1` |
+| `upstream` | `BRIDGE_UPSTREAM` (Default `http://127.0.0.1:8899`) passt auf `^http://(127.x.x.x\|[::1]):port$` |
+| `hermes_env` | `BRIDGE_HERMES_ENV` gesetzt, Datei 0600, mit `API_SERVER_KEY=…` |
+| `public_base_url` | leer → WARN (kein Deep-Link/QR); sonst muss es mit `https://` beginnen |
+| `port` | `BRIDGE_PORT` (Default 9842): `ss` fehlt → WARN; Listener auf Loopback/`0.0.0.0` → WARN („port in use") |
+| `hermes_health` | `curl` auf `$UPSTREAM/health` == 200; nur wenn `upstream` OK war, sonst WARN |
+
+Zusätzlich prüft der normale Installationsmodus **vor** jeder Änderung, ob `uv`
+vorhanden ist und `uv python find ${BRIDGE_PYTHON:-3.14}` funktioniert; sonst
+bricht er mit Hinweis ab. Nach einer Installation erinnert er an
+`./install.sh --check`.
+
 ## 3. Operator-Kommandos (kein HTTP-Admin)
 
 Pairing-Codes werden **ausschließlich lokal** erzeugt — die Dateisystemrechte auf

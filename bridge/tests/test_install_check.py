@@ -1,0 +1,270 @@
+"""Preflight tests for ``install.sh --check`` (stdlib unittest, loopback only).
+
+Each test builds a throwaway BRIDGE_HOME next to a loopback Hermes health stub
+and runs the real installer in check mode. The check must never mutate the
+installation it inspects and must never print secret values.
+"""
+
+import os
+import shutil
+import socket
+import stat
+import subprocess
+import tempfile
+import threading
+import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+INSTALL_SH = Path(__file__).resolve().parent.parent / "install.sh"
+
+HAVE_BASH = shutil.which("bash") is not None
+HAVE_CURL = shutil.which("curl") is not None
+HAVE_SS = shutil.which("ss") is not None
+HAVE_UV = shutil.which("uv") is not None
+
+SECRET = "test_key_not_secret"
+
+
+def free_port():
+    """Return a currently unused loopback TCP port."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/health":
+            code, body = getattr(self.server, "health_status", 200), b"ok"
+        else:
+            code, body = 404, b"not found"
+        self.send_response(code)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass
+
+
+class _HealthServer(ThreadingHTTPServer):
+    daemon_threads = True
+    health_status = 200
+
+
+class HealthStub:
+    """Loopback HTTP server whose ``/health`` answers with a fixed status."""
+
+    def __init__(self, status=200):
+        self.server = _HealthServer(("127.0.0.1", 0), _HealthHandler)
+        self.server.health_status = status
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def start(self):
+        self.thread.start()
+
+    def set_status(self, status):
+        self.server.health_status = status
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+    @property
+    def url(self):
+        host, port = self.server.server_address[:2]
+        return f"http://{host}:{port}"
+
+
+@unittest.skipUnless(HAVE_BASH and HAVE_CURL, "bash and curl are required")
+class InstallCheckTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.home = self.root / "home"
+
+        (self.home / "venv" / "bin").mkdir(parents=True)
+        cli = self.home / "venv" / "bin" / "orsik-mobile-bridge"
+        cli.write_text("#!/bin/sh\nexit 0\n")
+        cli.chmod(0o755)
+        self.home.chmod(0o700)
+
+        self.hermes_env = self.root / "hermes.env"
+        self.hermes_env.write_text(f"API_SERVER_KEY={SECRET}\n")
+        self.hermes_env.chmod(0o600)
+
+        self.stub = HealthStub(status=200)
+        self.stub.start()
+        self.addCleanup(self.stub.stop)
+
+        self.port = free_port()
+        self.write_env()
+
+    # -- helpers ---------------------------------------------------------
+
+    def write_env(
+        self,
+        bind="127.0.0.1",
+        port=None,
+        upstream=None,
+        hermes_env=None,
+        public_base_url="https://bridge.example.invalid",
+    ):
+        env_file = self.home / "bridge.env"
+        env_file.write_text(
+            "# preflight test env\n"
+            "\n"
+            f"BRIDGE_BIND={bind}\n"
+            f"BRIDGE_PORT={self.port if port is None else port}\n"
+            f"BRIDGE_UPSTREAM={self.stub.url if upstream is None else upstream}\n"
+            f"BRIDGE_HERMES_ENV={self.hermes_env if hermes_env is None else hermes_env}\n"
+            "BRIDGE_STATE_DB=\n"
+            f"BRIDGE_PUBLIC_BASE_URL={public_base_url}\n"
+        )
+        env_file.chmod(0o600)
+        return env_file
+
+    def run_check(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("BRIDGE_")}
+        env["BRIDGE_HOME"] = str(self.home)
+        env["HOME"] = str(self.root)
+        return subprocess.run(
+            ["bash", str(INSTALL_SH), "--check"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def snapshot(self):
+        """Sorted (absolute path, mode, mtime_ns) for everything we created."""
+        entries = []
+        for target in (self.home, self.hermes_env, *sorted(self.home.rglob("*"))):
+            info = target.lstat()
+            entries.append((str(target), stat.S_IMODE(info.st_mode), info.st_mtime_ns))
+        return sorted(entries)
+
+    def assertNoSecret(self, result):
+        combined = result.stdout + result.stderr
+        self.assertNotIn(SECRET, combined, "check leaked a secret value")
+
+    # -- cases -----------------------------------------------------------
+
+    def test_all_good_passes(self):
+        before = self.snapshot()
+        result = self.run_check()
+        self.assertNoSecret(result)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PREFLIGHT: PASS", result.stdout)
+        self.assertNotIn("FAIL", result.stdout)
+        self.assertEqual(before, self.snapshot(), "check mode changed the install")
+
+    def test_world_readable_env_fails(self):
+        (self.home / "bridge.env").chmod(0o644)
+        result = self.run_check()
+        self.assertNoSecret(result)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL env_mode", result.stdout)
+
+    def test_hermes_env_without_key_fails(self):
+        bare = self.root / "bare.env"
+        bare.write_text("SOMETHING_ELSE=1\n")
+        bare.chmod(0o600)
+        self.write_env(hermes_env=bare)
+        result = self.run_check()
+        self.assertNoSecret(result)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL hermes_env", result.stdout)
+
+    def test_plain_http_base_url_fails(self):
+        self.write_env(public_base_url="http://x")
+        result = self.run_check()
+        self.assertNoSecret(result)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL public_base_url", result.stdout)
+
+    def test_public_upstream_fails_and_skips_health(self):
+        self.write_env(upstream="http://example.com:8899")
+        result = self.run_check()
+        self.assertNoSecret(result)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL upstream", result.stdout)
+        self.assertIn("WARN hermes_health", result.stdout)
+
+    def test_unhealthy_hermes_fails(self):
+        self.stub.set_status(503)
+        result = self.run_check()
+        self.assertNoSecret(result)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL hermes_health", result.stdout)
+
+    @unittest.skipUnless(HAVE_SS, "ss is required for the port probe")
+    def test_busy_port_warns(self):
+        occupied = free_port()
+        with socket.socket() as busy:
+            busy.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            busy.bind(("127.0.0.1", occupied))
+            busy.listen(1)
+            self.write_env(port=occupied)
+            result = self.run_check()
+        self.assertNoSecret(result)
+        self.assertIn("WARN port", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_secret_never_printed(self):
+        scenarios = [("good", self.run_check())]
+        self.write_env(upstream="http://example.com:8899")
+        scenarios.append(("bad upstream", self.run_check()))
+        self.write_env(public_base_url="http://x")
+        scenarios.append(("bad base url", self.run_check()))
+        (self.home / "bridge.env").chmod(0o644)
+        scenarios.append(("bad env mode", self.run_check()))
+        for label, result in scenarios:
+            with self.subTest(label):
+                self.assertNoSecret(result)
+
+    def test_check_does_not_modify_install(self):
+        before = self.snapshot()
+        self.run_check()
+        self.assertEqual(before, self.snapshot())
+
+
+@unittest.skipUnless(HAVE_BASH and HAVE_UV, "bash and uv are required")
+class InstallPrerequisiteTest(unittest.TestCase):
+    """A normal install must refuse to start without its prerequisites."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.source = self.root / "bridge"
+        self.source.mkdir()
+        (self.source / "pyproject.toml").write_text(
+            "[project]\nname = 'bridge-test'\nversion = '0'\n"
+        )
+        (self.source / "uv.lock").write_text("version = 1\n")
+        self.home = self.root / "home-under-test"
+
+    def run_install(self, path):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("BRIDGE_")}
+        env["BRIDGE_HOME"] = str(self.home)
+        env["HOME"] = str(self.root)
+        env["PATH"] = path
+        return subprocess.run(
+            [shutil.which("bash") or "bash", str(INSTALL_SH), str(self.source)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def test_missing_uv_aborts_before_touching_bridge_home(self):
+        result = self.run_install("/nonexistent-bin")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("uv", result.stderr.lower())
+        self.assertFalse(
+            self.home.exists(), "installer created BRIDGE_HOME without uv present"
+        )

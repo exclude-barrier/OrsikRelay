@@ -165,6 +165,24 @@ BRIDGE_STATE_DB=/home/USER/.local/orsik-mobile-bridge/state.db
 BRIDGE_PUBLIC_BASE_URL=https://<host>
 ```
 
+### Preflight: `./install.sh --check`
+
+Verifies an existing install and changes nothing. It parses
+`$BRIDGE_HOME/bridge.env` line by line as data (`KEY=VALUE`, comments and blank
+lines ignored — never sourced, never eval'd) and prints one line per check
+(`OK`/`WARN`/`FAIL`), never a key or token value. Exit code is 1 if anything
+FAILed, with a closing `PREFLIGHT: PASS` or `PREFLIGHT: FAIL (<n> failed)`.
+
+Checks: `home_mode` (0700) · `env_mode` (0600) · `venv` (CLI executable) ·
+`bind` (loopback) · `upstream` (loopback plain HTTP with port) ·
+`hermes_env` (set, 0600, non-empty `API_SERVER_KEY`) · `public_base_url`
+(empty is a WARN: no deep link/QR, otherwise `https://`) · `port` (listener on
+loopback/`0.0.0.0` is a WARN: perhaps a running bridge) · `hermes_health`
+(GET `$UPSTREAM/health` == 200).
+
+The install path refuses to start before touching `$BRIDGE_HOME` when `uv` or a
+usable `uv python find ${BRIDGE_PYTHON:-3.14}` is missing.
+
 ## Tests
 
 ```sh
