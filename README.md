@@ -81,7 +81,7 @@ Alternativ kann das gekoppelte Gerät in der App über **Gerät trennen** sein e
 
 ## Verifikation des Alpha-6-Stands
 
-Belege: `docs/bridge-e2e.md` (P13, Fresh-Install-Pfad), `internal P11 report` (P11, hermes-server) und die App-Regressionsläufe.
+Belege: `docs/bridge-e2e.md` (P13, Fresh-Install-Pfad) und die App-Regressionsläufe.
 
 App-Suite, Builds und Version (real auf build-host):
 
@@ -128,7 +128,6 @@ Die APK ist mit dem Android-Debug-Key signiert. Sie ist ausschließlich zum manu
 - Android Platform Tools
 - Android Emulator mit AVD `Hermes_API_36`
 - Gradle 9.7.1 (nur für den initialen Wrapper-Bootstrap; maßgeblich ist `./gradlew`)
-- Hermes-Profil `dev-profile` ohne Cloud-Fallback
 
 Prüfung:
 
