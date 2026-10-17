@@ -1,9 +1,9 @@
 [versions]
 agp = "9.3.1"
 kotlin = "2.4.21"
-composeBom = "2025.12.00"
+composeBom = "2026.09.00"
 activityCompose = "1.10.1"
-navigationCompose = "2.9.3"
+navigationCompose = "2.10.2"
 junitVersion = "4.13.2"
 androidxTestCore = "1.6.1"
 androidxTestExtJunit = "1.2.1"
