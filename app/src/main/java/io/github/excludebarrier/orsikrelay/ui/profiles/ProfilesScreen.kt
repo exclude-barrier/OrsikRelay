@@ -14,8 +14,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectError
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectResult
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
@@ -50,24 +53,34 @@ import kotlinx.coroutines.withContext
  * - The currently active server is marked; the unambiguous action
  *   [R.string.profiles_select_active] switches the active server via
  *   [onServerSelected]. Selection is pure metadata.
- * - Deletion stays a separate, confirmed action (tap the row to open the
- *   dialog) through the verified [ProfileAdmin.deleteProfile] path.
+ * - Deletion is a separate, confirmed action (tap the row to open the
+ *   dialog).
  * - A profile whose credential kind is
  *   [ProfileCredentialKind.DEVICE_CREDENTIAL] (derived from NON-SECRET
- *   device metadata only) shows the additional "Gerät trennen" action.
- *   It is a TWO-STEP action: the row action opens a dedicated dialog,
- *   whose confirm button performs the disconnect. API-key profiles never
- *   offer this action and can never trigger a self-revoke.
- * - While a disconnect is in flight the confirm button is disabled so a
- *   double tap cannot start a second revocation; a remote failure deletes
- *   nothing locally and shows a fixed, generic German message with no
- *   profile ID, URL or exception detail.
+ *   device metadata only) has exactly ONE removal action, "Löschen".
+ *   Its confirmation dialog states that the device is disconnected on the
+ *   server first and only then removed locally. Confirming runs the
+ *   existing, verified disconnect path, which revokes the device access
+ *   exactly once and removes the local profile only after the server
+ *   acknowledged the revocation. API-key profiles keep the pure local
+ *   deletion path and can never trigger a self-revoke.
+ * - If the revocation fails or the device access cannot be loaded locally,
+ *   NOTHING is deleted and nothing is retried automatically. The dialog
+ *   shows a fixed, generic hint (no URL, profile ID or exception detail)
+ *   and offers the deliberate second action "Nur auf diesem Gerät
+ *   entfernen", which warns that the server-side access stays valid until
+ *   it is revoked there. The revocation itself can only be retried by
+ *   explicitly tapping "Erneut versuchen" (one request per tap). A local
+ *   cleanup failure after a successful revocation keeps the existing
+ *   generic message; its explicit retry repeats the local deletion only.
+ * - While a removal is in flight every dialog button is disabled so a
+ *   double tap cannot start a second revocation.
  *
  * [admin] is the test seam; production injects
  * [io.github.excludebarrier.orsikrelay.data.profile.ServerProfileAdmin].
  * [onDeviceDisconnected] (default no-op) is the safe-navigation hook,
- * triggered exactly like [onProfileDeleted] after a
- * successful disconnect.
+ * triggered exactly like [onProfileDeleted] after a successful
+ * disconnect.
  */
 @Composable
 fun ProfilesScreen(
@@ -79,9 +92,7 @@ fun ProfilesScreen(
     onServerSelected: (profileId: String) -> Unit = {},
     onDeviceDisconnected: (profileId: String) -> Unit = {},
     disconnect: (profileId: String) -> DeviceDisconnectResult = {
-        DeviceDisconnectResult.Failure(
-            io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectError.InvalidState
-        )
+        DeviceDisconnectResult.Failure(DeviceDisconnectError.InvalidState)
     }
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -91,21 +102,17 @@ fun ProfilesScreen(
     var loadFailed by remember { mutableStateOf(false) }
     // Profile ID -> non-secret credential kind, loaded
     // together with the list (device metadata only, no credential read).
-    var credentialKinds by remember { mutableStateOf<Map<String, ProfileCredentialKind>>(emptyMap()) }
+    // A null kind means the query failed: such a profile is NOT treated as
+    // an API-key profile (that would delete it locally and leave a possible
+    // device access valid on the server) but takes the disconnect path.
+    var credentialKinds by remember { mutableStateOf<Map<String, ProfileCredentialKind?>>(emptyMap()) }
     var deleteTarget by remember { mutableStateOf<ServerProfile?>(null) }
-    var deleting by remember { mutableStateOf(false) }
-    var deleteFailed by remember { mutableStateOf(false) }
+    var removalStep by remember { mutableStateOf(RemovalStep.Idle) }
+    var removeFailure by remember { mutableStateOf(RemoveFailure.None) }
     // Exactly one selection may be in flight; the button is
     // disabled while it runs and the navigation switch is triggered only
     // after the persist has succeeded.
     var selecting by remember { mutableStateOf<String?>(null) }
-    // The two-step "Gerät trennen" state. [disconnectTarget]
-    // is the profile whose confirmation dialog is open; [disconnecting]
-    // guards the single in-flight revocation; [disconnectFailed] drives
-    // the fixed, generic error text.
-    var disconnectTarget by remember { mutableStateOf<ServerProfile?>(null) }
-    var disconnecting by remember { mutableStateOf(false) }
-    var disconnectFailed by remember { mutableStateOf(false) }
 
     fun loadProfiles() {
         coroutineScope.launch {
@@ -121,29 +128,46 @@ fun ProfilesScreen(
                 loadFailed = true
                 return@launch
             }
-            profiles = list
             // The credential kind is NON-SECRET metadata
             // (device metadata presence only; no credential is read).
-            // It is loaded together with the list; a query failure or a
-            // non-device kind simply means the action is not offered —
-            // fail-closed.
+            // It is loaded together with the list. A known API_KEY profile
+            // keeps the pure local deletion; a DEVICE_CREDENTIAL profile and
+            // a failed query (null) go through the disconnect path, whose
+            // production source re-checks the device metadata and fails
+            // closed into the fallback dialog.
             credentialKinds = withContext(Dispatchers.IO) {
                 list.associate { profile ->
                     profile.id to
                         try {
                             admin.credentialKind(profile.id)
                         } catch (_: Exception) {
-                            ProfileCredentialKind.API_KEY
+                            null
                         }
                 }
             }
+            // Rows appear only together with their kinds, so a tap can never
+            // see a profile whose kind has not been queried yet.
+            profiles = list
         }
     }
 
-    fun confirmDelete(target: ServerProfile) {
-        if (deleting) return
-        deleting = true
-        deleteFailed = false
+    fun finishRemoval(target: ServerProfile, deviceDisconnected: Boolean) {
+        deleteTarget = null
+        loadProfiles()
+        if (deviceDisconnected) {
+            onDeviceDisconnected(target.id)
+        } else {
+            onProfileDeleted(target.id)
+        }
+    }
+
+    // Local-only deletion. Used for API-key profiles and as the deliberate
+    // fallback when the device revocation could not be completed. It never
+    // talks to the server and therefore uses the profile-deletion
+    // navigation hook, not the disconnect one.
+    fun confirmLocalDelete(target: ServerProfile) {
+        if (removalStep != RemovalStep.Idle) return
+        removalStep = RemovalStep.Deleting
         coroutineScope.launch {
             val failed = try {
                 withContext(Dispatchers.IO) { admin.deleteProfile(target.id) }
@@ -153,15 +177,63 @@ fun ProfilesScreen(
             } catch (_: Exception) {
                 true
             }
-            deleting = false
+            removalStep = RemovalStep.Idle
             if (failed) {
-                deleteFailed = true
+                removeFailure = RemoveFailure.DeletionFailed
             } else {
-                deleteTarget = null
-                loadProfiles()
-                onProfileDeleted(target.id)
+                finishRemoval(target, deviceDisconnected = false)
             }
         }
+    }
+
+    // The single removal action. Device-credential profiles go through the
+    // existing disconnect orchestration (one revocation per request);
+    // API-key profiles keep the local deletion path.
+    fun confirmRemove(target: ServerProfile) {
+        if (removalStep != RemovalStep.Idle) return
+        removeFailure = RemoveFailure.None
+        if (!revokesOnDelete(credentialKinds, target.id)) {
+            confirmLocalDelete(target)
+            return
+        }
+        removalStep = RemovalStep.Disconnecting
+        coroutineScope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) { disconnect(target.id) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                DeviceDisconnectResult.Failure(DeviceDisconnectError.RevokeFailed)
+            }
+            removalStep = RemovalStep.Idle
+            when (result) {
+                is DeviceDisconnectResult.Disconnected -> {
+                    // The verified deletion already removed the profile
+                    // from the stores.
+                    finishRemoval(target, deviceDisconnected = true)
+                }
+
+                is DeviceDisconnectResult.Failure -> when (result.reason) {
+                    DeviceDisconnectError.InvalidState,
+                    DeviceDisconnectError.RevokeFailed ->
+                        // Nothing local was deleted; offer the fallback
+                        // and an explicit retry.
+                        removeFailure = RemoveFailure.RevokeFailed
+
+                    DeviceDisconnectError.DeletionFailed ->
+                        removeFailure = RemoveFailure.DeletionFailed
+                }
+            }
+        }
+    }
+
+    // The deliberate second action of the fallback dialog: remove the
+    // profile locally even though the server access stays valid. This is a
+    // plain local deletion, so it uses the profile-deletion navigation
+    // hook, not the disconnect one.
+    fun confirmLocalOnlyRemove(target: ServerProfile) {
+        if (removalStep != RemovalStep.Idle) return
+        confirmLocalDelete(target)
     }
 
     // Persist first, navigate second. The safe navigation
@@ -188,40 +260,6 @@ fun ProfilesScreen(
             }
             if (persisted) {
                 onServerSelected(target.id)
-            }
-        }
-    }
-
-    // Exactly one disconnect may be in flight. Only the
-    // confirmed path runs [disconnect]; the revocation happens exactly
-    // once inside it and a failure deletes nothing locally.
-    fun confirmDisconnect(target: ServerProfile) {
-        if (disconnecting) return
-        disconnecting = true
-        disconnectFailed = false
-        coroutineScope.launch {
-            val result = try {
-                withContext(Dispatchers.IO) { disconnect(target.id) }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                DeviceDisconnectResult.Failure(
-                    io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectError.RevokeFailed
-                )
-            }
-            disconnecting = false
-            if (result is DeviceDisconnectResult.Disconnected) {
-                disconnectTarget = null
-                // The verified deletion already removed the profile from
-                // the stores; refresh the list so the row disappears, then
-                // trigger the safe navigation hook (same order as the
-                // deletion path).
-                loadProfiles()
-                onDeviceDisconnected(target.id)
-            } else {
-                // Fixed generic error; the dialog stays open, nothing
-                // local was deleted.
-                disconnectFailed = true
             }
         }
     }
@@ -306,21 +344,14 @@ fun ProfilesScreen(
                                 profile = profile,
                                 isActive = profile.id == activeProfileId,
                                 isSelecting = selecting != null,
-                                isDeviceProfile = credentialKinds[profile.id] ==
-                                    ProfileCredentialKind.DEVICE_CREDENTIAL,
                                 onClick = {
                                     if (deleteTarget == null) {
                                         deleteTarget = profile
-                                        deleteFailed = false
+                                        removalStep = RemovalStep.Idle
+                                        removeFailure = RemoveFailure.None
                                     }
                                 },
-                                onUseAsActive = { confirmSelect(profile) },
-                                onDisconnectDevice = {
-                                    if (disconnectTarget == null) {
-                                        disconnectTarget = profile
-                                        disconnectFailed = false
-                                    }
-                                }
+                                onUseAsActive = { confirmSelect(profile) }
                             )
                         }
                     }
@@ -331,26 +362,55 @@ fun ProfilesScreen(
 
     val target = deleteTarget
     if (target != null) {
+        val deviceProfile = revokesOnDelete(credentialKinds, target.id)
+        val inFlight = removalStep != RemovalStep.Idle
+        val fallback = removeFailure == RemoveFailure.RevokeFailed
         AlertDialog(
-            onDismissRequest = { if (!deleting) deleteTarget = null },
+            onDismissRequest = { if (!inFlight) deleteTarget = null },
             title = { Text(text = stringResource(R.string.profiles_delete_title)) },
             text = {
                 Column {
                     Text(
-                        text = stringResource(
-                            R.string.profiles_delete_message,
-                            target.profileName
-                        ),
+                        text = if (deviceProfile) {
+                            stringResource(
+                                R.string.profiles_delete_message_device,
+                                target.profileName
+                            )
+                        } else {
+                            stringResource(
+                                R.string.profiles_delete_message,
+                                target.profileName
+                            )
+                        },
                         style = MaterialTheme.typography.bodyLarge
                     )
-                    if (deleting) {
+                    if (inFlight) {
                         Text(
-                            text = stringResource(R.string.profiles_deleting),
+                            text = if (removalStep == RemovalStep.Disconnecting) {
+                                stringResource(R.string.profiles_delete_disconnecting)
+                            } else {
+                                stringResource(R.string.profiles_deleting)
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 8.dp)
                         )
                     }
-                    if (deleteFailed) {
+                    if (fallback) {
+                        // Fixed, generic hint without URL, profile ID or
+                        // exception details.
+                        Text(
+                            text = stringResource(R.string.profiles_delete_revoke_error_generic),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.profiles_delete_local_only_warning),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    if (removeFailure == RemoveFailure.DeletionFailed) {
                         Text(
                             text = stringResource(R.string.profiles_delete_error_generic),
                             style = MaterialTheme.typography.bodyMedium,
@@ -361,86 +421,91 @@ fun ProfilesScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = { confirmDelete(target) },
-                    enabled = !deleting
-                ) {
-                    Text(
-                        text = if (deleteFailed) {
-                            stringResource(R.string.sessions_retry)
-                        } else {
-                            stringResource(R.string.profiles_delete_confirm)
+                if (fallback) {
+                    // Three actions with long labels do not fit side by side:
+                    // they are stacked at full width, the deliberate local
+                    // removal first, the explicit retry and "Abbrechen" below.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Deliberate second action: local removal only.
+                        Button(
+                            onClick = { confirmLocalOnlyRemove(target) },
+                            enabled = !inFlight,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profileDeleteLocalOnly")
+                        ) {
+                            Text(text = stringResource(R.string.profiles_delete_local_only))
                         }
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { deleteTarget = null },
-                    enabled = !deleting
-                ) {
-                    Text(text = stringResource(R.string.new_session_cancel))
-                }
-            }
-        )
-    }
-
-    // Second, dedicated confirmation step of the
-    // "Gerät trennen" action. Opening the dialog costs nothing; only the
-    // confirm button triggers the single revocation.
-    val disconnectingTarget = disconnectTarget
-    if (disconnectingTarget != null) {
-        AlertDialog(
-            onDismissRequest = { if (!disconnecting) disconnectTarget = null },
-            title = { Text(text = stringResource(R.string.profiles_device_disconnect_title)) },
-            text = {
-                Column {
-                    Text(
-                        text = stringResource(
-                            R.string.profiles_device_disconnect_message,
-                            disconnectingTarget.profileName
+                        // The revocation itself may only be retried by an
+                        // explicit tap, one request per tap.
+                        FilledTonalButton(
+                            onClick = { confirmRemove(target) },
+                            enabled = !inFlight,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profileDeleteRetry")
+                        ) {
+                            Text(text = stringResource(R.string.sessions_retry))
+                        }
+                        TextButton(
+                            onClick = { deleteTarget = null },
+                            enabled = !inFlight,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profileDeleteDismiss")
+                        ) {
+                            Text(text = stringResource(R.string.new_session_cancel))
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            if (removeFailure == RemoveFailure.DeletionFailed) {
+                                // The revocation already succeeded; only
+                                // the local cleanup failed, so the explicit
+                                // retry repeats the local deletion and
+                                // never issues a second revocation.
+                                confirmLocalDelete(target)
+                            } else {
+                                confirmRemove(target)
+                            }
+                        },
+                        enabled = !inFlight,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
                         ),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    if (disconnecting) {
+                        modifier = Modifier.testTag("profileDeleteConfirm")
+                    ) {
                         Text(
-                            text = stringResource(R.string.profiles_device_disconnecting),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-                    if (disconnectFailed) {
-                        Text(
-                            text = stringResource(R.string.profiles_device_disconnect_error_generic),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp)
+                            text = if (removeFailure == RemoveFailure.None) {
+                                stringResource(R.string.profiles_delete_confirm)
+                            } else {
+                                stringResource(R.string.sessions_retry)
+                            }
                         )
                     }
                 }
             },
-            confirmButton = {
-                Button(
-                    onClick = { confirmDisconnect(disconnectingTarget) },
-                    enabled = !disconnecting,
-                    modifier = Modifier.testTag("deviceDisconnectConfirm")
-                ) {
-                    Text(
-                        text = if (disconnectFailed) {
-                            stringResource(R.string.sessions_retry)
-                        } else {
-                            stringResource(R.string.profiles_device_disconnect_confirm)
-                        }
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { disconnectTarget = null },
-                    enabled = !disconnecting,
-                    modifier = Modifier.testTag("deviceDisconnectDismiss")
-                ) {
-                    Text(text = stringResource(R.string.new_session_cancel))
+            // In the fallback state "Abbrechen" is part of the stacked actions.
+            dismissButton = if (fallback) {
+                null
+            } else {
+                {
+                    TextButton(
+                        onClick = { deleteTarget = null },
+                        enabled = !inFlight,
+                        modifier = Modifier.testTag("profileDeleteDismiss")
+                    ) {
+                        Text(text = stringResource(R.string.new_session_cancel))
+                    }
                 }
             }
         )
@@ -452,10 +517,8 @@ private fun ProfileRow(
     profile: ServerProfile,
     isActive: Boolean,
     isSelecting: Boolean,
-    isDeviceProfile: Boolean,
     onClick: () -> Unit,
-    onUseAsActive: () -> Unit,
-    onDisconnectDevice: () -> Unit
+    onUseAsActive: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -519,23 +582,22 @@ private fun ProfileRow(
                     Text(text = stringResource(R.string.profiles_select_active))
                 }
             }
-            // Offered ONLY for device-credential profiles.
-            // API-key profiles never render this button and can therefore
-            // never start a self-revoke. The row action only OPENS the
-            // dedicated confirmation dialog; the revocation itself happens
-            // exclusively on the dialog's confirm button.
-            if (isDeviceProfile) {
-                TextButton(
-                    onClick = onDisconnectDevice,
-                    enabled = !isSelecting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .testTag("disconnectDevice:${profile.id}")
-                ) {
-                    Text(text = stringResource(R.string.profiles_device_disconnect_action))
-                }
-            }
         }
     }
 }
+
+/**
+ * Whether deleting [profileId] has to revoke a device access first. Only a
+ * profile known to hold an API key is deleted purely locally; an unknown
+ * kind (failed query) is handled like a device profile.
+ */
+private fun revokesOnDelete(
+    kinds: Map<String, ProfileCredentialKind?>,
+    profileId: String
+): Boolean = kinds[profileId] != ProfileCredentialKind.API_KEY
+
+/** In-flight step of the unified removal action. */
+private enum class RemovalStep { Idle, Disconnecting, Deleting }
+
+/** Closed failure state shown inside the removal dialog. */
+private enum class RemoveFailure { None, RevokeFailed, DeletionFailed }

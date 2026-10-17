@@ -125,7 +125,7 @@ the exact capability contract before it stores anything.
 | --- | --- |
 | Add a server | **Add server** (or open an `orsik://pair` link) |
 | Switch or remove servers | **Manage servers** |
-| Disconnect this phone from a server | **Manage servers → Disconnect device** |
+| Disconnect this phone from a server | **Manage servers → tap the server → Delete** (the device is disconnected on the server first) |
 | Start a conversation | **+** (New session) on the session list |
 | Stop a running answer | **Stop** |
 | Correct a running answer | type in **Steer message**, then **Steer** |

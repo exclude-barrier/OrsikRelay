@@ -2,9 +2,9 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -26,21 +26,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The device disconnect UI contract.
+ * The unified removal UI contract of the server list.
  *
- * - Only profiles whose NON-SECRET credential kind is
- *   [ProfileCredentialKind.DEVICE_CREDENTIAL] offer the action;
- *   API-key profiles never render it and can therefore never start a
- *   self-revoke.
- * - The action is two-step: the row button opens a dedicated
- *   confirmation dialog; only the dialog's confirm button runs the
- *   revocation. Outside the dialog, nothing happens.
- * - A confirmed disconnect calls the disconnect seam exactly once,
- *   removes the local profile through the verified deletion path and
- *   triggers the safe navigation hook. A remote failure deletes
- *   nothing locally and shows the fixed, generic German message.
- * - While a revocation is in flight the confirm button is disabled, so
- *   a double tap cannot start a second revocation.
+ * - There is exactly ONE removal action ("Löschen"); the former separate
+ *   "Gerät trennen" row action no longer exists.
+ * - For a [ProfileCredentialKind.DEVICE_CREDENTIAL] profile the confirmed
+ *   removal runs the disconnect seam exactly once and removes the local
+ *   profile only after the server acknowledged the revocation.
+ * - A failed revocation (or a locally unloadable device access) deletes
+ *   nothing, retries nothing automatically and offers the deliberate
+ *   local-only fallback plus an explicit retry.
+ * - API-key profiles keep the pure local deletion and never revoke.
+ * - While a removal is in flight the dialog buttons are disabled.
  */
 @RunWith(AndroidJUnit4::class)
 class DeviceDisconnectUiTest {
@@ -52,6 +49,7 @@ class DeviceDisconnectUiTest {
     private lateinit var admin: FakeProfileAdmin
     private var disconnectCalls = 0
     private var disconnectedProfiles = mutableListOf<String>()
+    private var deletedProfiles = mutableListOf<String>()
     private var disconnectResult: DeviceDisconnectResult =
         DeviceDisconnectResult.Disconnected
     private var disconnectRelease: CountDownLatch? = null
@@ -61,12 +59,13 @@ class DeviceDisconnectUiTest {
         admin = FakeProfileAdmin()
         disconnectCalls = 0
         disconnectedProfiles = mutableListOf()
+        deletedProfiles = mutableListOf()
         disconnectResult = DeviceDisconnectResult.Disconnected
         disconnectRelease = null
     }
 
     @Test
-    fun onlyDeviceCredentialProfilesOfferTheDisconnectAction() {
+    fun deviceProfilesHaveNoSeparateDisconnectRowAction() {
         admin.profiles = listOf(
             profile("device-profile", "Geräteprofil"),
             profile("api-profile", "API-Profil")
@@ -76,22 +75,27 @@ class DeviceDisconnectUiTest {
 
         setContent()
 
-        composeRule.onNodeWithTag("disconnectDevice:device-profile").assertIsDisplayed()
-        // The API-key profile never renders the action.
+        composeRule.onNodeWithTag("disconnectDevice:device-profile").assertDoesNotExist()
         composeRule.onNodeWithTag("disconnectDevice:api-profile").assertDoesNotExist()
     }
 
     @Test
-    fun theRowActionOnlyOpensTheDialogWithoutCallingTheDisconnect() {
+    fun theRowOpensTheUnifiedDeleteDialogWithoutDisconnecting() {
         admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
         setContent()
 
-        composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
+        composeRule.onNodeWithText("Geräteprofil").performClick()
 
-        // Step 1: the confirmation dialog is open.
-        composeRule.onNodeWithText(context.getString(R.string.profiles_device_disconnect_title)).assertIsDisplayed()
-        // Step 2 (not yet): no revocation was started.
+        composeRule.onNodeWithText(context.getString(R.string.profiles_delete_title)).assertIsDisplayed()
+        // The device-specific text states that the server comes first.
+        composeRule
+            .onNodeWithText(
+                context.getString(R.string.profiles_delete_message_device, "Geräteprofil"),
+                substring = true
+            )
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("profileDeleteConfirm").assertIsDisplayed()
         assertEquals(0, disconnectCalls)
     }
 
@@ -101,24 +105,23 @@ class DeviceDisconnectUiTest {
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
         setContent()
 
-        composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
-        composeRule.onNodeWithTag("deviceDisconnectDismiss").performClick()
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteDismiss").performClick()
 
         assertEquals(0, disconnectCalls)
         assertTrue(admin.deleted.isEmpty())
-        composeRule.onNodeWithText(context.getString(R.string.profiles_device_disconnect_title)).assertDoesNotExist()
-        // The profile is still listed.
+        composeRule.onNodeWithText(context.getString(R.string.profiles_delete_title)).assertDoesNotExist()
         composeRule.onNodeWithText("Geräteprofil").assertIsDisplayed()
     }
 
     @Test
-    fun aConfirmedDisconnectRevokesExactlyOnceRemovesAndNavigates() {
+    fun aConfirmedDeleteRevokesExactlyOnceRemovesAndNavigates() {
         admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
         setContent()
 
-        composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
-        composeRule.onNodeWithTag("deviceDisconnectConfirm").performClick()
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         composeRule.waitUntil(timeoutMillis = 10_000) { disconnectedProfiles.size == 1 }
         composeRule.waitForIdle()
@@ -127,50 +130,179 @@ class DeviceDisconnectUiTest {
         // ran exactly once, and the safe navigation hook was triggered.
         assertEquals(listOf("device-profile"), admin.deleted)
         assertEquals(listOf("device-profile"), disconnectedProfiles)
-        // The local profile is gone from the list.
         composeRule.onNodeWithText("Geräteprofil").assertDoesNotExist()
     }
 
     @Test
-    fun aRemoteFailureDeletesNothingLocallyAndShowsTheClosedError() {
+    fun aRevokeFailureDeletesNothingAndShowsTheFallback() {
         admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
         disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.RevokeFailed)
         setContent()
 
-        composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
-        composeRule.onNodeWithTag("deviceDisconnectConfirm").performClick()
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
-        waitForText(context.getString(R.string.profiles_device_disconnect_error_generic))
+        waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
         assertEquals(1, disconnectCalls)
         // Remote failure: NOTHING is deleted locally, no navigation hook.
         assertTrue(admin.deleted.isEmpty())
         assertTrue(disconnectedProfiles.isEmpty())
-        // The local profile remains; the dialog stays open for a retry.
+        assertTrue(deletedProfiles.isEmpty())
+        // The warnings and the deliberate fallback are visible.
+        composeRule
+            .onNodeWithText(context.getString(R.string.profiles_delete_local_only_warning), substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("profileDeleteLocalOnly").assertIsDisplayed()
+        composeRule.onNodeWithTag("profileDeleteRetry").assertIsDisplayed()
+        // The profile remains listed behind the open dialog.
+        composeRule.onNodeWithText(context.getString(R.string.profiles_delete_title)).assertIsDisplayed()
+    }
+
+    @Test
+    fun anInvalidStateShowsTheSameFallback() {
+        admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
+        admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
+        disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.InvalidState)
+        setContent()
+
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
+
+        waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
+        assertEquals(1, disconnectCalls)
+        assertTrue(admin.deleted.isEmpty())
+        composeRule.onNodeWithTag("profileDeleteLocalOnly").assertIsDisplayed()
+    }
+
+    @Test
+    fun localOnlyRemovalDeletesLocallyWithoutAnotherRevocation() {
+        admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
+        admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
+        disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.RevokeFailed)
+        setContent()
+
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
+        waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
+
+        composeRule.onNodeWithTag("profileDeleteLocalOnly").performClick()
+
+        composeRule.waitUntil(timeoutMillis = 10_000) { deletedProfiles.size == 1 }
+        composeRule.waitForIdle()
+        assertEquals("no second revocation", 1, disconnectCalls)
+        assertEquals(listOf("device-profile"), admin.deleted)
+        assertTrue(disconnectedProfiles.isEmpty())
+        composeRule.onNodeWithText("Geräteprofil").assertDoesNotExist()
+    }
+
+    @Test
+    fun retryIssuesExactlyOneFurtherRevocation() {
+        admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
+        admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
+        disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.RevokeFailed)
+        setContent()
+
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
+        waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
+        assertEquals(1, disconnectCalls)
+
+        disconnectResult = DeviceDisconnectResult.Disconnected
+        composeRule.onNodeWithTag("profileDeleteRetry").performClick()
+
+        composeRule.waitUntil(timeoutMillis = 10_000) { disconnectedProfiles.size == 1 }
+        composeRule.waitForIdle()
+        assertEquals("exactly one further revocation", 2, disconnectCalls)
+        assertEquals(listOf("device-profile"), admin.deleted)
+    }
+
+    @Test
+    fun anApiKeyProfileIsRemovedLocallyWithoutAnyRevocation() {
+        admin.profiles = listOf(profile("api-profile", "API-Profil"))
+        admin.kinds["api-profile"] = ProfileCredentialKind.API_KEY
+        setContent()
+
+        composeRule.onNodeWithText("API-Profil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
+
+        composeRule.waitUntil(timeoutMillis = 10_000) { deletedProfiles.size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(0, disconnectCalls)
+        assertEquals(listOf("api-profile"), admin.deleted)
+        assertTrue(disconnectedProfiles.isEmpty())
+        composeRule.onNodeWithText("API-Profil").assertDoesNotExist()
+    }
+
+    @Test
+    fun aDeletionFailureKeepsTheGenericErrorMessage() {
+        admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
+        admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
+        // The revocation succeeded, the local cleanup failed.
+        disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.DeletionFailed)
+        setContent()
+
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
+
+        waitForText(context.getString(R.string.profiles_delete_error_generic))
+        assertEquals(1, disconnectCalls)
+        assertTrue(admin.deleted.isEmpty())
         composeRule.onNodeWithText("Geräteprofil").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.profiles_device_disconnect_title)).assertIsDisplayed()
     }
 
     @Test
     fun aDoubleTapOnConfirmCannotStartASecondRevocation() {
         admin.profiles = listOf(profile("device-profile", "Geräteprofil"))
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
-        // The first revocation stays in flight until the test releases it.
         val release = CountDownLatch(1)
         disconnectRelease = release
         setContent()
 
-        composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
-        composeRule.onNodeWithTag("deviceDisconnectConfirm").performClick()
+        composeRule.onNodeWithText("Geräteprofil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
-        waitForText(context.getString(R.string.profiles_device_disconnecting))
-        // The confirm button is disabled while the revocation runs.
-        composeRule.onNodeWithTag("deviceDisconnectConfirm").assertIsNotEnabled()
-        composeRule.onNodeWithTag("deviceDisconnectConfirm").performClick()
+        waitForText(context.getString(R.string.profiles_delete_disconnecting))
+        composeRule.onNodeWithTag("profileDeleteConfirm").assertIsNotEnabled()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         release.countDown()
         composeRule.waitUntil(timeoutMillis = 10_000) { disconnectedProfiles.size == 1 }
         assertEquals("no second revocation", 1, disconnectCalls)
+    }
+
+    @Test
+    fun cancelSitsLeftOfTheDestructiveAction() {
+        admin.profiles = listOf(profile("api-profile", "API-Profil"))
+        admin.kinds["api-profile"] = ProfileCredentialKind.API_KEY
+        setContent()
+
+        composeRule.onNodeWithText("API-Profil").performClick()
+
+        val dismissBounds = composeRule.onNodeWithTag("profileDeleteDismiss").getBoundsInRoot()
+        val confirmBounds = composeRule.onNodeWithTag("profileDeleteConfirm").getBoundsInRoot()
+        assertTrue(
+            "Abbrechen must sit left of the destructive action",
+            dismissBounds.left < confirmBounds.left
+        )
+    }
+
+    @Test
+    fun anUnreadableCredentialKindTakesTheRevocationPathNotASilentLocalDelete() {
+        admin.profiles = listOf(profile("unknown-profile", "Unbekanntes Profil"))
+        admin.failingKinds += "unknown-profile"
+        // Production re-checks the device metadata and fails closed.
+        disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.InvalidState)
+        setContent()
+
+        composeRule.onNodeWithText("Unbekanntes Profil").performClick()
+        composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
+
+        waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
+        assertEquals(1, disconnectCalls)
+        assertTrue("nothing may be deleted without the user's second action", admin.deleted.isEmpty())
+        assertTrue(deletedProfiles.isEmpty())
+        composeRule.onNodeWithTag("profileDeleteLocalOnly").assertIsDisplayed()
     }
 
     private fun setContent() {
@@ -178,7 +310,7 @@ class DeviceDisconnectUiTest {
             ProfilesScreen(
                 admin = admin,
                 onBack = {},
-                onProfileDeleted = {},
+                onProfileDeleted = { deletedProfiles += it },
                 onDeviceDisconnected = { disconnectedProfiles += it },
                 disconnect = { profileId ->
                     // Models the production wiring: the coordinator runs
@@ -223,6 +355,7 @@ class DeviceDisconnectUiTest {
         var profiles: List<ServerProfile> = emptyList()
         val kinds = mutableMapOf<String, ProfileCredentialKind>()
         val deleted = mutableListOf<String>()
+        val failingKinds = mutableSetOf<String>()
 
         override fun listProfiles(): List<ServerProfile> = profiles
 
@@ -234,7 +367,9 @@ class DeviceDisconnectUiTest {
 
         override fun selectActiveServer(profileId: String) = Unit
 
-        override fun credentialKind(profileId: String) =
-            kinds[profileId] ?: ProfileCredentialKind.API_KEY
+        override fun credentialKind(profileId: String): ProfileCredentialKind {
+            check(profileId !in failingKinds) { "metadata unavailable" }
+            return kinds[profileId] ?: ProfileCredentialKind.API_KEY
+        }
     }
 }
