@@ -6,17 +6,14 @@ name: Bridge CI
 # CycloneDX SBOM and a coverage report (report only, no fail-under gate).
 # No deployment, no secrets.
 
+# No path filter: the job is a required status check for `main`
+# (docs/release.md "Branch-Governance"), and a path-filtered required check
+# never reports on PRs outside bridge/ and blocks them. The run takes ~30 s.
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'bridge/**'
-      - '.github/workflows/bridge.yml'
   pull_request:
     branches: [ main ]
-    paths:
-      - 'bridge/**'
-      - '.github/workflows/bridge.yml'
 
 permissions:
   contents: read

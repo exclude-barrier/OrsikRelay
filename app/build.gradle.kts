@@ -1,8 +1,12 @@
+import org.cyclonedx.gradle.CyclonedxDirectTask
+import org.cyclonedx.model.Component
+import org.gradle.api.file.RegularFile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.cyclonedx.bom)
 }
 
 // Release signing is fed exclusively from four environment variables; no key
@@ -89,6 +93,15 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
+}
+
+// CycloneDX SBOM of the release runtime classpath (docs/release.md).
+// JSON only: app/build/reports/sbom/app.cdx.json.
+tasks.named<CyclonedxDirectTask>("cyclonedxDirectBom") {
+    projectType = Component.Type.APPLICATION
+    includeConfigs = listOf("releaseRuntimeClasspath")
+    jsonOutput = layout.buildDirectory.file("reports/sbom/app.cdx.json")
+    xmlOutput.convention(null as RegularFile?)
 }
 
 dependencies {

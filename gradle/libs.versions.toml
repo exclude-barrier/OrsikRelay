@@ -13,6 +13,7 @@ json = "20240303"
 coroutines = "1.10.2"
 markdownRenderer = "0.41.0"
 materialIconsCore = "1.7.8"
+cyclonedx = "3.5.1"
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -42,3 +43,4 @@ material-icons-core = { module = "androidx.compose.material:material-icons-core"
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+cyclonedx-bom = { id = "org.cyclonedx.bom", version.ref = "cyclonedx" }

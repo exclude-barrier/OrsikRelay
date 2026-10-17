@@ -2,8 +2,9 @@ name: Android CI
 
 # Reproducible gates for Orsik Relay. Every job mirrors a check that was
 # previously only run manually on build-host (see README "Verifikation").
-# The workflow performs NO signing and uploads NO release artifact: release
-# signing and AAB creation stay a separate, explicitly-scoped ticket.
+# The `release` job signs with a throwaway key generated on the runner: that
+# signature is NOT distributable and only proves the pipeline. No secret is
+# stored in GitHub and no artifact is published outside the workflow run.
 
 on:
   push:
@@ -142,3 +143,185 @@ jobs:
             app/build/reports/**
             app/build/outputs/androidTest-results/**
           if-no-files-found: ignore
+
+  release:
+    name: Release build, SBOM and provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No repository secrets: the upload key is a throwaway key generated on the
+    # runner. It is NOT distributable and only proves the release pipeline.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Create throwaway release keystore
+        # Random password, masked before it is exported. keytool reads it from
+        # stdin; there is no password argument and no password is logged.
+        run: |
+          umask 077
+          KEYSTORE="$RUNNER_TEMP/release-throwaway.jks"
+          PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$PASSWORD"
+          printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" | keytool \
+            -J-Duser.language=en -J-Duser.country=US \
+            -genkeypair \
+            -alias orsik-ci-throwaway \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10950 \
+            -dname "CN=Orsik Relay CI Throwaway, OU=Android, O=Orsik Relay, C=DE" \
+            -keystore "$KEYSTORE" \
+            -storetype PKCS12
+          chmod 0600 "$KEYSTORE"
+          {
+            echo "ORSIK_RELEASE_STORE_FILE=$KEYSTORE"
+            echo "ORSIK_RELEASE_STORE_PASSWORD=$PASSWORD"
+            echo "ORSIK_RELEASE_KEY_ALIAS=orsik-ci-throwaway"
+            echo "ORSIK_RELEASE_KEY_PASSWORD=$PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build signed release AAB and APK
+        run: ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease
+
+      - name: Verify release signatures
+        run: |
+          AAB="$(find app/build/outputs/bundle/release -name '*.aab' -print -quit)"
+          APK="$(find app/build/outputs/apk/release -name '*.apk' -print -quit)"
+          test -n "$AAB"
+          test -n "$APK"
+          "${ANDROID_HOME}/build-tools/36.1.0/apksigner" verify --print-certs "$APK"
+          jarsigner -verify "$AAB" > "$RUNNER_TEMP/jarsigner.log"
+          cat "$RUNNER_TEMP/jarsigner.log"
+          grep -q 'jar verified' "$RUNNER_TEMP/jarsigner.log"
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          ./gradlew --no-daemon :app:cyclonedxDirectBom
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          sbom = json.loads(Path("app/build/reports/sbom/app.cdx.json").read_text())
+          assert sbom["bomFormat"] == "CycloneDX", sbom.get("bomFormat")
+          assert sbom["components"], "SBOM has no components"
+          print(f"SBOM components: {len(sbom['components'])}")
+          PY
+
+      - name: Stage release distribution
+        run: |
+          DIST="$RUNNER_TEMP/release-dist"
+          mkdir -p "$DIST"
+          cp "$(find app/build/outputs/bundle/release -name '*.aab' -print -quit)" "$DIST/app-release.aab"
+          cp "$(find app/build/outputs/apk/release -name '*.apk' -print -quit)" "$DIST/app-release.apk"
+          cp app/build/reports/sbom/app.cdx.json "$DIST/app.cdx.json"
+          cd "$DIST"
+          sha256sum app-release.aab app-release.apk app.cdx.json > SHA256SUMS
+
+      - name: Write unsigned SLSA provenance
+        # in-toto Statement v1 + SLSA provenance v1, unsigned on purpose:
+        # GitHub Artifact Attestations require Enterprise Cloud for private
+        # repositories, so this file only records the local build inputs.
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          dist = Path(os.environ["RUNNER_TEMP"]) / "release-dist"
+          repository = os.environ["GITHUB_REPOSITORY"]
+          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          sha = os.environ["GITHUB_SHA"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+          workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
+
+          names = ["app-release.aab", "app-release.apk", "app.cdx.json"]
+          subjects = []
+          for name in names:
+              data = (dist / name).read_bytes()
+              subjects.append({
+                  "name": name,
+                  "digest": {"sha256": hashlib.sha256(data).hexdigest()},
+              })
+
+          run_url = f"{server}/{repository}/actions/runs/{run_id}"
+          statement = {
+              "_type": "https://in-toto.io/Statement/v1",
+              "subject": subjects,
+              "predicateType": "https://slsa.dev/provenance/v1",
+              "predicate": {
+                  "buildDefinition": {
+                      "buildType": f"{server}/{repository}/blob/{sha}/.github/workflows/android.yml",
+                      "externalParameters": {
+                          "repository": repository,
+                          "commit": sha,
+                          "workflowRef": workflow_ref,
+                          "runId": run_id,
+                          "runAttempt": run_attempt,
+                      },
+                      "internalParameters": {
+                          "runner": os.environ.get("RUNNER_OS", "Linux"),
+                          "signingKey": "throwaway-ci-key",
+                          "provenanceSigned": False,
+                      },
+                      "resolvedDependencies": [{
+                          "uri": f"git+{server}/{repository}@{sha}",
+                          "digest": {"gitCommit": sha},
+                      }],
+                  },
+                  "runDetails": {
+                      "builder": {"id": run_url},
+                      "metadata": {
+                          "invocationId": f"{run_url}/attempts/{run_attempt}",
+                      },
+                  },
+              },
+          }
+          (dist / "provenance.intoto.json").write_text(
+              json.dumps(statement, indent=2) + "\n"
+          )
+          PY
+
+      - name: Release notes
+        run: |
+          {
+            echo "### Release distribution"
+            echo "- Signed with a **throwaway CI key**; NOT distributable."
+            echo "- Provenance is **unsigned**: GitHub Artifact Attestations require Enterprise Cloud for private repositories."
+            echo "- Artifacts: AAB, APK, CycloneDX SBOM, SHA256SUMS, provenance.intoto.json."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: ${{ runner.temp }}/release-dist
+          if-no-files-found: error
+
+      - name: Verify fail-closed signing contract (a-d)
+        # Runs last: the script rebuilds the release outputs (unsigned, partial
+        # variables, keystore inside the repo, own throwaway key) after the
+        # distribution has been uploaded. It unsets the ORSIK_RELEASE_*
+        # variables per case; dependencies are cached, so --offline works.
+        run: ./scripts/verify-release-signing.sh
