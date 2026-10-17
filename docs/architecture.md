@@ -5,14 +5,16 @@ Orsik Relay und markiert ausdrücklich die Stellen, an denen der
 ursprüngliche (interne) Gesamtplan (Soll) vom Code (Ist) abweicht. Maßgeblich ist
 der Code; Abweichungen sind teils bewusst, teils offen.
 
-Stand: `v0.1.0-alpha.6` (`versionCode 6`), inklusive CI-Workflow,
-Apache-2.0-Lizenz und Audit-Härtungen.
+Grundlegend überarbeitet für `v0.1.0-alpha.6`. Spätere Bausteine – Mobile Bridge,
+Run-Lease nach Process Death, Release-Pipeline – beschreiben
+`docs/bridge-security.md`, `docs/mobile-wire-contract.md`, `docs/bridge-e2e.md`
+und `docs/release.md`.
 
 ## 1. Modul- und Build-Struktur
 
 - **Ein einzelnes Gradle-Modul** `app` (Namespace `io.github.excludebarrier.orsikrelay`).
-  Der Plan sah Multi-Modul (`core/`, `data/`, `feature/`) vor; der Plan
-  erlaubt in §5 ausdrücklich den Start als einzelnes `app`-Modul. Paketgrenzen
+  Der ursprüngliche Plan sah Multi-Modul (`core/`, `data/`, `feature/`) vor und
+  erlaubte ausdrücklich den Start als einzelnes `app`-Modul. Paketgrenzen
   bleiben die Schichtgrenzen.
 - Kein DI-Framework. Der produktive Graph wird von Hand in
   `di/AppDependencies.kt` gebaut und prozessweit in `AppDependenciesHolder`
@@ -41,7 +43,7 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
 
 | Plan (Soll) | Ist | Bewertung |
 |---|---|---|
-| Multi-Modul `core/`/`data/`/`feature/` | Ein `app`-Modul | bewusst (§5 erlaubt es) |
+| Multi-Modul `core/`/`data/`/`feature/` | Ein `app`-Modul | bewusst (der Plan erlaubte es) |
 | Room für Profile/Cache/Drafts | SharedPreferences mit versionierten Keys | bewusst: Room ist keine Dependency; das Repo-Muster ist SharedPreferences + versionierter Key |
 | DataStore für Drafts | SharedPreferences (`chat.draft.v1.*`) | bewusst, s. o. |
 | `docs/security-threat-model.md`, `docs/testing.md`, `docs/release-checklist.md` | nicht vorhanden | offen |
