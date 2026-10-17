@@ -20,12 +20,6 @@
     <string name="error_pairing_failed">The server could not complete the pairing request.</string>
     <string name="error_pairing_incompatible_api">The server does not support secure device pairing.</string>
     <string name="error_pairing_credential_rejected">The server rejected the new device credential.</string>
-    <string name="profiles_device_disconnect_title">Disconnect device?</string>
-    <string name="profiles_device_disconnect_message">“%1$s” will be disconnected from the server. This device will no longer be recognized as this device.</string>
-    <string name="profiles_device_disconnect_confirm">Disconnect device</string>
-    <string name="profiles_device_disconnect_action">Disconnect device</string>
-    <string name="profiles_device_disconnecting">Disconnecting…</string>
-    <string name="profiles_device_disconnect_error_generic">The device could not be disconnected.</string>
     <string name="sessions_title">Sessions</string>
     <string name="sessions_loading">Loading sessions…</string>
     <string name="sessions_empty">No sessions available.</string>
@@ -126,9 +120,14 @@
     <string name="profiles_active">Active server</string>
     <string name="profiles_delete_title">Delete server?</string>
     <string name="profiles_delete_message">“%1$s” will be permanently removed, including its API key and saved chat drafts.</string>
+    <string name="profiles_delete_message_device">“%1$s” will be disconnected from the server first and then permanently removed from this device, including its saved chat drafts.</string>
     <string name="profiles_delete_confirm">Delete</string>
     <string name="profiles_deleting">Deleting…</string>
+    <string name="profiles_delete_disconnecting">Disconnecting…</string>
     <string name="profiles_delete_error_generic">The server could not be deleted.</string>
+    <string name="profiles_delete_revoke_error_generic">The device could not be disconnected from the server.</string>
+    <string name="profiles_delete_local_only">Remove on this device only</string>
+    <string name="profiles_delete_local_only_warning">The access remains valid on the server until it is revoked there (admin list-devices, admin revoke-device &lt;device_id&gt;).</string>
     <string name="approval_title">Approval requested</string>
     <string name="approval_action_label">Action</string>
     <string name="approval_action_value">Hermes run</string>

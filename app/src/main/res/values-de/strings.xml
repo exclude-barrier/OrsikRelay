@@ -20,12 +20,6 @@
     <string name="error_pairing_failed">Der Server konnte den Pairing-Vorgang nicht ausführen.</string>
     <string name="error_pairing_incompatible_api">Der Server unterstützt kein sicheres Geräte-Pairing.</string>
     <string name="error_pairing_credential_rejected">Der neue Geräte-Zugang wurde vom Server abgelehnt.</string>
-    <string name="profiles_device_disconnect_title">Gerät trennen?</string>
-    <string name="profiles_device_disconnect_message">„%1$s“ wird vom Server getrennt. Das Gerät wird danach nicht mehr als dieses Gerät erkannt.</string>
-    <string name="profiles_device_disconnect_confirm">Gerät trennen</string>
-    <string name="profiles_device_disconnect_action">Gerät trennen</string>
-    <string name="profiles_device_disconnecting">Wird getrennt …</string>
-    <string name="profiles_device_disconnect_error_generic">Das Gerät konnte nicht getrennt werden.</string>
     <string name="sessions_title">Sessions</string>
     <string name="sessions_loading">Sessions werden geladen…</string>
     <string name="sessions_empty">Keine Sessions vorhanden.</string>
@@ -125,9 +119,14 @@
     <string name="profiles_active">Aktiver Server</string>
     <string name="profiles_delete_title">Server löschen?</string>
     <string name="profiles_delete_message">„%1$s“ wird dauerhaft entfernt, inklusive API-Key und gespeicherter Chat-Entwürfe.</string>
+    <string name="profiles_delete_message_device">„%1$s“ wird zuerst auf dem Server getrennt und anschließend von diesem Gerät dauerhaft entfernt, inklusive gespeicherter Chat-Entwürfe.</string>
     <string name="profiles_delete_confirm">Löschen</string>
     <string name="profiles_deleting">Wird gelöscht …</string>
+    <string name="profiles_delete_disconnecting">Wird getrennt …</string>
     <string name="profiles_delete_error_generic">Der Server konnte nicht gelöscht werden.</string>
+    <string name="profiles_delete_revoke_error_generic">Das Gerät konnte nicht vom Server getrennt werden.</string>
+    <string name="profiles_delete_local_only">Nur auf diesem Gerät entfernen</string>
+    <string name="profiles_delete_local_only_warning">Der Zugang bleibt auf dem Server gültig, bis er dort widerrufen wird (admin list-devices, admin revoke-device &lt;device_id&gt;).</string>
     <string name="approval_title">Freigabe anfragen</string>
     <string name="approval_action_label">Aktion</string>
     <string name="approval_action_value">Hermes-Run</string>
