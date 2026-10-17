@@ -20,8 +20,8 @@ und `docs/release.md`.
   `di/AppDependencies.kt` gebaut und prozessweit in `AppDependenciesHolder`
   gecacht. `HermesNavHost` löst bei Bedarf `AppDependenciesHolder.get(...)` auf;
   Test-Injektionen umgehen den Cache und bauen einen isolierten Graphen.
-- Wrapper `9.7.0`, Kotlin `2.4.20`, AGP `9.3.1`, Compose BOM `2025.12.00`,
-  `minSdk 26`, `compileSdk`/`targetSdk 36`, JDK 17.
+- Wrapper `9.8.1`, Kotlin `2.4.21`, AGP `9.3.1`, Compose BOM `2025.12.00`,
+  `minSdk 26`, `compileSdk 37`, `targetSdk 36`, JDK 17.
 
 ## 2. Schichten
 

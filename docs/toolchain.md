@@ -3,7 +3,7 @@
 ## Benötigte Werkzeuge
 
 Maßgeblich für alle Builds ist ausschließlich der versionierte Gradle Wrapper
-(`./gradlew`, Gradle 9.7.0); eine separate Gradle-Installation ist nicht nötig.
+(`./gradlew`, Gradle 9.8.1); eine separate Gradle-Installation ist nicht nötig.
 
 - JDK `17` (z. B. Temurin), im `PATH` oder über `JAVA_HOME`
 - Android SDK (Standardort `~/Android/Sdk`, sonst `ANDROID_HOME` setzen) mit
