@@ -1,26 +1,37 @@
 package io.github.excludebarrier.orsikrelay.ui.onboarding
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +47,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag as semanticsTestTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -90,6 +102,7 @@ fun OnboardingScreen(
         mutableStateOf<ProfileFormValidator.ValidationError?>(null)
     }
     var pairingCodeError by remember { mutableStateOf(false) }
+    var showModeInfo by rememberSaveable { mutableStateOf(false) }
 
     // Re-tap support: a deep link delivered after first composition (onNewIntent)
     // updates the pre-filled fields. Only non-empty values override, so a
@@ -181,29 +194,70 @@ fun OnboardingScreen(
             modifier = Modifier.padding(top = 8.dp)
         )
 
-        SingleChoiceSegmentedButtonRow(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp)
+                .padding(top = 24.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            SegmentedButton(
-                selected = mode == OnboardingMode.Pairing,
-                onClick = { switchMode(OnboardingMode.Pairing) },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                modifier = Modifier.testTag("onboardingModePairing")
+            // Equal segment heights at every font scale: the row adopts the
+            // tallest intrinsic height (and at least a 48 dp touch target),
+            // and each segment fills it.
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .height(IntrinsicSize.Min)
             ) {
-                Text(
-                    text = stringResource(R.string.onboarding_mode_pairing) +
-                        " (" + stringResource(R.string.onboarding_mode_pairing_recommended) + ")"
-                )
+                SegmentedButton(
+                    selected = mode == OnboardingMode.Pairing,
+                    onClick = { switchMode(OnboardingMode.Pairing) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .testTag("onboardingModePairing")
+                ) {
+                    Text(
+                        text = stringResource(R.string.onboarding_mode_pairing) +
+                            " (" + stringResource(R.string.onboarding_mode_pairing_recommended) + ")",
+                        textAlign = TextAlign.Center,
+                        fontWeight = if (mode == OnboardingMode.Pairing) {
+                            FontWeight.SemiBold
+                        } else {
+                            FontWeight.Normal
+                        }
+                    )
+                }
+                SegmentedButton(
+                    selected = mode == OnboardingMode.ApiKey,
+                    onClick = { switchMode(OnboardingMode.ApiKey) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .testTag("onboardingModeApiKey")
+                ) {
+                    Text(
+                        text = stringResource(R.string.onboarding_mode_api_key),
+                        textAlign = TextAlign.Center,
+                        fontWeight = if (mode == OnboardingMode.ApiKey) {
+                            FontWeight.SemiBold
+                        } else {
+                            FontWeight.Normal
+                        }
+                    )
+                }
             }
-            SegmentedButton(
-                selected = mode == OnboardingMode.ApiKey,
-                onClick = { switchMode(OnboardingMode.ApiKey) },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                modifier = Modifier.testTag("onboardingModeApiKey")
+            IconButton(
+                onClick = { showModeInfo = true },
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(48.dp)
+                    .testTag("onboardingModeInfo")
             ) {
-                Text(text = stringResource(R.string.onboarding_mode_api_key))
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = stringResource(R.string.onboarding_mode_info_content_description)
+                )
             }
         }
 
@@ -325,6 +379,16 @@ fun OnboardingScreen(
                     .padding(top = 16.dp)
                     .testTag("onboardingConnectionError")
             )
+            onboardingFailureHint(connectionState.reason)?.let { hint ->
+                Text(
+                    text = stringResource(hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .testTag("onboardingConnectionHint")
+                )
+            }
         }
 
         Button(
@@ -348,6 +412,26 @@ fun OnboardingScreen(
                 Text(text = stringResource(R.string.onboarding_submit))
             }
         }
+    }
+
+    if (showModeInfo) {
+        AlertDialog(
+            onDismissRequest = { showModeInfo = false },
+            confirmButton = {
+                TextButton(onClick = { showModeInfo = false }) {
+                    Text(text = stringResource(R.string.onboarding_mode_info_ok))
+                }
+            },
+            title = {
+                Text(text = stringResource(R.string.onboarding_mode_info_title))
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(text = stringResource(R.string.onboarding_mode_info_pairing_body))
+                    Text(text = stringResource(R.string.onboarding_mode_info_api_key_body))
+                }
+            }
+        )
     }
 }
 
@@ -384,4 +468,21 @@ private fun onboardingFailureMessage(reason: OnboardingFailureReason): Int = whe
     OnboardingFailureReason.PAIRING_INCOMPATIBLE -> R.string.error_pairing_incompatible_api
     OnboardingFailureReason.PAIRING_FAILED -> R.string.error_pairing_failed
     OnboardingFailureReason.PAIRING_CREDENTIAL_REJECTED -> R.string.error_pairing_credential_rejected
+}
+
+/**
+ * Static, input-free action hint shown below [onboardingFailureMessage].
+ *
+ * Returns `null` for reasons without a useful, safe next action. The hints
+ * contain no URLs, host names, server messages, or exception text.
+ */
+internal fun onboardingFailureHint(reason: OnboardingFailureReason): Int? = when (reason) {
+    OnboardingFailureReason.TLS -> R.string.onboarding_hint_tls
+    OnboardingFailureReason.INCOMPATIBLE_API,
+    OnboardingFailureReason.PAIRING_INCOMPATIBLE -> R.string.onboarding_hint_incompatible_api
+    OnboardingFailureReason.NETWORK,
+    OnboardingFailureReason.TIMEOUT -> R.string.onboarding_hint_network
+    OnboardingFailureReason.PAIRING_CODE_INVALID -> R.string.onboarding_hint_pairing_code_invalid
+    OnboardingFailureReason.INVALID_CREDENTIALS -> R.string.onboarding_hint_invalid_credentials
+    else -> null
 }
