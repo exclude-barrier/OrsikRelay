@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
@@ -294,19 +295,29 @@ onClick = { viewModel.handleBack() }
                 // must never squeeze the input row out: the composer keeps its
                 // intrinsic height and this region absorbs the deficit.
                 //
-                // Column measures its children in declaration order, so this
-                // region is measured BEFORE the composer and would consume its
-                // own content height first (a couple of lines of status text
-                // are already enough to push the composer off the keyboard
-                // edge). In the compact regime it is therefore not composed at
-                // all: the whole remaining budget belongs to the composer, and
-                // the timeline, the status lines and the run controls come back
-                // as soon as there is room for them again.
+                // Column does NOT measure its children in declaration order:
+                // it first measures every child without a weight with the
+                // incoming constraints, and only then distributes the
+                // remaining main-axis space to the weighted children (verified
+                // against the row/column measure policy in the local
+                // androidx.compose.foundation.layout artifact). The composer is
+                // therefore already measured when this region's budget is
+                // fixed and always keeps its intrinsic height. With `fill =
+                // true` (the default) the region additionally consumes the
+                // surplus space when the timeline is short or empty, which
+                // pins the composer to the bottom edge instead of letting it
+                // float up directly below the header.
+                //
+                // In the compact regime the timeline, the status lines and the
+                // run controls are not composed at all: the weighted spacer
+                // below keeps the whole remaining budget for the composer and
+                // still places it on the bottom edge. They come back as soon as
+                // there is room for them again.
                 if (!compactComposer) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f, fill = false)
+                            .weight(1f)
                     ) {
                 if (timeline.isEmpty()) {
                     StatusText(stringResource(R.string.chat_empty))
@@ -397,6 +408,8 @@ onClick = { viewModel.handleBack() }
                     StatusText(stringResource(R.string.chat_stream_reconnecting))
                 }
                 }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
                 ComposerBar(
                     draft = state.draft,
@@ -802,6 +815,9 @@ internal fun ComposerBar(
 ) {
     Column(
         modifier = Modifier
+            // The tag wraps the whole bar including its own bottom padding, so
+            // tests can compare the bar's bottom edge with the content area.
+            .testTag(TAG_COMPOSER_BAR)
             .fillMaxWidth()
             .padding(
                 top = if (compact) 0.dp else 8.dp,
@@ -1056,15 +1072,17 @@ private fun CompactComposerRow(
                 onValueChange = onDraftChange,
                 label = { Text(stringResource(R.string.chat_input_label)) },
                 enabled = !turnActive,
-                // Fixed height and bounded lines: the compact row must keep a
-                // deterministic budget, because an error line can sit above it
-                // and a growing draft (or a raised font scale) would otherwise
-                // squeeze the row below the 48 dp touch targets. Longer text
-                // scrolls inside the field.
+                // Bounded lines, NATURAL height: the row must keep a
+                // deterministic budget, but a fixed height clipped the text as
+                // soon as the font scale grew - a single visible line no
+                // longer fitted into a 56 dp box. With only a minimum height
+                // the field grows with its content instead of clipping it at
+                // font scale 1.3; the two-line cap still bounds the row and
+                // longer text scrolls inside the field.
                 maxLines = COMPACT_DRAFT_MAX_LINES,
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = COMPACT_FIELD_HEIGHT, max = COMPACT_FIELD_HEIGHT)
+                    .heightIn(min = COMPACT_FIELD_HEIGHT)
                     .padding(end = 8.dp)
                     .testTag(TAG_COMPOSER_FIELD)
             )
@@ -1121,13 +1139,18 @@ internal const val COMPACT_DRAFT_MAX_LINES = 2
 /** Max width of the attachment name in the compact composer row. */
 internal val COMPACT_NAME_MAX_WIDTH = 96.dp
 
-/** Fixed draft-field height in the compact composer row (Material minimum). */
+/**
+ * Minimum draft-field height in the compact composer row (Material minimum).
+ * The field grows beyond it when its content needs more room (raised font
+ * scale, a second draft line), so the text is never clipped.
+ */
 internal val COMPACT_FIELD_HEIGHT = 56.dp
 
 /** Thumbnail edge in the compact composer row. */
 internal val COMPACT_THUMBNAIL_SIZE = 24.dp
 
 internal const val TAG_RUN_STOP = "composer_run_stop"
+internal const val TAG_COMPOSER_BAR = "composer_bar"
 internal const val TAG_RUN_CONFLICT = "chat_run_conflict"
 internal const val TAG_RUN_UNCERTAIN = "chat_run_uncertain"
 internal const val TAG_RUN_RECONCILE = "chat_run_reconcile"
