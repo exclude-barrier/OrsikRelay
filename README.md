@@ -190,7 +190,7 @@ everything else.
 ./gradlew :app:testDebugUnitTest      # JVM unit tests
 ./gradlew :app:lintDebug              # Android lint
 ./gradlew :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.github.excludebarrier.orsikrelay.CaptureOnly,io.github.excludebarrier.orsikrelay.LiveBridge
+  -Pandroid.testInstrumentationRunnerArguments.filter=io.github.excludebarrier.orsikrelay.ManualTestsFilter
 (cd bridge && uv run --locked python -m unittest discover -s tests)
 ```
 

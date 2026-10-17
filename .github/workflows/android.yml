@@ -130,9 +130,11 @@ jobs:
           disk-size: 4096
           emulator-boot-timeout: 900
           disable-animations: true
-          # Capture-only tests (real IME / screenshot markers, no assertions) are
-          # environment-dependent and excluded from CI via @CaptureOnly.
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.github.excludebarrier.orsikrelay.CaptureOnly,io.github.excludebarrier.orsikrelay.LiveBridge
+          # Capture-only (@CaptureOnly) and live-bridge (@LiveBridge) tests are
+          # excluded via ManualTestsFilter - a single runner argument, because
+          # since AGP 9.4.1 only the first value of a comma-separated
+          # notAnnotation list reaches the runner.
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.filter=io.github.excludebarrier.orsikrelay.ManualTestsFilter
 
       - name: Upload instrumented test reports
         if: always()

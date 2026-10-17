@@ -6,7 +6,8 @@ package io.github.excludebarrier.orsikrelay
  * `liveBaseUrl` / `livePairingCode` instrumentation arguments.
  *
  * They are excluded from the regular connected suite (like [CaptureOnly]) via
- * `-Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.github.excludebarrier.orsikrelay.CaptureOnly,io.github.excludebarrier.orsikrelay.LiveBridge`
+ * [ManualTestsFilter]
+ * (`-Pandroid.testInstrumentationRunnerArguments.filter=io.github.excludebarrier.orsikrelay.ManualTestsFilter`)
  * and run explicitly against the live stack. Without the arguments the JUnit
  * assumption marks them skipped, so an accidental inclusion never fails CI.
  */
