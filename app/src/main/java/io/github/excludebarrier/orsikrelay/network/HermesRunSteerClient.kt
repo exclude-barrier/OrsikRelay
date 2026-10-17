@@ -154,8 +154,8 @@ class HermesRunSteerClient(
             RunSteerResult.Failure(RunSteerError.Tls)
         } catch (_: InterruptedIOException) {
             RunSteerResult.Failure(RunSteerError.Timeout)
-        } catch (_: IOException) {
-            RunSteerResult.Failure(RunSteerError.Network)
+        } catch (error: IOException) {
+            RunSteerResult.Failure(if (error.hasTlsFailure()) RunSteerError.Tls else RunSteerError.Network)
         } catch (_: Exception) {
             RunSteerResult.Failure(RunSteerError.IncompatibleApi)
         }

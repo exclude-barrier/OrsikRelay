@@ -70,8 +70,10 @@ class HermesConnectionClient(
             failure(ConnectionFailureReason.TLS)
         } catch (_: InterruptedIOException) {
             failure(ConnectionFailureReason.TIMEOUT)
-        } catch (_: IOException) {
-            failure(ConnectionFailureReason.NETWORK)
+        } catch (error: IOException) {
+            failure(
+                if (error.hasTlsFailure()) ConnectionFailureReason.TLS else ConnectionFailureReason.NETWORK
+            )
         } catch (_: Exception) {
             failure(ConnectionFailureReason.INCOMPATIBLE_API)
         }

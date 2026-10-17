@@ -119,8 +119,8 @@ class HermesRunStopClient(
             RunStopResult.Failure(RunStopError.Tls)
         } catch (_: InterruptedIOException) {
             RunStopResult.Failure(RunStopError.Timeout)
-        } catch (_: IOException) {
-            RunStopResult.Failure(RunStopError.Network)
+        } catch (error: IOException) {
+            RunStopResult.Failure(if (error.hasTlsFailure()) RunStopError.Tls else RunStopError.Network)
         } catch (_: Exception) {
             RunStopResult.Failure(RunStopError.IncompatibleApi)
         }

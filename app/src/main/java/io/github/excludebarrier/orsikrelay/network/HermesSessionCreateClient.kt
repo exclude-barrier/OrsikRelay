@@ -120,8 +120,8 @@ class HermesSessionCreateClient(
             SessionCreateResult.Failure(SessionCreateError.Tls)
         } catch (_: InterruptedIOException) {
             SessionCreateResult.Failure(SessionCreateError.Timeout)
-        } catch (_: IOException) {
-            SessionCreateResult.Failure(SessionCreateError.Network)
+        } catch (error: IOException) {
+            SessionCreateResult.Failure(if (error.hasTlsFailure()) SessionCreateError.Tls else SessionCreateError.Network)
         } catch (_: Exception) {
             SessionCreateResult.Failure(SessionCreateError.IncompatibleApi)
         }
