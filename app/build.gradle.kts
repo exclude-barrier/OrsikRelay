@@ -79,6 +79,14 @@ android {
         }
     }
 
+    // The in-app language switch must work from the APK without downloading
+    // locale splits at runtime (no Play Core dependency).
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -86,6 +94,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

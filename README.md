@@ -21,7 +21,8 @@ your private network.
 </p>
 
 *Real app screens rendered with sample data (`scripts/readme-screenshots.sh`).
-The user interface is currently German.*
+The user interface is available in English and German; choose the language
+under **Settings → Language**.*
 
 > **Early alpha (`0.1.0-alpha.7`).** For technical testing on your own setup.
 > No Play Store build or binary release yet – [build from source](#building-from-source).
@@ -39,7 +40,7 @@ The user interface is currently German.*
   drops, backgrounding, rotation and even process death. A run is never
   silently re-sent; if its outcome is unknown, the app asks the server.
 - **You stay in control:** stop or steer a running turn; tool approvals offer
-  only **Ablehnen** (deny) or **Erlauben** (allow once).
+  only **Deny** or **Allow** (allow once).
 - **Privacy by design:** tool activity is shown without commands, arguments,
   paths or output; write requests are never retried automatically; TLS
   validation and redirects are never relaxed.
@@ -110,8 +111,8 @@ BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env \
 With `qrencode` installed, a QR code for the deep link is printed as well.
 
 **5. Pair the app:** build and install it ([building from source](#building-from-source)),
-open the deep link or tap **Server hinzufügen**, enter a name and the HTTPS URL,
-choose **Pairing-Code** and enter the code. The app checks the connection and
+open the deep link or tap **Add server**, enter a name and the HTTPS URL,
+choose **Pairing code** and enter the code. The app checks the connection and
 the exact capability contract before it stores anything.
 
 <p align="center">
@@ -122,15 +123,17 @@ the exact capability contract before it stores anything.
 
 | Task | Where |
 | --- | --- |
-| Add a server | **Server hinzufügen** (or open an `orsik://pair` link) |
-| Switch or remove servers | **Server verwalten** |
-| Disconnect this phone from a server | **Server verwalten → Gerät trennen** |
-| Start a conversation | **+** (Neue Session anlegen) on the session list |
-| Stop a running answer | **Stoppen** |
-| Correct a running answer | type in **Kurskorrektur**, then **Steuern** |
-| Answer a tool approval | **Ablehnen** (deny) or **Erlauben** (allow once) |
-| Attach an image | **Anhang** in the composer (one image, ≤ 5 MiB) |
-| Light / dark mode | **Darstellung** on the session list (System / Hell / Dunkel) |
+| Add a server | **Add server** (or open an `orsik://pair` link) |
+| Switch or remove servers | **Manage servers** |
+| Disconnect this phone from a server | **Manage servers → Disconnect device** |
+| Start a conversation | **+** (New session) on the session list |
+| Stop a running answer | **Stop** |
+| Correct a running answer | type in **Steer message**, then **Steer** |
+| Answer a tool approval | **Deny** or **Allow** (allow once) |
+| Attach an image | **Attach** in the composer (one image, ≤ 5 MiB) |
+| Change the app language | **Settings → Language** (System / English / Deutsch) |
+| Light / dark mode | **Settings → Appearance** (System / Light / Dark) |
+| App version and license | **Settings → About the app** |
 
 On the server, `admin list-devices` and `admin revoke-device <device_id>` list
 and immediately revoke paired phones.
@@ -150,21 +153,21 @@ and immediately revoke paired phones.
 - **Attachments:** images only (JPEG, PNG, WEBP), one per turn, up to 5 MiB;
   vision depends on your model.
 - **Not yet:** approvals do not show the command being approved, no voice input,
-  no bot management, German UI only.
+  no bot management.
 
 ## Troubleshooting
 
-- **„Der Server bietet nicht die benötigten Hermes-Funktionen.“** – the URL does
+- **“The server does not provide the required Hermes features.”** – the URL does
   not point at the bridge, or the bridge/core does not offer the Mobile v1
   contract. Use the bridge URL (port 8443 in the example above), not the Hermes
   `api_server` itself, and run `bridge/install.sh --check`.
-- **„Die sichere Serververbindung konnte nicht bestätigt werden.“** – the TLS
+- **“The secure server connection could not be verified.”** – the TLS
   certificate is not trusted by Android. Use a publicly trusted certificate
   (Tailscale Serve provides one) instead of a self-signed CA.
-- **„Der Hermes-Server ist derzeit nicht erreichbar.“** – the phone cannot reach
+- **“The Hermes server is currently unreachable.”** – the phone cannot reach
   the server: check VPN/tailnet, the `tailscale serve` mapping and that the
   bridge is running.
-- **„Der Pairing-Code ist ungültig, abgelaufen oder bereits verwendet.“** – codes
+- **“The pairing code is invalid, expired, or already used.”** – codes
   are single-use and expire after 300 seconds; create a new one.
 - **No approval ever appears** – Hermes may be approving on its own; set
   `approvals: mode: manual`.

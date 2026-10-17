@@ -30,12 +30,24 @@
     <string name="sessions_loading">Sessions werden geladen…</string>
     <string name="sessions_empty">Keine Sessions vorhanden.</string>
     <string name="sessions_refresh">Aktualisieren</string>
-    <string name="theme_switcher_description">Darstellung</string>
     <string name="theme_mode_system">System</string>
     <string name="theme_mode_light">Hell</string>
     <string name="theme_mode_dark">Dunkel</string>
     <string name="sessions_retry">Erneut versuchen</string>
     <string name="sessions_load_more">Mehr laden</string>
+    <plurals name="session_message_count">
+        <item quantity="one">%1$s Nachricht</item>
+        <item quantity="other">%1$s Nachrichten</item>
+    </plurals>
+    <string name="settings_entry">Einstellungen</string>
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_back">Zurück</string>
+    <string name="settings_language_section">Sprache</string>
+    <string name="settings_language_system">System</string>
+    <string name="settings_appearance_section">Darstellung</string>
+    <string name="settings_about_section">Über die App</string>
+    <string name="settings_version_label">Version</string>
+    <string name="settings_license_label">Lizenz</string>
     <string name="session_fallback_title">Unbenannte Session</string>
     <string name="new_session_title">Neue Session</string>
     <string name="new_session_title_label">Titel (optional)</string>

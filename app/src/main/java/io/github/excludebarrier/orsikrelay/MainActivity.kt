@@ -1,4 +1,5 @@
 package io.github.excludebarrier.orsikrelay
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -28,6 +29,7 @@ import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.device.PairingDeepLink
 import io.github.excludebarrier.orsikrelay.platform.notification.AppForegroundTracker
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationSessionIntent
+import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 
 /**
  * Single entry point of the app. Hosts the Compose navigation shell;
@@ -45,6 +47,15 @@ class MainActivity : ComponentActivity() {
     // which opens exactly that chat. Malformed intents yield null (fail-closed)
     // and leave the normal startup navigation untouched.
     private val notificationBootstrap = mutableStateOf<Pair<String, String>?>(null)
+
+    /**
+     * Applies the persisted app language before the first frame on API < 33.
+     * On API 33+ the framework applies the app locale from LocaleManager
+     * before the activity is created, so the base context stays untouched.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

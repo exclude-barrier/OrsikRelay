@@ -30,12 +30,25 @@
     <string name="sessions_loading">Loading sessions…</string>
     <string name="sessions_empty">No sessions available.</string>
     <string name="sessions_refresh">Refresh</string>
-    <string name="theme_switcher_description">Appearance</string>
     <string name="theme_mode_system">System</string>
     <string name="theme_mode_light">Light</string>
     <string name="theme_mode_dark">Dark</string>
     <string name="sessions_retry">Try again</string>
     <string name="sessions_load_more">Load more</string>
+    <plurals name="session_message_count">
+        <item quantity="one">%1$s message</item>
+        <item quantity="other">%1$s messages</item>
+    </plurals>
+    <string name="settings_entry">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_language_section">Language</string>
+    <string name="settings_language_system">System</string>
+    <string name="settings_appearance_section">Appearance</string>
+    <string name="settings_about_section">About the app</string>
+    <string name="settings_version_label">Version</string>
+    <string name="settings_license_label">License</string>
+    <string name="settings_license_value" translatable="false">Apache License 2.0</string>
     <string name="session_fallback_title">Untitled session</string>
     <string name="new_session_title">New session</string>
     <string name="new_session_title_label">Title (optional)</string>

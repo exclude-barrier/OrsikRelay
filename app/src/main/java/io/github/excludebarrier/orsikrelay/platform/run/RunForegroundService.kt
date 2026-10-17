@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationSessionIntent
 
 /**
@@ -39,6 +40,15 @@ import io.github.excludebarrier.orsikrelay.platform.notification.NotificationSes
  * session notifications.
  */
 class RunForegroundService : Service() {
+
+    /**
+     * The foreground notification is rendered from the persisted app
+     * language on API < 33; API 33+ localizes the service through
+     * LocaleManager.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val profileId = intent?.getStringExtra(EXTRA_PROFILE_ID).orEmpty()
