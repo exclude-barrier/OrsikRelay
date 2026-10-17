@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.data.chat
 
 /**
- * Closed, fixed failure surface for chat-draft persistence (Mission 009A).
+ * Closed, fixed failure surface for chat-draft persistence.
  *
  * Mirrors [io.github.excludebarrier.orsikrelay.data.profile.ProfileMetadataStoreException]:
  * every store failure maps to this one generic message. It never carries

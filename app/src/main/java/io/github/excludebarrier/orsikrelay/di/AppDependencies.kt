@@ -63,16 +63,16 @@ import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCr
  * so the navigation host stays navigation-only.
  *
  * One [SharedPreferencesChatDraftRepository] is shared by the chat screen and
- * the profile repository (Mission 009B): profile deletion clears drafts
+ * the profile repository: profile deletion clears drafts
  * through this same instance, so no second, independent store exists.
  * The device metadata store holds ONLY non-secret metadata; the device key is
  * stored by the saver through the same Keystore-wrapped credential store as
- * the API key (Mission 017B).
+ * the API key.
  */
 internal data class AppDependencies(
     val profileAdmin: ProfileAdmin,
     val coordinator: ProfileConnectionCoordinator,
-    // Mission 017B: the pairing onboarding path and the "Gerät trennen"
+    // The pairing onboarding path and the "Gerät trennen"
     // disconnect path of the server management screen.
     val pairingCoordinator: DevicePairingCoordinator,
     val deviceDisconnectCoordinator: DeviceDisconnectCoordinator,
@@ -83,21 +83,20 @@ internal data class AppDependencies(
     val runStopRequester: RunStopRequester,
     val runSteerRequester: RunSteerRequester,
     val runApprovalRequester: RunApprovalRequester,
-    /** P7: reads `GET /v1/runs/{run_id}` for the manual uncertain-run recovery. */
+    /** Reads `GET /v1/runs/{run_id}` for the manual uncertain-run recovery. */
     val runStatusRequester: RunStatusRequester,
     val notificationCoordinator: NotificationCoordinator,
     val notificationPermissionStore: NotificationPermissionStore,
     val capabilityStore: RunApprovalCapabilityStore,
     val chatDraftRepository: ChatDraftRepository,
-    /** P5: reads a picked attachment's metadata/bytes through the ContentResolver. */
+    /** Reads a picked attachment's metadata/bytes through the ContentResolver. */
     val chatAttachmentSource: ChatAttachmentSource,
     val selectionStore: ActiveServerSelectionStore,
     val startupResolver: () -> StartupProfile,
 )
 
 /**
- * Process-scoped holder of the single production [AppDependencies] graph
- * (P4 recreation fix).
+ * Process-scoped holder of the single production [AppDependencies] graph.
  *
  * The graph owns the app-level live-run state and its stream (through
  * [RunSessionController]): a chat screen that is re-created by a
@@ -110,7 +109,7 @@ internal data class AppDependencies(
  * Scope of this holder is deliberately the LIVE PROCESS only: it survives an
  * Activity or view-model recreation inside the same process and dies with the
  * process. The graph itself is not persisted; process-death recovery of a
- * confirmed run is limited to the run lease the controller writes (OR-09).
+ * confirmed run is limited to the run lease the controller writes.
  *
  * Injected test stores always bypass the cache: a caller that supplies its own
  * [selectionStore]/[capabilityStore] gets a fresh, isolated graph, exactly as
@@ -159,7 +158,7 @@ internal fun buildAppDependencies(
 ): AppDependencies {
     val credentialStore = AndroidKeystoreCredentialStore(applicationContext)
     val metadataStore = SharedPreferencesServerProfileMetadataStore(applicationContext)
-    // Mission 012: one app-private selection store shared by the
+    // One app-private selection store shared by the
     // repository (select/delete) and the startup resolver. It holds
     // exactly one profile ID — no credential, URL, draft or chat data.
     val resolvedSelectionStore =
@@ -169,18 +168,18 @@ internal fun buildAppDependencies(
     // It contains no credential, URL, draft, chat or approval content.
     val resolvedCapabilityStore =
         capabilityStore ?: SharedPreferencesRunApprovalCapabilityStore(applicationContext)
-    // P3: the "ask at most once" flag for the POST_NOTIFICATIONS permission.
+    // The "ask at most once" flag for the POST_NOTIFICATIONS permission.
     // Only a single boolean is stored; no credential or notification content.
     val notificationPermissionStore =
         SharedPreferencesNotificationPermissionStore(applicationContext)
     // One production ChatDraftRepository instance shared by the chat
-    // screen and the profile repository (Mission 009B): profile
+    // screen and the profile repository: profile
     // deletion clears the drafts through this same instance, so no
     // second, independent store is created.
     val chatDraftRepository = SharedPreferencesChatDraftRepository(
         store = SharedPreferencesChatDraftStore(applicationContext)
     )
-    // Mission 017B: the device-pairing production dependencies.
+    // The device-pairing production dependencies.
     // The device metadata store holds ONLY non-secret metadata; the
     // device key is stored by the saver through the same
     // [credentialStore] (Keystore-wrapped) as the API key. The
@@ -206,7 +205,7 @@ internal fun buildAppDependencies(
         runApprovalCapabilityStore = resolvedCapabilityStore
     )
     val profileAdmin = ServerProfileAdmin(profileRepository)
-    // P3: local notifications. The poster is the single Android adapter;
+    // Local notifications. The poster is the single Android adapter;
     // the coordinator applies the pure policy and the duplicate guard.
     // The server label comes from the profile metadata and is validated
     // (isSafeTitle) before it can reach a notification; the foreground
@@ -223,7 +222,7 @@ internal fun buildAppDependencies(
         },
         fallbackTitle = applicationContext.getString(R.string.notification_fallback_title)
     )
-    // P3: the app-level owner of the single active run: the streaming
+    // The app-level owner of the single active run: the streaming
     // source, the run foreground service and the run notification side
     // effects. Exactly one instance for the whole app: the run must
     // outlive any chat screen.
@@ -239,7 +238,7 @@ internal fun buildAppDependencies(
         notificationCoordinator = notificationCoordinator,
         // Notification titles resolve profile metadata off the main thread.
         ioDispatcher = kotlinx.coroutines.Dispatchers.IO,
-        // OR-09: the confirmed run survives a process death as an UNCERTAIN
+        // The confirmed run survives a process death as an UNCERTAIN
         // lease; a lease of a deleted profile could never be reconciled.
         leaseStore = SharedPreferencesRunLeaseStore(applicationContext),
         isLeaseRestorable = { lease ->
@@ -303,7 +302,7 @@ internal fun buildAppDependencies(
         selectionStore = resolvedSelectionStore,
         capabilityStore = resolvedCapabilityStore,
         startupResolver = {
-            // Mission 012: the startup resolution validates the
+            // The startup resolution validates the
             // persisted active server selection against the metadata
             // AND credential stores; every invalid selection falls
             // back to the existing deterministic resolution.

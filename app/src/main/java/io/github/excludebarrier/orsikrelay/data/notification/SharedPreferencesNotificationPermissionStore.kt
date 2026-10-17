@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 
 /**
- * App-private [SharedPreferences] backing for the "ask at most once" flag (P3).
+ * App-private [SharedPreferences] backing for the "ask at most once" flag.
  * Only a single boolean is stored; no credential, URL or notification content
  * ever touches this store.
  */

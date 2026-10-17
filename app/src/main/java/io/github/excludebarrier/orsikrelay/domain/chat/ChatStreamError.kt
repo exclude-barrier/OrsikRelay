@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.chat
 
 /**
- * Closed set of streaming chat turn failure reasons (Mission 006A).
+ * Closed set of streaming chat turn failure reasons.
  *
  * Every reason is a stable, generic code: none of them carries request
  * URLs, response bodies, server error messages, session IDs, message

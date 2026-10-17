@@ -438,7 +438,7 @@ class StreamingChatRepositoryTest {
     }
 
     // ------------------------------------------------------------------
-    // P4: re-attach across transient stream failures
+    // Re-attach across transient stream failures
     // ------------------------------------------------------------------
 
     @Test
@@ -607,7 +607,7 @@ class StreamingChatRepositoryTest {
 
     @Test
     fun reattachAlwaysTargetsTheSameRunAsTheResumeStateItReplays() {
-        // P4 run-id boundary invariant: the run id of the re-attach
+        // Run-id boundary invariant: the run id of the re-attach
         // request and the run id of the state it resumes are the same
         // confirmed run. The transport additionally rejects a mismatch
         // closed, so a foreign run can never be replayed.
@@ -655,7 +655,7 @@ class StreamingChatRepositoryTest {
 
     @Test
     fun reconnectBackoffClampsToTheLastIntervalAndNeverRetriesAtZero() {
-        // P4 backoff bound: an `attempt` outside the ladder (only
+        // Backoff bound: an `attempt` outside the ladder (only
         // possible when a caller pairs a larger attempt bound with a
         // shorter ladder) clamps to the LAST interval instead of
         // falling back to 0 ms, so no aggressive retry spin exists.
@@ -872,8 +872,8 @@ class StreamingChatRepositoryTest {
 
     @Test
     fun textOnlyTurnCallsTheLegacyOpenTurnExactlyOnce() {
-        // P5 seam: a text-only turn must take the pre-P5 `openTurn` path
-        // exactly once and never the attachment-carrying open.
+        // Open-seam selection: a text-only turn must take the legacy
+        // `openTurn` path exactly once and never the attachment-carrying open.
         val metadata = FakeMetadataStore(mutableListOf(profile()))
         val credentials = FakeCredentialStore(
             mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
@@ -899,7 +899,7 @@ class StreamingChatRepositoryTest {
 
     @Test
     fun imageTurnCallsTheAttachmentOpenExactlyOnceWithTheImageList() {
-        // P5 seam: a turn with an inline image must take the
+        // Open-seam selection: a turn with an inline image must take the
         // attachment-carrying open exactly once with the validated body
         // (trimmed text plus the data URL list) and never the legacy open.
         val metadata = FakeMetadataStore(mutableListOf(profile()))
@@ -934,7 +934,7 @@ class StreamingChatRepositoryTest {
 
     @Test
     fun imageTurnTransientFailureReattachesViaResumeAndNeverRepostsTheAttachment() {
-        // P5 re-attach boundary: the attachment travels only in the initial
+        // Re-attach boundary: the attachment travels only in the initial
         // POST body. A transient failure after the run is confirmed is
         // repaired by a body-less re-attach GET to the same run, so the
         // attachment-carrying open happens exactly once and no second chat
@@ -1138,7 +1138,7 @@ class StreamingChatRepositoryTest {
     }
 
 
-    /** Synthetic P4 re-attach transport: scripted first and resume attempts. */
+    /** Synthetic re-attach transport: scripted first and resume attempts. */
     private class ReattachTransport(
         private val firstAttempt: (ChatStreamListener) -> ChatStreamHandle,
         private val resumeAttempt: (ChatStreamListener, ChatStreamResumeState) -> ChatStreamHandle
@@ -1176,7 +1176,7 @@ class StreamingChatRepositoryTest {
         }
     }
 
-    /** P5 capturing transport: records which open seam the repository used. */
+    /** Capturing transport: records which open seam the repository used. */
     private class AttachmentCapturingTransport : ChatStreamTransport {
         var openTurnCalls = 0
         var openTurnMessage: String? = null
@@ -1217,7 +1217,7 @@ class StreamingChatRepositoryTest {
     }
 
     /**
-     * P5 re-attach boundary: a [ReattachTransport] that additionally records
+     * Re-attach boundary: a [ReattachTransport] that additionally records
      * every attachment-carrying open, so a test can prove the attachment
      * travels only in the initial POST and never in a re-attach.
      */

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.device
 
 /**
- * Closed result of one device pairing attempt (Mission 017A).
+ * Closed result of one device pairing attempt.
  *
  * Wire contract (read-only reference, server contract v1):
  * `POST /v1/devices/pair` answers 201 with EXACTLY the field set

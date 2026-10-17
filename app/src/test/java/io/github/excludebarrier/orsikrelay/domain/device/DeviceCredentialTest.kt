@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Mission 017A: [DeviceCredential] secret hygiene. The raw device key
+ * [DeviceCredential] secret hygiene. The raw device key
  * must never appear in `toString()`, and equality must never expose it.
  */
 class DeviceCredentialTest {

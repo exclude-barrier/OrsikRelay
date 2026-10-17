@@ -219,7 +219,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun resumeRequestCarriesAfterSeqAndStatusFailuresStayClosed() {
-        // P4 re-attach: the GET is addressed by session + run and resumes
+        // Re-attach: the GET is addressed by session + run and resumes
         // exactly after the confirmed sequence; every status failure is
         // closed and never retried inside the transport. A 5xx is the one
         // transient status (the run is still alive server-side) - and a
@@ -276,7 +276,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun cleanMidStreamEofWithoutTerminalFrameIsNetworkNotIncompatible() {
-        // P4 finding: a socket that dies cleanly at a frame boundary
+        // A socket that dies cleanly at a frame boundary
         // without any terminal frame is a transient disconnect, not a
         // protocol violation. The classified reason must be the
         // reconnectable ChatStreamError.Network, never
@@ -308,7 +308,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun resumeWithForeignRunIdFailsClosedWithoutSendingARequest() {
-        // P4 run-id boundary: the confirmed snapshot of a DIFFERENT run
+        // Run-id boundary: the confirmed snapshot of a DIFFERENT run
         // must never be used to build a re-attach request. No request
         // is sent (the MockWebServer has no queued response at all) and
         // the turn fails closed with a definitive reason, so the
@@ -334,8 +334,8 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun textOnlyOpenTurnWithAttachmentsSendsExactLegacyBody() {
-        // P5 wire exactness: a text-only body must stay byte-identical to
-        // the pre-P5 legacy shape - no content-part list, no extra field.
+        // Wire exactness: a text-only body must stay byte-identical to
+        // the legacy shape - no content-part list, no extra field.
         server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
         val listener = RecordingListener()
 
@@ -369,7 +369,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun imageOnlyOpenTurnWithAttachmentsSendsSingleImagePartWithNoLocalPaths() {
-        // P5 wire exactness: an image-only turn is a content-part list with
+        // Wire exactness: an image-only turn is a content-part list with
         // exactly one `image_url` part carrying the inline data URL; no
         // `content://` reference, no `file://` path and no file name ever
         // reach the wire.
@@ -409,7 +409,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun textAndImageOpenTurnWithAttachmentsSendsOrderedTwoPartList() {
-        // P5 wire exactness: with text and an image the body is a
+        // Wire exactness: with text and an image the body is a
         // two-part list - text first, image second - and each appears
         // exactly once.
         server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
@@ -450,7 +450,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun foreignImageDataUrlFailsClosedWithoutSendingARequest() {
-        // P5 wire exactness: a data URL that is not an inline image
+        // Wire exactness: a data URL that is not an inline image
         // (`data:image/...`) must never reach the wire. The defensive
         // re-validation in the transport rejects it before any request is
         // built, so the server never sees the turn at all.
@@ -474,7 +474,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun legacyOpenTurnStillSendsExactLegacyBody() {
-        // P5 regression guard: the pre-P5 string path must keep sending
+        // Regression guard: the string path must keep sending
         // the exact legacy body, unchanged.
         server.enqueue(sseResponse(successfulStreamFrames(SESSION_ID)))
         val listener = RecordingListener()
@@ -494,7 +494,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun productionConnectAndWriteTimeoutsAreFiniteWhileAStreamStaysLongLived() {
-        // P4 wallclock decision: the established SSE stream must stay
+        // Timing decision: the established SSE stream must stay
         // long-lived (no global call timeout), but every connect and
         // write of a broken (re-)attach attempt must be bounded.
         val defaults = HermesSessionStreamClient.newDefaultStreamClient()
@@ -887,7 +887,7 @@ class HermesSessionStreamClientTest {
 
     @Test
     fun burstOfMoreThanChannelBufferEventsLosesNothingAndPreservesOrder() {
-        // Burst/backpressure proof (Mission 006A acceptance): the
+        // Burst/backpressure proof: the
         // repository forwards transport events into the callbackFlow
         // channel (default capacity 64) with `trySendBlocking`. This
         // test drives the real `StreamingChatRepository` + real
@@ -1255,7 +1255,7 @@ class HermesSessionStreamClientTest {
 
     private fun baseUrl(): String = server.url("/").toString().trimEnd('/')
 
-    /** Confirmed re-attach state of an interrupted attempt (P4). */
+    /** Confirmed re-attach state of an interrupted attempt. */
     private fun resumeState(lastSeq: Long): ChatStreamResumeState = ChatStreamResumeState(
         runId = RUN_ID,
         lastSeq = lastSeq,

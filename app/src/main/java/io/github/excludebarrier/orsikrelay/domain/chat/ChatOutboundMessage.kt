@@ -1,13 +1,13 @@
 package io.github.excludebarrier.orsikrelay.domain.chat
 
 /**
- * One outbound chat turn body (P5): the user text plus zero or more inline
+ * One outbound chat turn body: the user text plus zero or more inline
  * image data URLs.
  *
  * Wire shape, derived from the confirmed server contract
  * (`_normalize_multimodal_content` in the Hermes API server):
  * - text-only stays a plain JSON string (`{"message": "<text>"}`) so every
- *   existing text-only turn is byte-identical to before P5;
+ *   existing text-only turn is byte-identical to before attachment support;
  * - with attachments the message becomes a content-part list
  *   `[{"type":"text","text":...},{"type":"image_url","image_url":{"url":"data:image/...;base64,..."}}]`.
  *
@@ -24,7 +24,7 @@ data class ChatOutboundMessage(
         get() = imageDataUrls.isNotEmpty()
 
     companion object {
-        /** P5 v1: at most one attachment per turn (body budget and UI determinism). */
+        /** At most one attachment per turn (body budget and UI determinism). */
         const val MAX_IMAGES = 1
 
         private const val DATA_IMAGE_PREFIX = "data:image/"
@@ -65,7 +65,7 @@ data class ChatOutboundMessage(
             return value.length > comma + 1
         }
 
-        /** Convenience: the text-only body of the pre-P5 path. */
+        /** Convenience: the text-only body used before attachment support. */
         fun textOnly(text: String): ChatOutboundMessage? = create(text, emptyList())
     }
 }

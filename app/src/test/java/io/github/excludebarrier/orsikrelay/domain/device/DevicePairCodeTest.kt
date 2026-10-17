@@ -5,7 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Mission 017A: pure, local normalization/validation of the pairing code.
+ * Pure, local normalization/validation of the pairing code.
  *
  * Contract (read-only reference, server contract v1): 24 characters from
  * the alphabet `A-Z` without `I,L,O,U` plus `1-9`; displayed in 6 groups

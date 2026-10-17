@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Small notification icon (P3): a monochrome bell, tinted by the system.
+<!-- Small notification icon: a monochrome bell, tinted by the system.
      Kept as a simple vector so no binary asset is required. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

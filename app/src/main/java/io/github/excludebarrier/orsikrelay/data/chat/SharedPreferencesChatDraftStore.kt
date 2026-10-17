@@ -6,7 +6,7 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.CancellationException
 
 /**
- * App-private [ChatDraftStore] on top of [SharedPreferences] (Mission 009A).
+ * App-private [ChatDraftStore] on top of [SharedPreferences].
  *
  * This follows the repository's established persistence pattern —
  * [io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore]

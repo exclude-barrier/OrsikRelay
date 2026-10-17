@@ -23,7 +23,7 @@ import org.junit.Test
 
 /**
  * Contract tests for the authenticated `GET /api/sessions/{id}/messages`
- * read (Mission 004B). Fully synthetic; no real server, key or content.
+ * read. Fully synthetic; no real server, key or content.
  */
 class HermesMessageClientTest {
 

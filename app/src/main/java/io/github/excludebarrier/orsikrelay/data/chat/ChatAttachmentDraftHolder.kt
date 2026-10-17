@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft
 
 /**
  * Process-scoped holder for the attachment the user has picked but not sent
- * yet (P5).
+ * yet.
  *
  * Why this exists and why it is in memory only: the picker's `content://`
  * read permission lasts for the life of the process, so an attachment draft

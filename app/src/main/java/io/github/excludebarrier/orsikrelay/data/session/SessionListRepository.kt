@@ -10,7 +10,7 @@ import io.github.excludebarrier.orsikrelay.network.HermesSessionClient
 import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
 
 /**
- * Production [SessionPageSource] (Mission 004A).
+ * Production [SessionPageSource].
  *
  * Loads the profile metadata and the credential separately for the given
  * profile ID and then delegates the single authenticated read to

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Closed result of one run-stop attempt (Mission 007A).
+ * Closed result of one run-stop attempt.
  *
  * Contract derived read-only from the installed server code
  * (`gateway/platforms/api_server_runs.py`, `_handle_stop_run`):

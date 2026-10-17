@@ -1,14 +1,14 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Minimal durable record of a server-confirmed run (OR-09 process-death
+ * Minimal durable record of a server-confirmed run (run-lease process-death
  * recovery).
  *
  * Only the identity needed for an authoritative reconciliation is kept: the
  * owning [profileId]/[sessionId] and the confirmed [runId]. No message text,
  * assistant text, tool data, approval payload or credential is ever part of
  * a lease. After a process death the lease re-establishes the single run
- * slot as UNCERTAIN, so the P6/P7 invariant "never blindly POST a second
+ * slot as UNCERTAIN, so the run-slot invariant "never blindly POST a second
  * turn" survives the process; only the existing explicit reconciliation
  * (`GET /v1/runs/{run_id}`) may release it.
  */

@@ -11,7 +11,7 @@ import org.junit.Test
 
 /**
  * Instrumented contract test for the process-scoped [AppDependenciesHolder]
- * (P4 Activity-recreation fix).
+ * (Activity-recreation fix).
  *
  * The holder is the single production graph producer: it must hand out the
  * SAME graph for the whole live process - that is what lets a re-created chat

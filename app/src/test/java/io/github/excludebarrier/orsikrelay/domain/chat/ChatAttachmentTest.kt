@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * JVM unit tests for the P5 attachment gate: picker-result validation,
+ * JVM unit tests for the attachment gate: picker-result validation,
  * display-name sanitization, outbound turn bodies with inline image data
  * URLs, the optional-text validator, and the process-scoped draft holder.
  *

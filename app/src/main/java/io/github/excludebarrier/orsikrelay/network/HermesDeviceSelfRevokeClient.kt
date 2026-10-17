@@ -23,7 +23,7 @@ import org.json.JSONObject
 
 /**
  * Performs the single authenticated
- * `POST /v1/devices/self/revoke` write (Mission 017A). This class is
+ * `POST /v1/devices/self/revoke` write. This class is
  * the transport only; profile lookup and credential access happen in
  * the repository layer, so the key never reaches this class except as
  * the scoped [SecretValue] argument.

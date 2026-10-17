@@ -1,4 +1,4 @@
-"""Unit tests for the bridge SSE decoder and run buffer/registry (P13 Phase 2)."""
+"""Unit tests for the bridge SSE decoder and run buffer/registry."""
 
 import asyncio
 import json

@@ -1,8 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Fail-closed reader of the per-profile run-approval capability
- * (Mission 014).
+ * Fail-closed reader of the per-profile run-approval capability.
  *
  * The production implementation reads whether the complete versioned mobile
  * approval contract was confirmed for the profile. It always answers `false`

@@ -1,4 +1,4 @@
-"""Configuration-hardening tests for the bridge (OR-20a).
+"""Configuration-hardening tests for the bridge.
 
 ``BRIDGE_UPSTREAM`` decides where the bridge attaches the Hermes master key. A
 misconfigured value is therefore a master-key-exfiltration primitive. These lock

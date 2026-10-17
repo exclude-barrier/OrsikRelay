@@ -3,7 +3,7 @@ package io.github.excludebarrier.orsikrelay.domain.run
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
- * Authenticated raw transport seam for `GET /v1/runs/{run_id}` (P7).
+ * Authenticated raw transport seam for `GET /v1/runs/{run_id}`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesRunStatusClient]. The repository

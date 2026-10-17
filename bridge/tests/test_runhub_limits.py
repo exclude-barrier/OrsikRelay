@@ -1,4 +1,4 @@
-"""Byte and backpressure bounds for sse.py/runhub.py (CFA-69).
+"""Byte and backpressure bounds for sse.py/runhub.py.
 
 The tests pin the contract of the bounded bridge buffers: constant names and
 defaults, error types, the OVERFLOW sentinel and the memory invariants. They run

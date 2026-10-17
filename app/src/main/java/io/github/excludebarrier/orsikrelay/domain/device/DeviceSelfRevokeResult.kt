@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.device
 
 /**
- * Closed result of one device self-revocation attempt (Mission 017A).
+ * Closed result of one device self-revocation attempt.
  *
  * Wire contract (read-only reference, server contract v1):
  * `POST /v1/devices/self/revoke` (Bearer device key, no body) answers

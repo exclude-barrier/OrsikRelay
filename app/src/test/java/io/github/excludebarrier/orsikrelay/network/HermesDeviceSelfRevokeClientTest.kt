@@ -19,7 +19,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Mission 017A: transport contract of the single authenticated
+ * Transport contract of the single authenticated
  * `POST /v1/devices/self/revoke` write. Wire format per server contract
  * v1 (docs/mobile-wire-contract.md §2.4): `Authorization: Bearer <device
  * key>`, no request body (exact empty JSON object, no Content-Type); 200

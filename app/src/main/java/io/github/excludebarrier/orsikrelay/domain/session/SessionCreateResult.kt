@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.session
 
 /**
- * Closed result of one session creation (Mission 005A).
+ * Closed result of one session creation.
  *
  * [Success] carries only the server-generated session ID and the optional
  * sanitized title the user entered. It never contains a URL, credential,

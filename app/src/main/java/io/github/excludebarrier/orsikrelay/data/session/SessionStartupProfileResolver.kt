@@ -7,7 +7,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerSelection
 import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
 
-/** Deterministic outcome of the startup profile lookup (Mission 004A). */
+/** Deterministic outcome of the startup profile lookup. */
 sealed interface StartupProfile {
     /** No profile is persisted: onboarding stays the start screen. */
     data object None : StartupProfile
@@ -18,8 +18,7 @@ sealed interface StartupProfile {
 }
 
 /**
- * Resolves the profile used after an app restart (Mission 004A, extended in
- * Mission 012).
+ * Resolves the profile used after an app restart.
  *
  * A persisted active server selection (validated against metadata AND
  * credential) wins when present. Otherwise the metadata list is consulted
@@ -35,7 +34,7 @@ fun resolveStartupProfile(
     credentialStore: CredentialStore,
     selectionStore: ActiveServerSelectionStore? = null
 ): StartupProfile {
-    // Mission 012: a persisted selection that still validates against the
+    // A persisted selection that still validates against the
     // stored metadata and credential wins over the first stored profile.
     // Every invalid or unreadable selection deterministically falls through
     // to the existing resolution below.
@@ -71,7 +70,7 @@ fun resolveStartupProfile(
 }
 
 /**
- * Validates the persisted active server selection (Mission 012).
+ * Validates the persisted active server selection.
  *
  * A stored ID is [ServerSelection.Valid] only when it is non-blank, still
  * present in the server metadata AND has a credential. A missing, blank,

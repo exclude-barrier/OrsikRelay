@@ -7,7 +7,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunLease
 import io.github.excludebarrier.orsikrelay.domain.run.RunLeaseStore
 
 /**
- * App-private [RunLeaseStore] on top of [SharedPreferences] (OR-09), following
+ * App-private [RunLeaseStore] on top of [SharedPreferences], following
  * the repository's established persistence pattern (see
  * [io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftStore]).
  *

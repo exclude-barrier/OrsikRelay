@@ -3,8 +3,7 @@ package io.github.excludebarrier.orsikrelay.domain.chat
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 
 /**
- * Closed set of lifecycle-safe events of one streaming chat turn
- * (Mission 006A).
+ * Closed set of lifecycle-safe events of one streaming chat turn.
  *
  * Every event carries only closed, UI-safe data: the composed assistant
  * text, the final assistant text, and closed error codes. Server fields
@@ -41,18 +40,18 @@ sealed interface ChatTurnEvent {
 
     /**
      * The run completed successfully. [pendingSteer] carries the server's
-     * `pending_steer` field of `run.completed`, preserved exactly (Mission
-     * 008B): a steer that was queued but not yet applied by the run comes
-     * back here. It is `null` when the field was absent, blank, or not a
-     * string. The UI must only offer to send it as a NEW message — never
-     * automatically — and it is not a steer request itself.
+     * `pending_steer` field of `run.completed`, preserved exactly: a steer
+     * that was queued but not yet applied by the run comes back here. It is
+     * `null` when the field was absent, blank, or not a string. The UI must
+     * only offer to send it as a NEW message — never automatically — and it
+     * is not a steer request itself.
      */
     data class TurnCompleted(val pendingSteer: String? = null) : ChatTurnEvent
 
     /**
      * Closed generic failure. Delivered at most once per turn, and only
      * after the automatic repair is over: a transient [ChatStreamError]
-     * (`Network`/`Timeout`, P4) with a confirmed run is first repaired by
+     * (`Network`/`Timeout`) with a confirmed run is first repaired by
      * the bounded re-attach of [StreamReconnecting]; every other reason -
      * a protocol violation, a credential rejection, a rate limit, a TLS
      * failure or a server-side `error` frame - is definitive and never
@@ -63,7 +62,7 @@ sealed interface ChatTurnEvent {
     /**
      * The stream was interrupted by a transient network failure while
      * the run is still alive server-side; the client is re-attaching to
-     * the same run (P4). Non-terminal: the turn continues, and the flow
+     * the same run. Non-terminal: the turn continues, and the flow
      * still terminates with exactly one [TurnCompleted] or [TurnFailed].
      * The UI may show a transient reconnecting status for it; the run's
      * foreground service and all run bookkeeping stay active.

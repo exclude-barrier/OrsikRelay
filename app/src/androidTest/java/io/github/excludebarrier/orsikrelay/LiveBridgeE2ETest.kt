@@ -14,7 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * P13 real Android end-to-end: the app's own networking clients talk to a live
+ * Real Android end-to-end: the app's own networking clients talk to a live
  * Orsik Mobile Bridge (which fronts the unmodified official Hermes core) over
  * HTTPS, on the emulator.
  *

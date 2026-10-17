@@ -12,7 +12,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * Mission 012: the [ServerProfileRepository] owns the persisted active
+ * The [ServerProfileRepository] owns the persisted active
  * server selection.
  *
  * - [ServerProfileRepository.selectActiveServer] persists the selection only
@@ -196,8 +196,8 @@ class ServerProfileRepositorySelectionTest {
 
     @Test
     fun `a draft cleanup failure preserves the selection but keeps the deletion successful`() {
-        // Mission 009B contract: the deletion must stay successful even when
-        // the cleaner misbehaves. Mission 012 adds: the selection of the
+        // Deletion contract: the deletion must stay successful even when
+        // the cleaner misbehaves. In addition, the selection of the
         // deleted profile is preserved, because the verified cleanup did not
         // complete — the next startup deterministically falls back to the
         // safe startup resolution.

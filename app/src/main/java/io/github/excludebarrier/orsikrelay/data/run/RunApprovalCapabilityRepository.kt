@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Production [RunApprovalCapabilitySource] (Mission 014).
+ * Production [RunApprovalCapabilitySource].
  *
  * Reads the persisted, onboarding-confirmed capability for the given profile
  * from [RunApprovalCapabilityStore]. Every failure path is fail-closed:

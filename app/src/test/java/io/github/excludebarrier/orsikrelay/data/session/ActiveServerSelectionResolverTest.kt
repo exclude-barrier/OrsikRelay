@@ -10,7 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Mission 012: the persisted active server selection is validated against
+ * The persisted active server selection is validated against
  * the existing metadata and credential stores. A missing, deleted or
  * inconsistent selection deterministically yields [ServerSelection.Invalid]
  * so the caller falls back to the existing safe startup state; no ID or

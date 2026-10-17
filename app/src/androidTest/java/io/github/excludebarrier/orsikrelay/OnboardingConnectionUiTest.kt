@@ -41,9 +41,9 @@ class OnboardingConnectionUiTest {
     // `createComposeRule()` effect context (UnconfinedTestDispatcher) that
     // continuation - and the recomposition it triggers - resumes on the IO
     // worker, so the composition can be applied/disposed off the main thread.
-    // This class is the recorded P9 site of the rare
+    // This class is the recorded site of the rare
     // `androidx.compose.runtime.SlotTable` disposal crash (a matching crash was
-    // reproduced under P10 in `ChatMarkdownUiTest`). A confined
+    // reproduced in `ChatMarkdownUiTest`). A confined
     // StandardTestDispatcher queues the continuation on the test scheduler,
     // which is pumped on the main thread by `waitForIdle`/`waitUntil`.
     @get:Rule
@@ -166,7 +166,7 @@ class OnboardingConnectionUiTest {
     }
 
     private fun submitValidForm() {
-        // Mission 017B: onboarding now defaults to the pairing mode; these
+        // Onboarding now defaults to the pairing mode; these
         // API-key tests switch back to the unchanged API-Key mode first.
         composeRule.onNodeWithTag("onboardingModeApiKey").performClick()
         composeRule.onNodeWithTag("onboardingProfileName")

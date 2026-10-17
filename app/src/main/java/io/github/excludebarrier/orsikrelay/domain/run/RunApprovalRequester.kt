@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Small UI seam for resolving a pending run approval (Mission 014).
+ * Small UI seam for resolving a pending run approval.
  *
  * The UI depends only on this interface and the domain types. The
  * production implementation is the repository in the `data` package,

@@ -9,7 +9,7 @@ import io.github.excludebarrier.orsikrelay.network.HermesMessageClient
 import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
 
 /**
- * Production [MessageHistorySource] (Mission 004B).
+ * Production [MessageHistorySource].
  *
  * Loads the profile metadata and the credential separately for the given
  * profile ID and then delegates the single authenticated read to

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.data.device
 
 /**
- * Non-secret, persisted metadata of a paired device (Mission 017A).
+ * Non-secret, persisted metadata of a paired device.
  *
  * This is the metadata half of the device credential: everything the
  * 201 `POST /v1/devices/pair` answer carries EXCEPT the raw device key.

@@ -3,7 +3,7 @@ package io.github.excludebarrier.orsikrelay.platform.notification
 import io.github.excludebarrier.orsikrelay.domain.notification.AppForegroundState
 
 /**
- * Production [AppForegroundState] for the single-activity app (P3). It tracks
+ * Production [AppForegroundState] for the single-activity app. It tracks
  * the started-activity count: >0 means the app is in the foreground (visible),
  * 0 means it is in the background (home button / app switch) but the process
  * is still alive.

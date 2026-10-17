@@ -27,7 +27,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Compose tests for the new-session dialog (Mission 005A).
+ * Compose tests for the new-session dialog.
  *
  * All values are synthetic fixtures; the creator seam is a fake, so no
  * network, no real hosts and no credentials are involved.

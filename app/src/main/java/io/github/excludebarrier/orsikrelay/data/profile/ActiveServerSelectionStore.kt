@@ -1,8 +1,7 @@
 package io.github.excludebarrier.orsikrelay.data.profile
 
 /**
- * Synchronous, app-private storage seam for the active server selection
- * (Mission 012).
+ * Synchronous, app-private storage seam for the active server selection.
  *
  * The selection is private local metadata: exactly ONE non-secret profile
  * ID. It never stores an API key, a URL, a draft or any chat/session data.

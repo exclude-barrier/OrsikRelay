@@ -18,7 +18,7 @@ namespace the shipped client already speaks), so the client is a drop-in:
 Pairing codes are issued ONLY by the local operator CLI
 (``orsik-mobile-bridge admin pairing-code``); there is no HTTP admin surface.
 
-Security hardening (P12.1 + P13): approval choices are narrowed to once/deny
+Security hardening: approval choices are narrowed to once/deny
 locally, upstream redirects are never followed (no master-key hop), the query
 surface is allowlisted, the device store is persistent and fails closed, and
 pairing is rate-limited with true store caps.
@@ -58,7 +58,7 @@ from . import store as store_mod
 from .sse import MAX_FRAME_BYTES, Frame, SSEDecoder, SSEFrameTooLarge, normalize_approval, redact_echo
 
 logger = logging.getLogger("orsik_mobile_bridge")
-# OR-14: one line per state-changing call, attributable to a device. Only
+# One line per state-changing call, attributable to a device. Only
 # validated, non-secret values (device_id, run/session ids, the choice) are
 # logged; never a token, the master key or message content.
 audit_logger = logging.getLogger("orsik_mobile_bridge.audit")
@@ -566,7 +566,7 @@ async def _write_abort_comment(
 async def _indeterminate_run(state: BridgeState, run_id: str) -> web.Response:
     """No buffer: consult the authoritative upstream status, never fabricate.
 
-    Fail-closed mapping (P13.1):
+    Fail-closed mapping:
       * 200                  -> 409 ``resume_gap`` (run known, transport gone: the
                                 state is indeterminate and non-terminal)
       * 404                  -> 404 ``run_not_found`` (confirmed absent upstream)
@@ -575,8 +575,8 @@ async def _indeterminate_run(state: BridgeState, run_id: str) -> web.Response:
       * timeout/network/etc. -> 502 ``run_state_indeterminate`` (never a false 404)
 
     Only a *confirmed* upstream 404 is reported as "not found"; every other
-    outcome is a distinct, non-terminal error so the client keeps run ownership
-    (P6/P7). No run completion is invented and no chat POST is repeated.
+    outcome is a distinct, non-terminal error so the client keeps run ownership.
+    No run completion is invented and no chat POST is repeated.
     """
     try:
         async with ClientSession(timeout=_INDETERMINATE_TIMEOUT) as session:
@@ -632,7 +632,7 @@ async def _proxy(
 ) -> web.StreamResponse:
     """Forward one request upstream and relay the response.
 
-    ``on_status`` (the OR-14 audit hook) is called with the final status before
+    ``on_status`` (the audit hook) is called with the final status before
     any byte is sent downstream, so the record exists before the client is done.
     """
     def closed(status: int, code: str) -> web.Response:

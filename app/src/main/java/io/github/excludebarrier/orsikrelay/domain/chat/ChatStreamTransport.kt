@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
  * Authenticated raw transport seam for
- * `POST /api/sessions/{session_id}/chat/stream` (Mission 006A).
+ * `POST /api/sessions/{session_id}/chat/stream`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesSessionStreamClient]. The
@@ -33,7 +33,7 @@ interface ChatStreamTransport {
     ): ChatStreamHandle
 
     /**
-     * Opens one turn whose body may carry inline image attachments (P5).
+     * Opens one turn whose body may carry inline image attachments.
      *
      * The wire shape is the confirmed server contract: text-only stays the
      * plain `message` string, with images it becomes a
@@ -63,7 +63,7 @@ interface ChatStreamTransport {
     )
 
     /**
-     * Re-attaches to an already-started run of [sessionId] (P4):
+     * Re-attaches to an already-started run of [sessionId]:
      * `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`,
      * where `N` is [resume].[ChatStreamResumeState.lastSeq]. The server
      * replays the buffered events with `seq > N`, then follows the run
@@ -135,7 +135,7 @@ interface ChatStreamHandle {
     fun close()
 
     /**
-     * UI-safe snapshot of the stream's confirmed sequence state (P4),
+     * UI-safe snapshot of the stream's confirmed sequence state,
      * or `null` while no run is confirmed yet or the transport does
      * not track one. Read only after the stream has finished (the
      * terminal event has been delivered).

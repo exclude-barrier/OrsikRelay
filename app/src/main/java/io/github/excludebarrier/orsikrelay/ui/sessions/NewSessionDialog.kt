@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Dialog for creating a new empty Hermes session (Mission 005A).
+ * Dialog for creating a new empty Hermes session.
  *
  * - The title is optional; the raw text is passed to [creator], the
  *   repository sanitizes it (trim, control characters, length limit).

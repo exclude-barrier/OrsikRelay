@@ -149,7 +149,7 @@ def main() -> int:
             "choices": ["once", "deny"], "response_endpoint": "run_approval"},
     )
 
-    # P12.1 hardening probes: escalation refused locally, once reaches the core,
+    # Hardening probes: escalation refused locally, once reaches the core,
     # unknown query keys refused.
     status, _ = request(
         "POST", "/v1/runs/run_p12_1_probe/approval",
@@ -194,7 +194,7 @@ def main() -> int:
     if run_id:
         status, _ = request("GET", f"/v1/runs/{run_id}", token=device_key)
         check("run_status_200", status == 200)
-        # P13: re-attach the session run on the same run_id with exclusive replay.
+        # Re-attach the session run on the same run_id with exclusive replay.
         status, stream_body = request(
             "GET", f"/api/sessions/{sid}/runs/{run_id}/stream?after_seq=1", token=device_key,
             accept="text/event-stream",
@@ -202,7 +202,7 @@ def main() -> int:
         check("reattach_same_run_200", status == 200, str(status))
         check("reattach_replays_events", "data:" in stream_body or "event:" in stream_body)
 
-    # P13: an unknown run on reconnect is a clean 404 (no fabricated events).
+    # An unknown run on reconnect is a clean 404 (no fabricated events).
     status, _ = request(
         "GET", f"/api/sessions/{sid}/runs/run_p13_unknown/stream?after_seq=0", token=device_key
     )

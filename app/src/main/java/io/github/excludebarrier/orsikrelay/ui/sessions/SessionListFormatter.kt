@@ -7,8 +7,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Pure, locale-based formatting helpers for the session list
- * (Mission 004A). No I/O, no network.
+ * Pure, locale-based formatting helpers for the session list.
+ * No I/O, no network.
  */
 object SessionListFormatter {
 

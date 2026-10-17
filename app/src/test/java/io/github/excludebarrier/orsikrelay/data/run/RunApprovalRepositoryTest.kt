@@ -17,7 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Mission 014: repository contract of the approval decision. The profile
+ * Repository contract of the approval decision. The profile
  * metadata and the credential must be loaded SEPARATELY by profile ID, the
  * single authenticated POST must be delegated with the exact arguments,
  * and every failure must stay closed (no profile data, URL, key, run ID,

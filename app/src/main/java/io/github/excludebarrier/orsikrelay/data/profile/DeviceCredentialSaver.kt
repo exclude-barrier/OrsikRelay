@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.device.DeviceCredential
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 
 /**
- * Neutral seam (Mission 017A) that lets the profile layer persist a
+ * Neutral seam that lets the profile layer persist a
  * paired-device credential WITHOUT breaking the existing API-key path.
  *
  * The device key is stored through the same

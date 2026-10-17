@@ -1,9 +1,9 @@
 """Persistent, fail-closed device/pairing store for the Orsik Mobile Bridge.
 
-Replaces the volatile in-memory stores from the P12.1 PoC so a paired device
+Replaces the volatile in-memory stores from the PoC so a paired device
 survives a bridge restart and a revoke stays in effect across restarts.
 
-Design constraints (P13):
+Design constraints:
 
 * Pairing codes and device tokens are stored **only as SHA-256 hashes** — the
   plaintext code/token is returned once and never persisted or logged.

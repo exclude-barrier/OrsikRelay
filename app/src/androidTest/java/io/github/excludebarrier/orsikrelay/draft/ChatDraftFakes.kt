@@ -8,7 +8,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * In-memory [ChatDraftRepository] for Compose tests (Mission 009A).
+ * In-memory [ChatDraftRepository] for Compose tests.
  *
  * Writes synchronously (no debounce) so assertions are deterministic. Only
  * the ORDINARY draft is modelled; it can never hold run/stop/steer input,
@@ -41,7 +41,7 @@ class InMemoryChatDraftRepository : ChatDraftRepository {
 
     override fun clearProfile(profileId: String) {
         // Removes every draft of [profileId] (all sessions), exactly like the
-        // production repository after a profile deletion (Mission 009B).
+        // production repository after a profile deletion.
         val prefix = encodeKeyComponent(profileId) + "."
         map.keys.filterTo(mutableListOf()) { it.startsWith(prefix) }
             .forEach { map.remove(it) }
@@ -63,7 +63,7 @@ class InMemoryChatDraftRepository : ChatDraftRepository {
 
 /**
  * A [ChatDraftRepository] whose [loadDraft] suspends on a per-key
- * [CompletableDeferred] (Mission 009A). A test holds the deferred open so a
+ * [CompletableDeferred]. A test holds the deferred open so a
  * load for an OLD key stays in flight across a profile/session switch, then
  * releases it to prove the stale result can never overwrite the new screen's
  * composer. Because the suspension is a real cancellable suspension point,
@@ -130,7 +130,7 @@ class ControllableDraftRepository : ChatDraftRepository {
 }
 
 /**
- * No-op [ChatDraftRepository] (Mission 009A) used by pre-existing
+ * No-op [ChatDraftRepository] used by pre-existing
  * ChatScreen tests that exercise the history/turn/stop/steer slices and do
  * not concern themselves with draft persistence. It keeps the composer
  * usable and persists nothing.

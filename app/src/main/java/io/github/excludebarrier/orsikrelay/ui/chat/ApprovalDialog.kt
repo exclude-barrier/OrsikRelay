@@ -34,7 +34,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
- * The safe run-approval decision dialog (Mission 014).
+ * The safe run-approval decision dialog.
  *
  * This composable is the ONLY approval UI in the app. It renders exactly
  * the harmless, evidenced [ApprovalRequest] fields and nothing else —
@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
  * tool output, environment output or exception detail. The only descriptive
  * text in the model is the exact protocol-defined neutral sentence.
  *
- * Safety rules (Mission 014):
+ * Safety rules:
  * - "Ablehnen" is the first, filled (primary) button: it is the safe
  *   default. "Erlauben" is the second, secondary button and is the only
  *   way to consciously approve; it is never the default and is never
@@ -134,7 +134,7 @@ fun ApprovalDialog(
 
     val buttonsEnabled = !inFlight && outcome == null
 
-    // Mission 014 (hard gate): the content-lambda `AlertDialog` overload is
+    // The content-lambda `AlertDialog` overload is
     // @Deprecated in material3 1.3.2 ("Use BasicAlertDialog instead", proven
     // from the local AAR bytecode). `BasicAlertDialog` is the non-deprecated
     // equivalent with the same ColumnScope content contract and no buttons

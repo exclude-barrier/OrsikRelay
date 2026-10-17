@@ -6,7 +6,7 @@ import org.junit.Test
 import org.junit.Assert.fail
 
 /**
- * Mission 012: contract of the synchronous [ActiveServerSelectionStore]
+ * Contract of the synchronous [ActiveServerSelectionStore]
  * seam. The selection is private local metadata: exactly one profile ID,
  * never an API key, URL, draft or chat data.
  */

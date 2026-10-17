@@ -20,7 +20,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Mission 017A: transport contract of the single UNAUTHENTICATED
+ * Transport contract of the single UNAUTHENTICATED
  * `POST /v1/devices/pair` write. Wire format per server contract v1
  * (docs/mobile-wire-contract.md §2.3): exact body `{"code":"<code>"}` with
  * `Content-Type: application/json` and NO Authorization header; 201 with

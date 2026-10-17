@@ -5,8 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * App-private [RunApprovalCapabilityStore] on top of [SharedPreferences]
- * (Mission 014).
+ * App-private [RunApprovalCapabilityStore] on top of [SharedPreferences].
  *
  * Stores exactly one plain boolean per profile: whether the complete
  * `session_chat_interactive_approvals` protocol-v1 contract was validated.

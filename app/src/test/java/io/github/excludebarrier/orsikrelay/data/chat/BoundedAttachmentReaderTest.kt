@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P5.1: covers the real bounded-read path used by
+ * Covers the real bounded-read path used by
  * [io.github.excludebarrier.orsikrelay.platform.attachment.AndroidChatAttachmentSource].
  *
  * The reader is pure Kotlin on purpose, so the production code is tested here
@@ -208,7 +208,7 @@ class BoundedAttachmentReaderTest {
 }
 
 /**
- * P5.1: the fail-closed default of the closed read outcome. Every source that
+ * The fail-closed default of the closed read outcome. Every source that
  * does not override `readInlineDataUrlResult` (including
  * [io.github.excludebarrier.orsikrelay.data.chat.NoopChatAttachmentSource]) must map a
  * successful URL to `DataUrl` and every `null` to `Unreadable`.
@@ -248,7 +248,7 @@ class ChatAttachmentSourceDefaultResultTest {
 }
 
 /**
- * P5.1: the inline data URL the wire contract requires, for every MIME type the
+ * The inline data URL the wire contract requires, for every MIME type the
  * picker gate accepts.
  */
 class AttachmentDataUrlTest {

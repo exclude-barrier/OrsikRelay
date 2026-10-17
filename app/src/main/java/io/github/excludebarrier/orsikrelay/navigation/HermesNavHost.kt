@@ -67,12 +67,12 @@ fun HermesNavHost(
     // Product Gate: pairing deep-link bootstrap (server URL + code) pre-filled
     // into the onboarding route. Null when no deep link was received.
     pairingBootstrap: PairingBootstrap? = null,
-    // P3: a validated notification tap (profileId, sessionId) to open
+    // A validated notification tap (profileId, sessionId) to open
     // directly. Consumed exactly once; null when no tap is pending.
     notificationBootstrap: Pair<String, String>? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
-    // P4 recreation fix: the graph (and with it the app-level live-run
+    // The graph (and with it the app-level live-run
     // state) is process-scoped, so an Activity/configuration recreation
     // re-attaches to the still-running turn instead of building a second,
     // empty graph. Test-injected stores still get a fresh graph.
@@ -85,7 +85,7 @@ fun HermesNavHost(
     var activeProfileId by remember { mutableStateOf<String?>(null) }
     var pendingCreatedSessionId by remember { mutableStateOf<String?>(null) }
 
-    // Safe return after a profile deletion (Mission 010): the Profiles
+    // Safe return after a profile deletion: the Profiles
     // destination is only reachable from Sessions, so popping everything
     // from the first Sessions entry upward (inclusive) removes the
     // Profiles entry AND every chat entry; the single new Sessions entry
@@ -109,7 +109,7 @@ fun HermesNavHost(
         }
     }
 
-    // Safe switch of the active server (Mission 011). Reuses exactly the
+    // Safe switch of the active server. Reuses exactly the
     // [profileDeleted] pattern, but sets [activeProfileId] to the chosen
     // server instead of clearing it. Popping from the first Sessions entry
     // upward (inclusive) removes the Profiles entry AND every existing Chat
@@ -167,7 +167,7 @@ fun HermesNavHost(
         pendingCreatedSessionId = null
     }
 
-    // P3: a validated notification tap (profileId, sessionId) is consumed
+    // A validated notification tap (profileId, sessionId) is consumed
     // exactly once. `pendingNotificationTap` mirrors the latest tap from the
     // activity (cold start via onCreate, warm start via onNewIntent) so the
     // consuming effect below can clear it after navigating.
@@ -175,7 +175,7 @@ fun HermesNavHost(
     LaunchedEffect(notificationBootstrap) {
         if (notificationBootstrap != null) pendingNotificationTap = notificationBootstrap
     }
-    // P3: open the chat targeted by a validated notification tap. The effect
+    // Open the chat targeted by a validated notification tap. The effect
     // waits until the navigation host is composed (resolvedStart non-null) and
     // then switches the active profile to the tap's server (so the chat
     // authenticates under the right server) and navigates to exactly that
@@ -212,7 +212,7 @@ fun HermesNavHost(
                         ?: productionDependencies.value.coordinator
                     coordinator.connect(draft)
                 },
-                // Mission 017B: the pairing path (recommended default in the
+                // The pairing path (recommended default in the
                 // UI). Unauthenticated pair POST, authenticated probe with
                 // strict device-credential capability check, persistence only
                 // after verification, exactly one best-effort self-revoke on
@@ -221,13 +221,13 @@ fun HermesNavHost(
                     productionDependencies.value.pairingCoordinator
                         .connect(profileName, baseUrl, pairingCode)
                 },
-                // Mission 012: a freshly verified server becomes the ACTIVE
+                // A freshly verified server becomes the ACTIVE
                 // server. The selection is persisted FIRST (metadata-only
                 // write). The navigation to the verified server keeps the
                 // existing, verified behavior — the user must never be stuck
                 // on Onboarding after a successful connection — but a failed
                 // selection persist is never applied optimistically: the
-                // in-memory switch is the Mission 011 pattern and the
+                // in-memory switch is the existing active-server switch pattern and the
                 // selection itself stays as it was on disk; the next
                 // startup deterministically falls back to the existing
                 // resolution. No error details are surfaced.
@@ -244,7 +244,7 @@ fun HermesNavHost(
                         } catch (_: Exception) {
                             // Selection persist failed: see the comment above.
                         }
-                        // Mission 014: persist the onboarding-confirmed
+                        // Persist the onboarding-confirmed
                         // approval capability for the verified profile
                         // (metadata only, no credential). Best-effort and
                         // independent of the selection persist above: a
@@ -312,7 +312,7 @@ fun HermesNavHost(
                 onServerSelected = { profileId ->
                     navHostCoroutineScope.launch { serverSelected(profileId) }
                 },
-                // Mission 017B: a confirmed, server-acknowledged disconnect
+                // A confirmed, server-acknowledged disconnect
                 // removes the local profile connection; the navigation is
                 // exactly the verified profile-deletion path, so no chat or
                 // session can keep living under the disconnected profile.

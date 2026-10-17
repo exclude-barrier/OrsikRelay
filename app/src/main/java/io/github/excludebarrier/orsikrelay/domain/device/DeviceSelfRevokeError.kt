@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.device
 
 /**
- * Closed set of device self-revocation failure reasons (Mission 017A).
+ * Closed set of device self-revocation failure reasons.
  *
  * Every reason is a stable, generic code: none of them carries the
  * device key, response bodies, URLs or exception text.

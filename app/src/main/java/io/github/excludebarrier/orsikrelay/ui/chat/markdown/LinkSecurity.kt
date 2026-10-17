@@ -7,7 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.UriHandler
 
 /**
- * Fail-closed scheme allowlist that gates markdown link navigation (P2).
+ * Fail-closed scheme allowlist that gates markdown link navigation.
  *
  * Only absolute HTTPS URLs are opened. Every other scheme is rejected:
  * `javascript:`, `file://`, `intent://`, `data:`, unknown custom schemes,

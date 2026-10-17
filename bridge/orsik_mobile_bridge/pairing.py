@@ -1,4 +1,4 @@
-"""Operator-facing pairing bootstrap helpers (P13 Phase 5/6).
+"""Operator-facing pairing bootstrap helpers.
 
 * Build the client deep link ``orsik://pair?server=<url>&code=<code>`` the
   operator hands to the phone (QR or paste).

@@ -34,7 +34,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * OR-06 (UI half): a REAL positive approval through the real chat UI.
+ * A REAL positive approval through the real chat UI.
  *
  * Drives the real [MainActivity] and production graph against the live bridge
  * in front of the official core with a model provider and `approvals.mode:
@@ -81,7 +81,7 @@ class LiveBridgeApprovalE2ETest {
         assertTrue("expected DevicePairingOutcome.Success, got $outcome", outcome is DevicePairingOutcome.Success)
         val success = outcome as DevicePairingOutcome.Success
         pairedProfileId = success.profileId
-        // The approval UI is gated on the negotiated capability (Mission 014).
+        // The approval UI is gated on the negotiated capability.
         assertTrue(
             "the live bridge must negotiate interactive approvals",
             success.sessionChatInteractiveApprovals

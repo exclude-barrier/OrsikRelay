@@ -24,7 +24,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Mission 012 follow-up: the persisted active server selection must survive a
+ * The persisted active server selection must survive a
  * REAL Android activity recreation.
  *
  * This test drives the REAL production [MainActivity] (not a

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Closed set of run-steer failure reasons (Mission 008A).
+ * Closed set of run-steer failure reasons.
  *
  * Every reason is a stable, generic code: none of them carries request
  * URLs, response bodies, exception text, profile data, run IDs, steer

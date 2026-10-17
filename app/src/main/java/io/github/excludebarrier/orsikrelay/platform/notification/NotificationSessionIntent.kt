@@ -5,7 +5,7 @@ import android.content.Intent
 import io.github.excludebarrier.orsikrelay.MainActivity
 
 /**
- * The closed intent contract for a notification tap (P3). It is the single
+ * The closed intent contract for a notification tap. It is the single
  * place that builds the PendingIntent and that parses/validates the intent on
  * receipt, so the notification side and the activity side can never drift.
  *

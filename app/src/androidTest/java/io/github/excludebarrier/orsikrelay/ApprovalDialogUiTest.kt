@@ -32,7 +32,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Compose tests for the run-approval decision dialog (Mission 014).
+ * Compose tests for the run-approval decision dialog.
  *
  * All values are synthetic fixtures; the requester seam is a fake, so no
  * network, no real hosts, no credentials and no real Hermes approvals are

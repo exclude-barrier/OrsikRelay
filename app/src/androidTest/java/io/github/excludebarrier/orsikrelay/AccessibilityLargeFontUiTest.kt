@@ -53,7 +53,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * OR-16a: accessibility of the core screens at a large font scale.
+ * Accessibility of the core screens at a large font scale.
  *
  * The three core screens (onboarding pairing form, session list, chat) are
  * rendered with the production composables, the production test tags and the

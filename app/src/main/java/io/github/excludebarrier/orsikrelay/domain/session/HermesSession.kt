@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.session
 
 /**
- * One session entry from `GET /api/sessions` (Mission 004A).
+ * One session entry from `GET /api/sessions`.
  *
  * Only non-sensitive list metadata is kept: no preview text, message
  * content, tool data, system prompts or model configuration.

@@ -6,7 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
- * Deterministic JVM coverage (P3) of the adapter's fail-closed no-op path:
+ * Deterministic JVM coverage of the adapter's fail-closed no-op path:
  * when the enabled gate reports false (the Android 13+
  * `POST_NOTIFICATIONS` runtime permission denied, or the app-level
  * notification switch off), a post must neither resolve the context nor touch

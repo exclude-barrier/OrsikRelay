@@ -21,7 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Mission 012: the selection lifecycle against the REAL stores — real
+ * The selection lifecycle against the REAL stores — real
  * [SharedPreferencesServerProfileMetadataStore], real
  * [AndroidKeystoreCredentialStore] and real
  * [SharedPreferencesActiveServerSelectionStore] (connected).
@@ -113,7 +113,7 @@ class ActiveServerSelectionRepositoryConnectedTest {
         val repository = repository(draftClearer = failingClearer)
         repository.selectActiveServer(ALPHA_ID)
 
-        // The deletion itself still succeeds (Mission 009B contract)...
+        // The deletion itself still succeeds...
         repository.delete(ALPHA_ID)
         assertNull(metadataStore.get(ALPHA_ID))
         // ...but the selection of the deleted profile is preserved.

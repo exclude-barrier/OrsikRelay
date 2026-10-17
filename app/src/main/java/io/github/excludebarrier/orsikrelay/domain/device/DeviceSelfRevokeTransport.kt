@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
  * Authenticated raw transport seam for
- * `POST /v1/devices/self/revoke` (Mission 017A).
+ * `POST /v1/devices/self/revoke`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesDeviceSelfRevokeClient]. The

@@ -18,7 +18,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Mission 017B: the authenticated capability probe must negotiate the
+ * The authenticated capability probe must negotiate the
  * EXACT `device_credentials` contract of the authoritative server
  * contract:
  *

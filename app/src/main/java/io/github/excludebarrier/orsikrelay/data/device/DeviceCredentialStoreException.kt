@@ -2,7 +2,7 @@ package io.github.excludebarrier.orsikrelay.data.device
 
 /**
  * Closed, generic failure of a device-credential metadata store
- * operation (Mission 017A).
+ * operation.
  *
  * Mirrors the established store failure pattern
  * ([io.github.excludebarrier.orsikrelay.data.profile.ProfileMetadataStoreException],

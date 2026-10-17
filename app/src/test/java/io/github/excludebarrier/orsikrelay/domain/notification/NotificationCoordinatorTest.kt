@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Decision-layer coverage for the notification coordinator (P3): the
+ * Decision-layer coverage for the notification coordinator: the
  * foreground/background policy, the duplicate guard, the safe-title fallback,
  * and the guarantee that no secret ever reaches a notification. A recording
  * poster stands in for the Android adapter, so no Android API is touched.

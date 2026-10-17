@@ -1,8 +1,7 @@
 package io.github.excludebarrier.orsikrelay.data.profile
 
 /**
- * Closed, fixed failure surface for the run-approval capability store
- * (Mission 014).
+ * Closed, fixed failure surface for the run-approval capability store.
  *
  * Mirrors [ActiveServerSelectionStoreException]: every store failure maps
  * to this one generic message. It never carries a profile ID, a URL or any

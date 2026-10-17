@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 
 /**
  * Instrumentation tests for the app-private [SharedPreferencesChatDraftStore]
- * (Mission 009A, profile cleanup 009B) against the real production
+ * (including profile cleanup) against the real production
  * persistence implementation (SharedPreferences). Covers exact round-trip,
  * replacement, empty-delete, composite-key collision resistance, the closed
  * failure surface (no input echo) and [SharedPreferencesChatDraftStore.clearProfile]:
@@ -133,7 +133,7 @@ class SharedPreferencesChatDraftStoreTest {
         assertClosed(error, listOf(PROFILE, SESSION, "seed-value"))
     }
 
-    // -- profile cleanup (Mission 009B) --------------------------------------
+    // -- profile cleanup -----------------------------------------------------
 
     @Test
     fun clearProfileRemovesEverySessionDraftOfExactlyThatProfile() {

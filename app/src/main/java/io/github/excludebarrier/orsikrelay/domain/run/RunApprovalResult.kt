@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Closed result of one approval decision (Mission 014).
+ * Closed result of one approval decision.
  *
  * Contract derived read-only from the installed server code
  * (`gateway/platforms/api_server_runs.py`, `_handle_run_approval`):

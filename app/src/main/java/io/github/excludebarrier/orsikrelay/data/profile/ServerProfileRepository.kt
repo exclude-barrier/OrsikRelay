@@ -15,7 +15,7 @@ import java.util.UUID
  * connection coordinator calls it only after health and capability checks
  * have succeeded.
  *
- * [delete] (Mission 009B) removes the profile's ordinary chat-composer
+ * [delete] removes the profile's ordinary chat-composer
  * drafts only after credential deletion and metadata deletion have both
  * succeeded. If either earlier step fails, the drafts are preserved and the
  * existing fixed, input-free [ServerProfileRepositoryException] boundary
@@ -23,7 +23,7 @@ import java.util.UUID
  * repository plugs into without the profile repository depending on the UI
  * layer.
  *
- * (Mission 012) [selectActiveServer] persists the active server selection
+ * [selectActiveServer] persists the active server selection
  * only for a profile whose metadata AND credential both exist, and [delete]
  * clears the persisted selection of the deleted profile only after
  * credential deletion, metadata deletion and the draft cleanup have all
@@ -124,7 +124,7 @@ class ServerProfileRepository(
     }
 
     /**
-     * Non-secret credential-kind probe (Mission 017B).
+     * Non-secret credential-kind probe.
      *
      * Returns true iff the profile exists AND a non-secret device
      * metadata record exists for it. It NEVER reads the credential:
@@ -150,7 +150,7 @@ class ServerProfileRepository(
             // Best-effort cleanup of non-secret metadata after profile deletion.
         }
         try {
-            // Mission 014 follow-up: the per-profile approval capability is
+            // The per-profile approval capability is
             // non-secret metadata; without this it would leak one key per
             // deleted profile forever. Best-effort like the device metadata.
             runApprovalCapabilityStore?.clear(profileId)
@@ -167,17 +167,17 @@ class ServerProfileRepository(
                 profileDraftClearer!!.clearProfile(profileId)
                 false
             } catch (_: Exception) {
-                // Best-effort cleanup (Mission 009B contract): the profile is
+                // Best-effort cleanup (profile-deletion contract): the profile is
                 // already deleted, so a cleanup problem must not turn the
                 // deletion into a failure or expose an underlying exception.
-                // A failed cleanup counts as a Vorfehler: the selection of
-                // the deleted profile is NOT removed below (see Mission 012),
+                // A failed cleanup counts as a prior failure: the selection of
+                // the deleted profile is NOT removed below (see above),
                 // so the next startup deterministically falls back to the
                 // safe startup resolution instead of a stale pointer.
                 true
             }
         }
-        // Mission 012: the persisted selection of the DELETED profile is
+        // The persisted selection of the DELETED profile is
         // removed only after credential, metadata AND draft cleanup have all
         // succeeded. Deleting a profile that is not the selected one leaves
         // the selection untouched; the startup validation covers every other
@@ -196,7 +196,7 @@ class ServerProfileRepository(
     }
 
     /**
-     * Persists [profileId] as the active server selection (Mission 012).
+     * Persists [profileId] as the active server selection.
      *
      * The selection is private local metadata: exactly the profile ID. It is
      * persisted only when the profile exists (metadata) AND has a
@@ -218,7 +218,7 @@ class ServerProfileRepository(
 
     /**
      * Persists a paired-device credential for an existing profile
-     * (Mission 017A) through the optional [deviceCredentialSaver].
+     * through the optional [deviceCredentialSaver].
      *
      * The saver stores the device key through the same credential store
      * as the API key (the device key REPLACES the profile credential

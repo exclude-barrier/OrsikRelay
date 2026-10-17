@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * UI seam for reading the server-side status of a run (P7).
+ * UI seam for reading the server-side status of a run.
  *
  * The UI depends only on this interface and the domain types. The
  * production implementation is the repository in the `data` package,

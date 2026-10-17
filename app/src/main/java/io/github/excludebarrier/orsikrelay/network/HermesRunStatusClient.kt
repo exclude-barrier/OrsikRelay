@@ -20,7 +20,7 @@ import okhttp3.ResponseBody
 import org.json.JSONObject
 
 /**
- * Performs the single authenticated `GET /v1/runs/{run_id}` read (P7).
+ * Performs the single authenticated `GET /v1/runs/{run_id}` read.
  * This class is the transport only; profile lookup and credential access
  * happen in the repository layer, so the key never reaches this class
  * except as the scoped [SecretValue] argument.

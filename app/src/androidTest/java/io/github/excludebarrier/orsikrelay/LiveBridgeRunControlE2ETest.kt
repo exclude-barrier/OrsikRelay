@@ -44,8 +44,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * OR-08b: the live run-control part of the chat UI end-to-end flow (stop, steer,
- * disconnect/re-attach). It complements [LiveBridgeChatE2ETest] (OR-08a), which
+ * The live run-control part of the chat UI end-to-end flow (stop, steer,
+ * disconnect/re-attach). It complements [LiveBridgeChatE2ETest], which
  * only covers the provider-less send path.
  *
  * This test drives the REAL [MainActivity], the real Compose screens and the
@@ -65,7 +65,7 @@ import org.junit.runner.RunWith
  *       and that the turn still ends terminal.
  *  - C: send a long message, DISCONNECT the emulator network, re-enable it and
  *       verify the app re-attaches to the SAME run (same run id) and ends
- *       terminal with exactly one user message, or offers the honest P7
+ *       terminal with exactly one user message, or offers the honest
  *       uncertain/reconcile recovery. The code path is documented inline.
  *
  * Requires instrumentation arguments:
@@ -242,13 +242,13 @@ class LiveBridgeRunControlE2ETest {
     }
 
     /**
-     * Phase C - DISCONNECT / RE-ATTACH (P6/P7).
+     * Phase C - DISCONNECT / RE-ATTACH.
      *
      * The emulator network is disabled and re-enabled. The production code
      * plans two outcomes: the SSE stream is re-attached to the SAME server run
-     * (P4, `StreamingChatRepository` re-attach with `after_seq`, same run id,
+     * (`StreamingChatRepository` re-attach with `after_seq`, same run id,
      * no second POST) or, if the bounded re-attach ladder is exhausted, the run
-     * is honestly marked UNCERTAIN (P7) with a reconcile action. Both are
+     * is honestly marked UNCERTAIN with a reconcile action. Both are
      * accepted here; the same original run id is verified terminal through the
      * production status path either way.
      */
@@ -281,7 +281,7 @@ class LiveBridgeRunControlE2ETest {
             terminalRunReached() || reconcileButtonPresent()
         }
         if (reconcileButtonPresent()) {
-            // P7: reconcile the unknown outcome against the server until the
+            // Reconcile the unknown outcome against the server until the
             // run is proven terminal and its ownership released. The server
             // run is short, so a bounded retry loop is enough.
             val deadline = SystemClock.uptimeMillis() + RUN_TIMEOUT_MS
@@ -303,7 +303,7 @@ class LiveBridgeRunControlE2ETest {
         assertTrue("an assistant message must be rendered", assistantRowPresent())
     }
 
-    // --- UI helpers (patterns shared with the OR-08a live test) -------------
+    // --- UI helpers (patterns shared with the live chat test) ---------------
 
     /** Types the message into the real composer and taps the real send action. */
     private fun typeAndSend(text: String) {

@@ -20,7 +20,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Mission 007A: transport contract of the single authenticated
+ * Transport contract of the single authenticated
  * `POST /v1/runs/{run_id}/stop` write. The expected wire format was
  * derived read-only from the installed server code
  * (`gateway/platforms/api_server_runs.py`, `_handle_stop_run` /

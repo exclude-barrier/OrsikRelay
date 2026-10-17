@@ -12,7 +12,7 @@ import io.github.excludebarrier.orsikrelay.domain.notification.NotificationPoste
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationType
 
 /**
- * The single Android adapter that raises local notifications (P3). It is the
+ * The single Android adapter that raises local notifications. It is the
  * ONLY place in the app that touches an Android notification API; the domain
  * [NotificationCoordinator] only sees the [NotificationPoster] seam.
  *

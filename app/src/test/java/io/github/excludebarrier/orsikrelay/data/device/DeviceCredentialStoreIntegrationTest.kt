@@ -17,7 +17,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * Mission 017A: credential-store integration of the paired device key
+ * Credential-store integration of the paired device key
  * at the JVM seam level (synthetic stores, following the existing
  * CredentialStore test patterns). The device key must travel through the
  * SAME CredentialStore infrastructure as the API key (same protection

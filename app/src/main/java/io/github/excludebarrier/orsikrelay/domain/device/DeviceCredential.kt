@@ -3,7 +3,7 @@ package io.github.excludebarrier.orsikrelay.domain.device
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
- * A paired-device credential (Mission 017A).
+ * A paired-device credential.
  *
  * Wire contract (read-only reference, server contract v1): the device is
  * introduced by the single authenticated

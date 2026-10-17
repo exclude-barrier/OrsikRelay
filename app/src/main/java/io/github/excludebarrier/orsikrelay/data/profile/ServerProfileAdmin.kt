@@ -8,15 +8,14 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 
 /**
- * Production [ProfileAdmin] (Mission 010, extended in Missions 012 and
- * 017B):
+ * Production [ProfileAdmin]:
  * - delegates 1:1 to the existing verified [ServerProfileRepository]
  *   list/delete/select path — no second deletion or selection
  *   implementation;
- * - (Mission 017B) [credentialKind] derives the non-secret credential
+ * - [credentialKind] derives the non-secret credential
  *   kind from the repository's device-metadata probe. It reads NO
  *   credential: the device key stays sealed in the credential store.
- * - (Mission 017B) as a [DeviceDisconnectSource] it loads the profile's
+ * - as a [DeviceDisconnectSource] it loads the profile's
  *   base URL plus its SEALED credential for the disconnect path. The
  *   returned [io.github.excludebarrier.orsikrelay.domain.profile.SecretValue] is never
  *   displayed, shortened or copied anywhere; a missing profile or

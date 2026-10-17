@@ -103,7 +103,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.state.store.close()
 
     async def _admin_code(self):
-        # P13: the operator issues codes locally (no HTTP admin surface).
+        # The operator issues codes locally (no HTTP admin surface).
         issued = self.state.codes.issue()
         self.assertIsNotNone(issued)
         return issued[0]
@@ -130,7 +130,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         caps = await resp.json()
         self.assertEqual(caps["object"], "hermes.api_server.capabilities")
         self.assertEqual(caps["runtime"]["mode"], "server_agent")
-        # P13: the official core supports session interactive approvals, so the
+        # The official core supports session interactive approvals, so the
         # bridge advertises the exact Mobile-v1 contract with once/deny only.
         approvals = caps["features"]["session_chat_interactive_approvals"]
         self.assertEqual(
@@ -193,7 +193,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(set((await resp.json())["error"]), {"code"})
 
     async def test_admin_route_not_exposed(self):
-        # P13: no HTTP admin surface; pairing codes are issued only by the local
+        # No HTTP admin surface; pairing codes are issued only by the local
         # operator CLI. The old route must be out of scope for any client.
         self.assertEqual((await self.client.post("/admin/pairing-code")).status, 401)
         cred = await self._pair()
@@ -232,7 +232,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(UPSTREAM.get("approval_posts"), 2)
 
     async def test_mutations_are_audited_per_device_without_secrets(self):
-        # OR-14: every forwarded approval/stop is attributable to one device;
+        # Every forwarded approval/stop is attributable to one device;
         # neither the device token nor the master key ever reaches the log.
         cred = await self._pair()
         token = cred["device_key"]
@@ -333,7 +333,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.state.codes.issue())
         self.assertIsNone(self.state.codes.issue())
 
-    # --- P12.1 review regressions ------------------------------------------
+    # --- review regressions ------------------------------------------------
     async def test_approval_trailing_slash_bypass_refused(self):
         # A non-canonical approval path must not fall through to the generic
         # proxy and forward an unvalidated body (e.g. "session"/"always").
@@ -367,7 +367,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             bridge_server._MAX_BODY_BYTES = original
             await client.close()
 
-    # --- Phase 2 (P13): SSE reconnect / after_seq replay --------------------
+    # --- Phase 2: SSE reconnect / after_seq replay --------------------------
     async def test_reattach_replays_after_seq_without_second_post(self):
         cred = await self._pair()
         resp = await self.client.post(
@@ -440,7 +440,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 409)
         self.assertEqual((await resp.json())["error"]["code"], "resume_gap")
 
-    # --- Phase 8 (P13): security regressions --------------------------------
+    # --- Phase 8: security regressions --------------------------------------
     async def test_chat_stream_forwards_master_key_not_device_token(self):
         seen = {}
 
@@ -498,7 +498,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             resp = await self.client.get(path, headers=self._bearer(cred["device_key"]))
             self.assertIn(resp.status, (400, 403, 404), path)
 
-    # --- Phase 4 (P13): durable device credentials -------------------------
+    # --- Phase 4: durable device credentials --------------------------------
     async def test_device_survives_bridge_restart_and_revoke_is_durable(self):
         import os
         import tempfile
@@ -609,7 +609,7 @@ class ReconnectStreamTest(unittest.IsolatedAsyncioTestCase):
 
 
 class IndeterminateRunTest(unittest.IsolatedAsyncioTestCase):
-    """P13.1: a re-attach with no bridge buffer must fail closed from the
+    """A re-attach with no bridge buffer must fail closed from the
     authoritative upstream status — never a false 404, never fabricated events."""
 
     async def asyncSetUp(self):
@@ -825,7 +825,7 @@ class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
 
 
 class StoreExecutorHttpTest(unittest.IsolatedAsyncioTestCase):
-    """OR-20b: a blocked store call must not stall the aiohttp event loop.
+    """A blocked store call must not stall the aiohttp event loop.
 
     The device store is synchronous (sqlite3 + a lock + a 5 s busy timeout), so
     running it inline in a handler freezes every stream and request for as long
@@ -886,7 +886,7 @@ class StoreExecutorHttpTest(unittest.IsolatedAsyncioTestCase):
 
 
 class EchoRedactionTest(unittest.IsolatedAsyncioTestCase):
-    """OR-10a: the core echoes the full image body in the first run.started frame.
+    """The core echoes the full image body in the first run.started frame.
 
     ``ChatAttachmentRules`` accept raw images up to 5 MiB, so the echoed
     ``run.started`` legitimately exceeds the 1 MiB relay bound while every later
@@ -1006,7 +1006,7 @@ class EchoRedactionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self._blocks(replay)[0], first)
 
     async def test_core_approval_request_is_narrowed_to_mobile_v1(self):
-        # OR-06b: the shape the official core emits (measured live 2026-10-16).
+        # The shape the official core emits (measured live 2026-10-16).
         core_approval = {
             "event": "approval.request", "session_id": "s1", "run_id": "run_ap", "seq": 2,
             "ts": 1.5, "timestamp": 1.5, "message_id": "msg_1", "request_id": "req_1",

@@ -56,9 +56,8 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Synthetic Compose tests for the live turn slice of the chat screen
- * (Mission 006A, Batch 2). The streaming seam is a fake: no network, no
- * real hosts, no credentials.
+ * Synthetic Compose tests for the live turn slice of the chat screen.
+ * The streaming seam is a fake: no network, no real hosts, no credentials.
  */
 class ChatScreenTurnUiTest {
 
@@ -84,12 +83,12 @@ class ChatScreenTurnUiTest {
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").assertIsDisplayed()
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        // Leerer Entwurf: Senden ist deaktiviert und ein Tipp sendet nichts.
+        // Empty draft: "Senden" is disabled and a tap sends nothing.
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
         composeRule.onNodeWithText("Senden").performClick()
         assertEquals(0, source.calls.get())
 
-        // Whitespace-Entwurf: ebenfalls deaktiviert.
+        // Whitespace draft: also disabled.
         composeRule.onNodeWithText("Nachricht").performTextInput(" \n \t ")
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
         assertEquals(" \n \t ", draftText())
@@ -108,16 +107,16 @@ class ChatScreenTurnUiTest {
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue("first stream was not started", source.opened.await(3, TimeUnit.SECONDS))
-        // Zweiter, schneller Tipp während des laufenden Turns.
+        // Second, quick tap while the turn is running.
         composeRule.onNodeWithText("Senden").performClick()
         assertEquals("exactly one stream must run", 1, source.calls.get())
-        // Lokale Userzeile erscheint sofort nach akzeptiertem Submit.
+        // The local user line appears immediately after an accepted submit.
         waitForText("Doppelte Eingabe")
-        // Vor RunStarted bleibt der Entwurf im Feld erhalten.
+        // Before RunStarted the draft is kept in the field.
         assertEquals("  Doppelte Eingabe  ", draftText())
 
         source.enqueue(ChatTurnEvent.RunStarted("run_synthetic"))
-        // Erst RunStarted leert den Entwurf.
+        // Only RunStarted clears the draft.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             draftText().isNullOrBlank()
         }
@@ -127,9 +126,8 @@ class ChatScreenTurnUiTest {
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
-        // TurnCompleted gibt den Composer frei: das Feld ist wieder
-        // editierbar. Bei leerem Entwurf ist "Senden" sichtbar, aber
-        // deaktiviert.
+        // TurnCompleted frees the composer: the field is editable again.
+        // With an empty draft "Senden" is visible but disabled.
         composeRule.onNodeWithText("Nachricht").assertIsEnabled()
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
@@ -145,10 +143,9 @@ class ChatScreenTurnUiTest {
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
 
-        // Beide Deltas wachsen sichtbar in derselben Zeile. Der Stream
-        // wird erst nach der Beobachtung des Zwischenzustands
-        // fortgesetzt, weil das finale Ereignis die zusammengesetzte
-        // Zeile ersetzt.
+        // Both deltas visibly grow in the same line. The stream is only
+        // continued after the intermediate state has been observed, because
+        // the final event replaces the composed line.
         source.enqueue(
             ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.AssistantStarted,
@@ -166,7 +163,7 @@ class ChatScreenTurnUiTest {
             ChatTurnEvent.TurnCompleted()
         )
         source.complete()
-        // Der finale Text ersetzt die zusammengesetzte Zeile.
+        // The final text replaces the composed line.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Finaler Text")
                 .fetchSemanticsNodes().isNotEmpty()
@@ -177,9 +174,8 @@ class ChatScreenTurnUiTest {
             composeRule.onAllNodesWithText("Delta-1Delta-2")
                 .fetchSemanticsNodes().isEmpty()
         )
-        // TurnCompleted gibt den Composer frei: das Feld ist wieder
-        // editierbar. Bei leerem Entwurf ist "Senden" sichtbar, aber
-        // deaktiviert.
+        // TurnCompleted frees the composer: the field is editable again.
+        // With an empty draft "Senden" is visible but disabled.
         composeRule.onNodeWithText("Nachricht").assertIsEnabled()
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
@@ -203,15 +199,15 @@ class ChatScreenTurnUiTest {
             ChatTurnEvent.AssistantStarted,
             ChatTurnEvent.ToolActivity()
         )
-        // Nur der generische Status ist sichtbar. Der Stream wird erst
-        // nach der Beobachtung fortgesetzt, weil die finale Zeile die
-        // zusammengesetzten Inhalte ersetzt.
+        // Only the generic status is visible. The stream is only continued
+        // after the observation, because the final line replaces the
+        // composed content.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Tool ist aktiv…")
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Tool ist aktiv…").assertIsDisplayed()
-        // Synthetische Toolname/Args/Preview/Reasoning erscheinen nirgends.
+        // Synthetic tool name/args/preview/reasoning appear nowhere.
         listOf(
             "synthetic_tool_name",
             "synthetic-args",
@@ -231,7 +227,7 @@ class ChatScreenTurnUiTest {
         )
         source.complete()
         waitForFlowCompletion(source)
-        // Bei leerem Entwurf ist "Senden" sichtbar, aber deaktiviert.
+        // With an empty draft "Senden" is visible but disabled.
         composeRule.onNodeWithText("Senden").assertIsDisplayed()
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
     }
@@ -252,7 +248,7 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        // P7: without a confirmed start the POST may still have been accepted,
+        // Without a confirmed start the POST may still have been accepted,
         // so the outcome is UNKNOWN. The draft survives, the composer is locked
         // (no second POST) and the honest uncertain notice is shown - never a
         // claim that the server run ended. No history refresh and, without a
@@ -305,7 +301,7 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        // P7: the run was confirmed, so a transport failure leaves the server
+        // The run was confirmed, so a transport failure leaves the server
         // outcome UNKNOWN. The composer stays locked, no bare history refresh
         // is offered and the chat POST is never resent. The confirmed run ID
         // enables the explicit manual status recovery.
@@ -396,10 +392,10 @@ class ChatScreenTurnUiTest {
 
         composeRule.onNodeWithText("Zurück").performClick()
         assertTrue("onBack was not invoked", backInvoked.await(3, TimeUnit.SECONDS))
-        // P3-Background-Continuity: der Run gehört dem app-weiten
-        // RunSessionController, nicht dem Screen — Back bricht den Stream
-        // NICHT ab; der Foreground Service hält den Prozess unfrized,
-        // während der Run im Hintergrund weiterläuft.
+        // Background continuity: the run belongs to the app-wide
+        // RunSessionController, not to the screen — back does NOT cancel the
+        // stream; the foreground service keeps the process unfrozen while the
+        // run continues in the background.
         assertFalse(
             "the running stream must stay alive after back",
             source.canceled.await(100, TimeUnit.MILLISECONDS)
@@ -423,12 +419,12 @@ class ChatScreenTurnUiTest {
             ChatTurnEvent.RunStarted("run_synthetic"),
             ChatTurnEvent.AssistantStarted
         )
-        // Der Stream endet normal, ohne `TurnCompleted` und ohne
+        // The stream ends normally, without `TurnCompleted` and without
         // `TurnFailed`.
         source.complete()
         waitForFlowCompletion(source)
 
-        // P7: a confirmed run whose stream vanished without a terminal event
+        // A confirmed run whose stream vanished without a terminal event
         // has an UNKNOWN outcome. The composer stays locked, the run is never
         // reported as stopped or finished, no history refresh is offered and
         // the confirmed run ID enables the manual "check status" recovery.
@@ -514,7 +510,7 @@ class ChatScreenTurnUiTest {
 
     @Test
     fun confirmedTransportFailureWithoutSourceCompletionKeepsComposerBlocked() {
-        // P7 regression: a confirmed run plus a LOCAL transport failure does
+        // A confirmed run plus a LOCAL transport failure does
         // NOT prove the server run ended, so it must never release the
         // composer - even when the transport has not been closed. The
         // counterpart of the authoritative release below.
@@ -548,7 +544,7 @@ class ChatScreenTurnUiTest {
 
     @Test
     fun authoritativeServerErrorReleasesComposerWithoutSourceCompletion() {
-        // P7 regression: ONLY a server-authoritative terminal releases the run
+        // ONLY a server-authoritative terminal releases the run
         // slot. `ChatStreamError.ServerError` is the server's own terminal
         // `error` frame (the run status is terminal server-side), so the
         // composer is freed even though the transport was not closed by the
@@ -614,10 +610,10 @@ class ChatScreenTurnUiTest {
         assertTrue(firstSource.opened.await(3, TimeUnit.SECONDS))
         waitForText("Du")
 
-        // P3-Background-Continuity: der laufende Run gehört dem app-weiten
-        // RunSessionController, nicht dem Screen — ein Sessionwechsel
-        // bricht ihn NICHT ab. Hier vertritt der erste (verwaiste)
-        // Controller den app-weiten Owner: sein Stream bleibt offen.
+        // Background continuity: the running run belongs to the app-wide
+        // RunSessionController, not to the screen — a session switch does NOT
+        // cancel it. Here the first (orphaned) controller stands in for the
+        // app-wide owner: its stream stays open.
         key.value = "second-session"
         composeRule.waitForIdle()
 
@@ -632,7 +628,7 @@ class ChatScreenTurnUiTest {
             composeRule.onAllNodesWithText("Läuft in erster Session")
                 .fetchSemanticsNodes().isEmpty()
         )
-        // History der neuen Session wird geladen, Composer ist frei.
+        // The history of the new session is loaded, the composer is free.
         waitForText("Diese Session enthält noch keine Nachrichten.")
         composeRule.onNodeWithText("Nachricht").assertIsEnabled()
     }
@@ -704,7 +700,7 @@ class ChatScreenTurnUiTest {
     }
 
     /**
-     * P6 capture-only state: run A active, session B shows the conflict notice
+     * Capture-only state: run A active, session B shows the conflict notice
      * with its draft preserved. No assertions; run on a headed emulator for
      * manual inspection (light and dark system themes).
      */
@@ -747,7 +743,7 @@ class ChatScreenTurnUiTest {
     }
 
     /**
-     * P6 capture-only state in the dark colour scheme (explicit override, like
+     * Capture-only state in the dark colour scheme (explicit override, like
      * the existing dark IME capture). No assertions.
      */
     @CaptureOnly
@@ -963,7 +959,7 @@ class ChatScreenTurnUiTest {
     }
 
     // ------------------------------------------------------------------
-    // Mission 007B: the run-stop slice of the chat screen. All IDs are
+    // The run-stop slice of the chat screen. All IDs are
     // synthetic; no network, no credentials, no real server.
     // ------------------------------------------------------------------
 
@@ -979,8 +975,8 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
-        // Vor run.started ist der Stop-Control unsichtbar; ein Tipp
-        // kann den Stop-POST nicht erreichen.
+        // Before run.started the stop control is invisible; a tap cannot
+        // reach the stop POST.
         assertTrue(
             "stop control must be invisible before RunStarted",
             composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
@@ -993,8 +989,8 @@ class ChatScreenTurnUiTest {
         }
         composeRule.onNodeWithText("Stoppen").assertIsEnabled()
 
-        // Der terminale Streamzustand beendet den Turn; danach ist der
-        // Stop-Control wieder unsichtbar.
+        // The terminal stream state ends the turn; afterwards the
+        // stop control is invisible again.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
@@ -1019,8 +1015,8 @@ class ChatScreenTurnUiTest {
 
         composeRule.onNodeWithText("Stoppen").performClick()
         assertTrue("stop request must start", stopper.started.await(3, TimeUnit.SECONDS))
-        // Schneller zweiter Tipp während der laufenden Anfrage: der
-        // Control ist deaktiviert und es gibt genau einen Aufruf.
+        // Quick second tap while the request is running: the control is
+        // disabled and there is exactly one call.
         composeRule
             .onNodeWithText("Wird gestoppt …")
             .assertIsDisplayed()
@@ -1030,8 +1026,8 @@ class ChatScreenTurnUiTest {
         assertEquals(RUN_ID, stopper.runId.get())
         assertEquals("fixture-profile-id", stopper.profileId.get())
 
-        // Der Stream läuft weiter (kein lokaler Abbruch): der Abbruch-Latch
-        // ist noch intakt (1); erst das terminale Event beendet den Collector.
+        // The stream continues (no local cancellation): the cancellation latch
+        // is still intact (1); only the terminal event ends the collector.
         assertEquals("stream not interrupted by the stop", 1L, source.canceled.count)
         stopper.release(RunStopResult.Accepted(RUN_ID))
         source.enqueue(ChatTurnEvent.TurnCompleted())
@@ -1069,22 +1065,22 @@ class ChatScreenTurnUiTest {
             }
         }
 
-        // Accepted: nur "Stop angenommen" — kein optimistischer
-        // Terminalzustand, Composer bleibt blockiert, der Stream wird
-        // nicht lokal abgebrochen.
+        // Accepted: only "Stop angenommen" — no optimistic
+        // terminal state, the composer stays blocked and the stream is not
+        // cancelled locally.
         stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Wird gestoppt …").assertIsDisplayed()
         composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
-        // Der Collector läuft unverändert weiter (Abbruch-Latch intakt = 1);
-        // erst das terminale Stream-Event beendet ihn.
+        // The collector keeps running unchanged (cancellation latch intact = 1);
+        // only the terminal stream event ends it.
         assertEquals("stream must not be interrupted locally", 1L, source.canceled.count)
         assertEquals(1, source.calls.get())
         assertEquals(1, stopper.calls.get())
 
-        // Erst der vorhandene terminale Streamzustand beendet den Turn
-        // und entfernt den Stop-Control.
+        // Only the existing terminal stream state ends the turn and removes
+        // the stop control.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
@@ -1093,7 +1089,7 @@ class ChatScreenTurnUiTest {
             "stop control must be gone after the terminal event",
             composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
         )
-        // Die Run-ID erscheint nie in der UI.
+        // The run ID never appears in the UI.
         assertTrue(
             "run id must not be rendered",
             composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
@@ -1116,9 +1112,9 @@ class ChatScreenTurnUiTest {
         stopper.gate = Channel(Channel.UNLIMITED)
         composeRule.onNodeWithText("Stoppen").performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
-        // Generische lokale Meldung ohne dynamische Details; die
-        // laufende Streamsammlung bleibt unverändert; ein manueller
-        // erneuter Versuch ist wieder möglich.
+        // Generic local message without dynamic details; the running stream
+        // collection stays unchanged; another manual attempt is possible
+        // again.
         stopper.gate!!.trySend(RunStopResult.Failure(RunStopError.Network))
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
@@ -1138,8 +1134,7 @@ class ChatScreenTurnUiTest {
         assertEquals(1, stopper.calls.get())
         composeRule.onNodeWithText("Stoppen").assertIsEnabled()
 
-        // Der bewusste manuelle Retry sendet genau einen weiteren
-        // Request.
+        // The deliberate manual retry sends exactly one further request.
         stopper.gate = Channel(Channel.UNLIMITED)
         composeRule.onNodeWithText("Stoppen").performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
@@ -1179,16 +1174,15 @@ class ChatScreenTurnUiTest {
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         stopper.gate!!.trySend(RunStopResult.AlreadyTerminal(RUN_ID))
 
-        // Der bestehende History-Refresh/Reconciliation-Pfad wird
-        // ausgelöst: genau ein zusätzlicher idempotenter History-Read;
-        // der Chat-POST wird niemals erneut gesendet.
+        // The existing history-refresh/reconciliation path is triggered:
+        // exactly one additional idempotent history read; the chat POST is
+        // never resent.
         composeRule.waitUntil(timeoutMillis = 5_000) { historyCalls.get() == 2 }
         assertEquals(2, historyCalls.get())
         assertEquals("no chat resending", 1, source.calls.get())
         assertEquals("no second stop request", 1, stopper.calls.get())
         composeRule.waitForIdle()
-        // Kein Stop-Control mehr; der Composer ist für einen neuen Run
-        // frei.
+        // No stop control any more; the composer is free for a new run.
         assertTrue(
             "stop control must be gone after reconciliation",
             composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
@@ -1203,9 +1197,9 @@ class ChatScreenTurnUiTest {
         setScreen(history(emptyList()), source, runStopRequester = stopper)
 
         waitForText("Diese Session enthält noch keine Nachrichten.")
-        // Erster Run: Stop schlägt fehl (generisch). Der Fake hat hier
-        // kein Gate, daher wird das Ergebnis vor dem Tipp synchron
-        // vorbereitet, damit der (ungegatede) Aufruf es zurückgibt.
+        // First run: stop fails (generic). The fake has no gate here, so the
+        // result is prepared synchronously before the tap, so that the
+        // (ungated) call returns it.
         composeRule.onNodeWithText("Nachricht").performTextInput("Erster Lauf")
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
@@ -1226,16 +1220,15 @@ class ChatScreenTurnUiTest {
         }
         assertEquals(1, stopper.calls.get())
 
-        // Sauberer terminaler Abschluss des ersten Runs: Stop-Zustand
-        // (incl. Failure) und gebundene Run-ID werden zurückgesetzt und
-        // der Composer wird frei.
+        // Clean terminal completion of the first run: stop state (incl.
+        // failure) and bound run ID are reset and the composer becomes free.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
         composeRule.onNodeWithText("Nachricht").assertIsEnabled()
 
-        // Zweiter Run: der Stop-Zustand des ersten Runs ist weg und es
-        // wird nur die Run-ID des neuen Runs gebunden.
+        // Second run: the stop state of the first run is gone and only the
+        // run ID of the new run is bound.
         stopper.release(RunStopResult.Accepted(NEW_RUN_ID))
         composeRule.onNodeWithText("Nachricht").performTextInput("Zweiter Lauf")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1247,7 +1240,7 @@ class ChatScreenTurnUiTest {
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         assertEquals("new run binds only its own run id", NEW_RUN_ID, stopper.runId.get())
         assertEquals("second stop is exactly one further call", 2, stopper.calls.get())
-        // Die alte Run-ID darf nirgends (mehr) auftauchen.
+        // The old run ID must not appear anywhere (any more).
         assertTrue(
             "old run id must not appear anywhere",
             composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
@@ -1278,7 +1271,7 @@ class ChatScreenTurnUiTest {
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Stoppen")
 
-        // Der Stop-Aufruf bleibt in der Anfrage hängen.
+        // The stop call stays suspended in the request.
         stopper.gate = Channel(Channel.UNLIMITED)
         composeRule.onNodeWithText("Stoppen").performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
@@ -1291,8 +1284,8 @@ class ChatScreenTurnUiTest {
             }
         }
 
-        // P3-Background-Continuity: Back ist synchron und bricht nichts ab —
-        // weder den Run noch die laufende Stop-Anfrage.
+        // Background continuity: back is synchronous and cancels nothing —
+        // neither the run nor the in-flight stop request.
         composeRule.onNodeWithText("Zurück").performClick()
         assertTrue("onBack was not invoked", backInvoked.await(3, TimeUnit.SECONDS))
         assertFalse(
@@ -1306,13 +1299,13 @@ class ChatScreenTurnUiTest {
         assertEquals("exactly one stop request in total", 1, stopper.calls.get())
         assertEquals(1, source.calls.get())
 
-        // Die Stop-Anfrage läuft normal zu Ende; das akzeptierte Ergebnis
-        // allein beendet den Turn nicht (kein optimistischer Terminalzustand).
+        // The stop request runs to completion; the accepted result alone does
+        // not end the turn (no optimistic terminal state).
         stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
         composeRule.waitForIdle()
 
-        // Erst das terminale Stream-Event beendet den Turn: der Stop-Control
-        // verschwindet und der Composer wird frei.
+        // Only the terminal stream event ends the turn: the stop control
+        // disappears and the composer becomes free.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
@@ -1327,12 +1320,12 @@ class ChatScreenTurnUiTest {
         const val RUN_ID = "run_synthetic"
         const val NEW_RUN_ID = "run_synthetic_2"
         const val APPROVAL_TITLE = "Freigabe anfragen"
-        // P7: stable test tags of the uncertain-run notice and its manual
+        // Stable test tags of the uncertain-run notice and its manual
         // status-recovery action (mirroring ChatScreen's TAG_RUN_UNCERTAIN /
         // TAG_RUN_RECONCILE).
         const val UNCERTAIN_TAG = "chat_run_uncertain"
         const val RECONCILE_TAG = "chat_run_reconcile"
-        // P6: the exact generic conflict text (no IDs, no server detail).
+        // The exact generic conflict text (no IDs, no server detail).
         const val CONFLICT_TEXT =
             "In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst."
         const val APPROVAL_RUN_ID = "run_0123456789abcdef0123456789abcdef"
@@ -1349,7 +1342,7 @@ class ChatScreenTurnUiTest {
     }
 
     // ------------------------------------------------------------------
-    // Mission 008B: the run-steer slice of the chat screen. All IDs are
+    // The run-steer slice of the chat screen. All IDs are
     // synthetic; no network, no credentials, no real server. The tests
     // target the steer semantics/test tags (chatSteerInput,
     // chatSteerSend, chatSteeringStatus, chatSteerQueuedStatus,
@@ -1373,8 +1366,8 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
-        // Vor run.started ist die Steuer-Eingabe unsichtbar; ein Tipp
-        // kann den Steuer-POST nicht erreichen.
+        // Before run.started the steer input is invisible; a tap cannot
+        // reach the steer POST.
         assertTrue(
             "steer input must be invisible before RunStarted",
             composeRule.onAllNodesWithTag("chatSteerInput").fetchSemanticsNodes().isEmpty()
@@ -1387,8 +1380,8 @@ class ChatScreenTurnUiTest {
         }
         composeRule.onNodeWithTag("chatSteerSend").assertIsEnabled()
 
-        // Der terminale Streamzustand beendet den Turn; danach ist die
-        // Steuer-Eingabe wieder unsichtbar.
+        // The terminal stream state ends the turn; afterwards the steer
+        // input is invisible again.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
@@ -1414,17 +1407,16 @@ class ChatScreenTurnUiTest {
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue("steer request must start", steerer.started.await(3, TimeUnit.SECONDS))
-        // Gated: die Request-Parameter sind gesetzt, bevor das Ergebnis
-        // ausgeliefert wird — kein Race beim Prüfen des exakten Textes.
+        // Gated: the request parameters are set before the result is
+        // delivered — no race when checking the exact text.
         assertEquals(RUN_ID, steerer.runId.get())
         assertEquals("fixture-profile-id", steerer.profileId.get())
-        // Exakter, getrimmter Nutzertext — keine andere Zeichenfolge.
+        // Exact, trimmed user text — no other character sequence.
         assertEquals("Kurs nach links", steerer.text.get())
         steerer.gate!!.trySend(RunSteerResult.Queued(RUN_ID))
 
-        // Eingereiht: kurze Bestätigung, Steuer-Eingabe geleert, der Run
-        // bleibt aktiv — kein lokaler Terminalzustand, keine neue
-        // Chat-Nachricht.
+        // Queued: short confirmation, steer input cleared, the run stays
+        // active — no local terminal state, no new chat message.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule.onNodeWithTag("chatSteerQueuedStatus").assertIsDisplayed()
@@ -1435,16 +1427,16 @@ class ChatScreenTurnUiTest {
         }
         assertTrue("steer input must be cleared after queued", steerDraftText().isNullOrBlank())
         assertEquals("no new chat message from a steer", 1, source.calls.get())
-        // Der Run ist nach wie vor aktiv: Composer und Senden sind blockiert.
+        // The run is still active: composer and send are blocked.
         composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
         composeRule.onNodeWithText("Senden").assertIsNotEnabled()
-        // Die Run-ID erscheint nie in der UI.
+        // The run ID never appears in the UI.
         assertTrue(
             "run id must not be rendered",
             composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
         )
 
-        // Erst das terminale Stream-Event beendet den Turn.
+        // Only the terminal stream event ends the turn.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
@@ -1473,8 +1465,8 @@ class ChatScreenTurnUiTest {
         assertEquals("Kurs nach rechts", steerer.text.get())
         steerer.gate!!.trySend(RunSteerResult.NotAccepting(RUN_ID))
 
-        // 409: der exakte Text bleibt in der wiederherstellbaren
-        // Zustandsmenge; die explizite Aktion erscheint.
+        // 409: the exact text stays in the recoverable state set; the
+        // explicit action appears.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsDisplayed()
@@ -1485,8 +1477,8 @@ class ChatScreenTurnUiTest {
         }
         assertTrue("steer input must be empty after 409", steerDraftText().isNullOrBlank())
 
-        // Die explizite Aktion verschiebt den Text in den gewöhnlichen
-        // Composer — ohne ihn zu senden.
+        // The explicit action moves the text into the ordinary composer —
+        // without sending it.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Kurs nach rechts", draftText())
         assertTrue(
@@ -1496,8 +1488,8 @@ class ChatScreenTurnUiTest {
         )
         assertEquals("the text must never be auto-sent", 1, source.calls.get())
 
-        // Der Run läuft noch: der Composer ist blockiert, der Text bleibt
-        // aber erhalten. Erst nach dem terminalen Event ist er sendbar.
+        // The run is still running: the composer is blocked, but the text is
+        // preserved. It is only sendable after the terminal event.
         composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
@@ -1521,8 +1513,8 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        // Der Turn ist beendet: die Recovery-Aktion erscheint über genau
-        // dieselbe UI wie nach einer 409.
+        // The turn has ended: the recovery action appears through exactly the
+        // same UI as after a 409.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsDisplayed()
@@ -1533,7 +1525,7 @@ class ChatScreenTurnUiTest {
         }
         composeRule.onNodeWithText("Nachricht").assertIsEnabled()
 
-        // Explizite Aktion: Text wandert in den Composer, ohne Versand.
+        // Explicit action: text moves into the composer, without sending.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Weiter mit Plan B", draftText())
         assertTrue(
@@ -1561,8 +1553,8 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
 
-        // In der Anfrage: Eingabe und Aktion sind deaktiviert; der
-        // schnelle zweite Tipp öffnet keinen zweiten Request.
+        // In the request: input and action are disabled; the quick second
+        // tap opens no second request.
         composeRule.onNodeWithTag("chatSteeringStatus").assertIsDisplayed()
         composeRule.onNodeWithTag("chatSteerInput").assertIsNotEnabled()
         composeRule.onNodeWithTag("chatSteerSend").assertIsNotEnabled()
@@ -1598,9 +1590,9 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
 
-        // Generische Meldung ohne dynamische Details; der Text bleibt in
-        // der Eingabe für einen bewussten manuellen Retry; die
-        // Run-ID wird nirgends gerendert.
+        // Generic message without dynamic details; the text stays in the
+        // input for a deliberate manual retry; the run ID is rendered
+        // nowhere.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule.onNodeWithTag("chatSteerFailedStatus").assertIsDisplayed()
@@ -1615,8 +1607,8 @@ class ChatScreenTurnUiTest {
             composeRule.onAllNodesWithText(RUN_ID).fetchSemanticsNodes().isEmpty()
         )
 
-        // Der bewusste manuelle Retry sendet genau einen weiteren
-        // Request (gleicher Text).
+        // The deliberate manual retry sends exactly one further request
+        // (same text).
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) { steerer.calls.get() == 2 }
         assertEquals("manual retry sends one further request", 2, steerer.calls.get())
@@ -1639,7 +1631,7 @@ class ChatScreenTurnUiTest {
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
-        // 409: Recovery-Text gesetzt.
+        // 409: recovery text set.
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsDisplayed()
@@ -1652,10 +1644,9 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        // Eine neue gewöhnliche Nachricht startet einen neuen Run: der
-        // run-spezifische Steuerentwurf darf nicht in diesen Run
-        // hineingleiten — aber der erhaltene Recovery-Text ist
-        // Nutzereingabe und geht nicht verloren (Mission 008B).
+        // A new ordinary message starts a new run: the run-specific steer
+        // draft must not slip into this run — but the preserved recovery text
+        // is user input and is not lost.
         composeRule.onNodeWithText("Nachricht").performTextInput("Zweiter Lauf")
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
@@ -1672,7 +1663,7 @@ class ChatScreenTurnUiTest {
         assertTrue("stale steer draft must be cleared", steerDraftText().isNullOrBlank())
         assertEquals("no steer request for the new run", 1, steerer.calls.get())
 
-        // Explizite Aktion: exakter Text in den Composer, ohne Versand.
+        // Explicit action: exact text into the composer, without sending.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Alter Steuerentwurf", draftText())
         assertEquals("the preserved text must never be auto-sent", 2, source.calls.get())
@@ -1703,8 +1694,8 @@ class ChatScreenTurnUiTest {
             }
         }
 
-        // Terminal ohne `pending_steer`: der Nutzertext darf nicht
-        // verloren gehen — die Recovery-Aktion bleibt sichtbar.
+        // Terminal without `pending_steer`: the user text must not be lost —
+        // the recovery action stays visible.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
@@ -1716,7 +1707,7 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        // Die explizite Aktion verschiebt den Text, ohne ihn zu senden.
+        // The explicit action moves the text without sending it.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Bleibt stehen", draftText())
         assertEquals(1, source.calls.get())
@@ -1739,10 +1730,9 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
 
-        // Der Run endet, während der Steuer-Request noch läuft: der
-        // Server hat den Text vielleicht oder vielleicht nicht
-        // eingereiht — er darf unter keinen Umständen verloren gehen,
-        // sondern wandert in die Recovery-Zustandsmenge.
+        // The run ends while the steer request is still running: the server
+        // may or may not have queued the text — it must not be lost under any
+        // circumstances, but moves into the recovery state set.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
@@ -1754,7 +1744,7 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        // Explizite Aktion: exakter Text in den Composer, ohne Versand.
+        // Explicit action: exact text into the composer, without sending.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Halb weg", draftText())
         assertEquals("the preserved draft must never be auto-sent", 1, source.calls.get())
@@ -1784,30 +1774,29 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        // Turn beenden, damit der gewöhnliche Composer wieder editierbar ist.
+        // End the turn so that the ordinary composer is editable again.
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
 
-        // Der gewöhnliche Composer erhält einen nicht-leeren Entwurf: die
-        // Recovery-Aktion muss deaktiviert werden und ein No-Op bleiben,
-        // damit der Nutzertext nicht übertschrieben wird (Mission 008B).
+        // The ordinary composer receives a non-empty draft: the recovery
+        // action must be disabled and remain a no-op, so that the user text
+        // is not overwritten.
         composeRule.onNodeWithText("Nachricht").performTextInput("Mein laufender Entwurf")
         assertEquals("Mein laufender Entwurf", draftText())
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsNotEnabled()
 
-        // Klick auf die (deaktivierte) Aktion ändert nichts: Entwurf bleibt,
-        // der Recovery-Text bleibt erhalten, der Block bleibt sichtbar.
+        // Clicking the (disabled) action changes nothing: the draft stays,
+        // the recovery text is preserved, the block stays visible.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("der Composer darf nicht überschrieben werden", "Mein laufender Entwurf", draftText())
         assertEquals("genau ein Item", 1, recoveryItemCount())
         assertTrue("der erhaltene Text muss erhalten bleiben", recoveryItemTextPresent("Rettet mich"))
 
-        // Erst wenn der Composer leer ist, ist die Aktion wieder möglich und
-        // verschiebt genau das eine Item. `performTextClearance()` leert
-        // das Feld wirklich (im Gegensatz zu `performTextInput("")`, das
-        // ein No-Op ist), genau die Voraussetzung, die die Aktion
-        // verlangt.
+        // Only when the composer is empty is the action possible again and
+        // moves exactly the one item. `performTextClearance()` really clears
+        // the field (unlike `performTextInput("")`, which is a no-op),
+        // exactly the precondition the action requires.
         composeRule.onNodeWithText("Nachricht").performTextClearance()
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsEnabled()
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
@@ -1844,8 +1833,8 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        // Terminal mit einem anderen `pending_steer`: zwei getrennte,
-        // geordnete Items, nie zu einem String zusammengeführt.
+        // Terminal with a different `pending_steer`: two separate, ordered
+        // items, never merged into one string.
         source.enqueue(ChatTurnEvent.TurnCompleted(pendingSteer = "Steuer-B"))
         source.complete()
         waitForFlowCompletion(source)
@@ -1853,25 +1842,24 @@ class ChatScreenTurnUiTest {
         assertEquals("zwei separate Items", 2, recoveryItemCount())
         assertTrue("das erste Item bleibt erhalten", recoveryItemTextPresent("Steuer-A"))
         assertTrue("das zweite Item bleibt erhalten", recoveryItemTextPresent("Steuer-B"))
-        // Ein zusammengeführter String hätte genau eine Zeile
-        // "Steuer-A\nSteuer-B" erzeugt — die darf nicht existieren.
+        // A merged string would have produced exactly one line
+        // "Steuer-A\nSteuer-B" — that must not exist.
         assertTrue(
             "no merged single item",
             composeRule.onAllNodesWithText("Steuer-A\nSteuer-B").fetchSemanticsNodes().isEmpty()
         )
-        // Zwei getrennte, geordnete Items: beide sind sichtbar und nie
-        // automatisch gesendet worden.
+        // Two separate, ordered items: both are visible and were never
+        // sent automatically.
         assertEquals("nie automatisch gesendet", 1, source.calls.get())
     }
 
     @Test
     fun clickingTheSecondRecoveryActionMovesExactlyTheSecondItem() {
-        // Regression für die Aktion-zu-Item-Identität (Mission 008B):
-        // Jeder Recovery-Block hat seine EIGENE Aktion, verdrahtet auf
-        // genau SEINE Position. Ein Klick auf den ZWEITEN Block darf
-        // genau das zweite Original-Item in den (leeren) Composer
-        // verschieben — niemals das erste. Das erste bleibt unverändert
-        // in der Recovery-Menge; nichts wird automatisch gesendet.
+        // Regression for action-to-item identity: each recovery block has its
+        // OWN action, wired to exactly ITS position. A click on the SECOND
+        // block must move exactly the second original item into the (empty)
+        // composer — never the first. The first stays unchanged in the
+        // recovery set; nothing is sent automatically.
         val steerer = FakeRunSteerRequester()
         val source = FakeTurnSource()
         steerer.release(RunSteerResult.NotAccepting(RUN_ID))
@@ -1894,8 +1882,8 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        // Terminal mit einem zweiten, anderen `pending_steer`: zwei
-        // geordnete Items (0 = 409-Text, 1 = Pending-Text).
+        // Terminal with a second, different `pending_steer`: two ordered
+        // items (0 = 409 text, 1 = pending text).
         source.enqueue(ChatTurnEvent.TurnCompleted(pendingSteer = "Steuer-Zweites"))
         source.complete()
         waitForFlowCompletion(source)
@@ -1904,13 +1892,13 @@ class ChatScreenTurnUiTest {
         assertTrue("das erste Item bleibt erhalten", recoveryItemTextPresent("Steuer-Erstes"))
         assertTrue("das zweite Item bleibt erhalten", recoveryItemTextPresent("Steuer-Zweites"))
 
-        // Der Composer ist leer, also sind beide Aktionen aktiv.
+        // The composer is empty, so both actions are active.
         assertTrue("Composer ist leer", draftText().isNullOrBlank())
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:1").assertIsEnabled()
 
-        // Klick auf die Aktion des ZWEITEN Blocks: genau der zweite
-        // Original-Text wandert in den Composer, das erste Item bleibt
-        // in der Recovery-Menge und behält seine Identität.
+        // Click on the action of the SECOND block: exactly the second
+        // original text moves into the composer, the first item stays in the
+        // recovery set and keeps its identity.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:1").performClick()
         assertEquals(
             "genau der zweite Original-Text wandert in den Composer",
@@ -1923,8 +1911,7 @@ class ChatScreenTurnUiTest {
             "der zweite Text darf nicht noch als Recovery-Item vorliegen",
             !recoveryItemTextPresent("Steuer-Zweites")
         )
-        // Kein automatischer Versand: nur der eine ursprüngliche
-        // Chat-POST existiert.
+        // No automatic sending: only the one original chat POST exists.
         assertEquals("nie automatisch gesendet", 1, source.calls.get())
     }
 
@@ -1940,23 +1927,22 @@ class ChatScreenTurnUiTest {
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithText("Senden").performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
-        // Eingabe mit führenden/abschließenden Leerraum: der Server
-        // liefert normalisiert den getrimmten Wire-Text zurück. Der
-        // Duplicate-Schutz muss den exakten, validierten/gesendeten
-        // Text (getrimmt) vergleichen, NICHT den rohen, nicht-getrimmten
-        // `steerDraft` — sonst entspräche `"  Gleich  "` != `"Gleich"`
-        // und es entstünde ein falsches zweites Item (Mission 008B).
+        // Input with leading/trailing whitespace: the server returns the
+        // normalized, trimmed wire text. The duplicate guard must compare the
+        // exact, validated/sent text (trimmed), NOT the raw, untrimmed
+        // `steerDraft` — otherwise `"  Gleich  "` != `"Gleich"` and a wrong
+        // second item would arise.
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("  Gleich  ")
         ImeClickSettle.settleAfterTyping(composeRule)
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
-        // Exakt der validierte/gesendete (getrimmte) Wire-Text.
+        // Exactly the validated/sent (trimmed) wire text.
         assertEquals("Gleich", steerer.text.get())
 
-        // Der Run endet, während der Steuer-Request in der Anfrage hängt,
-        // und sein `pending_steer` ist derselbe Request — hier als der
-        // normalisierte Wire-Text `"Gleich"`. Genau EIN Recovery-Item,
-        // keine doppelte Aufnahme desselben Request.
+        // The run ends while the steer request is still in flight, and its
+        // `pending_steer` is the same request — here as the normalized wire
+        // text `"Gleich"`. Exactly ONE recovery item, no duplicate capture of
+        // the same request.
         source.enqueue(ChatTurnEvent.TurnCompleted(pendingSteer = "Gleich"))
         source.complete()
         waitForFlowCompletion(source)
@@ -1966,8 +1952,8 @@ class ChatScreenTurnUiTest {
             "der normalisierte Wire-Text ist erhalten",
             recoveryItemTextPresent("Gleich")
         )
-        // Explizite Aktion: das eine Item wandert in den Composer,
-        // ohne Versand — als der normalisierte Wire-Text.
+        // Explicit action: the one item moves into the composer, without
+        // sending — as the normalized wire text.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Gleich", draftText())
         assertEquals(0, recoveryItemCount())
@@ -2020,8 +2006,8 @@ class ChatScreenTurnUiTest {
         firstSource.complete()
         waitForFlowCompletion(firstSource)
 
-        // Sessionwechsel: die Recovery-Zustandsmenge der alten Session
-        // (profil/session-schlüssel) muss vollständig verschwinden.
+        // Session switch: the recovery state set of the old session
+        // (profile/session key) must disappear completely.
         key.value = "second-session"
         composeRule.waitForIdle()
         waitForText("Diese Session enthält noch keine Nachrichten.")
@@ -2039,7 +2025,7 @@ class ChatScreenTurnUiTest {
     }
 
     /**
-     * Number of recoverable steer items currently rendered (Mission 008B).
+     * Number of recoverable steer items currently rendered.
      * Each item is its own ordered block tagged `chatSteerRecovery:<index>`
      * (contiguous from 0), so the count is the highest existing index + 1.
      * Uses only the public assertion APIs.
@@ -2058,8 +2044,7 @@ class ChatScreenTurnUiTest {
     }
 
     /**
-     * True while the exact item [text] is rendered as a recovery item
-     * (Mission 008B). Scoped to the item text nodes tagged
+     * True while the exact item [text] is rendered as a recovery item. Scoped to the item text nodes tagged
      * `chatSteerRecoveryText`, so the same string sitting in the ordinary
      * composer (e.g. right after an explicit move) can never produce a
      * false positive. Used to assert that a preserved recovery item is
@@ -2089,7 +2074,7 @@ class ChatScreenTurnUiTest {
     }
 
     /**
-     * Synthetic P7 run-status fake: no network, no credentials. Records the
+     * Synthetic run-status fake: no network, no credentials. Records the
      * requested run ID and returns the pre-set [result] immediately (a status
      * read is a fast, idempotent GET).
      */
@@ -2107,7 +2092,7 @@ class ChatScreenTurnUiTest {
     }
 
     /**
-     * Synthetic stop fake (Mission 007B): no network, no credentials.
+     * Synthetic stop fake: no network, no credentials.
      * [gate] (when set) suspends the request until the test sends the
      * result; [release] returns a pre-set result immediately.
      */
@@ -2145,7 +2130,7 @@ class ChatScreenTurnUiTest {
     }
 
     /**
-     * Synthetic steer fake (Mission 008B): no network, no credentials.
+     * Synthetic steer fake: no network, no credentials.
      * [gate] (when set) suspends the request until the test sends the
      * result; [release] returns a pre-set result immediately. The
      * request parameters are recorded BEFORE [started] counts down, so

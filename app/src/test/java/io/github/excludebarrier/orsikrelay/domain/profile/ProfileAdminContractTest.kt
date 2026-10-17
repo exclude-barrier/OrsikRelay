@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
 /**
- * Contract test (Mission 010): [ServerProfileAdmin] must delegate 1:1 to the
+ * Contract test: [ServerProfileAdmin] must delegate 1:1 to the
  * existing verified [ServerProfileRepository] list/delete path, including the
  * draft cleaner seam, and must not introduce a parallel deletion
  * implementation.

@@ -3,7 +3,7 @@ package io.github.excludebarrier.orsikrelay.domain.chat
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Small streaming seam for one text chat turn (Mission 006A).
+ * Small streaming seam for one text chat turn.
  *
  * The UI depends only on this interface and the closed [ChatTurnEvent]
  * set. The production implementation is the repository in the `data`
@@ -26,7 +26,7 @@ fun interface StreamingChatSource {
     ): Flow<ChatTurnEvent>
 
     /**
-     * Streams one turn whose body may carry inline image attachments (P5).
+     * Streams one turn whose body may carry inline image attachments.
      *
      * Additive seam: the default implementation streams the text alone, so
      * every existing source (and every test double) keeps its exact

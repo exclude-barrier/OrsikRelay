@@ -25,7 +25,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Mission 011: switching the active server from the management screen.
+ * Switching the active server from the management screen.
  *
  * The switch reuses the verified, safe `profileDeleted` navigation pattern
  * (main-thread navigation, a fresh Sessions destination,
@@ -220,7 +220,7 @@ class ActiveServerSelectionUiTest {
             remaining.removeAll { it.id == profileId }
         }
 
-        // Mission 012: the fake selection store — metadata only, no secret.
+        // The fake selection store — metadata only, no secret.
         val selectedActive = CopyOnWriteArrayList<String>()
 
         override fun selectActiveServer(profileId: String) {
@@ -228,7 +228,7 @@ class ActiveServerSelectionUiTest {
             selectedActive += profileId
         }
 
-        // Mission 017B: the selection tests have no device profiles.
+        // The selection tests have no device profiles.
         override fun credentialKind(profileId: String): ProfileCredentialKind =
             ProfileCredentialKind.API_KEY
     }

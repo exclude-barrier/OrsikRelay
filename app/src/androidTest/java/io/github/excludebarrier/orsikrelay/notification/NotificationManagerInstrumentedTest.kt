@@ -24,7 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * P3 — instrumented tests of the real [NotificationManager] adapter.
+ * Instrumented tests of the real [NotificationManager] adapter.
  *
  * Permission flow (per the agreed test strategy):
  *

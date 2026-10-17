@@ -3,7 +3,7 @@ package io.github.excludebarrier.orsikrelay.domain.profile
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
- * Pure, local validation of the onboarding form (Mission 002A).
+ * Pure, local validation of the onboarding form.
  *
  * Rules:
  * - profile name: not empty after trim, at most [PROFILE_NAME_MAX_LENGTH]
@@ -80,7 +80,7 @@ object ProfileFormValidator {
      * Validates ONLY the shared connection fields (profile name + HTTPS
      * base URL) without any credential rule.
      *
-     * Mission 017B: the device-pairing mode has no API-key field, so it
+     * The device-pairing mode has no API-key field, so it
      * must not be rejected by the `API_KEY_EMPTY` rule. The pairing code
      * is validated separately by the UI against the closed
      * `DevicePairCode.normalize` contract. The API-key mode keeps the

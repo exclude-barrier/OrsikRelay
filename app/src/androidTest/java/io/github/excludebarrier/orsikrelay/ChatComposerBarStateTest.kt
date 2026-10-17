@@ -22,7 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * P5.1: the composer attachment states the real [io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen]
+ * The composer attachment states the real [io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen]
  * cannot be driven into from a test — the busy state only exists while a real
  * picker result is being read, and a decodable thumbnail needs a real image
  * provider. The test renders the production [ComposerBar] directly with the

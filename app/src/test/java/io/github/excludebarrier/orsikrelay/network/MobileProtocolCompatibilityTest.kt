@@ -19,7 +19,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * P0 mobile-protocol compatibility contract (explicit versioning).
+ * Mobile-protocol compatibility contract (explicit versioning).
  *
  * Proves the authenticated capability probe negotiates the mobile-protocol
  * version explicitly and fail-closed, for BOTH soft mobile capabilities

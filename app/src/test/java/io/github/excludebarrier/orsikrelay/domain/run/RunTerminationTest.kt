@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * P7: closed classification of a failed turn into the three ownership
+ * Closed classification of a failed turn into the three ownership
  * outcomes. Only an authoritative server terminal or a proven pre-run
  * rejection may release the single run slot.
  */

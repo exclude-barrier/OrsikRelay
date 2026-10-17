@@ -3,8 +3,7 @@ package io.github.excludebarrier.orsikrelay.domain.session
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
- * Authenticated raw transport seam for `POST /api/sessions` (Mission
- * 005A).
+ * Authenticated raw transport seam for `POST /api/sessions`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesSessionCreateClient]. The

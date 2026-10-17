@@ -13,7 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Instrumentation tests for [SharedPreferencesRunLeaseStore] (OR-09) against
+ * Instrumentation tests for [SharedPreferencesRunLeaseStore] against
  * the real SharedPreferences persistence: exact round-trip across store
  * instances (the process-death path re-creates the store), replacement,
  * idempotent clear and the "incomplete record is absent" rule.

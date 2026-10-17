@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.onboarding
 
 /**
- * The two onboarding connection modes (Mission 017B).
+ * The two onboarding connection modes.
  *
  * [Pairing] is the recommended default: the user pastes a one-time device
  * pairing code and no API key. [ApiKey] is the pre-existing mode, kept

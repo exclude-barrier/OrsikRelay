@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     // API key. Snapshot state so a re-delivered link recomposes the route.
     private val pairingBootstrap = mutableStateOf<PairingBootstrap?>(null)
 
-    // P3: a notification tap (cold start or warm start) is parsed once into a
+    // A notification tap (cold start or warm start) is parsed once into a
     // validated (profileId, sessionId) and handed to the navigation host,
     // which opens exactly that chat. Malformed intents yield null (fail-closed)
     // and leave the normal startup navigation untouched.

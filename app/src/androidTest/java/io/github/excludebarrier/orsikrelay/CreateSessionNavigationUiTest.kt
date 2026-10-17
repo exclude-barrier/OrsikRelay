@@ -31,7 +31,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Navigation test for the new-session flow (Mission 005A):
+ * Navigation test for the new-session flow:
  * a successful synthetic creation opens the existing read-only chat of
  * the returned synthetic session ID; special characters are safely
  * encoded through the existing route.
@@ -79,7 +79,7 @@ class CreateSessionNavigationUiTest {
             }
         }
 
-        // FAB ist sichtbar und öffnet den Dialog.
+        // The FAB is visible and opens the dialog.
         composeRule
             .onNodeWithContentDescription("Neue Session anlegen")
             .performClick()
@@ -90,7 +90,7 @@ class CreateSessionNavigationUiTest {
             .performTextInput("Synthetischer Titel")
         composeRule.onNodeWithText("Erstellen").performClick()
 
-        // Die neue Session öffnet den bestehenden Chat der synthetischen ID.
+        // The new session opens the existing chat of the synthetic ID.
         waitForText("Fixture-Chatinhalt")
         assertEquals(specialId, receivedSession.get())
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -98,8 +98,8 @@ class CreateSessionNavigationUiTest {
                 ?.isAtLeast(Lifecycle.State.CREATED) == true
         }
         composeRule.waitForIdle()
-        // Back ist bereits ohne den zusätzlichen Dialog-/Navigation-Race im
-        // bestehenden SessionChatNavigationUiTest abgedeckt.
+        // Back is already covered without the additional dialog/navigation
+        // race in the existing SessionChatNavigationUiTest.
     }
 
     private val emptySessions = SessionPageSource { _, _, _ ->

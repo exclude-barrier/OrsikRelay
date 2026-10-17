@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.message
 
 /**
- * Closed set of chat-history failure reasons (Mission 004B).
+ * Closed set of chat-history failure reasons.
  *
  * Every reason is a stable, generic code: none of them carries request
  * URLs, response bodies, session IDs, message content, exception text,

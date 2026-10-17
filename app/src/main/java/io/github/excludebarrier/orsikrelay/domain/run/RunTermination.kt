@@ -5,7 +5,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 /**
  * Closed classification of how a streaming turn ended, used by the
  * app-level run owner to decide whether the single run slot may be
- * released (P7).
+ * released.
  *
  * A Hermes run is independent of its SSE socket server-side: once the
  * server confirmed a run (`run.started`), a local transport, timeout,

@@ -12,7 +12,7 @@ import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationSessionIntent
 
 /**
- * The single run foreground service (P3 background continuity).
+ * The single run foreground service (background continuity).
  *
  * Started by the app-level run controller while the user's send action
  * still runs in the foreground, and stopped as soon as the run is

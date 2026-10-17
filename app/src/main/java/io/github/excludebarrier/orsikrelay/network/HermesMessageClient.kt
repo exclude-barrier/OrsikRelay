@@ -26,7 +26,7 @@ import org.json.JSONObject
 
 /**
  * Performs the single authenticated `GET /api/sessions/{id}/messages`
- * read (Mission 004B). This class is the transport only; profile lookup
+ * read. This class is the transport only; profile lookup
  * and credential access happen in the repository layer, so the key never
  * reaches this class except as the scoped [SecretValue] argument.
  *

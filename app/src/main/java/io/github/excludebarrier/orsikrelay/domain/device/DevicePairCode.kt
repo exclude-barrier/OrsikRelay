@@ -1,8 +1,8 @@
 package io.github.excludebarrier.orsikrelay.domain.device
 
 /**
- * Pure, local normalization and validation of a device pairing code
- * (Mission 017A). No network access, no I/O, no error text.
+ * Pure, local normalization and validation of a device pairing code.
+ * No network access, no I/O, no error text.
  *
  * Server contract v1 (docs/mobile-wire-contract.md §7.3): the
  * code is 24 characters from the alphabet `A-Z` without `I, L, O, U`
