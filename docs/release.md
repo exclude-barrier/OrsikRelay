@@ -1,77 +1,77 @@
-# Release-Signing, AAB, SBOM und CI-Release
+# Release Signing, AAB, SBOM and CI Release
 
-## Zweck
+## Purpose
 
-Dieses Dokument beschreibt, wie das produktive Release-Signing verwaltet wird,
-wie ein signiertes Release-Artefakt (AAB und APK) lokal gebaut und verifiziert
-wird und welche Grenzen der CI-Release-Job, die SBOM und die Provenance haben.
+This document describes how productive release signing is managed,
+how a signed release artifact (AAB and APK) is built and verified locally,
+and what limits the CI release job, the SBOM and the provenance have.
 
-Das Release-Signing ist bewusst **nicht** im Repository hinterlegt: Die Signatur
-wird ausschließlich aus vier Umgebungsvariablen gespeist, damit weder
-Keystore-Datei, Passwörter noch Alias jemals in Git landen.
+Release signing is deliberately **not** stored in the repository: The signature
+is fed exclusively from four environment variables, so that neither
+keystore file, passwords nor alias ever land in Git.
 
-Die Debug-Variante bleibt unverändert und nutzt weiterhin den Android-Debug-Key.
+The debug variant remains unchanged and continues to use the Android debug key.
 
-## Die vier Umgebungsvariablen
+## The Four Environment Variables
 
-Alle vier werden über `providers.environmentVariable(...)` gelesen. Fehlt eine,
-bleibt der Release-Build unsigniert (kein Fehler), solange **keine** gesetzt ist.
+All four are read via `providers.environmentVariable(...)`. If one is missing,
+the release build remains unsigned (no error), as long as **none** is set.
 
-| Variable | Bedeutung |
+| Variable | Meaning |
 | --- | --- |
-| `ORSIK_RELEASE_STORE_FILE` | Pfad zur Keystore-Datei (`.jks`) **außerhalb** des Repositories |
-| `ORSIK_RELEASE_STORE_PASSWORD` | Passwort des Keystores |
-| `ORSIK_RELEASE_KEY_ALIAS` | Alias des Signing-Keys |
-| `ORSIK_RELEASE_KEY_PASSWORD` | Passwort des Signing-Keys (bei PKCS12 gleich dem Store-Passwort) |
+| `ORSIK_RELEASE_STORE_FILE` | Path to the keystore file (`.jks`) **outside** the repository |
+| `ORSIK_RELEASE_STORE_PASSWORD` | Password of the keystore |
+| `ORSIK_RELEASE_KEY_ALIAS` | Alias of the signing key |
+| `ORSIK_RELEASE_KEY_PASSWORD` | Password of the signing key (for PKCS12 the same as the store password) |
 
-Regeln in `app/build.gradle.kts` (fail-closed, unverändert):
+Rules in `app/build.gradle.kts` (fail-closed, unchanged):
 
-- **Keine** der vier Variablen gesetzt: Der Release-Build läuft durch und bleibt
-  unsigniert.
-- **Nur ein Teil** gesetzt: Der Build bricht mit einer Festfehlermeldung ab, die
-  die erwarteten Variablennamen nennt, aber **keine Werte** ausgibt.
-- **Keystore innerhalb des Repositories** (kanonisch geprüfter Pfad unterhalb von
-  `rootDir`): Der Build bricht mit `Release keystore must live outside the
-  repository` ab, ohne den Pfad auszugeben.
-- **Keystore-Datei existiert nicht**: Der Build bricht ab, ebenfalls ohne
-  Pfadwert in der Meldung.
+- **None** of the four variables set: The release build succeeds and remains
+  unsigned.
+- **Only some** set: The build aborts with a fixed error message that
+  names the expected variable names but outputs **no values**.
+- **Keystore inside the repository** (canonically checked path below
+  `rootDir`): The build aborts with `Release keystore must live outside the
+  repository`, without outputting the path.
+- **Keystore file does not exist**: The build aborts, likewise without a
+  path value in the message.
 
-Passwörter werden nur als Umgebungsvariablen in der Shell gesetzt und niemals
-ausgegeben, geloggt oder in Dateien geschrieben.
+Passwords are set only as environment variables in the shell and never
+output, logged or written to files.
 
-## Produktiver Upload-/Release-Key (Owner-Ablauf)
+## Productive Upload/Release Key (Owner Procedure)
 
-Der produktive Key wird **nur vom Menschen** auf einem vertrauenswürdigen
-Rechner erzeugt. Das Werkzeug ist `scripts/release-keystore.sh`; es ist nicht
-für CI gedacht.
+The productive key is generated **only by the human** on a trusted
+machine. The tool is `scripts/release-keystore.sh`; it is not
+intended for CI.
 
 ```bash
-# Standardziel ~/.config/orsik-release/release.jks, Alias orsik-release
+# Default target ~/.config/orsik-release/release.jks, alias orsik-release
 scripts/release-keystore.sh
 
-# Alternativ mit explizitem Ziel und Alias
+# Alternatively with explicit target and alias
 scripts/release-keystore.sh \
   --path "$HOME/.config/orsik-release/release.jks" \
   --alias orsik-release
 ```
 
-Eigenschaften des Skripts:
+Properties of the script:
 
-- `keytool -genkeypair`, RSA 4096 Bit, PKCS12, Gültigkeit **10950 Tage**
-  (30 Jahre).
-- **Keine** Passwort-Argumente. `keytool` fragt das Keystore-Passwort und die
-  Bestätigung interaktiv ab; am Ende fragt es das Passwort erneut, um den
-  SHA-256-Zertifikats-Fingerprint zu lesen.
-- Bricht ab, wenn das Ziel im Repository liegt oder bereits existiert.
-- Erzeugt das Elternverzeichnis mit Modus `0700` und die Keystore-Datei mit
-  Modus `0600`.
-- Gibt am Ende nur Pfad, Alias und SHA-256-Fingerprint aus. Das Passwort wird
-  weder ausgegeben noch gespeichert.
+- `keytool -genkeypair`, RSA 4096 bit, PKCS12, validity **10950 days**
+  (30 years).
+- **No** password arguments. `keytool` prompts for the keystore password and the
+  confirmation interactively; at the end it asks for the password again to read the
+  SHA-256 certificate fingerprint.
+- Aborts if the target is inside the repository or already exists.
+- Creates the parent directory with mode `0700` and the keystore file with
+  mode `0600`.
+- At the end outputs only path, alias and SHA-256 fingerprint. The password is
+  neither output nor stored.
 
-### Gültigkeit und Quelle
+### Validity and Source
 
-Die Android-Dokumentation empfiehlt mindestens 25 Jahre und Google Play
-verlangt ein Zertifikat, das nach dem 22. Oktober 2033 gültig ist:
+The Android documentation recommends at least 25 years and Google Play
+requires a certificate that is valid after 22 October 2033:
 
 > "A validity period of 25 years or more is recommended."
 >
@@ -80,49 +80,49 @@ verlangt ein Zertifikat, das nach dem 22. Oktober 2033 gültig ist:
 > Play enforces this requirement to ensure that users can seamlessly upgrade
 > apps when new versions are available."
 
-Quelle: <https://developer.android.com/studio/publish/app-signing>, Abschnitt
-"Signing considerations" (geprüft am 2026-10-17). 10950 Tage liegen mit rund
-30 Jahren oberhalb der Empfehlung und oberhalb der Play-Grenze.
+Source: <https://developer.android.com/studio/publish/app-signing>, section
+"Signing considerations" (checked on 2026-10-17). 10950 days are, at around
+30 years, above the recommendation and above the Play limit.
 
-### Sichere Aufbewahrung
+### Secure Storage
 
-- Die Keystore-Datei und das Passwort getrennt aufbewahren, zum Beispiel
-  Keystore in einem Passwortmanager und das Passwort in einem zweiten,
-  getrennten Tresor.
-- **Mindestens zwei** getrennte, gesicherte Orte, davon ein **Offline-Backup**
-  an einem zweiten Ort (z. B. verschlüsselter Datenträger im Safe).
-- Niemals in Git, in CI-Variablen oder in einen Cloud-Sync ohne
-  Verschlüsselung legen. Das Repository enthält keinerlei Key-Material; die
-  `.gitignore`-Regeln ersetzen diese Regel nicht.
-- Das Passwort nie in Shell-History, Logs, Tickets oder Screenshots schreiben.
+- Store the keystore file and the password separately, for example
+  the keystore in a password manager and the password in a second,
+  separate vault.
+- **At least two** separate, secured locations, one of them an **offline backup**
+  at a second location (e.g. an encrypted medium in a safe).
+- Never place in Git, in CI variables or in a cloud sync without
+  encryption. The repository contains no key material whatsoever; the
+  `.gitignore` rules do not replace this rule.
+- Never write the password to shell history, logs, tickets or screenshots.
 
-### Verlust des Keys
+### Loss of the Key
 
-Geht der Key oder sein Passwort verloren, ist mit demselben Key **kein Update
-mehr möglich**: Google Play akzeptiert für ein bereits veröffentlichtes Paket
-nur Signaturen mit derselben Identität. Ein neuer Key bedeutet eine neue
-App-ID und damit einen neuen Eintrag ohne Update-Pfad für bestehende
-Installationen.
+If the key or its password is lost, **no further update is possible** with the
+same key: Google Play accepts for an already published package
+only signatures with the same identity. A new key means a new
+app ID and thus a new entry without an update path for existing
+installations.
 
-**Google Play App Signing (Option, derzeit nicht eingerichtet):** Google
-verwaltet dabei den App-Signing-Key; der lokale Key ist nur noch der
-Upload-Key. Bei Verlust des Upload-Keys kann der Owner bei Google einen
-Upload-Key-Reset beantragen, ohne die App-Identität zu verlieren. Quelle:
+**Google Play App Signing (option, currently not set up):** Google
+manages the app signing key; the local key is then only the
+upload key. If the upload key is lost, the owner can request an
+upload key reset at Google without losing the app identity. Source:
 <https://support.google.com/googleplay/android-developer/answer/7384423>
-("Use Play App Signing"). Die Entscheidung für oder gegen Play App Signing
-trifft der Owner; dieses Repository setzt sie nicht voraus.
+("Use Play App Signing"). The decision for or against Play App Signing
+is made by the owner; this repository does not assume it.
 
-## Lokaler signierter Release-Build
+## Local Signed Release Build
 
-Unsigned (keine Variablen gesetzt):
+Unsigned (no variables set):
 
 ```bash
 export ANDROID_HOME="$HOME/Android/Sdk"
 ./gradlew --offline :app:bundleRelease :app:assembleRelease
 ```
 
-Signed (Passwörter nur interaktiv in Shell-Variablen, nie in Dateien oder in
-der History):
+Signed (passwords only interactively in shell variables, never in files or in
+the history):
 
 ```bash
 export ANDROID_HOME="$HOME/Android/Sdk"
@@ -134,163 +134,163 @@ export ORSIK_RELEASE_KEY_ALIAS=orsik-release
 ./gradlew --offline :app:bundleRelease :app:assembleRelease
 ```
 
-`isMinifyEnabled` bleibt `false`; R8/ProGuard-Verschlankung ist ein separates
-Vorhaben und ist hier **nicht** Teil des Release-Builds.
+`isMinifyEnabled` remains `false`; R8/ProGuard shrinking is a separate
+initiative and is **not** part of the release build here.
 
-## Verifikation
+## Verification
 
-`scripts/verify-release-signing.sh` prüft die vier Pfade real und offline
-(Throwaway-Key und Passwort nur in `mktemp` und Shell-Variablen, mit
-`trap`-Cleanup):
+`scripts/verify-release-signing.sh` checks the four paths for real and offline
+(throwaway key and password only in `mktemp` and shell variables, with
+`trap` cleanup):
 
-| Fall | Erwartung |
+| Case | Expectation |
 | --- | --- |
-| (a) keine Variablen | Release baut, AAB ist unsigniert, APK verifiziert nicht |
-| (b) nur teilweise Variablen | Build bricht ab, Meldung nennt Variablennamen, keine Werte |
-| (c) Keystore im Repository | Build bricht ab, Meldung enthält keinen Pfad |
-| (d) Throwaway-Key außerhalb | `:app:bundleRelease` und `:app:assembleRelease` bauen, `apksigner verify --print-certs` und `jarsigner -verify` sind erfolgreich |
+| (a) no variables | release builds, AAB is unsigned, APK does not verify |
+| (b) only partial variables | build aborts, message names variable names, no values |
+| (c) keystore in the repository | build aborts, message contains no path |
+| (d) throwaway key outside | `:app:bundleRelease` and `:app:assembleRelease` build, `apksigner verify --print-certs` and `jarsigner -verify` succeed |
 
 ```bash
 ./scripts/verify-release-signing.sh
 ```
 
-Einzelne Artefakte prüfen:
+Verify individual artifacts:
 
 ```bash
-# Unsigned: erwartet "jar is unsigned." (jarsigner liefert dabei Exit 0)
-# Signed:   erwartet "jar verified."
+# Unsigned: expects "jar is unsigned." (jarsigner exits 0 in this case)
+# Signed:   expects "jar verified."
 jarsigner -verify app/build/outputs/bundle/release/app-release.aab
 
-# APK-Zertifikat prüfen (DN und Digests; keine Secrets)
+# Verify APK certificate (DN and digests; no secrets)
 "$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs \
   app/build/outputs/apk/release/app-release.apk
 
-# Artefakt-Integrität
+# Artifact integrity
 sha256sum app/build/outputs/bundle/release/app-release.aab \
   app/build/outputs/apk/release/app-release.apk
 ```
 
-## CI-Release-Job
+## CI Release Job
 
-Der Job `release` in `.github/workflows/android.yml` heißt
-**"Release build, SBOM and provenance"** und läuft bei Push und Pull Request
-gegen `main`. Er hat `permissions: contents: read` und verwendet **keine**
-GitHub-Secrets.
+The `release` job in `.github/workflows/android.yml` is named
+**"Release build, SBOM and provenance"** and runs on push and pull request
+against `main`. It has `permissions: contents: read` and uses **no**
+GitHub secrets.
 
-Ablauf:
+Procedure:
 
-1. Erzeugt in `$RUNNER_TEMP` einen Wegwerf-Keystore (RSA 4096, 30 Jahre) mit
-   zufälligem Passwort aus `openssl rand -hex 24`. Das Passwort wird vor der
-   Weitergabe mit `::add-mask::` maskiert und nur über `$GITHUB_ENV` an die
-   folgenden Schritte gegeben. `keytool` liest es aus stdin, es gibt kein
-   Passwort-Argument.
-2. Baut `:app:bundleRelease` und `:app:assembleRelease` und prüft APK
-   (`apksigner verify --print-certs`) und AAB (`jarsigner -verify`).
-3. Erzeugt die CycloneDX-SBOM über `:app:cyclonedxDirectBom` und validiert das
-   JSON (`bomFormat`, nichtleere Komponentenliste).
-4. Legt `app-release.aab`, `app-release.apk`, `app.cdx.json` und `SHA256SUMS`
-   in `$RUNNER_TEMP/release-dist` ab.
-5. Schreibt `provenance.intoto.json` (in-toto Statement v1,
-   `predicateType` `https://slsa.dev/provenance/v1`) mit den Subjekten
-   Dateiname plus SHA-256 sowie Repo, Commit-SHA, Workflow-Ref, Run-ID und
-   Runner aus den GitHub-Umgebungsvariablen.
-6. Lädt alles als Artefakt **`release-dist`** hoch.
-7. Führt zuletzt `scripts/verify-release-signing.sh` aus und prüft damit die
-   Fail-closed-Fälle (a)–(c) und einen eigenen Wegwerf-Key-Build (d) auch in
-   der CI.
+1. Creates a throwaway keystore in `$RUNNER_TEMP` (RSA 4096, 30 years) with a
+   random password from `openssl rand -hex 24`. The password is masked with
+   `::add-mask::` before being passed on and is passed to the
+   following steps only via `$GITHUB_ENV`. `keytool` reads it from stdin; there is no
+   password argument.
+2. Builds `:app:bundleRelease` and `:app:assembleRelease` and verifies the APK
+   (`apksigner verify --print-certs`) and AAB (`jarsigner -verify`).
+3. Generates the CycloneDX SBOM via `:app:cyclonedxDirectBom` and validates the
+   JSON (`bomFormat`, non-empty component list).
+4. Places `app-release.aab`, `app-release.apk`, `app.cdx.json` and `SHA256SUMS`
+   in `$RUNNER_TEMP/release-dist`.
+5. Writes `provenance.intoto.json` (in-toto statement v1,
+   `predicateType` `https://slsa.dev/provenance/v1`) with the subjects
+   file name plus SHA-256 as well as repo, commit SHA, workflow ref, run ID and
+   runner from the GitHub environment variables.
+6. Uploads everything as the artifact **`release-dist`**.
+7. Finally runs `scripts/verify-release-signing.sh`, thereby checking the
+   fail-closed cases (a)–(c) and its own throwaway-key build (d) also in
+   CI.
 
-Grenzen:
+Limits:
 
-- Der Wegwerf-Key ist **nicht verteilbar**. Er belegt nur, dass die Pipeline
-  signieren und verifizieren kann. Produktive Artefakte entstehen ausschließlich
-  lokal mit dem Owner-Key.
-- Die Provenance ist **unsigniert**. GitHub Artifact Attestations stehen für
-  private Repositories nur mit GitHub Enterprise Cloud zur Verfügung; Free,
-  Pro und Team nur für öffentliche Repositories. Quelle:
+- The throwaway key is **not distributable**. It only proves that the pipeline
+  can sign and verify. Productive artifacts are produced exclusively
+  locally with the owner key.
+- The provenance is **unsigned**. GitHub Artifact Attestations are available for
+  private repositories only with GitHub Enterprise Cloud; Free,
+  Pro and Team only for public repositories. Source:
   <https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations>.
-- Der Job veröffentlicht nichts außerhalb des Workflow-Runs (kein Play-Upload,
-  kein Release, kein Push).
+- The job publishes nothing outside the workflow run (no Play upload,
+  no release, no push).
 
-## App-SBOM
+## App SBOM
 
-Die SBOM wird mit dem CycloneDX-Gradle-Plugin erzeugt. Version und Plugin-ID
-sind im Version Catalog gepinnt (`gradle/libs.versions.toml`,
-`org.cyclonedx.bom` 3.5.1); das Plugin ist im `app`-Modul angewendet. Erfasst
-wird die **Release-Runtime-Classpath** (`releaseRuntimeClasspath`), nicht der
-Test- oder Compile-Classpath.
+The SBOM is generated with the CycloneDX Gradle plugin. Version and plugin ID
+are pinned in the version catalog (`gradle/libs.versions.toml`,
+`org.cyclonedx.bom` 3.5.1); the plugin is applied in the `app` module. Captured
+is the **release runtime classpath** (`releaseRuntimeClasspath`), not the
+test or compile classpath.
 
 ```bash
 ./gradlew --offline :app:cyclonedxDirectBom
 ```
 
-Ausgabe: `app/build/reports/sbom/app.cdx.json` (CycloneDX 1.6, nur JSON).
-Die Datei enthält Komponenten wie OkHttp, Compose und kotlinx-coroutines.
-Lokal real mit Gradle 9.7.0 und AGP 9.3.1 erzeugt; das Plugin verlangt Gradle
-8.4 oder neuer.
+Output: `app/build/reports/sbom/app.cdx.json` (CycloneDX 1.6, JSON only).
+The file contains components such as OkHttp, Compose and kotlinx-coroutines.
+Generated for real locally with Gradle 9.7.0 and AGP 9.3.1; the plugin requires Gradle
+8.4 or newer.
 
-Grenzen: Die SBOM beschreibt aufgelöste Abhängigkeiten. Sie ist kein
-Quellcode-Inventar, kein Vulnerability-Scan und nicht signiert. Eine
-SBOM-Attestierung ist aus demselben Grund wie die Provenance nicht aktiv.
+Limits: The SBOM describes resolved dependencies. It is not a
+source code inventory, not a vulnerability scan and not signed. An
+SBOM attestation is not active for the same reason as the provenance.
 
-## Branch-Governance für `main`
+## Branch Governance for `main`
 
-Gewünschte Regeln (Owner-Entscheidung):
+Desired rules (owner decision):
 
-- Pull Request vor jedem Merge verpflichtend.
-- Genehmigende Reviews: **0** (Payload). Bei nur einem Maintainer kann der
-  Autor seinen eigenen PR nicht approven; mit `1` und ohne Bypass wäre `main`
-  unmergebar. Sobald ein zweiter Maintainer existiert, auf `1` setzen.
-- Required Status Checks mit aktuellem Branch (strict).
-- Keine Force-Pushes, keine Branch-Löschung.
-- Lineare History.
+- Pull request mandatory before every merge.
+- Approving reviews: **0** (payload). With only one maintainer, the
+  author cannot approve their own PR; with `1` and without a bypass, `main`
+  would be unmergeable. As soon as a second maintainer exists, set to `1`.
+- Required status checks with up-to-date branch (strict).
+- No force pushes, no branch deletion.
+- Linear history.
 
-Pflicht-Checks (exakte Check-Namen, also die Job-Namen aus den Workflows):
+Required checks (exact check names, i.e. the job names from the workflows):
 
-| Workflow | Check-Name |
+| Workflow | Check name |
 | --- | --- |
 | Android CI | `Unit tests, lint and debug build` |
 | Android CI | `Instrumented tests (API 36)` |
 | Bridge CI | `Bridge tests and reproducible build` |
 | Android CI | `Release build, SBOM and provenance` |
 
-Bridge CI läuft ohne Pfadfilter auf jedem Push/PR gegen `main` (ca. 30 s),
-damit der Pflicht-Check immer berichtet; ein pfadgefilterter Required Check
-bliebe bei PRs außerhalb von `bridge/` dauerhaft "pending".
+Bridge CI runs without a path filter on every push/PR against `main` (approx. 30 s),
+so that the required check always reports; a path-filtered required check
+would remain permanently "pending" for PRs outside `bridge/`.
 
-**Status: derzeit NICHT aktiv.** Das Repository ist privat und liegt im
-Free-Plan. GitHub antwortet auf den Branch-Protection-Aufruf mit HTTP 403
+**Status: currently NOT active.** The repository is private and on the
+Free plan. GitHub responds to the branch protection call with HTTP 403
 ("Upgrade to GitHub Pro or make this repository public to enable this
-feature."). Rulesets mit Required Checks sind für private Repositories
-ebenfalls erst ab Pro/Team verfügbar.
+feature."). Rulesets with required checks are for private repositories
+likewise available only from Pro/Team.
 
-Der Payload liegt vorbereitet unter `.github/branch-ruleset-main.json`. Nach
-einem Plan-Upgrade oder dem Öffentlich-Machen führt der Owner genau diesen
-Befehl einmal aus:
+The payload is prepared at `.github/branch-ruleset-main.json`. After
+a plan upgrade or making it public, the owner runs exactly this
+command once:
 
 ```bash
 gh api --method POST repos/exclude-barrier/OrsikRelay/rulesets \
   --input .github/branch-ruleset-main.json
 ```
 
-Kontrolle:
+Check:
 
 ```bash
 gh api repos/exclude-barrier/OrsikRelay/rulesets
 ```
 
-## Ausdrücklich NICHT umgesetzt
+## Explicitly NOT Implemented
 
-- **Play-Upload**: Es gibt keinen automatischen oder manuellen Upload zu Google
-  Play; die Artefakte werden lokal gebaut und geprüft.
-- **Produktives Signing in der CI**: Der CI-Release-Job nutzt ausschließlich
-  einen Wegwerf-Key. Es werden keine Signing-Secrets in GitHub hinterlegt und
-  keine produktiven Artefakte in der CI erzeugt.
-- **Signierte Provenance/Attestations**: `provenance.intoto.json` ist
-  unsigniert. GitHub Artifact Attestations für private Repositories setzen
-  Enterprise Cloud voraus.
-- **Aktive Branch-Protection/Rulesets**: Der Payload ist vorbereitet, aber wegen
-  des Free-Plan-403 nicht angewendet.
-- **R8/Minify**: `isMinifyEnabled` bleibt `false`; Code-Shrinking und
-  Ressourcen-Verkleinerung sind ein separates Vorhaben.
-- **SBOM-Signatur und Vulnerability-Scan**: Die SBOM ist ein reines
-  Abhängigkeitsinventar; es gibt keine Signatur und kein Scan-Gate.
+- **Play upload**: There is no automatic or manual upload to Google
+  Play; the artifacts are built and checked locally.
+- **Productive signing in CI**: The CI release job uses exclusively
+  a throwaway key. No signing secrets are stored in GitHub and
+  no productive artifacts are produced in CI.
+- **Signed provenance/attestations**: `provenance.intoto.json` is
+  unsigned. GitHub Artifact Attestations for private repositories require
+  Enterprise Cloud.
+- **Active branch protection/rulesets**: The payload is prepared, but due to
+  the Free-plan 403 not applied.
+- **R8/minify**: `isMinifyEnabled` remains `false`; code shrinking and
+  resource shrinking are a separate initiative.
+- **SBOM signature and vulnerability scan**: The SBOM is a pure
+  dependency inventory; there is no signature and no scan gate.

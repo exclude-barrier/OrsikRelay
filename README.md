@@ -171,8 +171,6 @@ and immediately revoke paired phones.
 
 ## Documentation
 
-Most design documents are currently written in German.
-
 - [Bridge installation](docs/bridge-installation.md): install, configure, update, back up and roll back the bridge.
 - [Network options](docs/network-deployment.md): LAN, WireGuard and Tailscale setups.
 - [Threat model](docs/bridge-security.md): trust boundaries, security properties and residual risks.

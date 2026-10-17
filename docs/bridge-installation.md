@@ -1,24 +1,24 @@
-# Orsik Mobile Bridge – Installation & Betrieb
+# Orsik Mobile Bridge – Installation & Operation
 
-Stand: 2026-10-10. Zielpfad: **frische, unveränderte offizielle Hermes-Installation**
-→ Bridge installieren → privates HTTPS bereitstellen → Pairing erzeugen → QR/Deep-Link
-scannen → Chat nutzen. Kein Hermes-Fork, keine Core-Patches, kein öffentlicher Port.
+As of: 2026-10-10. Target path: **fresh, unmodified official Hermes installation**
+→ install bridge → provide private HTTPS → create pairing → scan QR/deep link
+→ use chat. No Hermes fork, no core patches, no public port.
 
-## 1. Voraussetzungen
+## 1. Prerequisites
 
-- Offizielles Hermes (Git-Stand, hier getestet: `NousResearch/hermes-agent`
-  `f86276d2`, Python 3.14) läuft mit aktivem `api_server` auf **Loopback**
-  (Default `127.0.0.1:8899` oder `:8642`), `API_SERVER_KEY` in 0600-Env.
-- Ein privater HTTPS-Zugangsweg zum Server (siehe §4): Tailscale Serve,
-  WireGuard+Reverse-Proxy oder LAN mit gültigem Zertifikat.
-- `uv` und ein Python ≥ 3.11 (Bridge-venv getrennt vom Hermes-venv).
-- **Approval-Modus `manual`** in der `config.yaml` des Hermes-Homes hinter der
-  Bridge (`approvals:` / `mode: manual`). Mit dem Core-Default `smart` genehmigt
-  ein Hilfs-LLM als harmlos eingestufte gefährliche Kommandos ohne
-  `approval.request`; das Gerät wird dann nicht gefragt (live belegt, siehe
+- Official Hermes (Git state, tested here: `NousResearch/hermes-agent`
+  `f86276d2`, Python 3.14) runs with an active `api_server` on **loopback**
+  (default `127.0.0.1:8899` or `:8642`), `API_SERVER_KEY` in a 0600 env.
+- A private HTTPS access path to the server (see §4): Tailscale Serve,
+  WireGuard+reverse proxy or LAN with a valid certificate.
+- `uv` and a Python ≥ 3.11 (bridge venv separate from the Hermes venv).
+- **Approval mode `manual`** in the `config.yaml` of the Hermes home behind the
+  bridge (`approvals:` / `mode: manual`). With the core default `smart`, a
+  helper LLM approves dangerous commands classified as harmless without
+  `approval.request`; the device is then not asked (proven live, see
   `bridge-security.md` §4.1).
-- Hermes-Venv mit dem Extra `messaging` (`uv sync --frozen --extra messaging`);
-  ohne es fehlt `aiohttp` und der `api_server` startet nicht.
+- Hermes venv with the `messaging` extra (`uv sync --frozen --extra messaging`);
+  without it, `aiohttp` is missing and `api_server` does not start.
 
 ## 2. Installation
 
@@ -26,78 +26,78 @@ scannen → Chat nutzen. Kein Hermes-Fork, keine Core-Patches, kein öffentliche
 ./install.sh [--update] [--systemd] /pfad/zum/bridge/source
 ```
 
-- Legt `$BRIDGE_HOME` (Default `~/.local/orsik-mobile-bridge`, 0700) und einen
-  **dedizierten venv** an; installiert die Abhängigkeiten **hash-gepinnt** aus
-  dem eingecheckten `bridge/uv.lock` (`uv export --frozen` mit
-  `--require-hashes`, danach die Bridge selbst mit `--no-deps`), **kein**
-  `curl | bash`. Fehlt `uv.lock`, bricht der Installer ab.
-- Existiert bereits eine Installation, bricht `install.sh` ohne `--update` ab
-  (bestehende Installationen/Ports werden nicht überschrieben).
-- Schreibt `$BRIDGE_HOME/bridge.env` (0600) als Vorlage.
+- Creates `$BRIDGE_HOME` (default `~/.local/orsik-mobile-bridge`, 0700) and a
+  **dedicated venv**; installs the dependencies **hash-pinned** from
+  the checked-in `bridge/uv.lock` (`uv export --frozen` with
+  `--require-hashes`, then the bridge itself with `--no-deps`), **no**
+  `curl | bash`. If `uv.lock` is missing, the installer aborts.
+- If an installation already exists, `install.sh` aborts without `--update`
+  (existing installations/ports are not overwritten).
+- Writes `$BRIDGE_HOME/bridge.env` (0600) as a template.
 
-Damit ist die Installation reproduzierbar: derselbe Quellstand liefert an jedem
-Tag und auf jedem Rechner exakt dieselben Abhängigkeitsversionen. Abhängigkeiten
-ändern sich nur bewusst — `uv lock --upgrade-package <pkg>` plus Review des
-Lock-Diffs (`uv lock --check` in CI schlägt bei veraltetem Lock fehl). Die CI
-baut zusätzlich Wheel, `SHA256SUMS` und ein CycloneDX-SBOM und legt sie als
-Artefakt `bridge-dist` ab.
+This makes the installation reproducible: the same source state delivers exactly the same
+dependency versions on any day and on any machine. Dependencies
+change only deliberately — `uv lock --upgrade-package <pkg>` plus review of the
+lock diff (`uv lock --check` in CI fails on an outdated lock). CI
+additionally builds a wheel, `SHA256SUMS` and a CycloneDX SBOM and stores them as
+the artifact `bridge-dist`.
 
 `bridge.env`:
 
 ```
-# nur Loopback; die Bridge erzwingt das
+# loopback only; the bridge enforces this
 BRIDGE_BIND=127.0.0.1
 BRIDGE_PORT=9842
-# offizieller api_server; nur Loopback-HTTP-IP mit Port, kein Hostname,
-# kein Pfad — sonst startet die Bridge nicht
+# official api_server; loopback HTTP IP with port only, no hostname,
+# no path — otherwise the bridge does not start
 BRIDGE_UPSTREAM=http://127.0.0.1:8899
-# Datei mit API_SERVER_KEY (0600)
+# file with API_SERVER_KEY (0600)
 BRIDGE_HERMES_ENV=/home/USER/.hermes/.env
 BRIDGE_STATE_DB=/home/USER/.local/orsik-mobile-bridge/state.db
-# für Deep-Link/QR
+# for deep link/QR
 BRIDGE_PUBLIC_BASE_URL=https://<host>
 ```
 
-Kommentare nur in eigenen Zeilen: `bridge.env` wird als `KEY=VALUE` gelesen,
-ein Inline-Kommentar würde Teil des Werts (und z. B. `BRIDGE_BIND` /
-`BRIDGE_UPSTREAM` ungültig machen).
+Comments only on their own lines: `bridge.env` is read as `KEY=VALUE`,
+an inline comment would become part of the value (and, for example, make
+`BRIDGE_BIND` / `BRIDGE_UPSTREAM` invalid).
 
 ## 2a. Preflight: `./install.sh --check`
 
-Prüft eine bestehende Installation, **ohne etwas anzulegen oder zu verändern**,
-und liest dafür `$BRIDGE_HOME/bridge.env` zeilenweise als Daten (`KEY=VALUE`,
-Kommentare/Leerzeilen ignoriert; kein `source`, kein `eval`). Ausgabe pro
-Prüfung genau eine Zeile `OK <name>` / `WARN <name>: <grund>` /
-`FAIL <name>: <grund>`; Key-/Token-Werte werden nie ausgegeben. Exit-Code 1,
-sobald eine Prüfung FAIL ist, sonst 0; am Ende `PREFLIGHT: PASS` bzw.
+Checks an existing installation **without creating or changing anything**,
+reading `$BRIDGE_HOME/bridge.env` line by line as data (`KEY=VALUE`,
+comments/blank lines ignored; no `source`, no `eval`). Output per
+check exactly one line `OK <name>` / `WARN <name>: <reason>` /
+`FAIL <name>: <reason>`; key/token values are never output. Exit code 1
+as soon as one check is FAIL, otherwise 0; at the end `PREFLIGHT: PASS` or
 `PREFLIGHT: FAIL (<n> failed)`.
 
 ```sh
 ./install.sh --check
 ```
 
-| Prüfung | Erwartung |
+| Check | Expectation |
 |---|---|
-| `home_mode` | `$BRIDGE_HOME` existiert, Modus 700 |
-| `env_mode` | `bridge.env` existiert, Modus 600 |
-| `venv` | `$BRIDGE_HOME/venv/bin/orsik-mobile-bridge` ausführbar |
-| `bind` | `BRIDGE_BIND` leer, `127.0.0.1` oder `::1` |
-| `upstream` | `BRIDGE_UPSTREAM` (Default `http://127.0.0.1:8899`) passt auf `^http://(127.x.x.x\|[::1]):port$` |
-| `hermes_env` | `BRIDGE_HERMES_ENV` gesetzt, Datei 0600, mit `API_SERVER_KEY=…` |
-| `approvals_mode` | `config.yaml` neben der Hermes-Env-Datei setzt `approvals: mode: manual`; fehlt die Datei oder steht dort ein anderer Modus → WARN (Core-Default `smart` genehmigt teils ohne Rückfrage) |
-| `public_base_url` | leer → WARN (kein Deep-Link/QR); sonst muss es mit `https://` beginnen |
-| `port` | `BRIDGE_PORT` (Default 9842): `ss` fehlt → WARN; Listener auf Loopback/`0.0.0.0` → WARN („port in use") |
-| `hermes_health` | `curl` auf `$UPSTREAM/health` == 200; nur wenn `upstream` OK war, sonst WARN |
+| `home_mode` | `$BRIDGE_HOME` exists, mode 700 |
+| `env_mode` | `bridge.env` exists, mode 600 |
+| `venv` | `$BRIDGE_HOME/venv/bin/orsik-mobile-bridge` executable |
+| `bind` | `BRIDGE_BIND` empty, `127.0.0.1` or `::1` |
+| `upstream` | `BRIDGE_UPSTREAM` (default `http://127.0.0.1:8899`) matches `^http://(127.x.x.x\|[::1]):port$` |
+| `hermes_env` | `BRIDGE_HERMES_ENV` set, file 0600, with `API_SERVER_KEY=…` |
+| `approvals_mode` | `config.yaml` next to the Hermes env file sets `approvals: mode: manual`; if the file is missing or another mode is set there → WARN (core default `smart` sometimes approves without asking) |
+| `public_base_url` | empty → WARN (no deep link/QR); otherwise it must start with `https://` |
+| `port` | `BRIDGE_PORT` (default 9842): `ss` missing → WARN; listener on loopback/`0.0.0.0` → WARN ("port in use") |
+| `hermes_health` | `curl` to `$UPSTREAM/health` == 200; only if `upstream` was OK, otherwise WARN |
 
-Zusätzlich prüft der normale Installationsmodus **vor** jeder Änderung, ob `uv`
-vorhanden ist und `uv python find ${BRIDGE_PYTHON:-3.14}` funktioniert; sonst
-bricht er mit Hinweis ab. Nach einer Installation erinnert er an
+In addition, the normal installation mode checks **before** any change whether `uv`
+is present and `uv python find ${BRIDGE_PYTHON:-3.14}` works; otherwise it
+aborts with a note. After an installation it reminds you of
 `./install.sh --check`.
 
-## 3. Operator-Kommandos (kein HTTP-Admin)
+## 3. Operator Commands (No HTTP Admin)
 
-Pairing-Codes werden **ausschließlich lokal** erzeugt — die Dateisystemrechte auf
-den Store sind die Autorisierungsgrenze; Geräte erhalten nie einen Admin-Weg.
+Pairing codes are generated **exclusively locally** — the file system permissions on
+the store are the authorization boundary; devices never get an admin path.
 
 ```sh
 BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
@@ -105,37 +105,37 @@ BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
   --base-url https://<host>
 # -> "Pairing code: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX  (valid 300s, single-use)"
 # -> "Deep link:    orsik://pair?server=...&code=..."
-# -> ASCII-QR (wenn 'qrencode' installiert ist)
+# -> ASCII QR (if 'qrencode' is installed)
 
 ... admin list-devices
 ... admin revoke-device <device_id>
 ```
 
-Sicherheitseigenschaften: 24 Zeichen, single-use, TTL 300 s, servergebunden,
-nur SHA-256-Hash at rest; **kein** Master-Key und **kein** Device-Key im Link.
+Security properties: 24 characters, single-use, TTL 300 s, server-bound,
+only SHA-256 hash at rest; **no** master key and **no** device key in the link.
 
-## 4. Privates HTTPS (ein Weg genügt)
+## 4. Private HTTPS (One Path Is Enough)
 
-- **Tailscale Serve** (im Tailnet, kein Funnel):
+- **Tailscale Serve** (in the tailnet, no funnel):
   `tailscale serve --bg --https=8443 http://127.0.0.1:9842`
   → `https://<host>.<tailnet>:8443`
-- **WireGuard + Reverse-Proxy**: Hermes/Bridge bleiben auf Loopback; der Proxy
-  terminiert ein öffentlich vertrauenswürdiges Zertifikat und leitet nur die
-  Quelle-Allowlist weiter.
-- **LAN**: gültiges Zertifikat via Split-DNS auf die private Adresse.
+- **WireGuard + reverse proxy**: Hermes/bridge remain on loopback; the proxy
+  terminates a publicly trusted certificate and forwards only the
+  source allowlist.
+- **LAN**: valid certificate via split DNS to the private address.
 
-Kein Klartext-HTTP, kein TLS-Bypass, kein öffentlicher Port. Die Android-App
-prüft Zertifikat + Vertrag; bei ungültigem Zertifikat bricht sie ab.
+No plaintext HTTP, no TLS bypass, no public port. The Android app
+checks certificate + contract; it aborts on an invalid certificate.
 
 ## 5. Start / Stop / Status
 
-Ohne systemd:
+Without systemd:
 
 ```sh
 BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/venv/bin/orsik-mobile-bridge
 ```
 
-Mit `--systemd` (User-Unit `orsik-mobile-bridge.service`):
+With `--systemd` (user unit `orsik-mobile-bridge.service`):
 
 ```sh
 systemctl --user enable --now orsik-mobile-bridge.service
@@ -143,54 +143,53 @@ systemctl --user status  orsik-mobile-bridge.service
 systemctl --user restart orsik-mobile-bridge.service
 ```
 
-## 6. Update / Rollback / Backup / Restore / Deinstallation
+## 6. Update / Rollback / Backup / Restore / Uninstall
 
-- **Update:** `./install.sh --update [--systemd] /pfad/zum/source` baut das venv
-  neu auf (`uv venv --clear`); `bridge.env` und der Store bleiben erhalten,
-  Pairing/Tokens überleben. Danach die Bridge neu starten.
-- **Deinstallation:** `./install.sh --uninstall` (Unit stoppen/entfernen) und
-  `rm -rf $BRIDGE_HOME` (venv + Store). Hermes und seine Modelle bleiben unberührt.
+- **Update:** `./install.sh --update [--systemd] /pfad/zum/source` rebuilds the venv
+  (`uv venv --clear`); `bridge.env` and the store are retained,
+  pairing/tokens survive. Then restart the bridge.
+- **Uninstall:** `./install.sh --uninstall` (stop/remove the unit) and
+  `rm -rf $BRIDGE_HOME` (venv + store). Hermes and its models remain untouched.
 
 ### Backup / Restore
 
-Operator-Backup des Stores (atomar über eine temp-Datei + Hardlink, Ziel
-0600; ein bereits existierendes Ziel wird nie überschrieben):
+Operator backup of the store (atomic via a temp file + hardlink, target
+0600; an already existing target is never overwritten):
 
 ```sh
 BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
   $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin backup $BRIDGE_HOME/state.db.bak
 # -> "backup written: /home/USER/.local/orsik-mobile-bridge/state.db.bak"
-# -> bei Fehler: "error: ..." auf stderr, Exit 1
+# -> on error: "error: ..." on stderr, exit 1
 ```
 
-- **Pre-Migration-Backup (automatisch):** Öffnet die Bridge einen Store mit
-  älterem Schema (1 ≤ `user_version` < aktuelle Version), legt sie **vor** der
-  Migration `state.db.pre-v<version>.bak` an (0600, ebenfalls atomar). Eine
-  frische DB (`user_version` 0) bekommt kein Backup. Ein bereits vorhandenes
-  Ziel wird nicht überschrieben, sondern als
-  `state.db.pre-v<version>.<timestamp>.bak` abgelegt. Schlägt das Backup fehl,
-  öffnet die Bridge den Store **nicht** und migriert nichts.
-- **Restore:** Bridge stoppen, eventuell vorhandene `state.db-wal` und
-  `state.db-shm` neben dem Ziel entfernen (sonst mischt SQLite den alten WAL in
-  das zurückgespielte Backup), das Backup über `$BRIDGE_STATE_DB` kopieren (oder
-  das Backup selbst als `BRIDGE_STATE_DB` setzen), Bridge starten, danach
-  `admin list-devices` prüfen.
-- **Rollback nach einer Schema-Migration:** nur durch Restore des
-  Pre-Migration-Backups (Bridge stoppen → Backup über `BRIDGE_STATE_DB`
-  kopieren → alte Bridge-Version starten). Eine ältere Bridge kann einen bereits
-  migrierten Store **nicht** öffnen: sie verweigert ein neueres Schema
-  fail-closed. Ohne Pre-Migration-Backup gibt es keinen Rollback-Weg.
+- **Pre-migration backup (automatic):** If the bridge opens a store with an
+  older schema (1 ≤ `user_version` < current version), it creates
+  `state.db.pre-v<version>.bak` **before** the migration (0600, likewise atomic).
+  A fresh DB (`user_version` 0) gets no backup. An already existing
+  target is not overwritten but stored as
+  `state.db.pre-v<version>.<timestamp>.bak`. If the backup fails,
+  the bridge does **not** open the store and migrates nothing.
+- **Restore:** stop the bridge, remove any existing `state.db-wal` and
+  `state.db-shm` next to the target (otherwise SQLite mixes the old WAL into
+  the restored backup), copy the backup over `$BRIDGE_STATE_DB` (or
+  set the backup itself as `BRIDGE_STATE_DB`), start the bridge, then
+  check `admin list-devices`.
+- **Rollback after a schema migration:** only by restoring the
+  pre-migration backup (stop the bridge → copy the backup over `BRIDGE_STATE_DB`
+  → start the old bridge version). An older bridge cannot open an already
+  migrated store: it refuses a newer schema
+  fail-closed. Without a pre-migration backup there is no rollback path.
 
-⚠️ **WARNUNG:** Ein Restore stellt den **Autorisierungszustand zum
-Backup-Zeitpunkt** wieder her. Revokes sind gelöschte Zeilen im Store, kein
-Widerruf-Log; deshalb sind Geräte, die **nach** dem Backup widerrufen wurden,
-nach dem Restore wieder gültig. Nach **jedem** Restore `admin list-devices`
-prüfen und betroffene Geräte erneut mit `admin revoke-device <device_id>`
-widerrufen.
+⚠️ **WARNING:** A restore restores the **authorization state at the
+backup time**. Revokes are deleted rows in the store, not a
+revocation log; therefore devices that were revoked **after** the backup are
+valid again after the restore. After **every** restore, check `admin list-devices`
+and revoke affected devices again with `admin revoke-device <device_id>`.
 
-## 7. Verifizierter Weg (build-host, 2026-10-10)
+## 7. Verified Path (build-host, 2026-10-10)
 
-Frischer offizieller Core (`f86276d2`) → Bridge installiert (Quell-Checkout,
-`uv`-venv) → Loopback-Proxy → Tailscale Serve `:8443` → Emulator API 36 →
-Live-Akzeptanz **37/37 grün** (`bridge/tests/acceptance_live.py`). Details:
+Fresh official core (`f86276d2`) → bridge installed (source checkout,
+`uv` venv) → loopback proxy → Tailscale Serve `:8443` → emulator API 36 →
+live acceptance **37/37 green** (`bridge/tests/acceptance_live.py`). Details:
 `docs/bridge-e2e.md`.
