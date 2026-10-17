@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -21,8 +22,9 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The settings entry replaces the old appearance switcher in the session
- * list; opening it shows the settings screen and back returns to the list.
+ * The settings and about entries live in the session list's overflow menu;
+ * each opens its screen and back returns to the list. Settings itself no
+ * longer shows the app version.
  */
 class SettingsNavigationUiTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -32,6 +34,60 @@ class SettingsNavigationUiTest {
 
     @Test
     fun settingsEntryOpensSettingsAndBackReturnsToSessions() {
+        setHost()
+        waitForText(context.getString(R.string.sessions_title))
+        openOverflowMenu()
+        composeRule.onNodeWithText(context.getString(R.string.settings_entry)).performClick()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("settings_screen").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_language_section))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_appearance_section))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_version_label))
+            .assertDoesNotExist()
+        composeRule.onNodeWithText(context.getString(R.string.settings_license_label))
+            .assertDoesNotExist()
+
+        composeRule.onNodeWithText(context.getString(R.string.settings_back)).performClick()
+
+        waitForText(context.getString(R.string.sessions_title))
+        composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().let {
+            org.junit.Assert.assertTrue("settings screen must be gone", it.isEmpty())
+        }
+    }
+
+    @Test
+    fun aboutEntryOpensAboutWithVersionAndLicenseAndBackReturnsToSessions() {
+        setHost()
+        waitForText(context.getString(R.string.sessions_title))
+        openOverflowMenu()
+        composeRule.onNodeWithText(context.getString(R.string.settings_about_section)).performClick()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("about_screen").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("about_screen").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_version_label))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(BuildConfig.VERSION_NAME).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_license_label))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_license_value))
+            .assertIsDisplayed()
+
+        composeRule.onNodeWithText(context.getString(R.string.settings_back)).performClick()
+
+        waitForText(context.getString(R.string.sessions_title))
+        composeRule.onAllNodesWithTag("about_screen").fetchSemanticsNodes().let {
+            org.junit.Assert.assertTrue("about screen must be gone", it.isEmpty())
+        }
+    }
+
+    private fun setHost() {
         composeRule.setContent {
             HermesTheme {
                 HermesNavHost(
@@ -57,27 +113,13 @@ class SettingsNavigationUiTest {
                 )
             }
         }
+    }
 
-        waitForText(context.getString(R.string.sessions_title))
-        composeRule.onNodeWithText(context.getString(R.string.settings_entry)).performClick()
-
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithTag("settings_screen").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.settings_language_section))
-            .assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.settings_appearance_section))
-            .assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.settings_about_section))
-            .assertIsDisplayed()
-
-        composeRule.onNodeWithText(context.getString(R.string.settings_back)).performClick()
-
-        waitForText(context.getString(R.string.sessions_title))
-        composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().let {
-            org.junit.Assert.assertTrue("settings screen must be gone", it.isEmpty())
-        }
+    private fun openOverflowMenu() {
+        composeRule.onNodeWithContentDescription(
+            context.getString(R.string.sessions_more_options)
+        ).performClick()
+        composeRule.waitForIdle()
     }
 
     private fun waitForText(text: String) {

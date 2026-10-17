@@ -24,6 +24,7 @@
     <string name="sessions_loading">Loading sessions…</string>
     <string name="sessions_empty">No sessions available.</string>
     <string name="sessions_refresh">Refresh</string>
+    <string name="sessions_more_options">More options</string>
     <string name="theme_mode_system">System</string>
     <string name="theme_mode_light">Light</string>
     <string name="theme_mode_dark">Dark</string>

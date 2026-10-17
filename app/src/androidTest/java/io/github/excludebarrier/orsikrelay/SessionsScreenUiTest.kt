@@ -1,10 +1,18 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
@@ -156,10 +164,104 @@ class SessionsScreenUiTest {
         waitForText(context.getString(R.string.sessions_empty))
     }
 
-    private fun setScreen(source: SessionPageSource) {
+    @Test
+    fun overflowMenuButtonIsVisibleWithAccessibleLabelAndTouchTarget() {
+        setScreen(SessionPageSource { _, _, _ -> success(emptyList(), false) })
+
+        val button = composeRule.onNodeWithContentDescription(
+            context.getString(R.string.sessions_more_options)
+        )
+        button.assertIsDisplayed()
+        button.assertWidthIsAtLeast(48.dp)
+        button.assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test
+    fun overflowMenuShowsExactlyTheThreeEntriesInOrder() {
+        setScreen(SessionPageSource { _, _, _ -> success(emptyList(), false) })
+
+        openOverflowMenu()
+
+        composeRule.onNodeWithTag("sessions_overflow_menu")
+            .onChildren()
+            .assertCountEquals(3)
+        val tags = listOf(
+            "sessions_menu_manage_servers",
+            "sessions_menu_settings",
+            "sessions_menu_about"
+        )
+        tags.forEach { tag -> composeRule.onNodeWithTag(tag).assertIsDisplayed() }
+        val tops = tags.map { tag ->
+            composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+        }
+        assertEquals(tops.sorted(), tops)
+    }
+
+    @Test
+    fun everyOverflowEntryInvokesOnlyItsCallbackOnceAndClosesTheMenu() {
+        var manageServers = 0
+        var settings = 0
+        var about = 0
+        setScreen(
+            source = SessionPageSource { _, _, _ -> success(emptyList(), false) },
+            onOpenProfileManagement = { manageServers++ },
+            onOpenSettings = { settings++ },
+            onOpenAbout = { about++ }
+        )
+
+        openOverflowMenu()
+        composeRule.onNodeWithTag("sessions_menu_manage_servers").performClick()
+        assertEquals(1, manageServers)
+        assertEquals(0, settings)
+        assertEquals(0, about)
+        assertMenuClosed()
+
+        openOverflowMenu()
+        composeRule.onNodeWithTag("sessions_menu_settings").performClick()
+        assertEquals(1, manageServers)
+        assertEquals(1, settings)
+        assertEquals(0, about)
+        assertMenuClosed()
+
+        openOverflowMenu()
+        composeRule.onNodeWithTag("sessions_menu_about").performClick()
+        assertEquals(1, manageServers)
+        assertEquals(1, settings)
+        assertEquals(1, about)
+        assertMenuClosed()
+    }
+
+    private fun openOverflowMenu() {
+        composeRule.onNodeWithContentDescription(
+            context.getString(R.string.sessions_more_options)
+        ).performClick()
+        composeRule.waitForIdle()
+    }
+
+    private fun assertMenuClosed() {
+        composeRule.waitForIdle()
+        assertTrue(
+            "overflow menu must be closed",
+            composeRule.onAllNodesWithTag("sessions_overflow_menu")
+                .fetchSemanticsNodes().isEmpty()
+        )
+    }
+
+    private fun setScreen(
+        source: SessionPageSource,
+        onOpenProfileManagement: () -> Unit = {},
+        onOpenSettings: () -> Unit = {},
+        onOpenAbout: () -> Unit = {}
+    ) {
         composeRule.setContent {
             HermesTheme {
-                SessionsScreen(source, PROFILE_ID)
+                SessionsScreen(
+                    pageSource = source,
+                    profileId = PROFILE_ID,
+                    onOpenProfileManagement = onOpenProfileManagement,
+                    onOpenSettings = onOpenSettings,
+                    onOpenAbout = onOpenAbout
+                )
             }
         }
     }

@@ -3,6 +3,7 @@ package io.github.excludebarrier.orsikrelay
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -73,7 +74,7 @@ class ActiveServerSelectionUiTest {
         // Go to the management screen: the ACTIVE server (Alpha) is marked
         // with exactly one "Aktiver Server" marker, and only the NON-active
         // server (Beta) offers the "use as active server" action.
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
         composeRule.onNodeWithTag(selectTag(BETA_ID)).assertExists()
@@ -96,7 +97,7 @@ class ActiveServerSelectionUiTest {
 
         // Re-open the management screen: the marker has MOVED to the chosen
         // server (Beta) and Beta now carries no select action.
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
         composeRule.onNodeWithTag(selectTag(BETA_ID)).assertDoesNotExist()
@@ -121,7 +122,7 @@ class ActiveServerSelectionUiTest {
         waitForText("Session Alpha")
 
         // Open the management screen and return without selecting anything.
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         // Alpha is still the active, marked server; nothing was selected.
         assertExactlyOneActiveMarker()
@@ -152,6 +153,13 @@ class ActiveServerSelectionUiTest {
                 )
             }
         }
+    }
+
+    private fun openProfilesFromOverflowMenu() {
+        composeRule.onNodeWithContentDescription(
+            context.getString(R.string.sessions_more_options)
+        ).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
     }
 
     private fun waitForText(text: String) {

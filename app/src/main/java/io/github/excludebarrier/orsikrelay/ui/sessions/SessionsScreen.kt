@@ -16,12 +16,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -64,8 +69,8 @@ import java.util.Locale
  * when `has_more` is true. A load in flight blocks every further load, so
  * double taps never start a parallel second request. No automatic retry.
  *
- * The header links to the settings screen; the appearance switcher lives
- * there now.
+ * The header's overflow menu links to server management, settings and the
+ * about screen; the appearance switcher lives in settings now.
  *
  * [pageSource] is the test seam; production injects the repository.
  * The API key and raw response/exception text never enter the state.
@@ -79,7 +84,8 @@ fun SessionsScreen(
     onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
     onSessionCreated: (sessionId: String) -> Unit = {},
     onOpenProfileManagement: () -> Unit = {},
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onOpenAbout: () -> Unit = {}
 ) {
     val configuration = LocalConfiguration.current
     val locale = remember(configuration) { configuration.locales[0] }
@@ -87,6 +93,7 @@ fun SessionsScreen(
     var state by remember { mutableStateOf<SessionListState>(SessionListState.Loading) }
     var loadInFlight by remember { mutableStateOf(false) }
     var showNewSessionDialog by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
     val canCreateSession = !profileId.isBlank() && creator != null
 
     fun loadPage(offset: Int, append: Boolean) {
@@ -158,19 +165,47 @@ fun SessionsScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
             Spacer(modifier = Modifier.weight(1f))
-            TextButton(
-                onClick = onOpenProfileManagement
-            ) {
-                Text(
-                    text = stringResource(R.string.profiles_manage)
-                )
-            }
-            TextButton(
-                onClick = onOpenSettings
-            ) {
-                Text(
-                    text = stringResource(R.string.settings_entry)
-                )
+            Box {
+                IconButton(
+                    onClick = { showOverflowMenu = true },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(R.string.sessions_more_options)
+                    )
+                }
+                DropdownMenu(
+                    expanded = showOverflowMenu,
+                    onDismissRequest = { showOverflowMenu = false }
+                ) {
+                    Column(modifier = Modifier.testTag("sessions_overflow_menu")) {
+                        DropdownMenuItem(
+                            text = { Text(text = stringResource(R.string.profiles_manage)) },
+                            modifier = Modifier.testTag("sessions_menu_manage_servers"),
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenProfileManagement()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(text = stringResource(R.string.settings_entry)) },
+                            modifier = Modifier.testTag("sessions_menu_settings"),
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenSettings()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(text = stringResource(R.string.settings_about_section)) },
+                            modifier = Modifier.testTag("sessions_menu_about"),
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenAbout()
+                            }
+                        )
+                    }
+                }
             }
         }
         TextButton(

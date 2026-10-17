@@ -3,6 +3,7 @@ package io.github.excludebarrier.orsikrelay
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -48,7 +49,7 @@ class ProfileManagementNavigationUiTest {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
         waitForText(context.getString(R.string.sessions_title))
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        openProfilesFromOverflowMenu()
 
         waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Alpha").assertExists()
@@ -92,7 +93,7 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         waitForText("Session Alpha")
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
 
         composeRule.onNodeWithText("Alpha").performClick()
@@ -123,7 +124,7 @@ class ProfileManagementNavigationUiTest {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
         waitForText(context.getString(R.string.sessions_title))
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Beta").performClick()
         waitForText(context.getString(R.string.profiles_delete_title))
@@ -155,7 +156,7 @@ class ProfileManagementNavigationUiTest {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID), admin = failingAdmin)
 
         waitForText(context.getString(R.string.sessions_title))
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Alpha").performClick()
         waitForText(context.getString(R.string.profiles_delete_title))
@@ -184,6 +185,13 @@ class ProfileManagementNavigationUiTest {
                 )
             }
         }
+    }
+
+    private fun openProfilesFromOverflowMenu() {
+        composeRule.onNodeWithContentDescription(
+            context.getString(R.string.sessions_more_options)
+        ).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
     }
 
     private fun waitForText(text: String) {

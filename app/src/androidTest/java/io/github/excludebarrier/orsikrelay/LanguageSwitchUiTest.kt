@@ -7,7 +7,9 @@ import android.os.Build
 import android.os.LocaleList
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -131,7 +133,13 @@ class LanguageSwitchUiTest {
     }
 
     private fun openSettings() {
-        val entry = localizedString(currentLanguageTag(), R.string.settings_entry)
+        val languageTag = currentLanguageTag()
+        val moreOptions = localizedString(languageTag, R.string.sessions_more_options)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithContentDescription(moreOptions).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithContentDescription(moreOptions).performClick()
+        val entry = localizedString(languageTag, R.string.settings_entry)
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(entry).fetchSemanticsNodes().isNotEmpty()
         }

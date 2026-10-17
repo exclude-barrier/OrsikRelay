@@ -21,8 +21,8 @@ import org.junit.Test
 
 /**
  * UI contract for the settings screen: the language list is the shared
- * supported-language registry, every choice persists, and the About section
- * shows the version and the license without any external link.
+ * supported-language registry and every choice persists. The app version and
+ * license live on the separate about screen.
  */
 class SettingsScreenUiTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -96,18 +96,6 @@ class SettingsScreenUiTest {
     }
 
     @Test
-    fun aboutSectionShowsVersionAndLicense() {
-        setSettings(versionName = "0.1.0-alpha.7")
-
-        composeRule.onNodeWithText(context.getString(R.string.settings_version_label))
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("0.1.0-alpha.7").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.settings_license_label))
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("Apache License 2.0").assertIsDisplayed()
-    }
-
-    @Test
     fun backInvokesTheNavigationCallback() {
         var back = false
         setSettings(onBack = { back = true })
@@ -118,7 +106,6 @@ class SettingsScreenUiTest {
     }
 
     private fun setSettings(
-        versionName: String = "0.1.0-alpha.7",
         onBack: () -> Unit = {}
     ) {
         composeRule.setContent {
@@ -128,7 +115,6 @@ class SettingsScreenUiTest {
                 SettingsScreen(
                     languageController = languageController,
                     themeController = themeController,
-                    versionName = versionName,
                     onBack = onBack
                 )
             }

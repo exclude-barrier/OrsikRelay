@@ -160,7 +160,6 @@ private fun SettingsHarness(
         SettingsScreen(
             languageController = languageController,
             themeController = themeController,
-            versionName = "0.1.0-alpha.7",
             onBack = {}
         )
         content()
