@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Languages offered by the app. Must stay in sync with
+    io.github.excludebarrier.orsikrelay.domain.language.SupportedLanguages
+    and the values-<tag> resource directories; LocalesConsistencyTest
+    enforces all three.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="de" />
+</locale-config>

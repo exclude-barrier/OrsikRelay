@@ -11,12 +11,14 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -165,12 +167,15 @@ class AccessibilityLargeFontUiTest {
                 profileId = "fixture-profile-id"
             )
         }
-        waitForText(SESSION_TITLES.last())
+        waitForText(SESSION_TITLES.first())
     }
 
     private fun assertSessionEntry(title: String, scrollable: Boolean) {
+        if (scrollable) {
+            composeRule.onNode(hasScrollAction())
+                .performScrollToNode(hasText(title) and hasClickAction())
+        }
         val entry = composeRule.onNode(hasText(title) and hasClickAction())
-        if (scrollable) entry.performScrollTo()
         entry.assertIsDisplayed()
         assertTouchTargetAtLeast48Dp(entry, "session entry")
         assertLabelNotTruncated(title)

@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,11 +17,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import io.github.excludebarrier.orsikrelay.BuildConfig
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.profile.ActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.RunApprovalCapabilityStore
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
+import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesLanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.di.AppDependenciesHolder
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
@@ -33,11 +37,16 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
+import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.LanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
+import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,6 +70,7 @@ fun HermesNavHost(
     chatDraftRepository: ChatDraftRepository? = null,
     profileAdmin: ProfileAdmin? = null,
     themeController: ThemeModeController? = null,
+    languageController: LanguageController? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
     capabilityStore: RunApprovalCapabilityStore? = null,
@@ -72,6 +82,21 @@ fun HermesNavHost(
     notificationBootstrap: Pair<String, String>? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
+    // The settings screen owns both selections. Production passes the theme
+    // controller from MainActivity; tests may inject either controller.
+    val themeStore = remember(applicationContext) {
+        SharedPreferencesThemeSettingStore(applicationContext)
+    }
+    val settingsThemeController = themeController
+        ?: rememberThemeModeController(themeStore)
+    val languageStore = remember(applicationContext) {
+        SharedPreferencesLanguageSettingStore(applicationContext)
+    }
+    val currentActivity = LocalActivity.current
+    val resolvedLanguageController = languageController ?: rememberLanguageController(
+        store = languageStore,
+        applySelection = { tag -> currentActivity?.let { AppLocale.applySelection(it, tag) } }
+    )
     // The graph (and with it the app-level live-run
     // state) is process-scoped, so an Activity/configuration recreation
     // re-attaches to the still-running turn instead of building a second,
@@ -278,7 +303,6 @@ fun HermesNavHost(
                 profileId = activeProfileId.orEmpty(),
                 creator = sessionCreator
                     ?: productionDependencies.value.sessionCreator,
-                themeController = themeController,
                 onSessionSelected = { sessionId, _ ->
                     navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
                         launchSingleTop = true
@@ -289,6 +313,23 @@ fun HermesNavHost(
                 },
                 onOpenProfileManagement = {
                     navController.navigate(routeOf(AppScreen.Profiles))
+                },
+                onOpenSettings = {
+                    navController.navigate(routeOf(AppScreen.Settings)) {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+        composable(routeOf(AppScreen.Settings)) {
+            SettingsScreen(
+                languageController = resolvedLanguageController,
+                themeController = settingsThemeController,
+                versionName = BuildConfig.VERSION_NAME,
+                onBack = {
+                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                        navController.popBackStack()
+                    }
                 }
             )
         }
@@ -374,6 +415,7 @@ internal fun routeOf(screen: AppScreen): String = when (screen) {
     AppScreen.Sessions -> "sessions"
     is AppScreen.Chat -> "chat/${encodeRouteArgument(screen.sessionId)}"
     AppScreen.Profiles -> "profiles"
+    AppScreen.Settings -> "settings"
 }
 
 internal const val CHAT_ARGUMENT = "sessionId"

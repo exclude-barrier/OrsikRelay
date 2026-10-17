@@ -24,10 +24,18 @@ class SessionListFormatterTest {
     }
 
     @Test
-    fun timestampUsesRequestedLocaleAndLocalZone() {
+    fun germanTimestampUsesGermanLocalizedFormat() {
         assertEquals(
             "01.01.1970, 00:00",
             SessionListFormatter.formatLastActive(0L, Locale.GERMANY)
+        )
+    }
+
+    @Test
+    fun englishTimestampUsesEnglishLocalizedFormat() {
+        assertEquals(
+            "Jan 1, 1970, 12:00 AM",
+            SessionListFormatter.formatLastActive(0L, Locale.US)
         )
     }
 
@@ -38,10 +46,14 @@ class SessionListFormatterTest {
     }
 
     @Test
-    fun messageCountUsesLocaleFormatting() {
+    fun messageCountReturnsOnlyTheLocaleFormattedNumber() {
         assertEquals(
-            "1.234 Nachrichten",
+            "1.234",
             SessionListFormatter.formatMessageCount(1234L, Locale.GERMANY)
+        )
+        assertEquals(
+            "1,234",
+            SessionListFormatter.formatMessageCount(1234L, Locale.US)
         )
         assertNull(SessionListFormatter.formatMessageCount(null, Locale.GERMANY))
     }

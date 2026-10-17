@@ -10,6 +10,7 @@ import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationContent
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationPoster
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationType
+import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 
 /**
  * The single Android adapter that raises local notifications. It is the
@@ -67,11 +68,12 @@ class AndroidNotificationManager(
         ensureChannel()
 
         val context = contextProvider()
+        val localizedContext = AppLocale.wrap(context)
         val contentIntent = buildContentIntent(content)
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(content.title)
-            .setContentText(content.bodyText(context))
+            .setContentText(content.bodyText(localizedContext))
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .setOngoing(false)
@@ -85,7 +87,7 @@ class AndroidNotificationManager(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                contextProvider().getString(R.string.notification_channel_name),
+                AppLocale.wrap(contextProvider()).getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 // Local run/approval notices: present in the shade, no sound,

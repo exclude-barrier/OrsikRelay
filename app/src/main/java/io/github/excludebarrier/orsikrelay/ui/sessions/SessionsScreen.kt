@@ -20,8 +20,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,11 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
@@ -49,8 +44,6 @@ import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
-import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
-import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,12 +58,14 @@ import java.util.Locale
  * - success: server-ordered list with title, optional source, message
  *   count, pin status and locally formatted last activity;
  * - empty: only when the server really delivered an empty `data` list;
- * - failure: generic German text with manual "Erneut versuchen".
+ * - failure: a localized generic text with a manual retry.
  *
- * "Aktualisieren" reloads page 0; "Mehr laden" appends the next page and
- * only appears when `has_more` is true. A load in flight blocks every
- * further load, so double taps never start a parallel second request.
- * No automatic retry.
+ * Refresh reloads page 0; load-more appends the next page and only appears
+ * when `has_more` is true. A load in flight blocks every further load, so
+ * double taps never start a parallel second request. No automatic retry.
+ *
+ * The header links to the settings screen; the appearance switcher lives
+ * there now.
  *
  * [pageSource] is the test seam; production injects the repository.
  * The API key and raw response/exception text never enter the state.
@@ -81,10 +76,10 @@ fun SessionsScreen(
     profileId: String,
     modifier: Modifier = Modifier,
     creator: SessionCreator? = null,
-    themeController: ThemeModeController? = null,
     onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
     onSessionCreated: (sessionId: String) -> Unit = {},
-    onOpenProfileManagement: () -> Unit = {}
+    onOpenProfileManagement: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
 ) {
     val configuration = LocalConfiguration.current
     val locale = remember(configuration) { configuration.locales[0] }
@@ -170,7 +165,13 @@ fun SessionsScreen(
                     text = stringResource(R.string.profiles_manage)
                 )
             }
-            themeController?.let { ThemeModeMenu(it) }
+            TextButton(
+                onClick = onOpenSettings
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_entry)
+                )
+            }
         }
         TextButton(
             onClick = { loadPage(offset = 0, append = false) },
@@ -303,48 +304,6 @@ fun SessionsScreen(
 }
 
 @Composable
-private fun ThemeModeMenu(controller: ThemeModeController) {
-    var expanded by remember { mutableStateOf(false) }
-    val currentLabel = themeModeLabel(controller.mode)
-    val appearanceDescription = stringResource(R.string.theme_switcher_description)
-    Box {
-        TextButton(
-            onClick = { expanded = true },
-            modifier = Modifier.semantics {
-                contentDescription = appearanceDescription
-                stateDescription = currentLabel
-            }
-        ) {
-            Text(currentLabel)
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            ThemeMode.entries.forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(themeModeLabel(mode)) },
-                    modifier = Modifier.semantics {
-                        selected = controller.mode == mode
-                    },
-                    onClick = {
-                        controller.select(mode)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
-    ThemeMode.System -> stringResource(R.string.theme_mode_system)
-    ThemeMode.Light -> stringResource(R.string.theme_mode_light)
-    ThemeMode.Dark -> stringResource(R.string.theme_mode_dark)
-}
-
-@Composable
 private fun SessionRow(
     session: HermesSession,
     locale: Locale,
@@ -357,10 +316,13 @@ private fun SessionRow(
         session.lastActiveEpochSeconds,
         locale
     )
-    val messageCount = SessionListFormatter.formatMessageCount(
-        session.messageCount,
-        locale
-    )
+    val messageCount = session.messageCount?.let { count ->
+        pluralStringResource(
+            R.plurals.session_message_count,
+            count.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            SessionListFormatter.formatMessageCount(count, locale).orEmpty()
+        )
+    }
     val pinned = if (session.pinned) {
         stringResource(R.string.session_pinned)
     } else {

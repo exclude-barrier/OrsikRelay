@@ -1,39 +1,33 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
-import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
-import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
-import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
-import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
 /**
- * UI contract for the persistent theme switcher in the Sessions header.
+ * UI contract for the persistent appearance switcher in the settings screen.
  *
- * The selection is a Material 3 exposed dropdown anchored next to the
- * "Sessions" title. The currently selected mode label is always shown as the
- * field value; opening the menu reveals exactly the three options
- * System/Hell/Dunkel. Picking an option closes the menu, updates the label
- * immediately and persists the choice through the injected [ThemeSettingStore].
- * The resolved color scheme is applied to the whole screen through the
- * existing [HermesTheme].
+ * The three modes are radio options in the Appearance section. The currently
+ * selected mode is applied to the whole settings screen through
+ * [HermesTheme]; picking an option updates the palette immediately and
+ * persists the choice through the injected [ThemeSettingStore].
  */
 class ThemeSwitcherUiTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -42,6 +36,7 @@ class ThemeSwitcherUiTest {
     val composeRule = createComposeRule()
 
     private val fakeStore = FakeThemeStore()
+    private val fakeLanguageStore = FakeLanguageStore()
 
     private class FakeThemeStore : ThemeSettingStore {
         var value: ThemeMode = ThemeMode.System
@@ -59,36 +54,39 @@ class ThemeSwitcherUiTest {
         }
     }
 
+    private class FakeLanguageStore : LanguageSettingStore {
+        var value: String? = null
+
+        override fun read(): String? = value
+
+        override fun write(tag: String?) {
+            value = tag
+        }
+    }
+
     @Test
-    fun headerShowsSystemDefaultWithoutAStoredChoice() {
+    fun settingsShowsSystemDefaultWithoutAStoredChoice() {
         composeRule.setContent {
-            ThemeSwitcherScreen(fakeStore) {
-                Text("Sessions-Inhalt")
-            }
+            SettingsHarness(fakeStore, fakeLanguageStore)
         }
 
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(context.getString(R.string.theme_mode_system)).assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_theme_System").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_appearance_section))
+            .assertIsDisplayed()
         assertEquals(ThemeMode.System, fakeStore.value)
     }
 
     @Test
     fun selectingAModeIsAppliedImmediatelyAndPersists() {
         composeRule.setContent {
-            ThemeSwitcherScreen(fakeStore) {
-                Text("Sessions-Inhalt")
-            }
+            SettingsHarness(fakeStore, fakeLanguageStore)
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription(context.getString(R.string.theme_switcher_description)).performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_light)).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText(context.getString(R.string.theme_mode_light)).performClick()
+        composeRule.onNodeWithTag("settings_theme_Light").performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(context.getString(R.string.theme_mode_light)).assertIsDisplayed()
         assertEquals(1, fakeStore.writes)
         assertEquals(ThemeMode.Light, fakeStore.value)
     }
@@ -97,22 +95,17 @@ class ThemeSwitcherUiTest {
     fun darkModeForcesTheDarkPaletteEvenWhenTheSystemIsLight() {
         var captured: Color? = null
         composeRule.setContent {
-            ThemeSwitcherScreen(fakeStore) {
+            SettingsHarness(fakeStore, fakeLanguageStore) {
                 captured = MaterialTheme.colorScheme.background
             }
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription(context.getString(R.string.theme_switcher_description)).performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_dark)).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText(context.getString(R.string.theme_mode_dark)).performClick()
+        composeRule.onNodeWithTag("settings_theme_Dark").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             captured == Color(0xFF0D1117)
         }
 
-        composeRule.onNodeWithText(context.getString(R.string.theme_mode_dark)).assertIsDisplayed()
         assertEquals(ThemeMode.Dark, fakeStore.value)
     }
 
@@ -121,8 +114,8 @@ class ThemeSwitcherUiTest {
         var systemDark = false
         var captured: Color? = null
         composeRule.setContent {
-            ThemeSwitcherScreen(fakeStore) {
-                systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            SettingsHarness(fakeStore, fakeLanguageStore) {
+                systemDark = isSystemInDarkTheme()
                 captured = MaterialTheme.colorScheme.background
             }
         }
@@ -133,60 +126,42 @@ class ThemeSwitcherUiTest {
     }
 
     @Test
-    fun menuShowsExactlyTheThreeModes() {
+    fun appearanceSectionShowsExactlyTheThreeModes() {
         composeRule.setContent {
-            ThemeSwitcherScreen(fakeStore) {
-                Text("Sessions-Inhalt")
-            }
+            SettingsHarness(fakeStore, fakeLanguageStore)
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription(context.getString(R.string.theme_switcher_description)).performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_dark)).fetchSemanticsNodes().isNotEmpty()
+        ThemeMode.entries.forEach { mode ->
+            composeRule.onNodeWithTag("settings_theme_${mode.name}").assertIsDisplayed()
         }
-
-        assertTrue(composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_system)).fetchSemanticsNodes().isNotEmpty())
-        assertTrue(composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_light)).fetchSemanticsNodes().isNotEmpty())
-        assertTrue(composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_dark)).fetchSemanticsNodes().isNotEmpty())
-    }
-
-    private fun waitForText(text: String) {
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.waitForIdle()
     }
 }
 
 /**
- * Test harness around [SessionsScreen] that wires the theme controller the
- * same way [io.github.excludebarrier.orsikrelay.MainActivity] does in production: the
- * [HermesTheme] consumes the controller's mode so the selected mode is
- * applied to the whole screen, while the Sessions header exposes the
- * dropdown.
+ * Test harness around [SettingsScreen] that wires both controllers like
+ * production does: [HermesTheme] consumes the theme controller's mode and the
+ * screen exposes the language and appearance choices.
  */
 @Composable
-private fun ThemeSwitcherScreen(
-    store: ThemeSettingStore,
-    content: @Composable () -> Unit
+private fun SettingsHarness(
+    themeStore: ThemeSettingStore,
+    languageStore: LanguageSettingStore,
+    content: @Composable () -> Unit = {}
 ) {
-    val controller = rememberThemeModeController(store)
-    HermesTheme(darkTheme = controller.mode.resolve(false).let { dark ->
-        // System mode must still follow the real system flag; Light/Dark
-        // resolve to a fixed value.
-        if (controller.mode == ThemeMode.System) {
-            androidx.compose.foundation.isSystemInDarkTheme()
-        } else {
-            dark
-        }
-    }) {
-        SessionsScreen(
-            pageSource = SessionPageSource { _, _, _ ->
-                SessionListResult.Success(SessionPage(emptyList(), false))
-            },
-            profileId = "fixture-profile-id",
-            themeController = controller
+    val themeController = rememberThemeModeController(themeStore)
+    val languageController = rememberLanguageController(languageStore) { }
+    val dark = if (themeController.mode == ThemeMode.System) {
+        isSystemInDarkTheme()
+    } else {
+        themeController.mode.resolve(false)
+    }
+    HermesTheme(darkTheme = dark) {
+        SettingsScreen(
+            languageController = languageController,
+            themeController = themeController,
+            versionName = "0.1.0-alpha.7",
+            onBack = {}
         )
         content()
     }

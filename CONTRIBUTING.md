@@ -26,6 +26,25 @@ See the README for build and test commands.
 The app follows the layering Compose UI → ViewModel → use case → repository →
 REST/SSE client; UI code does not see network DTOs (`docs/architecture.md`).
 
+## Adding a translation
+
+The app ships English (base language) and German. To add or extend a
+translation:
+
+1. Add the language to `SupportedLanguages.all` in
+   `domain/language/SupportedLanguages.kt` (BCP 47 tag plus the language's own
+   name, e.g. `SupportedLanguage("fr", "Français")`). The name is not
+   translated.
+2. Create `app/src/main/res/values-<tag>/strings.xml` with every string from
+   `values/strings.xml`. Keep placeholders (`%1$s`, `%2$s`), plural items and
+   XML escapes exactly as in the base file.
+3. Add `<locale android:name="<tag>" />` to `app/src/main/res/xml/locales_config.xml`.
+
+`LocalesConsistencyTest` fails when the list, the resource directory and
+`locales_config.xml` disagree. Translate approval, security and permission
+texts especially carefully; have a native speaker review them where possible.
+Run `./gradlew :app:testDebugUnitTest` before opening the pull request.
+
 ## Pull requests
 
 Before opening a pull request, please run locally:

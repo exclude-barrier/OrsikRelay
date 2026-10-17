@@ -9,6 +9,7 @@ sealed interface AppScreen {
     data object Sessions : AppScreen
     data class Chat(val sessionId: String) : AppScreen
     data object Profiles : AppScreen
+    data object Settings : AppScreen
 }
 
 /**
@@ -32,6 +33,7 @@ value class AppNavigationState(val current: AppScreen) {
         AppScreen.Sessions -> AppNavigationState(AppScreen.Onboarding)
         is AppScreen.Chat -> AppNavigationState(AppScreen.Sessions)
         AppScreen.Profiles -> AppNavigationState(AppScreen.Sessions)
+        AppScreen.Settings -> AppNavigationState(AppScreen.Sessions)
     }
 }
 

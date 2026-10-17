@@ -67,7 +67,13 @@ class SessionsScreenUiTest {
 
         waitForText("Erste Fixture-Session")
         composeRule.onNodeWithText("cli · " + context.getString(R.string.session_pinned)).assertIsDisplayed()
-        composeRule.onNodeWithText("7 Nachrichten").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            context.resources.getQuantityString(
+                R.plurals.session_message_count,
+                7,
+                "7"
+            )
+        ).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.session_fallback_title)).assertIsDisplayed()
     }
 
