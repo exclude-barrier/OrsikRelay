@@ -41,8 +41,8 @@ jobs:
           # The action's default `packages: tools platform-tools` is broken:
           # the legacy `tools` package was removed from the SDK repository, so
           # `sdkmanager tools` exits 1. Pin exactly the components this build
-          # needs (compileSdk 36 and build-tools 36.1.0, per app/build.gradle.kts).
-          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+          # needs (compileSdk 37 and build-tools 36.1.0, per app/build.gradle.kts).
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0'
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
@@ -97,7 +97,7 @@ jobs:
         with:
           # The app pins buildToolsVersion 36.1.0; install it explicitly so the
           # build does not depend on AGP's implicit SDK auto-download.
-          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0'
 
       - name: Free disk space
         # The AVD needs a ~4 GB userdata partition; the runner otherwise runs
@@ -166,7 +166,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0'
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4

@@ -57,7 +57,7 @@ Android app ──HTTPS (private network)──▶ Orsik Mobile Bridge ──loo
   `mode: manual` – the core default (`smart`) can approve some commands
   without asking (`docs/bridge-security.md`).
 - **Phone:** Android 8.0 (API 26) or newer.
-- **Building the app:** JDK 17 and the Android SDK (platform 36, build tools
+- **Building the app:** JDK 17 and the Android SDK (platform 37, build tools
   36.1.0). The Gradle wrapper (`./gradlew`) pins everything else.
 
 ## Quick start

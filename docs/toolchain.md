@@ -7,7 +7,7 @@ Maßgeblich für alle Builds ist ausschließlich der versionierte Gradle Wrapper
 
 - JDK `17` (z. B. Temurin), im `PATH` oder über `JAVA_HOME`
 - Android SDK (Standardort `~/Android/Sdk`, sonst `ANDROID_HOME` setzen) mit
-  - Android Platform `36`
+  - Android Platform `37` (`platforms;android-37.0`; Zielplattform bleibt `targetSdk 36`)
   - Build Tools `36.1.0`
   - Platform Tools
 - nur für Instrumentationstests: Android Emulator, ein API-36-System-Image
