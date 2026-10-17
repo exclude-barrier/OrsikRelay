@@ -1,4 +1,4 @@
-# Hermes Mobile Wire Contract (P0)
+# Hermes Mobile Wire Contract
 
 **Status:** Stabilisierter, versionierter Client-Vertrag für Orsik Relay.
 **Client:** `HermesConnectionClient` (Capability-Negotiation), `HermesDevicePairClient`,
@@ -160,13 +160,13 @@ Invarianten (invariante Sicherheitsgrenzen, nicht verhandelbar):
   Android-Client; die Hermes-Server-Konfiguration (Loopback/LAN-VPN,
   `127.0.0.1:8642`) und die Desktop-/CLI-Nutzung bleiben unberührt.
 
-## 5. Gap-Analyse (Stand dieser Session)
+## 5. Gap-Analyse
 
-> **Quellen-Basis:** dokumentierter Live-Status (`docs/api-capability-matrix.md`,
-> auf dem Hermes-Server am 30.08.2026 verifiziert) + Client-Code. Die Hermes-
+> **Quellen-Basis:** dokumentierter Live-Status (auf dem Hermes-Server am
+> 30.08.2026 verifiziert) + Client-Code. Die Hermes-
 > Quellcode-Basis selbst ist **nicht** lokal und von diesem Rechner nicht
 > erreichbar (Hermes-Server, `127.0.0.1:8642`); eine frische Gegenlektüre des
-> Hermes-Quellcodes erfolgte in dieser Session **nicht**.
+> Hermes-Quellcodes erfolgte hierbei **nicht**.
 
 1. **Was Orsik Relay erwartet:** exakt der v1-Vertrag in §2 (harter Kern +
    zwei weiche Fähigkeiten + pair/revoke/approval-Endpoints). Fail-closed.
@@ -190,7 +190,7 @@ Invarianten (invariante Sicherheitsgrenzen, nicht verhandelbar):
      per-Feature-Blöcken kennzeichnet (Client-optional; kein harten
      Requirement, um Kompatibilität zum aktuellen Stand zu halten).
 
-## 6. Verifikation (diese Session)
+## 6. Verifikation
 
 - `./gradlew test` — bestehende + neue Compatibility-Tests.
 - Neue Tests: `MobileProtocolCompatibilityTest` (v1 offen; 0/2/3/100/fehlend/
@@ -279,17 +279,17 @@ Die **kanonische** Mobile-v1-Quelle (`hermes devices pair`) gibt **nur** den
 Teil des kanonischen Mobile-v1-Commits und wird nicht als stehender
 Vertrag vorausgesetzt — der Client-Contract (§7.1–§7.6) bleibt davon unabhängig.
 
-Der **Orsik Mobile Bridge**-Sidecar (P13) implementiert denselben Pairing-Vertrag
+Der **Orsik Mobile Bridge**-Sidecar implementiert denselben Pairing-Vertrag
 für eine frische, unveränderte offizielle Hermes-Installation; dort erzeugt die
 lokale Operator-CLI (`orsik-mobile-bridge admin pairing-code`) Code, Deep-Link und
 optional einen QR-Code (`docs/bridge-installation.md`).
 
-## 8. Run-Autorität & Recovery (P7)
+## 8. Run-Autorität & Recovery
 
 **Status:** Read-only gegen den lokal vorhandenen Mobile-v1-Quellstand geprüft
 (im Hermes-Mobile-v1-Quellstand: `gateway/platforms/api_server.py`,
-`api_server_runs.py`, `api_server_run_idempotency.py`). P7 stützt die Freigabe
-der Single-Slot-Run-Ownership auf diese Aussagen. Kein E2E-Lauf gegen einen
+`api_server_runs.py`, `api_server_run_idempotency.py`). Die Freigabe der
+Single-Slot-Run-Ownership stützt sich auf diese Aussagen. Kein E2E-Lauf gegen einen
 echten Server (nicht verifiziert, s. unten).
 
 ### 8.1 Run-Unabhängigkeit vom SSE-Socket
@@ -305,19 +305,19 @@ Hintergrund-Task aus. Bei einem Socket-Disconnect:
 - **ohne** diesen Header: `_drain_session_stream_task_on_disconnect`
   unterbricht den laufenden Run.
 
-Die P4/P7-Annahme „ein Hermes-Run ist unabhängig vom Socket" gilt also nur für
+Die Annahme „ein Hermes-Run ist unabhängig vom Socket" gilt also nur für
 das Mobile-v1-Opt-in. Ein terminaler Abschluss ist `assistant.completed` →
 `run.completed` → `done` bzw. `error` → `done` (Server setzt den Status auf
 `failed`).
 
-### 8.2 Re-Attach (bestehend, P4)
+### 8.2 Re-Attach (bestehend)
 
 `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`:
 streng exklusives Replay (`seq > N`), danach Follow bis zum Terminal. Nicht
 replaybarer Puffer → 409 `resume_gap`; unbekannter/fremder Run bzw.
 Session-Mismatch → 404. Client: ungültige `after_seq` wird lokal abgelehnt.
 
-### 8.3 Run-Status lesen (P7-Recovery, `_handle_get_run`)
+### 8.3 Run-Status lesen (`_handle_get_run`)
 
 `GET /v1/runs/{run_id}` (Bearer, `permission="status"`) liefert das pollable
 Statusobjekt `{"object":"hermes.run","run_id":<id>,"status":<s>, …}` für den
@@ -334,7 +334,7 @@ completed, failed, cancelled, interrupted
 (`_RUN_STREAM_TTL = 300 s` betrifft nur den Transport-Puffer). Fremder/
 unbekannter/abgelaufener Run → 404 `run_not_found`.
 
-Client-Vertrag (P7): **nur** ein terminaler Status gibt die Run-Ownership
+Client-Vertrag: **nur** ein terminaler Status gibt die Run-Ownership
 autoritativ frei; `queued`/`running`/`waiting_for_approval`/`stopping` oder ein
 Lesefehler ändern nichts. Der Client liest ausschließlich `run_id` und
 `status`; `output`, `error`, `usage`, `session_id`, `pending_steer` usw. werden
@@ -352,7 +352,7 @@ weder gelesen noch propagiert.
 Fehlt nach dem initialen POST eine bestätigte Run-ID (`run.started` nie
 gesehen), existiert **kein** Discovery-/Reconciliation-Endpunkt
 (`session → run`). Der POST kann serverseitig trotzdem akzeptiert worden sein.
-P7 gibt die Ownership dann **nicht** frei und sendet **keinen** neuen POST;
+Der Client gibt die Ownership dann **nicht** frei und sendet **keinen** neuen POST;
 der Ausgang wird ehrlich als unbestimmt dargestellt. Eine sichere Recovery
 erfordert eine zusätzliche Server-Fähigkeit (z. B. Session→aktiver-Run-
 Discovery oder eine idempotente Startbestätigung).
@@ -367,7 +367,7 @@ Es wurde **kein** echter Hermes-Mobile-v1-E2E-Test ausgeführt. Die
 Korrektheit der Endpunkt-/Status-Annahmen stützt sich auf die lokale
 Quelle und MockWebServer-Tests, nicht auf einen Live-Server.
 
-## 9. P13-Status (2026-10-10)
+## 9. Status der Mobile Bridge (2026-10-10)
 
 Der Client-Vertrag dieses Dokuments ist unverändert gültig. Neu ist, dass der
 **Server** (Orsik Mobile Bridge, Branch `p13/full-mobile-bridge`) ihn jetzt

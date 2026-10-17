@@ -89,7 +89,7 @@ uv run --locked coverage report
 uv run --locked coverage xml -o dist/coverage.xml
 ```
 
-Gemessene Baseline (Datum 2026-10-16, Basis `main@f1311d1` + OR-11; 137 Tests,
+Gemessene Baseline (Datum 2026-10-16, Basis `main@f1311d1`; 137 Tests,
 `branch = true`):
 
 | Modul | Line | Branch | Combined |

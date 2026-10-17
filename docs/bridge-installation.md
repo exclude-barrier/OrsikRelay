@@ -1,4 +1,4 @@
-# Orsik Mobile Bridge – Installation & Betrieb (P13)
+# Orsik Mobile Bridge – Installation & Betrieb
 
 Stand: 2026-10-10. Zielpfad: **frische, unveränderte offizielle Hermes-Installation**
 → Bridge installieren → privates HTTPS bereitstellen → Pairing erzeugen → QR/Deep-Link

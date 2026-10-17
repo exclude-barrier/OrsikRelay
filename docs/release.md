@@ -135,7 +135,7 @@ export ORSIK_RELEASE_KEY_ALIAS=orsik-release
 ```
 
 `isMinifyEnabled` bleibt `false`; R8/ProGuard-Verschlankung ist ein separates
-Ticket und ist hier **nicht** Teil des Release-Builds.
+Vorhaben und ist hier **nicht** Teil des Release-Builds.
 
 ## Verifikation
 
@@ -291,6 +291,6 @@ gh api repos/exclude-barrier/OrsikRelay/rulesets
 - **Aktive Branch-Protection/Rulesets**: Der Payload ist vorbereitet, aber wegen
   des Free-Plan-403 nicht angewendet.
 - **R8/Minify**: `isMinifyEnabled` bleibt `false`; Code-Shrinking und
-  Ressourcen-Verkleinerung sind ein separates Ticket.
+  Ressourcen-Verkleinerung sind ein separates Vorhaben.
 - **SBOM-Signatur und Vulnerability-Scan**: Die SBOM ist ein reines
   Abhängigkeitsinventar; es gibt keine Signatur und kein Scan-Gate.
