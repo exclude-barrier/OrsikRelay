@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "hermes-android"
+rootProject.name = "orsik-relay"
 include(":app")
