@@ -5,6 +5,9 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.performTextInput
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
@@ -217,8 +220,14 @@ class ChatTurnNavigationUiTest {
 
         waitForText("SystemBack-Session")
         composeRule.onNodeWithText("SystemBack-Session").performClick()
-        // We are now on the chat screen.
+        // We are now on the chat screen. The title appears before the (empty)
+        // history has loaded; wait until the composer accepts input.
         waitForText("Chat")
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodes(hasSetTextAction() and hasText("Nachricht") and isEnabled())
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
 
         // Start a turn that stays open (the fake never emits a terminal
         // event and never completes on its own).
