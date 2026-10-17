@@ -56,7 +56,7 @@ The test pairs and negotiates **with the real app clients** (`HermesDevicePairCl
 checks `device_credentials` + `session_chat_interactive_approvals`.
 
 The test carries `@LiveBridge` and is excluded from the regular suite and CI
-(`notAnnotation=…CaptureOnly,…LiveBridge`); without arguments the JUnit
+(`filter=…ManualTestsFilter`); without arguments the JUnit
 assumption skips. It runs only explicitly against the live stack.
 
 ## 4. Android regression (build-host)
@@ -64,7 +64,7 @@ assumption skips. It runs only explicitly against the live stack.
 - `:app:testDebugUnitTest --rerun-tasks`: **823 tests, 0 failures/errors/skips**.
 - `:app:lintDebug`, `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`:
   BUILD SUCCESSFUL.
-- `:app:connectedDebugAndroidTest` (API 36, `notAnnotation=…CaptureOnly,…LiveBridge`):
+- `:app:connectedDebugAndroidTest` (API 36, then `notAnnotation=…CaptureOnly,…LiveBridge`, now `filter=…ManualTestsFilter`):
   **247 tests, 1 documented skip, 0 failures — full suite green.** Two
   preceding full runs each hit the known IME/landscape flake
   (`ChatLandscapeComposerUiTest.composerStaysAboveTheKeyboardWithAttachmentAndMultilineDraft`);
@@ -211,7 +211,7 @@ in exactly **one** `@Test` in the same session:
   per run phase), without `Thread.sleep` chains.
 
 Both tests carry `@LiveBridge` and are excluded from the regular suite/CI
-(`notAnnotation=…CaptureOnly,…LiveBridge`); without arguments the
+(`filter=…ManualTestsFilter`); without arguments the
 JUnit assumption skips. Run only explicitly against the live stack:
 
 ```
