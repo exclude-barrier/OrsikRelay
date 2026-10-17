@@ -22,7 +22,7 @@ your private network.
 
 *Real app screens rendered with sample data (`scripts/readme-screenshots.sh`).
 The user interface is available in English and German; choose the language
-under **Settings → Language**.*
+under **⋮ → Settings → Language**.*
 
 > **Early alpha (`0.1.0-alpha.7`).** For technical testing on your own setup.
 > No Play Store build or binary release yet – [build from source](#building-from-source).
@@ -124,16 +124,16 @@ the exact capability contract before it stores anything.
 | Task | Where |
 | --- | --- |
 | Add a server | **Add server** (or open an `orsik://pair` link) |
-| Switch or remove servers | **Manage servers** |
-| Disconnect this phone from a server | **Manage servers → tap the server → Delete** (the device is disconnected on the server first) |
+| Switch or remove servers | **⋮ → Manage servers** |
+| Disconnect this phone from a server | **⋮ → Manage servers → tap the server → Delete** (the device is disconnected on the server first) |
 | Start a conversation | **+** (New session) on the session list |
 | Stop a running answer | **Stop** |
 | Correct a running answer | type in **Steer message**, then **Steer** |
 | Answer a tool approval | **Deny** or **Allow** (allow once) |
 | Attach an image | **Attach** in the composer (one image, ≤ 5 MiB) |
-| Change the app language | **Settings → Language** (System / English / Deutsch) |
-| Light / dark mode | **Settings → Appearance** (System / Light / Dark) |
-| App version and license | **Settings → About the app** |
+| Change the app language | **⋮ → Settings → Language** (System / English / Deutsch) |
+| Light / dark mode | **⋮ → Settings → Appearance** (System / Light / Dark) |
+| App version and license | **⋮ → About the app** |
 
 On the server, `admin list-devices` and `admin revoke-device <device_id>` list
 and immediately revoke paired phones.

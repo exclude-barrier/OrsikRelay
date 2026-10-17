@@ -5,13 +5,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -29,7 +27,7 @@ import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 
 /**
- * Settings screen with language, appearance and app information.
+ * Settings screen with language and appearance.
  *
  * Language options come exclusively from [SupportedLanguages]; "System" is
  * the leading option and means the device language. Appearance is the same
@@ -39,7 +37,6 @@ import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 fun SettingsScreen(
     languageController: LanguageController,
     themeController: ThemeModeController,
-    versionName: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -89,17 +86,6 @@ fun SettingsScreen(
                 onClick = { themeController.select(mode) }
             )
         }
-
-        SectionTitle(stringResource(R.string.settings_about_section))
-        HorizontalDivider()
-        InfoRow(
-            label = stringResource(R.string.settings_version_label),
-            value = versionName
-        )
-        InfoRow(
-            label = stringResource(R.string.settings_license_label),
-            value = stringResource(R.string.settings_license_value)
-        )
     }
 }
 
@@ -138,20 +124,6 @@ private fun RadioOptionRow(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(start = 12.dp)
         )
-    }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge)
-        Spacer(modifier = Modifier.weight(1f))
-        Text(text = value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

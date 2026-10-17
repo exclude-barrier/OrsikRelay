@@ -69,4 +69,13 @@ class AppNavigationStateTest {
 
         assertEquals(AppNavigationState(AppScreen.Sessions), next)
     }
+
+    @Test
+    fun `back moves from about to sessions`() {
+        val state = AppNavigationState(AppScreen.About)
+
+        val next = state.goBack()
+
+        assertEquals(AppNavigationState(AppScreen.Sessions), next)
+    }
 }

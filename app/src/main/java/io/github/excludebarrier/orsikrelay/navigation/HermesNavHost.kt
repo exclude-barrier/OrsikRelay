@@ -42,6 +42,7 @@ import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.AboutScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.LanguageController
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
@@ -318,6 +319,11 @@ fun HermesNavHost(
                     navController.navigate(routeOf(AppScreen.Settings)) {
                         launchSingleTop = true
                     }
+                },
+                onOpenAbout = {
+                    navController.navigate(routeOf(AppScreen.About)) {
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -325,6 +331,15 @@ fun HermesNavHost(
             SettingsScreen(
                 languageController = resolvedLanguageController,
                 themeController = settingsThemeController,
+                onBack = {
+                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                        navController.popBackStack()
+                    }
+                }
+            )
+        }
+        composable(routeOf(AppScreen.About)) {
+            AboutScreen(
                 versionName = BuildConfig.VERSION_NAME,
                 onBack = {
                     if (navController.currentDestination?.route != routeOf(initialScreen)) {
@@ -416,6 +431,7 @@ internal fun routeOf(screen: AppScreen): String = when (screen) {
     is AppScreen.Chat -> "chat/${encodeRouteArgument(screen.sessionId)}"
     AppScreen.Profiles -> "profiles"
     AppScreen.Settings -> "settings"
+    AppScreen.About -> "about"
 }
 
 internal const val CHAT_ARGUMENT = "sessionId"
