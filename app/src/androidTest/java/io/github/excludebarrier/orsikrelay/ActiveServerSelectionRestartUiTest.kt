@@ -265,6 +265,10 @@ class ActiveServerSelectionRestartUiTest {
         composeRule.onNodeWithTag(selectTag(BETA_ID)).assertIsNotEnabled()
 
         release.countDown()
+        // The selection resumes on Dispatchers.IO and only then navigates on
+        // the main thread; waitForIdle does not track that IO work, so wait
+        // (bounded) for the navigation event itself.
+        composeRule.waitUntil(timeoutMillis = 5_000) { events.size >= 2 }
         composeRule.waitForIdle()
 
         // Exactly one selection ran, and it triggered the navigation once.
