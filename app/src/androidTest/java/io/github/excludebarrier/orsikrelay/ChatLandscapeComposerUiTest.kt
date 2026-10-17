@@ -45,6 +45,7 @@ import io.github.excludebarrier.orsikrelay.ui.chat.COMPACT_COMPOSER_MAX_HEIGHT
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_ADD
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_REMOVE
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_BAR
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_FIELD
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_SEND
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_RUN_STOP
@@ -111,6 +112,29 @@ class ChatLandscapeComposerUiTest {
     fun composerStaysAboveTheKeyboardWithoutAttachment() {
         enterLandscape(attachment = false, multiline = false)
         assertComposerAboveKeyboard()
+    }
+
+    @Test
+    fun composerIsPushedDownFromTheHeaderInTheCompactRegime() {
+        enterLandscape(attachment = false, multiline = false)
+        assertCompactRegime()
+        assertComposerAboveKeyboard()
+
+        // The timeline is not composed in the compact regime, so without an
+        // explicit weighted placeholder the composer row would sit directly
+        // below the header. With the empty draft there is plenty of room, so a
+        // real gap must separate the two.
+        val headerBottom = composeRule.onNodeWithText(HEADER_LABEL)
+            .fetchSemanticsNode().boundsInRoot.bottom
+        val composerTop = composeRule.onNodeWithTag(TAG_COMPOSER_BAR)
+            .fetchSemanticsNode().boundsInRoot.top
+        val gapDp = with(composeRule.activity.resources.displayMetrics) {
+            (composerTop - headerBottom) / density
+        }
+        assertTrue(
+            "the compact composer must not sit directly below the header, gap was $gapDp dp",
+            gapDp >= MIN_HEADER_GAP_DP
+        )
     }
 
     @Test
@@ -394,16 +418,23 @@ class ChatLandscapeComposerUiTest {
     private fun hideRealImeAndWait() {
         val activity = composeRule.activity
         val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        activity.runOnUiThread {
-            imm.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
-        }
-        // Deterministic sync point: wait until the platform reports the real
-        // IME inset as gone, instead of a fixed wall-clock sleep. The condition
-        // is re-evaluated with a Compose idle round-trip each iteration.
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        // `performTextInput` focuses the field, and the platform may still be
+        // in the middle of SHOWING the IME when this runs. A single hide
+        // request can then be overtaken by that pending show (observed on the
+        // API 26 emulator), so the hide is re-issued while waiting, bounded by
+        // a deadline instead of a wall-clock sleep.
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            activity.runOnUiThread {
+                imm.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+            }
             val imeShown = ViewCompat.getRootWindowInsets(activity.window.decorView)
                 ?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
-            imeShown == 0
+            if (imeShown == 0) {
+                composeRule.waitForIdle()
+                return
+            }
+            Thread.sleep(100)
         }
         composeRule.waitForIdle()
     }
@@ -697,6 +728,8 @@ class ChatLandscapeComposerUiTest {
         const val STEER_INPUT_TAG = "chatSteerInput"
         const val STEER_SEND_TAG = "chatSteerSend"
         const val MIN_TOUCH_TARGET_DP = 48f
+        /** Minimum free space between header and compact composer row. */
+        const val MIN_HEADER_GAP_DP = 8f
         /** Width floor of the compact draft field with an attachment staged. */
         const val MIN_FIELD_WIDTH_DP = 96f
         /** Height the chat root is left with in the landscape+IME scenario. */
