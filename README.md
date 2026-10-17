@@ -158,7 +158,7 @@ Most design documents are currently written in German.
 | `docs/bridge-e2e.md` | live end-to-end evidence |
 | `docs/hermes-fresh-compat.md` | compatibility with the official Hermes core |
 | `docs/release.md` | release signing, SBOM, provenance, branch rules |
-| `docs/toolchain.md` | example local toolchain |
+| `docs/toolchain.md` | required toolchain, environment check, coverage reports |
 
 ## Security
 
