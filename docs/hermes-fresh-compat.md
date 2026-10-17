@@ -1,4 +1,4 @@
-# Hermes Fresh-Install-Kompatibilität & Mobile-Bridge-Design (P12)
+# Hermes Fresh-Install-Kompatibilität & Mobile-Bridge-Design
 
 Stand: 2026-10-10. Ziel: Orsik Relay soll mit einer **frisch installierten,
 unveränderten offiziellen** Hermes-Version verbunden werden können — ohne
@@ -150,7 +150,7 @@ simuliert; der Client handelt sie fail-closed als nicht unterstützt aus.
   die einzelne Ressource; garantierte Per-Device-Isolation wird **nicht**
   bereitgestellt und **nicht** vorgetäuscht. Wirksame Einschränkungen: Pairing
   ist admin-gated, Tokens sind einzeln widerrufbar, die Approval-Auswahl ist auf
-  `once`/`deny` verengt. Für echte Isolation ist eine Core-Erweiterung nötig (P13).
+  `once`/`deny` verengt. Für echte Isolation ist eine Core-Erweiterung nötig.
 - Restrisiko: Der Bridge-Prozess ist privilegiert (hält den Master-Key);
   Schutz durch Loopback-Bindung, 0600-Env, Dateisystem-Rechte und minimale
   Angriffsfläche. Ein kompromittierter Bridge-Prozess hätte Hermes-API-Rechte.
@@ -165,7 +165,7 @@ simuliert; der Client handelt sie fail-closed als nicht unterstützt aus.
 - Rollback: Bridge-Prozess stoppen und `BRIDGE_HOME` löschen; Hermes und seine
   Modelle bleiben unberührt.
 
-## 9. Konkrete nächste Implementierungsphase (P13)
+## 9. Konkrete nächste Implementierungsphase
 
 1. **Upstream (Ziel):** Mobile-v1 in den offiziellen Core einbringen
    (`protocol_version`, Device-Credentials, Session-Approval-Opt-in,
@@ -178,7 +178,7 @@ simuliert; der Client handelt sie fail-closed als nicht unterstützt aus.
 4. **Fresh-Install-Pfad:** Bridge-Installation + Tailscale Serve als
    verifizierte, versionierte Paketkette dokumentieren.
 
-## 10. P12.1 – Mobile-Bridge Security Hardening
+## 10. Mobile-Bridge Security Hardening
 
 ### Vorher nachweisbare Schwächen (Root Cause)
 1. **Approval-Eskalation:** `POST /v1/runs/{run_id}/approval` wurde mit
@@ -223,9 +223,9 @@ simuliert; der Client handelt sie fail-closed als nicht unterstützt aus.
 ### Verbleibende Restrisiken
 - Keine garantierte Per-Device-Isolation (offizielle API ohne Ownership) — §7.
 - Bridge ist privilegiert (hält Master-Key); Schutz nur über Loopback/OS-Rechte.
-- Token-/Code-Stores sind flüchtig (Prozessneustart verliert sie) — P13.
+- Token-/Code-Stores sind flüchtig (Prozessneustart verliert sie).
 
-### Offene P13-Aufgaben
+### Offene Aufgaben
 - Upstream: `protocol_version` + Device-Credentials + **Ressourcen-Ownership**
   (echte Per-Device-Isolation) + After-Seq-Replay + interaktives
   Session-Approval-Opt-in.
@@ -233,15 +233,15 @@ simuliert; der Client handelt sie fail-closed als nicht unterstützt aus.
   Bridge-eigene, gescopte Endpunkte (kein Core-Patch).
 - Persistente, dauerhafte Geräteverwaltung (verschlüsselt, über Neustart).
 
-## 11. P13 – Full Mobile Bridge (2026-10-10)
+## 11. Mobile Bridge (2026-10-10)
 
 Branch `p13/full-mobile-bridge` (Basis `f339343`). Ziel: vom abgesicherten
-P12.1-Prototyp zur vollständigen mobilen Anbindung einer frischen, unveränderten
+Prototyp zur vollständigen mobilen Anbindung einer frischen, unveränderten
 offiziellen Hermes-Installation. Kein Core-Patch, kein hermes-server-Eingriff.
 
 ### 11.1 Aktualisierte Core-Analyse (offiziell `f86276d2`)
 
-Der offizielle Core hat sich seit P12 weiterentwickelt; **neu belegt** durch
+Der offizielle Core hat sich weiterentwickelt; **neu belegt** durch
 read-only Quellanalyse und Live-Akzeptanz:
 
 - `POST /api/sessions/{id}/chat/stream` vergibt eine `run_id` (`run_<uuid>`),
@@ -262,9 +262,9 @@ read-only Quellanalyse und Live-Akzeptanz:
   (`_RunStream`, `Last-Event-ID`/`last_seq`, `replay.truncated`) — **nicht** aber
   für den Session-Chat-Stream (kein Eintrag in `_run_streams`).
 
-### 11.2 Aktualisierte Gap-Matrix (P13)
+### 11.2 Aktualisierte Gap-Matrix
 
-| Fähigkeit | Offizieller Core `f86276d2` | Bridge (P13) |
+| Fähigkeit | Offizieller Core `f86276d2` | Bridge |
 |---|---|---|
 | Session-CRUD/Messages/Chat/Stream (+`seq`) | ja | proxied |
 | Interaktive Session-Approvals `approval.request` | **ja** | bewirbt v1-Vertrag, verengt auf `once`/`deny` |
@@ -299,7 +299,7 @@ read-only Quellanalyse und Live-Akzeptanz:
 
 1. **Per-Device-Isolation** fehlt im Core → Single-Owner-Delegation (dokumentiert).
 2. **Run-Discovery** (Session→aktiver Run) fehlt → ohne bestätigte `run_id`
-   bleibt der Ausgang unbestimmt (P7-Invariante).
+   bleibt der Ausgang unbestimmt.
 3. **Assistant-Inhalt** ist ohne konfigurierten Provider nicht real prüfbar
    (Transport vollständig verifiziert).
 
@@ -313,7 +313,7 @@ Out-of-Scope-`403`, fehlendes Token `401`, Session-Create/-Messages,
 vollständiger Chat-SSE-Lebenszyklus inkl. `run.completed`, **Re-Attach 200 mit
 Replay**, unbekannter Run `404`, Self-Revoke `200` + danach `401`).
 
-## 12. OR-17 – Hermes-Kompatibilitätsmatrix (2026-10-16)
+## 12. Hermes-Kompatibilitätsmatrix (2026-10-16)
 
 Jeder Stand läuft isoliert auf `build-host` (eigener Git-Worktree, eigenes
 `HERMES_HOME`, eigener Loopback-Port, eigene Bridge-Instanz und `state.db`;
@@ -337,4 +337,4 @@ Fail-closed-Nachweis (live gegen `main`): Die Bridge erzeugt
 endet mit einem gültigen Device-Token an der Bridge mit **403**. Eine Nutzung
 (potenziell relevant für die Run-Discovery-Grenze 11.4/2) erfordert eine
 bewusste Erweiterung von Bridge-Allowlist, Capability-Envelope und
-Client-Vertrag; nicht Teil von OR-17.
+Client-Vertrag; nicht Teil dieser Kompatibilitätsmatrix.

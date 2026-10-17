@@ -3,7 +3,7 @@
 A minimal, **installable** sidecar that exposes the Orsik Mobile Protocol v1
 surface in front of an **unmodified official Hermes** API server.
 
-It is the sidecar chosen in the P12 architecture comparison
+It is the sidecar chosen in the architecture comparison
 (`docs/hermes-fresh-compat.md`). It does not patch Hermes, does not run inside
 the Hermes process, and does not expose the Hermes API key to clients.
 
@@ -20,18 +20,18 @@ URL unchanged.
   CLI** — there is no HTTP admin surface.
 - Gives every device token a fixed allowlist: `chat`, `runs`, `approvals`.
 - Persists paired devices in a **SQLite store (0600)** so pairing and revoke
-  survive a bridge restart (P13).
+  survive a bridge restart.
 - Proxies **only** a closed set of paths upstream (`core.PROXIED_ROUTES`):
   `/api/sessions…` and `/v1/runs…`. No admin, cron, memory, jobs, skills or
   artifact surface.
 - Takes over the session chat stream **server-side** so a lost client
   connection does not interrupt the Hermes run, and exposes an `after_seq`
-  re-attach endpoint (P13).
+  re-attach endpoint.
 - Advertises the Mobile Protocol v1 capability envelope, including the
   `session_chat_interactive_approvals` contract the official core now supports,
   narrowed to the least-privilege choices `once`/`deny`.
 
-## Security hardening (P12.1 + P13)
+## Security hardening
 
 - **Approval least-privilege.** `POST /v1/runs/{run_id}/approval` is validated
   locally: only `once`/`deny` are accepted, `request_id` must be a non-blank
@@ -78,7 +78,7 @@ URL unchanged.
 
 Anything else returns `403 endpoint_out_of_scope`.
 
-## Reconnect / run ownership (P13)
+## Reconnect / run ownership
 
 `POST /api/sessions/{id}/chat/stream` is consumed by the bridge, not streamed
 through blindly: the bridge holds the upstream SSE connection independently of

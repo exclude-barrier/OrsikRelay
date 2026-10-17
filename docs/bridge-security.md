@@ -1,4 +1,4 @@
-# Orsik Mobile Bridge – Security Threat Model (P13)
+# Orsik Mobile Bridge – Security Threat Model
 
 Stand: 2026-10-10.
 
@@ -42,7 +42,7 @@ Rechte-Allowlist `{chat, runs, approvals}`.
 | Öffentlicher API-Port | Bind nur `127.0.0.1`; TLS extern; kein Funnel |
 | TLS-Bypass | Bridge terminiert kein TLS; App erzwingt HTTPS + Systemtrust |
 
-## 3.1 Bild-Echo in `run.started` (OR-10a)
+## 3.1 Bild-Echo in `run.started`
 
 Der Core echot im ersten `run.started`-Frame den kompletten Request inklusive
 `user_message` (u. a. `content[1].image_url.url` als
@@ -79,7 +79,7 @@ Wirksame Einschränkungen: Pairing ist Operator-gated (lokale CLI), jedes Token
 ist durabel einzeln widerrufbar, die Approval-Auswahl ist auf `once`/`deny`
 verengt.
 
-## 4.1 Revalidierung gegen reale positive Approvals (OR-14, 2026-10-16)
+## 4.1 Revalidierung gegen reale positive Approvals (2026-10-16)
 
 Live auf `build-host`: offizieller Core `f86276d2` mit echtem Provider
 (DeepSeek, `deepseek-flash`, nur im isolierten Test-Home), Bridge
@@ -102,7 +102,7 @@ feste `description`, `choices = [once, deny]`) und verwirft alle übrigen Felder
 als Protokollfehler ab, ein echtes Approval hätte den Turn auf dem Gerät also
 in UNCERTAIN geworfen. Fehlt ein v1-Feld, bleibt der Frame unverändert (die App
 lehnt ihn ab, die Bridge erfindet nichts). Folge für das Produkt: Das Gerät
-zeigt nur den festen Hinweistext, **nicht** das Kommando (OR-19-Entscheidung).
+zeigt nur den festen Hinweistext, **nicht** das Kommando (bewusste Produktentscheidung).
 
 **Befund: Approval-Modus des Cores.** Mit dem Core-Default `approvals.mode:
 smart` bewertet ein Hilfs-LLM gefährliche Kommandos und genehmigt als harmlos

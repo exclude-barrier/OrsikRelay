@@ -42,7 +42,7 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
 | Plan (Soll) | Ist | Bewertung |
 |---|---|---|
 | Multi-Modul `core/`/`data/`/`feature/` | Ein `app`-Modul | bewusst (§5 erlaubt es) |
-| Room für Profile/Cache/Drafts | SharedPreferences mit versionierten Keys | bewusst: Room ist keine Dependency; das Repo-Muster ist SharedPreferences + versionierter Key (TASK 009A) |
+| Room für Profile/Cache/Drafts | SharedPreferences mit versionierten Keys | bewusst: Room ist keine Dependency; das Repo-Muster ist SharedPreferences + versionierter Key |
 | DataStore für Drafts | SharedPreferences (`chat.draft.v1.*`) | bewusst, s. o. |
 | `docs/security-threat-model.md`, `docs/testing.md`, `docs/release-checklist.md` | nicht vorhanden | offen |
 | Network Security Config (Datei) | `android:usesCleartextTraffic="false"` + HTTPS-only im Client | bewusst/minimal: Klartext ist ohnehin blockiert |
@@ -52,7 +52,7 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
 
 ## 4. Bekannte, bewusst getragene Grenzen
 
-- **Prozess-Tod-Recovery nur als Run-Lease (OR-09).** Die Live-Run-Bindung
+- **Prozess-Tod-Recovery nur als Run-Lease.** Die Live-Run-Bindung
   (`AppDependenciesHolder`, `RunSessionController.ActiveRun`) überlebt
   Activity-/ViewModel-Recreation innerhalb desselben Prozesses. Ein
   Prozess-Kill beendet den SSE-Socket, beweist aber **nicht** ein terminales
@@ -95,9 +95,9 @@ Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositorie
   Voraussetzung für einen allgemein nutzbaren Release ohne Bridge (siehe
   `README.md`).
 
-## 5. Run-Lifecycle-Invarianten (P7)
+## 5. Run-Lifecycle-Invarianten
 
-Orsik hat genau **einen** app-weiten Run-Slot. Seine Freigabe beruht seit P7
+Orsik hat genau **einen** app-weiten Run-Slot. Seine Freigabe beruht
 ausschließlich auf **autoritativer** Server-Information; ein clientseitiger
 Transport-, Timeout-, TLS- oder Protokollfehler darf niemals als
 Server-Terminal gelten.
