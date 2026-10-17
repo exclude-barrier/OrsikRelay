@@ -287,7 +287,7 @@ optional einen QR-Code (`docs/bridge-installation.md`).
 ## 8. Run-Autorität & Recovery (P7)
 
 **Status:** Read-only gegen den lokal vorhandenen Mobile-v1-Quellstand geprüft
-(`/home/user/hermes-mobile-v1-src/gateway/platforms/api_server.py`,
+(im Hermes-Mobile-v1-Quellstand: `gateway/platforms/api_server.py`,
 `api_server_runs.py`, `api_server_run_idempotency.py`). P7 stützt die Freigabe
 der Single-Slot-Run-Ownership auf diese Aussagen. Kein E2E-Lauf gegen einen
 echten Server (nicht verifiziert, s. unten).

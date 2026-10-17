@@ -117,7 +117,7 @@ trifft der Owner; dieses Repository setzt sie nicht voraus.
 Unsigned (keine Variablen gesetzt):
 
 ```bash
-export ANDROID_HOME=/home/user/Android/Sdk
+export ANDROID_HOME="$HOME/Android/Sdk"
 ./gradlew --offline :app:bundleRelease :app:assembleRelease
 ```
 
@@ -125,7 +125,7 @@ Signed (Passwörter nur interaktiv in Shell-Variablen, nie in Dateien oder in
 der History):
 
 ```bash
-export ANDROID_HOME=/home/user/Android/Sdk
+export ANDROID_HOME="$HOME/Android/Sdk"
 export ORSIK_RELEASE_STORE_FILE="$HOME/.config/orsik-release/release.jks"
 read -rsp "Keystore password: " ORSIK_RELEASE_STORE_PASSWORD; echo
 export ORSIK_RELEASE_STORE_PASSWORD
