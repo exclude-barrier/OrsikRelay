@@ -66,7 +66,7 @@ jobs:
 
       - name: Upload test and lint reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reports
           path: |
@@ -136,7 +136,7 @@ jobs:
 
       - name: Upload instrumented test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: connected-reports
           path: |
@@ -313,7 +313,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release distribution
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-dist
           path: ${{ runner.temp }}/release-dist
