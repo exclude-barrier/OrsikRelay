@@ -1,19 +1,26 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,10 +50,13 @@ import kotlinx.coroutines.launch
  * text in the model is the exact protocol-defined neutral sentence.
  *
  * Safety rules:
- * - "Ablehnen" is the first, filled (primary) button: it is the safe
- *   default. "Erlauben" is the second, secondary button and is the only
- *   way to consciously approve; it is never the default and is never
- *   triggered implicitly.
+ * - "Ablehnen" is the first, neutral outlined button: it is the safe
+ *   default and looks neutral rather than recommended. "Erlauben" is the
+ *   second button, is filled in the error colour with a warning icon to
+ *   mark it as the risky action, and is the only way to consciously
+ *   approve; it is never the default and is never triggered implicitly.
+ * - Both buttons share one width and one height (equal `weight` in a Row
+ *   with an intrinsic height), so neither is visually favoured by size.
  * - The dialog is NOT dismissible by outside tap: [onDismissRequest] is a
  *   no-op, so a tap outside can neither approve nor deny (and cannot
  *   accidentally close the pending decision). Only the two explicit
@@ -194,22 +204,45 @@ fun ApprovalDialog(
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                // Deny first (filled, primary, safe default), then Allow
-                // (secondary, the only conscious approval path).
-                Row {
-                    Button(
+                // Deny first (neutral, safe default), then Allow (risk-marked
+                // in the error colour with a warning icon, the only conscious
+                // approval path). Equal weights make both buttons the same
+                // width; the intrinsic row height keeps them equally tall
+                // even when a label wraps at a large font scale.
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    OutlinedButton(
                         onClick = { decide(RunApprovalChoice.DENY) },
                         enabled = buttonsEnabled,
-                        modifier = Modifier.testTag(TAG_DENY)
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .testTag(TAG_DENY)
                     ) {
                         Text(text = stringResource(R.string.approval_deny))
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    TextButton(
+                    Button(
                         onClick = { decide(RunApprovalChoice.ONCE) },
                         enabled = buttonsEnabled,
-                        modifier = Modifier.testTag(TAG_ALLOW)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .testTag(TAG_ALLOW)
                     ) {
+                        // Decorative: the accessible name stays the text.
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(ButtonDefaults.IconSize)
+                        )
+                        Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
                         Text(text = stringResource(R.string.approval_allow))
                     }
                 }

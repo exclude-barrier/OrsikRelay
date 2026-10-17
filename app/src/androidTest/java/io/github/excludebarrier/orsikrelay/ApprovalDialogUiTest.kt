@@ -1,6 +1,9 @@
 package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -12,10 +15,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalChoice
@@ -65,6 +72,8 @@ class ApprovalDialogUiTest {
         }
     }
 
+    // captureToImage() of a dialog window needs API 28+; older devices skip it.
+    @SdkSuppress(minSdkVersion = 28)
     @Test
     fun dialogDrawsAnOpaqueSurfaceBehindItsContent() {
         // BasicAlertDialog has no container of its own; without the surface
@@ -85,12 +94,82 @@ class ApprovalDialogUiTest {
         val denyBounds = composeRule.onNodeWithTag(TAG_DENY).assertIsDisplayed().getBoundsInRoot()
         val allowBounds = composeRule.onNodeWithTag(TAG_ALLOW).assertIsDisplayed().getBoundsInRoot()
 
-        // Both live in one horizontal Row; Deny (the filled, primary, safe
-        // default) is the FIRST element, i.e. strictly left of Allow.
+        // Both live in one horizontal Row; Deny (the neutral, safe default)
+        // is the FIRST element, i.e. strictly left of Allow.
         assertTrue(
             "Deny must be left of Allow (first in the row)",
             denyBounds.right.value <= allowBounds.left.value
         )
+    }
+
+    @Test
+    fun denyAndAllowHaveTheSameWidth() {
+        setDialog(fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }))
+
+        val denyBounds = composeRule.onNodeWithTag(TAG_DENY).assertIsDisplayed().getBoundsInRoot()
+        val allowBounds = composeRule.onNodeWithTag(TAG_ALLOW).assertIsDisplayed().getBoundsInRoot()
+
+        val denyWidthPx = with(composeRule.density) { (denyBounds.right - denyBounds.left).toPx() }
+        val allowWidthPx = with(composeRule.density) { (allowBounds.right - allowBounds.left).toPx() }
+        assertTrue(
+            "deny width ($denyWidthPx px) and allow width ($allowWidthPx px) must be equal (+/- 1 px)",
+            kotlin.math.abs(denyWidthPx - allowWidthPx) <= 1f
+        )
+    }
+
+    @Test
+    fun bothButtonsStayAtLeast48DpAndUntruncatedAtLargestFont() {
+        setDialog(
+            fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }),
+            fontScale = 2.0f
+        )
+
+        val deny = composeRule.onNodeWithTag(TAG_DENY).assertIsDisplayed()
+        val allow = composeRule.onNodeWithTag(TAG_ALLOW).assertIsDisplayed()
+
+        listOf(TAG_DENY to deny, TAG_ALLOW to allow).forEach { (tag, node) ->
+            val touchBounds = node.fetchSemanticsNode().touchBoundsInRoot
+            val heightDp = with(composeRule.density) { touchBounds.height / density }
+            assertTrue(
+                "$tag touch target height must be >= 48 dp, was $heightDp dp",
+                heightDp >= 48f
+            )
+        }
+
+        val denyBounds = deny.getBoundsInRoot()
+        val allowBounds = allow.getBoundsInRoot()
+        val denyHeightPx = with(composeRule.density) { (denyBounds.bottom - denyBounds.top).toPx() }
+        val allowHeightPx = with(composeRule.density) { (allowBounds.bottom - allowBounds.top).toPx() }
+        assertTrue(
+            "deny height ($denyHeightPx px) and allow height ($allowHeightPx px) must be equal (+/- 1 px)",
+            kotlin.math.abs(denyHeightPx - allowHeightPx) <= 1f
+        )
+
+        assertLabelNotEllipsized(DENY_LABEL)
+        assertLabelNotEllipsized(ALLOW_LABEL)
+    }
+
+    @Test
+    fun bothButtonsStayAtLeast48DpAndUntruncatedAtMediumFont() {
+        setDialog(
+            fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }),
+            fontScale = 1.3f
+        )
+
+        val deny = composeRule.onNodeWithTag(TAG_DENY).assertIsDisplayed()
+        val allow = composeRule.onNodeWithTag(TAG_ALLOW).assertIsDisplayed()
+
+        listOf(TAG_DENY to deny, TAG_ALLOW to allow).forEach { (tag, node) ->
+            val touchBounds = node.fetchSemanticsNode().touchBoundsInRoot
+            val heightDp = with(composeRule.density) { touchBounds.height / density }
+            assertTrue(
+                "$tag touch target height must be >= 48 dp, was $heightDp dp",
+                heightDp >= 48f
+            )
+        }
+
+        assertLabelNotEllipsized(DENY_LABEL)
+        assertLabelNotEllipsized(ALLOW_LABEL)
     }
 
     @Test
@@ -247,23 +326,55 @@ class ApprovalDialogUiTest {
         assertEquals(listOf(RunApprovalChoice.DENY), seenChoice)
     }
 
-    private fun setDialog(requester: RunApprovalRequester, onDismiss: () -> Unit = {}) {
+    private fun setDialog(
+        requester: RunApprovalRequester,
+        onDismiss: () -> Unit = {},
+        fontScale: Float = 1.0f
+    ) {
         composeRule.setContent {
             var show by remember { mutableStateOf(true) }
             if (show) {
-                HermesTheme {
-                    ApprovalDialog(
-                        request = REQUEST,
-                        profileId = PROFILE_ID,
-                        requester = requester,
-                        onDismiss = {
-                            show = false
-                            onDismiss()
-                        }
-                    )
+                val base = LocalDensity.current
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density = base.density, fontScale = fontScale)
+                ) {
+                    HermesTheme {
+                        ApprovalDialog(
+                            request = REQUEST,
+                            profileId = PROFILE_ID,
+                            requester = requester,
+                            onDismiss = {
+                                show = false
+                                onDismiss()
+                            }
+                        )
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * The label must not be clipped by the layout. `hasVisualOverflow` is
+     * not used because its width flag produces false positives on
+     * exactly-fitting labels; an ellipsized line is the exact truncation
+     * signal.
+     */
+    private fun assertLabelNotEllipsized(label: String) {
+        val node = composeRule
+            .onNodeWithText(label, useUnmergedTree = true)
+            .fetchSemanticsNode()
+        val action = node.config.getOrNull(SemanticsActions.GetTextLayoutResult)
+        assertTrue("no GetTextLayoutResult action exposed for '$label'", action != null)
+        val layouts = ArrayList<TextLayoutResult>()
+        action!!.action?.invoke(layouts)
+        assertTrue("no TextLayoutResult for '$label'", layouts.isNotEmpty())
+        assertTrue(
+            "'$label' must not be ellipsized/truncated",
+            layouts.none { layout ->
+                (0 until layout.lineCount).any { line -> layout.isLineEllipsized(line) }
+            }
+        )
     }
 
     private fun fake(
@@ -304,6 +415,8 @@ class ApprovalDialogUiTest {
             "Sicherheitsmodul empfiehlt Ablehnung. Erlauben nur, wenn du die Aktion bewusst freigibst."
         val ERROR_GENERIC: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_error_generic) }
         val ALREADY_RESOLVED: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_already_resolved) }
+        val DENY_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_deny) }
+        val ALLOW_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_allow) }
 
         const val TAG_SURFACE = "approval_surface"
         const val TAG_DENY = "approval_deny"
