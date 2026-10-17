@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.session
 
 /**
- * Closed set of session-creation failure reasons (Mission 005A).
+ * Closed set of session-creation failure reasons.
  *
  * Every reason is a stable, generic code: none of them carries request
  * URLs, response bodies, exception text, profile data, titles or

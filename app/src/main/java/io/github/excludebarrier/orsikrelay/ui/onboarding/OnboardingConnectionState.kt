@@ -24,7 +24,7 @@ enum class OnboardingFailureReason {
     NETWORK,
     HTTP,
     PERSISTENCE,
-    // Mission 017B: closed reasons of the device pairing path.
+    // Closed reasons of the device pairing path.
     PAIRING_CODE_INVALID,
     PAIRING_DEVICE_LIMIT,
     PAIRING_RATE_LIMITED,

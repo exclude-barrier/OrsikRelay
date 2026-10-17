@@ -24,7 +24,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Mission 010: the profile management slice is reachable from the app shell
+ * The profile management slice is reachable from the app shell
  * and a confirmed deletion returns to a safe state in which no chat keeps
  * living under the deleted profile. All fakes are synthetic; no network
  * request is made.
@@ -143,10 +143,10 @@ class ProfileManagementNavigationUiTest {
                 throw IllegalStateException("synthetic deletion failure")
             }
 
-            // Mission 012: no-op selection persist in this test's fake admin.
+            // No-op selection persist in this test's fake admin.
             override fun selectActiveServer(profileId: String) = Unit
 
-            // Mission 017B: this test has no device profiles.
+            // This test has no device profiles.
             override fun credentialKind(profileId: String): ProfileCredentialKind =
                 ProfileCredentialKind.API_KEY
         }
@@ -207,10 +207,10 @@ class ProfileManagementNavigationUiTest {
             remaining.removeAll { it.id == profileId }
         }
 
-        // Mission 012: no-op selection persist in this test's fake admin.
+        // No-op selection persist in this test's fake admin.
         override fun selectActiveServer(profileId: String) = Unit
 
-        // Mission 017B: this test has no device profiles.
+        // This test has no device profiles.
         override fun credentialKind(profileId: String): ProfileCredentialKind =
             ProfileCredentialKind.API_KEY
     }

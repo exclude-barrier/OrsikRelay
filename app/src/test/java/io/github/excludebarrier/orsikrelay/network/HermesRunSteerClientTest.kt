@@ -20,7 +20,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Mission 008A: transport contract of the single authenticated
+ * Transport contract of the single authenticated
  * `POST /v1/runs/{run_id}/steer` write. The expected wire format was
  * verified read-only against the installed server contract: the client
  * sends the canonical JSON body `{"input":"<text>"}` with a Bearer key

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Closed server run status read from `GET /v1/runs/{run_id}` (P7).
+ * Closed server run status read from `GET /v1/runs/{run_id}`.
  *
  * The set is the closed status vocabulary derived read-only from the
  * installed server code (`gateway/platforms/api_server_runs.py`,
@@ -28,7 +28,7 @@ enum class RunServerStatus {
         get() = this == COMPLETED || this == FAILED || this == CANCELLED || this == INTERRUPTED
 }
 
-/** Closed set of run-status read failure reasons (P7). */
+/** Closed set of run-status read failure reasons. */
 sealed interface RunStatusError {
     /** A locally invalid input (URL, credential or run ID) was rejected. */
     data object InvalidInput : RunStatusError
@@ -62,7 +62,7 @@ sealed interface RunStatusError {
 }
 
 /**
- * Closed result of one run-status read (P7). Every failure maps to a
+ * Closed result of one run-status read. Every failure maps to a
  * closed [RunStatusError]; no response body, URL, run ID or exception
  * text ever escapes into the result.
  */

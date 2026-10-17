@@ -15,7 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Mission 012: the app-private active server selection store on a real
+ * The app-private active server selection store on a real
  * [SharedPreferences] (connected).
  *
  * The store persists exactly one plain profile ID — never an API key,

@@ -35,7 +35,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * OR-08a: the provider-less part of the live chat UI end-to-end flow.
+ * The provider-less part of the live chat UI end-to-end flow.
  *
  * This test drives the REAL [MainActivity], the real Compose screens and the
  * production dependency graph ([AppDependenciesHolder], reset around every
@@ -66,8 +66,8 @@ import org.junit.runner.RunWith
  *     -Pandroid.testInstrumentationRunnerArguments.livePairingCode=...
  *
  * Stop/steer and the disconnect-with-identical-`run_id` path need a LONG
- * running turn and therefore a model provider (OR-05); they are deliberately
- * NOT part of OR-08a.
+ * running turn and therefore a model provider; they are deliberately
+ * NOT part of this provider-less flow.
  */
 @LiveBridge
 @RunWith(AndroidJUnit4::class)
@@ -129,7 +129,7 @@ class LiveBridgeChatE2ETest {
         // A live run posts a local notification, which would raise the
         // contextual POST_NOTIFICATIONS justification dialog over the chat
         // mid-test. The "ask at most once" flag is marked up front; the
-        // permission flow itself is not part of OR-08a.
+        // permission flow itself is not part of this test.
         dependencies.notificationPermissionStore.markRequested()
     }
 

@@ -14,8 +14,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Small data seam the chat UI depends on for the ORDINARY composer draft
- * (Mission 009A).
+ * Small data seam the chat UI depends on for the ORDINARY composer draft.
  *
  * Only the ordinary new-message draft is covered. Run/stop/steer input,
  * recovery items, run IDs, credentials, URLs and transient errors are never
@@ -33,7 +32,7 @@ import kotlinx.coroutines.withContext
  * - [flushPendingDraft] writes the currently pending value immediately
  *   (deterministic flush on leaving the screen / a key switch).
  * - [clearProfile] removes every stored draft of one profile (all sessions)
- *   after the profile has been deleted (Mission 009B). It cancels any
+ *   after the profile has been deleted. It cancels any
  *   pending debounced write for that profile, serializes the deletion
  *   behind writes already entered into the store, and leaves pending writes
  *   for other profiles intact.
@@ -49,7 +48,7 @@ interface ChatDraftRepository : ProfileDraftClearer {
 }
 
 /**
- * [ChatDraftRepository] over a [ChatDraftStore] (Mission 009A).
+ * [ChatDraftRepository] over a [ChatDraftStore].
  *
  * Write strategy: at most one debounced write is pending at a time. Rapid
  * changes for the same key coalesce into a single latest-value write (no
@@ -69,7 +68,7 @@ interface ChatDraftRepository : ProfileDraftClearer {
  * `commit()` semantics guarantee read-your-writes for an already-committed
  * value.
  *
- * Profile deletion ([clearProfile], Mission 009B) cancels the profile's
+ * Profile deletion ([clearProfile]) cancels the profile's
  * pending write and runs the store-wide removal through the same [Mutex]: a
  * save already entered `commit()` for that profile can never resurrect an
  * orphan after the profile is gone, and pending writes for other profiles

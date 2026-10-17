@@ -21,7 +21,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Compose tests for the assistant markdown renderer (P2).
+ * Compose tests for the assistant markdown renderer.
  *
  * These exercise the real renderer surface (not a full ChatScreen) so they
  * stay focused: element rendering, code-block copy, the https-only link seam,

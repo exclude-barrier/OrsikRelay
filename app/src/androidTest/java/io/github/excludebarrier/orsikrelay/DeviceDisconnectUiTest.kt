@@ -25,7 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Mission 017B: the "Gerät trennen" (device disconnect) UI contract.
+ * The "Gerät trennen" (device disconnect) UI contract.
  *
  * - Only profiles whose NON-SECRET credential kind is
  *   [ProfileCredentialKind.DEVICE_CREDENTIAL] offer the action;

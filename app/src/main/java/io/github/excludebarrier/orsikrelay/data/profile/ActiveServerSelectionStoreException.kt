@@ -1,8 +1,7 @@
 package io.github.excludebarrier.orsikrelay.data.profile
 
 /**
- * Closed, fixed failure surface for the active server selection store
- * (Mission 012).
+ * Closed, fixed failure surface for the active server selection store.
  *
  * Mirrors [ProfileMetadataStoreException]: every store failure maps to this
  * one generic message. It never carries a profile ID, a URL or any dynamic

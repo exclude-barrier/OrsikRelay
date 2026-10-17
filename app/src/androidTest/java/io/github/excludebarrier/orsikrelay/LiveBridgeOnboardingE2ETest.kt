@@ -30,7 +30,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * OR-07 real Android end-to-end: the WHOLE onboarding UI path against a live
+ * Real Android end-to-end: the WHOLE onboarding UI path against a live
  * Orsik Mobile Bridge (which fronts the unmodified official Hermes core) over
  * HTTPS, on the emulator, through the production [MainActivity], the real
  * Compose screens and the production `AppDependencies` graph.

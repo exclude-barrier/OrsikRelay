@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 
 /**
  * Domain decision layer that turns a terminal chat-stream event into an
- * optional local notification (P3).
+ * optional local notification.
  *
  * This class owns the notification policy application and the duplicate
  * guard; it never touches an Android notification API. It hands a closed,

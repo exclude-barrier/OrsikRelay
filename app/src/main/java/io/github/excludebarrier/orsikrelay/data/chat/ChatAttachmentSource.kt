@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.data.chat
 
 /**
- * The single seam between the chat UI and Android's content providers (P5).
+ * The single seam between the chat UI and Android's content providers.
  *
  * The picker hands back a `content://` URI; everything else in the app works
  * with the closed [io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft]
@@ -33,7 +33,7 @@ interface ChatAttachmentSource {
 
     /**
      * Same read as [readInlineDataUrl], but with a closed outcome so the UI can
-     * tell an over-limit attachment apart from a broken read (P5.1).
+     * tell an over-limit attachment apart from a broken read.
      *
      * Sources that cannot distinguish the two keep the fail-closed default,
      * which reports every `null` of [readInlineDataUrl] as
@@ -49,7 +49,7 @@ interface ChatAttachmentSource {
             ?: ChatAttachmentReadResult.Unreadable
 }
 
-/** Closed outcome of one attachment read (P5.1). */
+/** Closed outcome of one attachment read. */
 sealed interface ChatAttachmentReadResult {
     /** The attachment was read within the bound and is ready to be sent. */
     class DataUrl(val value: String) : ChatAttachmentReadResult {

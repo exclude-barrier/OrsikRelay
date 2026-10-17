@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Production [RunSteerRequester] (Mission 008A).
+ * Production [RunSteerRequester].
  *
  * Loads the profile metadata and the credential separately for the
  * given profile ID and then delegates the single authenticated

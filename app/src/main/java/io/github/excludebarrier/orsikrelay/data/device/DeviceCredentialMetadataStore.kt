@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.data.device
 
 /**
- * UI-free seam (Mission 017A) for persisting the NON-SECRET metadata of
+ * UI-free seam for persisting the NON-SECRET metadata of
  * a paired device per profile.
  *
  * The device key is deliberately absent: it is stored only through the

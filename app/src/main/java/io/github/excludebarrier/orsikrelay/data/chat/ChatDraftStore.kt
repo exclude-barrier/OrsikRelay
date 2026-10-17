@@ -5,7 +5,7 @@ import java.util.Base64
 
 /**
  * Synchronous, app-private storage seam for the ordinary chat composer
- * draft (Mission 009A).
+ * draft.
  *
  * One draft per (profileId, sessionId) pair. The seam is intentionally
  * minimal: the UI never sees this type — it depends on
@@ -36,7 +36,7 @@ interface ChatDraftStore {
 
     /**
      * Removes every stored draft belonging to [profileId] (all sessions) in
-     * one idempotent operation (Mission 009B). Clearing a profile that has
+     * one idempotent operation. Clearing a profile that has
      * no stored drafts succeeds silently and never affects other profiles'
      * drafts.
      */

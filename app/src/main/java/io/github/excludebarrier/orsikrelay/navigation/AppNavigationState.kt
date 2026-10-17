@@ -12,7 +12,7 @@ sealed interface AppScreen {
 }
 
 /**
- * Pure navigation state machine for the Mission 001 slice.
+ * Pure navigation state machine.
  *
  * Rules:
  * - The app starts on [AppScreen.Onboarding].

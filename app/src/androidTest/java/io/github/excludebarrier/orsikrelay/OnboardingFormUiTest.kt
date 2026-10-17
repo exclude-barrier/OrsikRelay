@@ -17,7 +17,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Compose instrumentation tests for the Mission 002A onboarding form:
+ * Compose instrumentation tests for the onboarding form:
  *
  * 1. Submitting an empty form shows the field-specific validation
  *    errors and stays on the Onboarding screen.
@@ -43,7 +43,7 @@ class OnboardingFormUiTest {
     }
 
     /**
-     * Mission 017B: onboarding now defaults to the pairing mode. The
+     * Onboarding now defaults to the pairing mode. The
      * API-key assertions of this test therefore switch back to the
      * unchanged API-Key mode first.
      */
@@ -74,15 +74,15 @@ class OnboardingFormUiTest {
 
     @Test
     fun submittingEmptyFormShowsFieldErrorsAndStaysOnOnboarding() {
-        // Startscreen mit Titel.
+        // Start screen with title.
         composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
 
-        // Die API-Key-Aussagen gelten für den unveränderten API-Key-Modus;
-        // der Default-Modus ist seit Mission 017B das Pairing.
+        // The API-key assertions apply to the unchanged API-key mode;
+        // the default mode is the pairing mode.
         switchToApiKeyMode()
         clickSubmit()
 
-        // Feldbezogene Validierungsfehler werden angezeigt.
+        // Field-specific validation errors are shown.
         composeRule
             .onNodeWithText("Servername darf nicht leer sein.")
             .assertIsDisplayed()
@@ -91,7 +91,7 @@ class OnboardingFormUiTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText("API-Key darf nicht leer sein.").assertIsDisplayed()
 
-        // Die App bleibt auf Onboarding und navigiert nicht zu Sessions.
+        // The app stays on onboarding and does not navigate to sessions.
         composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
         assertNoNodeWithText("Sessions")
     }
@@ -106,11 +106,11 @@ class OnboardingFormUiTest {
             .onNodeWithContentDescription("API-Key", useUnmergedTree = true)
             .performTextInput(syntheticApiKey)
 
-        // Das Feld selbst ist ein Passwortfeld: kein Klartext und keine
-        // Semantics-Leakage über sämtliche Compose-Knoten hinweg.
+        // The field itself is a password field: no plain text and no
+        // semantics leakage across all Compose nodes.
         assertApiKeyNotRenderedAsPlainText()
 
-        // Bleibt auf Onboarding, solange nicht gültig abgeschickt wird.
+        // Stays on onboarding as long as no valid submission is made.
         assertNoNodeWithText("Sessions")
     }
 }

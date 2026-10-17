@@ -6,7 +6,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
 
 /**
- * Production [DeviceCredentialSaver] (Mission 017A).
+ * Production [DeviceCredentialSaver].
  *
  * Stores the paired-device credential with the SAME protection levels as
  * the API key:

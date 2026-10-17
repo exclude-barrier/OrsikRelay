@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.chat
 
 /**
- * Pure, local validation of the outgoing chat message (Mission 006A).
+ * Pure, local validation of the outgoing chat message.
  * No network access, no I/O.
  *
  * Rules:
@@ -47,7 +47,7 @@ object ChatMessageValidator {
     }
 
     /**
-     * Validates the text of a turn that MAY carry an attachment (P5): every
+     * Validates the text of a turn that MAY carry an attachment: every
      * rule of [validate] applies except that a blank text is allowed, because
      * an attachment-only turn is a legitimate request (the server accepts a
      * content-part list whose only visible payload is the image). Returns the

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.device
 
 /**
- * Closed set of device-pairing failure reasons (Mission 017A).
+ * Closed set of device-pairing failure reasons.
  *
  * The first five values are the server's closed `error.code` values for
  * `POST /v1/devices/pair` (server contract v1, read-only reference); the

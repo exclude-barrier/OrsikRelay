@@ -36,7 +36,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * OR-09 live: a REAL process death while a server run is in flight.
+ * A REAL process death while a server run is in flight.
  *
  * Two separate instrumentation invocations (`adb shell am instrument`, the app
  * stays installed in between, see docs/bridge-e2e.md §11):

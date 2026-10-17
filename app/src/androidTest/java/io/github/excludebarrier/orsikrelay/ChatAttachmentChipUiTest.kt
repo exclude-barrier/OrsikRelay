@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Instrumented Compose tests for the REAL attachment chip of the production
- * [ChatScreen] (P5). The picked attachment is staged through the production
+ * [ChatScreen]. The picked attachment is staged through the production
  * process-scoped [ChatAttachmentDraftHolder] — the exact value the real
  * `onAttachmentPicked` path stores after picker validation — so the real
  * view model rehydrates it at construction and the real composer renders the
@@ -178,7 +178,7 @@ class ChatAttachmentChipUiTest {
     }
 
     // ------------------------------------------------------------------
-    // Chip content (P5): name, size, buttons, remove.
+    // Chip content: name, size, buttons, remove.
     // ------------------------------------------------------------------
 
     @Test
@@ -345,8 +345,8 @@ class ChatAttachmentChipUiTest {
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(chat.opened.await(3, TimeUnit.SECONDS))
 
-        // P7: no confirmed run ID, but the initial POST may still have been
-        // accepted - the outcome is UNKNOWN. The staged attachment (chip AND
+        // Uncertain run: no confirmed run ID, but the initial POST may still have
+        // been accepted - the outcome is UNKNOWN. The staged attachment (chip AND
         // holder) survives and the composer stays locked: no second POST.
         chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
         chat.complete()
@@ -486,7 +486,7 @@ class ChatAttachmentChipUiTest {
         const val PROFILE_ID = "fixture-profile-id"
         const val TAG_ADD = "composer_attachment_add"
         const val TAG_REMOVE = "composer_attachment_remove"
-        // P7: the uncertain-run notice test tag (ChatScreen's TAG_RUN_UNCERTAIN).
+        // The uncertain-run notice test tag (ChatScreen's TAG_RUN_UNCERTAIN).
         const val TAG_UNCERTAIN = "chat_run_uncertain"
         const val EMPTY_SESSION_TEXT = "Diese Session enthält noch keine Nachrichten."
         const val ADD_LABEL = "Anhang"

@@ -74,8 +74,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 
 /**
- * Chat screen with the live turn slice (Mission 006A) — thin presentation
- * layer (P1 refactor).
+ * Chat screen with the live turn slice — thin presentation
+ * layer.
  *
  * This composable holds no business state. It renders [ChatUiState] published
  * by a [ChatViewModel] and forwards every user intent (draft, send, stop,
@@ -84,8 +84,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
  * persistence, streaming, run stop, run steer, recoverable steers, back and
  * approval — lives in [ChatViewModel], which is keyed by `(profileId,
  * sessionId)`: a key switch or leaving composition recreates it, cancelling
- * the previous session's collectors and flushing the pending draft (Mission
- * 007B/008B/009A).
+ * the previous session's collectors and flushing the pending draft.
  *
  * The public signature is unchanged: the same seams are injected and the same
  * test tags are rendered, so the synthetic Compose tests keep exercising the
@@ -148,8 +147,8 @@ fun ChatScreen(
 
     // A key switch (or leaving composition) cancels the running collector AND
     // any in-flight stop/steer request of the previous session and
-    // deterministically flushes the pending ordinary draft (Mission
-    // 007B/009A). No state is published after cancellation.
+    // deterministically flushes the pending ordinary draft.
+    // No state is published after cancellation.
     DisposableEffect(viewModel) {
         onDispose { viewModel.close() }
     }
@@ -164,7 +163,7 @@ fun ChatScreen(
     val state by viewModel.state.collectAsState()
 
     val context = LocalContext.current
-    // P5: the Android system photo picker - no storage permission, no custom
+    // The Android system photo picker - no storage permission, no custom
     // file browser; the app can only ever read what the user explicitly
     // picked. The result is a content:// URI that the view model validates
     // through the ChatAttachmentSource seam.
@@ -189,12 +188,12 @@ fun ChatScreen(
     }
     val timelineListState = remember(profileId, sessionId) { LazyListState() }
 
-    // System and gesture back (Mission 006A): the platform back event goes
+    // System and gesture back: the platform back event goes
     // through exactly the same path as the visible button, so a running stream
     // is always canceled before the navigation back to the session list.
 BackHandler(enabled = true, onBack = { viewModel.handleBack() })
 
-    // P3: contextual POST_NOTIFICATIONS request (Android 13+), triggered when
+    // Contextual POST_NOTIFICATIONS request (Android 13+), triggered when
     // a run is active in the foreground and the permission has not been
     // requested yet. A denial is respected and never re-asked; the app stays
     // fully functional without notifications.
@@ -325,7 +324,7 @@ onClick = { viewModel.handleBack() }
                 }
                 val failure = state.turnFailure
                 if (state.turnUncertain) {
-                    // P7: unknown run outcome. Generic, honest notice; the
+                    // Unknown run outcome. Generic, honest notice; the
                     // confirmed binding is kept and NO new message is sent.
                     // A manual status reconciliation is offered only when a
                     // server-confirmed run ID exists.
@@ -343,14 +342,14 @@ onClick = { viewModel.handleBack() }
                         onRefreshHistory = { viewModel.refreshHistory() }
                     )
                 }
-                // P6: a rejected send (another run owns the app-wide slot).
+                // A rejected send (another run owns the app-wide slot).
                 // Generic, closed message only - no run/session/profile ID,
                 // URL, key or tool detail. The composer stays usable; the
                 // note clears once the global run is terminal.
                 if (state.startConflict) {
                     ConflictBlock()
                 }
-                // Stop control (Mission 007B) and steer control (Mission 008B):
+                // Stop control and steer control:
                 // visible only for an active turn whose server-confirmed,
                 // non-blank run ID is bound.
                 if (state.controlsVisible) {
@@ -376,7 +375,7 @@ onClick = { viewModel.handleBack() }
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                // Recoverable steers (Mission 008B): each preserved item is
+                // Recoverable steers: each preserved item is
                 // rendered as its own ordered block.
                 if (state.steerRecovery.isNotEmpty()) {
                     state.steerRecovery.forEachIndexed { index, text ->
@@ -392,7 +391,7 @@ onClick = { viewModel.handleBack() }
                         )
                     }
                 }
-                // P4: transient re-attach status while the stream is
+                // Transient re-attach status while the stream is
                 // being re-attached to the still-running server run.
                 if (state.reconnecting) {
                     StatusText(stringResource(R.string.chat_stream_reconnecting))
@@ -553,7 +552,7 @@ private fun TurnFailureBlock(
 }
 
 /**
- * P6: the generic notice shown when a send was rejected because another run
+ * The generic notice shown when a send was rejected because another run
  * already owns the app-wide run slot. It carries no identifier and no server
  * detail - exactly one fixed, understandable sentence.
  */
@@ -572,7 +571,7 @@ private fun ConflictBlock() {
 }
 
 /**
- * P7: the honest recovery notice for a run whose server-side outcome is
+ * The honest recovery notice for a run whose server-side outcome is
  * unknown. It never presents a failed connection as a stopped run and never
  * claims success. A manual reconciliation action is offered only when a
  * server-confirmed run ID exists ([canReconcile]); without one the notice
@@ -623,7 +622,7 @@ private fun RunUncertainBlock(
 }
 
 /**
- * The run-stop control (Mission 007B). [label] is the "Stop" label or, while a
+ * The run-stop control. [label] is the "Stop" label or, while a
  * stop request is in flight, the "stopping" label; [enabled] is false while
  * the request is in flight. [showStopError] renders the one closed, generic
  * stop failure message (no dynamic server detail, no run ID).
@@ -660,7 +659,7 @@ private fun StopControl(
 }
 
 /**
- * The run-steer control (Mission 008B). A distinct input plus its own "steer"
+ * The run-steer control. A distinct input plus its own "steer"
  * action, only rendered for an active turn with a bound, non-blank run ID.
  * [inFlight] disables input and action; [queued] renders the acknowledgement;
  * [failed] renders the one closed, generic failure message and keeps the text
@@ -732,7 +731,7 @@ private fun SteerControl(
 }
 
 /**
- * One ordered block for a single recoverable steer (Mission 008B). [note] is
+ * One ordered block for a single recoverable steer. [note] is
  * the generic recoverable note with an `index/total` counter; [text] is the
  * exact preserved item text. The single [actionLabel] action moves exactly
  * THIS one item into the ordinary composer; it never sends it and is disabled
@@ -820,7 +819,7 @@ internal fun ComposerBar(
             // paddings, the visible draft lines) is reduced.
             //
             // The middle region (timeline, status blocks) is not composed in
-            // this regime, so the P6 conflict notice is surfaced here instead:
+            // this regime, so the run-conflict notice is surfaced here instead:
             // exactly ONE bounded line above the row, the same slot and style
             // the attachment error already uses, so no new height class and
             // no IME regression is introduced. The conflict takes precedence
@@ -859,7 +858,7 @@ internal fun ComposerBar(
             )
             return@Column
         }
-        // P5: compact attachment chip above the input row. Local-only data:
+        // Compact attachment chip above the input row. Local-only data:
         // the file name and size the provider reported, plus a bounded decoded
         // thumbnail; no path, no URI and no provider text is ever rendered.
         if (attachmentErrorLabel != null && attachment != null) {
@@ -1197,7 +1196,7 @@ private fun MessageRow(message: TimelineRow) {
                     .brandSurface(background = bubbleBackground, contentPadding = 14.dp)
             ) {
                 if (message.role == MessageRole.ASSISTANT) {
-                    // Assistant output renders as markdown (P2); user, system
+                    // Assistant output renders as markdown; user, system
                     // and tool lines stay plain text so markdown can never
                     // surface user input or tool/approval detail.
                     AssistantMarkdownMessage(content = message.content)

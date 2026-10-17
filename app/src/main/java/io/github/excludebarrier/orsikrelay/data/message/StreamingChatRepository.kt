@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 
 /**
- * Production [StreamingChatSource] (Mission 006A).
+ * Production [StreamingChatSource].
  *
  * Loads the profile metadata and the credential separately for the
  * given profile ID and then delegates the authenticated stream to
@@ -37,7 +37,7 @@ import kotlinx.coroutines.flow.flowOn
  * attempt is buffered by the listener and handed to the producer
  * through a per-attempt deferred (the happens-before edge), so the
  * producer — never the transport thread — decides whether the turn
- * ends or re-attaches (P4). Cancellation at any suspension point
+ * ends or re-attaches. Cancellation at any suspension point
  * (awaiting an attempt, re-attach backoff) closes the scope, and the
  * `finally` closes the current transport handle exactly once, so the
  * stream never outlives the collector.
@@ -52,7 +52,7 @@ import kotlinx.coroutines.flow.flowOn
  * and credential reads (SharedPreferences and Keystore) and the stream
  * never execute on the collecting (main) thread. The turn is
  * never re-POSTed; after a transient stream failure only the socket is
- * re-attached to the same server run (P4), bounded by
+ * re-attached to the same server run, bounded by
  * [maxReconnectAttempts] with [reconnectBackoffMs] between attempts. A
  * re-attach attempt that fails before its stream was bound (an HTTP
  * status failure such as a transient 5xx, or a synchronous open
@@ -66,9 +66,9 @@ class StreamingChatRepository(
     private val streamTransport: ChatStreamTransport = HermesSessionStreamClient(),
     private val runApprovalCapabilitySource: RunApprovalCapabilitySource =
         RunApprovalCapabilitySource { false },
-    /** P4: at most this many re-attach attempts after the initial stream. */
+    /** At most this many re-attach attempts after the initial stream. */
     private val maxReconnectAttempts: Int = MAX_RECONNECT_ATTEMPTS,
-    /** P4: capped backoff (ms) per re-attach attempt index. */
+    /** Capped backoff (ms) per re-attach attempt index. */
     private val reconnectBackoffMs: LongArray = RECONNECT_BACKOFF_MS
 ) : StreamingChatSource {
 
@@ -126,7 +126,7 @@ class StreamingChatRepository(
             false
         }
 
-        // P4: re-attach across transient stream failures. The run is
+        // Re-attach across transient stream failures. The run is
         // independent of any single SSE socket server-side, so a
         // transient network/timeout failure with a confirmed run is
         // repaired by re-attaching to the SAME run from the confirmed
@@ -191,7 +191,7 @@ class StreamingChatRepository(
                 currentHandle = try {
                     if (attempt == 0) {
                         if (outbound.hasImages) {
-                            // P5: the attachment travels only in this initial
+                            // The attachment travels only in this initial
                             // POST body. A re-attach below is a GET from the
                             // confirmed sequence state and never repeats it.
                             streamTransport.openTurnWithAttachments(
@@ -259,7 +259,7 @@ class StreamingChatRepository(
                     // failure without an attempt state of its own.
                     ChatStreamError.Network
                 }
-                // P4 fallback state: the failed attempt's own snapshot when
+                // Fallback state: the failed attempt's own snapshot when
                 // it has one — its stream was bound, so it may have advanced
                 // the confirmed sequence — otherwise the state the attempt
                 // was started from. A re-attach that never bound its stream
@@ -285,7 +285,7 @@ class StreamingChatRepository(
                     }
                     attempts = attempt + 1
                     resume = confirmed
-                    // Bounded, non-zero fallback (P4), see
+                    // Bounded, non-zero fallback, see
                     // [reconnectBackoffMsFor]: `attempt` is normally
                     // inside [reconnectBackoffMs] because the re-attach
                     // branch requires `attempt < maxReconnectAttempts`
@@ -325,14 +325,14 @@ class StreamingChatRepository(
     }.flowOn(Dispatchers.IO)
 
     internal companion object {
-        /** P4: at most this many re-attach attempts after the initial stream. */
+        /** At most this many re-attach attempts after the initial stream. */
         const val MAX_RECONNECT_ATTEMPTS = 5
 
-        /** P4: capped exponential backoff between re-attach attempts. */
+        /** Capped exponential backoff between re-attach attempts. */
         val RECONNECT_BACKOFF_MS = longArrayOf(500L, 1_000L, 2_000L, 4_000L, 5_000L)
 
         /**
-         * P4: the backoff interval (ms) for re-attach attempt [attempt].
+         * The backoff interval (ms) for re-attach attempt [attempt].
          *
          * The ladder normally holds exactly one interval per attempt
          * ([RECONNECT_BACKOFF_MS] and [MAX_RECONNECT_ATTEMPTS] are

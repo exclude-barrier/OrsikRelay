@@ -3,7 +3,7 @@ package io.github.excludebarrier.orsikrelay.domain.session
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
- * Authenticated raw read seam for `GET /api/sessions` (Mission 004A).
+ * Authenticated raw read seam for `GET /api/sessions`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesSessionClient]. The repository

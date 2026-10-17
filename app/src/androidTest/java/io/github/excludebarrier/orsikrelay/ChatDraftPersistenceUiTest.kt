@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Compose/instrumentation tests for the ordinary composer-draft
- * persistence (Mission 009A). No network, no credentials.
+ * persistence. No network, no credentials.
  *
  * Most tests use the in-memory draft seam to prove the UI contract
  * (restore, isolation, clear-on-success, keep-on-failure, stale-load
@@ -65,7 +65,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * disposal/rebuild boundary a recreation produces). It is strictly NOT a
  * real Activity/config recreation: no `onSaveInstanceState` /
  * `onConfigurationChanged` callbacks are exercised (see the test's
- * honest-scope comment, NICHT VERIFIZIERT).
+ * honest-scope comment, NOT VERIFIED).
  */
 class ChatDraftPersistenceUiTest {
 
@@ -107,7 +107,7 @@ class ChatDraftPersistenceUiTest {
         // recreation produces. What this test does NOT exercise are the
         // actual Android lifecycle callbacks (`onSaveInstanceState` /
         // `onConfigurationChanged`); a genuine ActivityScenario
-        // config-recreation run remains NICHT VERIFIZIERT.
+        // config-recreation run remains NOT VERIFIED.
         // REAL production implementation: app-private SharedPreferences on
         // the real device storage.
         val context = context()
@@ -251,8 +251,8 @@ class ChatDraftPersistenceUiTest {
         composeRule.onNodeWithText("Senden").performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
-        // P7: the initial POST failed with NO confirmed run ID, but it may
-        // already have been accepted server-side. The outcome is therefore
+        // Uncertain run: the initial POST failed with NO confirmed run ID, but it
+        // may already have been accepted server-side. The outcome is therefore
         // UNKNOWN: the draft (composer AND disk) survives, the composer stays
         // locked (no second POST) and the honest uncertain notice is shown.
         // Without a confirmed run ID there is no safe reconciliation action.
@@ -583,7 +583,7 @@ class ChatDraftPersistenceUiTest {
     private fun context(): Context = ApplicationProvider.getApplicationContext()
 
     /**
-     * One composed ChatScreen generation (Mission 009A). Bumping
+     * One composed ChatScreen generation. Bumping
      * [generation] re-keys the subtree in a test's composition, disposing
      * the old screen and building the new one — the same disposal/rebuild
      * boundary an Activity/config recreation or a session switch produces.

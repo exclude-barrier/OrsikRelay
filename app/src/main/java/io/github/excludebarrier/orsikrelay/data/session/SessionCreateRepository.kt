@@ -10,7 +10,7 @@ import io.github.excludebarrier.orsikrelay.network.HermesSessionCreateClient
 import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
 
 /**
- * Production [SessionCreator] (Mission 005A).
+ * Production [SessionCreator].
  *
  * Loads the profile metadata and the credential separately for the given
  * profile ID and then delegates the single authenticated POST to

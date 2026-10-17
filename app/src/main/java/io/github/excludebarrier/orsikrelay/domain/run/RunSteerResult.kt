@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Closed result of one run-steer attempt (Mission 008A).
+ * Closed result of one run-steer attempt.
  *
  * Contract verified read-only against the installed server:
  * - [Queued] is the server's

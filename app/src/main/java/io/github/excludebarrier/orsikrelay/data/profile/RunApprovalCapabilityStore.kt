@@ -2,7 +2,7 @@ package io.github.excludebarrier.orsikrelay.data.profile
 
 /**
  * Synchronous, app-private storage seam for the per-profile run-approval
- * capability (Mission 014).
+ * capability.
  *
  * The capability is private local metadata derived from strict validation of
  * the complete `session_chat_interactive_approvals` protocol-v1 contract.

@@ -1,4 +1,4 @@
-"""Persistence and security tests for the bridge device store (P13 Phase 4).
+"""Persistence and security tests for the bridge device store.
 
 These lock the durable-credential guarantees: pairing/revoke survive a restart,
 codes are single-use and atomic under concurrency, TTL and caps hold, tokens are

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.message
 
 /**
- * Small read-only seam for the chat history (Mission 004B).
+ * Small read-only seam for the chat history.
  *
  * The UI depends only on this interface and the domain types. The
  * production implementation is the repository in the `data` package,

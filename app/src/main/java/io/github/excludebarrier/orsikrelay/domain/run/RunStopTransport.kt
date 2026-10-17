@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
  * Authenticated raw transport seam for
- * `POST /v1/runs/{run_id}/stop` (Mission 007A).
+ * `POST /v1/runs/{run_id}/stop`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesRunStopClient]. The repository

@@ -43,8 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Server management screen (Mission 010, extended in Missions 011/012
- * and 017B).
+ * Server management screen.
  *
  * - Lists the stored servers exactly as [ProfileAdmin.listProfiles]
  *   reports them (name plus base URL); no network request is made here.
@@ -53,7 +52,7 @@ import kotlinx.coroutines.withContext
  *   [onServerSelected]. Selection is pure metadata.
  * - Deletion stays a separate, confirmed action (tap the row to open the
  *   dialog) through the verified [ProfileAdmin.deleteProfile] path.
- * - (Mission 017B) A profile whose credential kind is
+ * - A profile whose credential kind is
  *   [ProfileCredentialKind.DEVICE_CREDENTIAL] (derived from NON-SECRET
  *   device metadata only) shows the additional "Gerät trennen" action.
  *   It is a TWO-STEP action: the row action opens a dedicated dialog,
@@ -66,8 +65,8 @@ import kotlinx.coroutines.withContext
  *
  * [admin] is the test seam; production injects
  * [io.github.excludebarrier.orsikrelay.data.profile.ServerProfileAdmin].
- * [onDeviceDisconnected] (default no-op) is the safe-navigation hook
- * (Mission 017B), triggered exactly like [onProfileDeleted] after a
+ * [onDeviceDisconnected] (default no-op) is the safe-navigation hook,
+ * triggered exactly like [onProfileDeleted] after a
  * successful disconnect.
  */
 @Composable
@@ -90,17 +89,17 @@ fun ProfilesScreen(
     // A load failure must be reachable and retryable: without this the screen
     // stayed on the loading text forever after a transient store failure.
     var loadFailed by remember { mutableStateOf(false) }
-    // Mission 017B: profile ID -> non-secret credential kind, loaded
+    // Profile ID -> non-secret credential kind, loaded
     // together with the list (device metadata only, no credential read).
     var credentialKinds by remember { mutableStateOf<Map<String, ProfileCredentialKind>>(emptyMap()) }
     var deleteTarget by remember { mutableStateOf<ServerProfile?>(null) }
     var deleting by remember { mutableStateOf(false) }
     var deleteFailed by remember { mutableStateOf(false) }
-    // Mission 012: exactly one selection may be in flight; the button is
+    // Exactly one selection may be in flight; the button is
     // disabled while it runs and the navigation switch is triggered only
     // after the persist has succeeded.
     var selecting by remember { mutableStateOf<String?>(null) }
-    // Mission 017B: the two-step "Gerät trennen" state. [disconnectTarget]
+    // The two-step "Gerät trennen" state. [disconnectTarget]
     // is the profile whose confirmation dialog is open; [disconnecting]
     // guards the single in-flight revocation; [disconnectFailed] drives
     // the fixed, generic error text.
@@ -123,7 +122,7 @@ fun ProfilesScreen(
                 return@launch
             }
             profiles = list
-            // Mission 017B: the credential kind is NON-SECRET metadata
+            // The credential kind is NON-SECRET metadata
             // (device metadata presence only; no credential is read).
             // It is loaded together with the list; a query failure or a
             // non-device kind simply means the action is not offered —
@@ -165,7 +164,7 @@ fun ProfilesScreen(
         }
     }
 
-    // Mission 012: persist first, navigate second. The safe navigation
+    // Persist first, navigate second. The safe navigation
     // switch ([onServerSelected]) is triggered only after
     // [ProfileAdmin.selectActiveServer] succeeded, so a failed selection is
     // never applied optimistically. A store failure keeps the previous
@@ -193,7 +192,7 @@ fun ProfilesScreen(
         }
     }
 
-    // Mission 017B: exactly one disconnect may be in flight. Only the
+    // Exactly one disconnect may be in flight. Only the
     // confirmed path runs [disconnect]; the revocation happens exactly
     // once inside it and a failure deletes nothing locally.
     fun confirmDisconnect(target: ServerProfile) {
@@ -386,7 +385,7 @@ fun ProfilesScreen(
         )
     }
 
-    // Mission 017B: second, dedicated confirmation step of the
+    // Second, dedicated confirmation step of the
     // "Gerät trennen" action. Opening the dialog costs nothing; only the
     // confirm button triggers the single revocation.
     val disconnectingTarget = disconnectTarget
@@ -505,7 +504,7 @@ private fun ProfileRow(
                 }
             }
             if (!isActive) {
-                // Separate, unambiguous action (Mission 011): tapping the row
+                // Separate, unambiguous action: tapping the row
                 // opens the deletion confirmation, while only this button
                 // selects the server. Selection reads no credential on this
                 // path. The inner button intercepts taps on its own area.
@@ -520,7 +519,7 @@ private fun ProfileRow(
                     Text(text = stringResource(R.string.profiles_select_active))
                 }
             }
-            // Mission 017B: offered ONLY for device-credential profiles.
+            // Offered ONLY for device-credential profiles.
             // API-key profiles never render this button and can therefore
             // never start a self-revoke. The row action only OPENS the
             // dedicated confirmation dialog; the revocation itself happens

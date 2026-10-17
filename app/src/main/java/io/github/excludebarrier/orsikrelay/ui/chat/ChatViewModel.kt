@@ -44,12 +44,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * View model owning the chat screen's turn state machine (P1 refactor, P3
- * background-continuity update).
+ * View model owning the chat screen's turn state machine.
  *
  * The screen composable no longer holds any business state: it renders
  * [state] and forwards user intents to the methods below. Every transition
- * of the verified P0 state machine (history load, draft, send/streaming,
+ * of the verified baseline state machine (history load, draft, send/streaming,
  * run stop, run steer, recoverable steers, back, approval) is reproduced
  * here one-to-one. The screen-local `mutableStateOf` slots are replaced by
  * a single immutable [ChatUiState] published through [state], and the
@@ -63,7 +62,7 @@ import kotlinx.coroutines.withContext
  * The ordinary draft survives a key switch / disposal through the
  * [ChatDraftRepository] (the debounced value is flushed on [close]).
  *
- * Network-protocol logic is NOT here: [runController] (app-level, P3) owns
+ * Network-protocol logic is NOT here: [runController] (app-level) owns
  * the active run's STREAM and foreground-service lifecycle, so a run
  * survives leaving the chat screen, an activity recreation and the app
  * going to the background. This view model only observes the controller's
@@ -80,10 +79,10 @@ internal class ChatViewModel(
     private val runController: RunSessionController,
     private val runStopRequester: RunStopRequester,
     private val runSteerRequester: RunSteerRequester,
-    /** P7: reads the server-side status of a confirmed uncertain run (manual recovery). */
+    /** Reads the server-side status of a confirmed uncertain run (manual recovery). */
     private val runStatusRequester: RunStatusRequester = NoOpRunStatusRequester,
     private val chatDraftRepository: ChatDraftRepository,
-    /** P5: reads the picked attachment's metadata/bytes; no-op when unwired. */
+    /** Reads the picked attachment's metadata/bytes; no-op when unwired. */
     private val attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
     private val profileId: String,
     private val sessionId: String,
@@ -105,13 +104,13 @@ internal class ChatViewModel(
     private var localKeyCounter = 0
     private var draftGeneration = 0
     private var activeUserLineKey: String? = null
-    // P4: key of the user line REHYDRATED from the controller after a
+    // Key of the user line REHYDRATED from the controller after a
     // recreation. It is dropped as soon as the loaded server history carries
     // the same message (the server stores it when the run starts), so a
     // re-created screen never renders the user's message twice.
     private var rehydratedUserLineKey: String? = null
     private var terminalPendingSteer: String? = null
-    // P6: true only once THIS screen has actually handed a turn to the
+    // True only once THIS screen has actually handed a turn to the
     // controller ([RunSessionController.startTurn] was called / a matching
     // active run was rehydrated). It gates [handleRunEvent]: while an
     // attachment is still being read the screen shows an optimistic turn
@@ -122,7 +121,7 @@ internal class ChatViewModel(
 
     // Job handles for the in-flight stop and steer requests. Deliberately
     // not part of the immutable state: they exist so a settled turn can
-    // cancel a request that belongs to the finished run (Mission 007B/008B)
+    // cancel a request that belongs to the finished run
     // and disposal can cancel a request of the left screen.
     private var stopJob: Job? = null
     private var steerJob: Job? = null
@@ -135,7 +134,7 @@ internal class ChatViewModel(
         val active = runController.activeRun.value
         if (active != null && active.profileId == profileId && active.sessionId == sessionId) {
             // Rebuild the visible turn from the controller's durable,
-            // in-memory turn state (P4 recreation fix): the user line and
+            // in-memory turn state: the user line and
             // the assistant text received so far, plus the run identity and
             // the transient statuses. Deliberately rebuilt ONLY from the
             // closed, UI-safe fields - no command, argument, path, raw tool
@@ -188,10 +187,10 @@ internal class ChatViewModel(
                     localLines = rows
                 )
             }
-            // P6: a rehydrated matching run is owned by this screen.
+            // A rehydrated matching run is owned by this screen.
             ownsRun = true
         }
-        // P5 rehydration: a recreation re-creates this view model, and the
+        // Attachment rehydration: a recreation re-creates this view model, and the
         // picker's read permission lives as long as the process, so the
         // picked-but-unsent attachment is re-read from the process-scoped
         // holder (exactly this profile+session).
@@ -206,7 +205,7 @@ internal class ChatViewModel(
                 handleRunEvent(event)
             }
         }
-        // P6: the conflict notice is transient. It clears as soon as the
+        // The conflict notice is transient. It clears as soon as the
         // app-wide run slot is free again (the owning run reached a real
         // terminal state or was explicitly stopped). The waiting draft is
         // deliberately NOT sent automatically - the user decides.
@@ -217,7 +216,7 @@ internal class ChatViewModel(
                         if (current.startConflict) current.copy(startConflict = false) else current
                     }
                 } else if (
-                    // OR-09: the run lease of a dead process is restored
+                    // The run lease of a dead process is restored
                     // asynchronously. A screen created before that restore
                     // finished adopts the restored UNCERTAIN run of its own
                     // session, so the manual reconciliation is offered and
@@ -249,7 +248,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * Appends one recoverable steer (Mission 008B) as its own ordered item.
+     * Appends one recoverable steer as its own ordered item.
      * Items are never merged: two occurrences with identical text remain two
      * separate items, each kept intact.
      */
@@ -258,7 +257,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * Loads the message history for the active key (Mission 006A). Guarded so
+     * Loads the message history for the active key. Guarded so
      * a retry/refresh tap can never start a second load while one is in
      * flight; the guard is released on the main scope BEFORE the finished
      * Ready/Failed state is published, so the screen never shows a tappable
@@ -303,7 +302,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * P4: removes the rehydrated turn rows once the loaded server history
+     * Removes the rehydrated turn rows once the loaded server history
      * already records the same turn. The server stores the user message when
      * the run starts and the assistant answer when it ends, so a screen
      * re-created mid-turn would otherwise render the user's own message (and,
@@ -340,10 +339,10 @@ internal class ChatViewModel(
     }
 
     /**
-     * Restores the persisted ordinary draft for the active key (Mission
-     * 009A). Zero is the only generation with no newer local intent: any
-     * local draft mutation bumps [draftGeneration], so a delayed stored value
-     * must never overwrite newer local intent.
+     * Restores the persisted ordinary draft for the active key. Zero is the
+     * only generation with no newer local intent: any local draft mutation
+     * bumps [draftGeneration], so a delayed stored value must never overwrite
+     * newer local intent.
      */
     suspend fun restoreDraft() {
         val loadedKey = profileId to sessionId
@@ -362,7 +361,7 @@ internal class ChatViewModel(
 
     /**
      * Records one ordinary-draft change from the composer and schedules its
-     * debounced, latest-value persist for the active key (Mission 009A).
+     * debounced, latest-value persist for the active key.
      * Ignored while a turn is active (the composer is disabled then).
      */
     fun onDraftChange(value: String) {
@@ -373,7 +372,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * Records one change of the run-steer input (Mission 008B). The steer
+     * Records one change of the run-steer input. The steer
      * draft is separate from the ordinary composer draft and is never
      * persisted: it is only visible for an active, run-bound turn.
      */
@@ -383,7 +382,7 @@ internal class ChatViewModel(
 
     /**
      * Moves exactly ONE recoverable steer — the item at position [index] —
-     * into the ordinary new-message composer (Mission 008B). It never sends
+     * into the ordinary new-message composer. It never sends
      * it automatically and is a no-op while the ordinary composer already
      * holds a nonblank draft, so it can never silently overwrite the user's
      * current message.
@@ -399,10 +398,10 @@ internal class ChatViewModel(
     }
 
     /**
-     * Clears the ordinary draft and its stored state together (Mission
-     * 009A). Used exactly where the composer is cleared on a successful send
-     * (`RunStarted`) and on a back that leaves a running turn, so the
-     * just-sent text is never re-persisted as a draft.
+     * Clears the ordinary draft and its stored state together. Used exactly
+     * where the composer is cleared on a successful send (`RunStarted`) and
+     * on a back that leaves a running turn, so the just-sent text is never
+     * re-persisted as a draft.
      */
     private fun clearDraftState() {
         _state.update { it.copy(draft = "") }
@@ -411,13 +410,13 @@ internal class ChatViewModel(
     }
 
     /**
-     * The "refresh history" action after a failed turn (Mission 006A/007B/
-     * 008B): resets the ephemeral local lines, the turn failure and the
-     * start flag, and the run-specific stop/steer state of the finished turn,
-     * then re-runs the idempotent history read. The POST is never resent.
+     * The "refresh history" action after a failed turn: resets the ephemeral
+     * local lines, the turn failure and the start flag, and the run-specific
+     * stop/steer state of the finished turn, then re-runs the idempotent
+     * history read. The POST is never resent.
      */
     fun refreshHistory() {
-        // P7: an uncertain run is NOT reconcilable by a bare history refresh
+        // An uncertain run is NOT reconcilable by a bare history refresh
         // (that would clear the screen state without releasing the app-wide
         // ownership). The explicit reconciliation is the only path.
         if (_state.value.turnUncertain) return
@@ -445,7 +444,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * Dismisses the pending approval dialog (Mission 014). Invoked by the
+     * Dismisses the pending approval dialog. Invoked by the
      * dialog only after a `Resolved` decision; the decision POST itself is
      * owned by the dialog's own composition scope, not by this view model.
      * The app-level pending-approval bookkeeping is cleared together, so a
@@ -483,7 +482,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * P7: manual reconciliation of an UNCERTAIN run. Reads the server-side
+     * Manual reconciliation of an UNCERTAIN run. Reads the server-side
      * status of the confirmed run (`GET /v1/runs/{run_id}`) and releases the
      * app-wide ownership ONLY when the server proves a terminal status. A
      * still-active or unreadable status changes nothing: the ownership is
@@ -541,7 +540,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * P7: settles an uncertain turn after a reconciliation proved the server
+     * Settles an uncertain turn after a reconciliation proved the server
      * run terminal. Mirrors the authoritative `AlreadyTerminal` path: the
      * ephemeral turn lines and the run binding are reset, the recoverable
      * steer draft is preserved, and the idempotent history read is re-run.
@@ -569,7 +568,7 @@ internal class ChatViewModel(
 
     /**
      * Starts exactly one streaming turn for the validated composer draft
-     * (Mission 006A, P3 background continuity). The local user line appears
+     * (background continuity). The local user line appears
      * immediately after the accepted submit; the draft is cleared only on
      * `RunStarted`. A failure before the confirmed start keeps the draft and
      * drops the premature user line.
@@ -581,7 +580,7 @@ internal class ChatViewModel(
      * This method only prepares the screen state and hands the turn over.
      */
     /**
-     * Records one picker result (P5). The provider's metadata is read through
+     * Records one picker result. The provider's metadata is read through
      * the [ChatAttachmentSource] seam and gated by [ChatAttachmentRules]
      * before anything is stored: an unsupported type, an over-sized file or an
      * unreadable URI yields a closed error and no draft. Nothing is uploaded
@@ -652,7 +651,7 @@ internal class ChatViewModel(
             // and the final body is validated once the image is encoded.
             ChatMessageValidator.validateOptional(current.draft).getOrNull() ?: return
         }
-        // P6 fast path (UX only): if a run already owns the app-wide slot,
+        // Fast path (UX only): if a run already owns the app-wide slot,
         // reject before any optimistic local state - no premature user line,
         // no composer disable, no notification-permission prompt. The
         // controller's atomic reservation stays the authoritative boundary
@@ -671,7 +670,7 @@ internal class ChatViewModel(
                 turnFailure = null,
                 startConflict = false,
                 reconnecting = false,
-                // A new turn starts with a fresh P7 state: no leftover
+                // A new turn starts with a fresh reconciliation state: no leftover
                 // uncertainty or reconciliation result of the finished run.
                 turnUncertain = false,
                 reconcileInFlight = false,
@@ -680,12 +679,12 @@ internal class ChatViewModel(
                 runStarted = false,
                 // A new turn starts with a fresh stop state: the previous run
                 // ID and any in-flight stop belong to the finished turn and
-                // must not leak into this one (Mission 007B).
+                // must not leak into this one.
                 boundRunId = null,
                 stopInFlight = false,
                 stopFailed = false,
-                // A new turn also starts with a fresh steer state (Mission
-                // 008B). The recoverable text is deliberately KEPT.
+                // A new turn also starts with a fresh steer state.
+                // The recoverable text is deliberately KEPT.
                 steerInFlight = false,
                 steerQueued = false,
                 steerFailed = false,
@@ -722,12 +721,12 @@ internal class ChatViewModel(
             }
             return
         }
-        // P5: the attachment bytes are read and encoded BEFORE the POST. On
+        // The attachment bytes are read and encoded BEFORE the POST. On
         // any failure no request is sent at all, the turn stays inactive and
         // the draft (text + attachment) is kept, so the user can retry or
         // remove it deliberately.
         scope.launch {
-            // The read outcome is closed (P5.1): an attachment that exceeds the
+            // The read outcome is closed: an attachment that exceeds the
             // limit is reported as too large even when the provider never
             // reported a size, while a broken read stays "unreadable".
             val readResult = try {
@@ -776,7 +775,7 @@ internal class ChatViewModel(
     }
 
     /**
-     * Handles one event of the active run (P3): the verified P0 state
+     * Handles one event of the active run: the verified baseline state
      * transitions, driven by the app-level controller instead of a
      * screen-lifetime collector. Notification side effects (approval
      * requested, run completed) are owned by the controller, so they fire
@@ -795,7 +794,7 @@ internal class ChatViewModel(
     private fun handleRunEvent(event: ChatTurnEvent) {
         val current = _state.value
         if (!current.turnActive || !ownsRun) return
-        // P4: any progress after a re-attach announcement means the
+        // Any progress after a re-attach announcement means the
         // stream is flowing again; only the announcement itself sets
         // the transient status.
         if (event !is ChatTurnEvent.StreamReconnecting && current.reconnecting) {
@@ -804,7 +803,7 @@ internal class ChatViewModel(
 
         when (event) {
             is ChatTurnEvent.StreamReconnecting -> {
-                // P4: the stream was interrupted by a transient network
+                // The stream was interrupted by a transient network
                 // failure and is being re-attached to the same run:
                 // the turn stays active, nothing is settled.
                 _state.update { s -> s.copy(reconnecting = true) }
@@ -813,13 +812,13 @@ internal class ChatViewModel(
                 // The server-confirmed run ID is the only value the
                 // stop control may use; it is bound here and never
                 // rendered or logged. Successful send handoff:
-                // clear the composer AND its stored state together
-                // (Mission 009A).
+                // clear the composer AND its stored state
+                // together.
                 _state.update { s -> s.copy(runStarted = true, boundRunId = event.runId) }
                 // The local line is no longer premature from here on.
                 activeUserLineKey = null
                 clearDraftState()
-                // P5: the run is confirmed, so the sent attachment is cleared
+                // The run is confirmed, so the sent attachment is cleared
                 // from the composer and from the process-scoped rehydration
                 // entry - it can never be sent twice.
                 if (_state.value.attachment != null) {
@@ -870,7 +869,7 @@ replaceLastAssistantLine(s.localLines, event.finalText)
                 // A second request while one is still pending is a protocol
                 // contradiction: the actionable request must never be
                 // overwritten, so the turn fails with the closed
-                // `IncompatibleApi` code. P7: this is a LOCAL contradiction,
+                // `IncompatibleApi` code. This is a LOCAL contradiction,
                 // not a confirmed server stop, so the possibly-live server
                 // run must NOT be released - the controller keeps the
                 // ownership and marks it uncertain (no second POST, no
@@ -907,13 +906,13 @@ replaceLastAssistantLine(s.localLines, event.finalText)
                 }
             }
             is ChatTurnEvent.TurnCompleted -> {
-                // P3: the run-completed notification is posted by the
+                // The run-completed notification is posted by the
                 // controller (background policy + duplicate guard); only the
                 // screen state is settled here.
                 _state.update { s -> s.copy(pendingApproval = null) }
                 val pending = event.pendingSteer
                 if (pending != null) {
-                    // Mission 008B: a `pending_steer` carried by
+                    // A `pending_steer` carried by
                     // `run.completed` is surfaced through the same
                     // recoverable state, as its own separate item.
                     terminalPendingSteer = pending
@@ -922,7 +921,7 @@ replaceLastAssistantLine(s.localLines, event.finalText)
                 turnSettled()
             }
             is ChatTurnEvent.TurnFailed -> {
-                // P7: the controller only keeps the run slot for a failure
+                // The controller only keeps the run slot for a failure
                 // whose server outcome is UNKNOWN (a confirmed run plus a
                 // transport/protocol failure, or an unconfirmed start that
                 // may already have been accepted). In that case this screen
@@ -955,7 +954,7 @@ replaceLastAssistantLine(s.localLines, event.finalText)
      * Settles the active turn exactly once, on its terminal event or a
      * client-side protocol failure: releases the composer, cancels any
      * in-flight stop/steer request of the finished run (a late callback must
-     * never mutate the screen state — Mission 007B/008B), and applies the
+     * never mutate the screen state), and applies the
      * same-request duplicate suppression for the recoverable steer text.
      */
 private fun turnSettled() {
@@ -978,7 +977,7 @@ private fun turnSettled() {
         stopJob = null
         steerJob = null
         // Capture the in-flight request's EXACT submitted text and the
-        // leftover draft BEFORE clearing the flags (Mission 008B): they are
+        // leftover draft BEFORE clearing the flags: they are
         // only known at this moment.
         val inFlightSteerText =
             if (_state.value.steerInFlight) _state.value.steerSubmittedText else null
@@ -995,7 +994,7 @@ private fun turnSettled() {
                 steerSubmittedText = null
             )
         }
-        // Same-request duplicate suppression (Mission 008B): if the
+        // Same-request duplicate suppression: if the
         // in-flight request was already reported by this turn's terminal
         // `pending_steer`, it was appended exactly once already. The
         // comparison uses the exact validated/trimmed wire text — never the
@@ -1026,7 +1025,7 @@ private fun turnSettled() {
     }
 
     /**
-     * P6: rolls back an optimistic send that the controller rejected because
+     * Rolls back an optimistic send that the controller rejected because
      * a run already owns the app-wide slot. NOTHING was POSTed and nothing on
      * the server changed. The rejected turn leaves no pending stream, no
      * optimistic local user line and no bound run; the draft AND the picked
@@ -1053,7 +1052,7 @@ private fun turnSettled() {
 
     /**
      * Starts exactly one stop request for the server-confirmed run of the
-     * active turn (Mission 007B). The in-flight flag is set before the request
+     * active turn. The in-flight flag is set before the request
      * starts: fast multi-taps never open a second request. `Accepted` only
      * marks the request; nothing is set optimistically. `AlreadyTerminal`
      * runs the reconciliation path; `Failure` leaves one deliberate retry.
@@ -1061,7 +1060,7 @@ private fun turnSettled() {
     fun stop() {
         val current = _state.value
         if (!current.turnActive) return
-        // P7: while the run outcome is unknown the stop control is hidden and
+        // While the run outcome is unknown the stop control is hidden and
         // no write is issued from here; recovery is an explicit reconciliation.
         if (current.turnUncertain) return
         if (current.stopInFlight) return
@@ -1080,7 +1079,7 @@ private fun turnSettled() {
                 RunStopResult.Failure(RunStopError.Network)
             }
             // A late result must never mutate a screen that was already left
-            // (back) or disposed (Mission 007B).
+            // (back) or disposed.
             if (coroutineContext[Job]?.isCancelled == true) return@launch
             when (result) {
                 is RunStopResult.Accepted -> {
@@ -1133,7 +1132,7 @@ private fun turnSettled() {
 
     /**
      * Starts exactly one steer request for the server-confirmed run of the
-     * active turn (Mission 008B). The in-flight flag is set before the request
+     * active turn. The in-flight flag is set before the request
      * starts: fast multi-taps never open a second request. [RunSteerResult]
      * `Queued` acknowledges and clears the input; `NotAccepting` preserves the
      * text as a recoverable item; `Failure` keeps the text for one deliberate
@@ -1142,14 +1141,14 @@ private fun turnSettled() {
     fun steer() {
         val current = _state.value
         if (!current.turnActive) return
-        // P7: no steer write while the run outcome is unknown (no live
+        // No steer write while the run outcome is unknown (no live
         // transport and the server status is not confirmed).
         if (current.turnUncertain) return
         if (current.steerInFlight) return
         val runId = current.boundRunId?.takeIf { it.isNotBlank() } ?: return
         val text = ChatMessageValidator.validate(current.steerDraft).getOrNull() ?: return
-        // Record the EXACT validated/trimmed text actually sent (Mission
-        // 008B), not the mutable/raw steer draft.
+        // Record the EXACT validated/trimmed text actually sent, not the
+        // mutable/raw steer draft.
         _state.update {
             it.copy(
                 steerInFlight = true,
@@ -1167,11 +1166,11 @@ private fun turnSettled() {
                 RunSteerResult.Failure(RunSteerError.Network)
             }
             // The request is no longer in flight (queued / 409 / failure), so
-            // the submitted-text tracking is cleared on EVERY result (Mission
-            // 008B).
+            // the submitted-text tracking is cleared on EVERY result, whatever
+            // the outcome.
             _state.update { it.copy(steerSubmittedText = null) }
             // A late result must never mutate a screen that was already left
-            // (back) or disposed (Mission 008B).
+            // (back) or disposed.
             if (coroutineContext[Job]?.isCancelled == true) return@launch
             when (result) {
                 is RunSteerResult.Queued -> {
@@ -1207,7 +1206,7 @@ private fun turnSettled() {
 
     /**
      * Routes the platform back (button, system key or gesture) exactly like
-     * the visible button (Mission 006A/007B/008B, P3 background continuity):
+     * the visible button (background continuity):
      * with no active turn it navigates back immediately; with an active turn
      * it clears the in-turn draft and the run-specific steer state, and then
      * navigates back exactly once. The run itself is NOT interrupted: it is
@@ -1224,11 +1223,11 @@ private fun turnSettled() {
                 _state.update { it.copy(backPending = true) }
                 // Back leaves the screen: clear the composer AND its stored
                 // state so the in-turn draft is not re-persisted as a draft
-                // for the left session (Mission 009A). The run continues in
+                // for the left session. The run continues in
                 // the background.
                 clearDraftState()
                 // The run-specific steer state (incl. the recoverable items)
-                // belongs to the left run (Mission 008B).
+                // belongs to the left run.
                 _state.update {
                     it.copy(
                         steerInFlight = false,
@@ -1246,7 +1245,7 @@ private fun turnSettled() {
 
     /**
      * Tears the view model down on a key switch or leaving composition
-     * (Mission 007B/009A, P3 background continuity): cancels any in-flight
+     * (background continuity): cancels any in-flight
      * stop/steer request and the event observer of the previous session, and
      * deterministically flushes the pending ordinary draft so it is neither
      * lost nor able to land under the new key. The active RUN (if any) is

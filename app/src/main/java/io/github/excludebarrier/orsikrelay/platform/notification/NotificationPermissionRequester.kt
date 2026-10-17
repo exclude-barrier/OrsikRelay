@@ -21,7 +21,7 @@ import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.notification.NotificationPermissionStore
 
 /**
- * Contextual request for the Android 13+ POST_NOTIFICATIONS permission (P3).
+ * Contextual request for the Android 13+ POST_NOTIFICATIONS permission.
  *
  * It fires only when all of the following hold: a run is currently active (the
  * user is about to receive a local notification), the app is in the foreground

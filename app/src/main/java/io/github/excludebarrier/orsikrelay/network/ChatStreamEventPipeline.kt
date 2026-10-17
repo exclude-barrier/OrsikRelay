@@ -10,9 +10,9 @@ import java.security.MessageDigest
 import org.json.JSONObject
 
 /**
- * Strict, stateful pipeline for one streaming chat turn (Mission
- * 006A). It consumes the closed [ParsedSseFrame] frames of
- * [SseFrameParser] and produces only closed [ChatTurnEvent] values.
+ * Strict, stateful pipeline for one streaming chat turn. It consumes the
+ * closed [ParsedSseFrame] frames of [SseFrameParser] and produces only
+ * closed [ChatTurnEvent] values.
  *
  * Enforced rules:
  * - `session_id` must exactly equal the requested session ID;
@@ -49,7 +49,7 @@ import org.json.JSONObject
  * - no server field except the closed, UI-safe parts is propagated:
  *   no `user_message`, `runtime`, `usage`, tool names, arguments,
  *   previews, error messages or raw payloads. The single exception is
- *   `pending_steer` on `run.completed`/`run.cancelled` (Mission 008B): a
+ *   `pending_steer` on `run.completed`/`run.cancelled`: a
  *   non-blank string value is preserved exactly on
  *   [ChatTurnEvent.TurnCompleted]; absent, null, non-string or blank
  *   values stay `null`.
@@ -72,7 +72,7 @@ class ChatStreamEventPipeline(
     requireDoneAfterTerminal: Boolean = false,
     private val interactiveApprovals: Boolean = false,
     /**
-     * P4 re-attach: the confirmed sequence state of an interrupted
+     * Stream re-attach: the confirmed sequence state of an interrupted
      * stream of the SAME run. When non-null the pipeline starts from
      * that state: the run is already bound and started (no
      * `run.started` frame is expected again), and the next frame must
@@ -106,7 +106,7 @@ class ChatStreamEventPipeline(
     private var sawError = false
     private var doneSent = false
     init {
-        // P4 re-attach: start from the confirmed state of the
+        // Stream re-attach: start from the confirmed state of the
         // interrupted stream. A non-null snapshot always carries a
         // confirmed run (boundRunId is set by the first frame, which
         // must be the `seq = 1` `run.started`), so `runStarted` is
@@ -185,7 +185,7 @@ class ChatStreamEventPipeline(
      * A stream that ended without any terminal frame - no
      * `run.completed`, `run.cancelled`, `run.failed` or `error` - is
      * deliberately NOT a protocol violation: the connection simply died
-     * mid-stream (P4). The run
+     * mid-stream. The run
      * is still alive server-side, so the transport maps this end to a
      * reconnectable [ChatStreamError.Network] and the repository
      * re-attaches to the same run instead of failing the turn closed.
@@ -202,7 +202,7 @@ class ChatStreamEventPipeline(
     }
 
     /**
-     * P4 re-attach snapshot of the confirmed sequence state, or `null`
+     * Stream re-attach snapshot of the confirmed sequence state, or `null`
      * while no frame has been processed (no run confirmed). The
      * transport exposes it on the stream handle; callers must read it
      * only after the stream has finished.
@@ -368,7 +368,7 @@ class ChatStreamEventPipeline(
                 }
                 // `messages`, `usage`, `runtime` are deliberately neither
                 // parsed nor logged. `pending_steer` is the only field
-                // that crosses the boundary (Mission 008B): a non-blank
+                // that crosses the boundary: a non-blank
                 // string is preserved exactly; every other shape (absent,
                 // null, non-string, blank) yields `null`.
                 val pendingSteer = safePendingSteer(payload.opt(PENDING_STEER_FIELD) as? String)

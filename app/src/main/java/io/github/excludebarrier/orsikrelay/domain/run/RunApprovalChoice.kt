@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * The two approval decisions the thin client may make (Mission 014).
+ * The two approval decisions the thin client may make.
  *
  * The closed set is derived read-only from the installed server code
  * (`gateway/platforms/api_server_runs.py`, `_handle_run_approval`):

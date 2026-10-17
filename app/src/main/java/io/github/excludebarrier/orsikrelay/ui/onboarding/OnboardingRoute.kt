@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Onboarding navigation route (Mission 002A, extended in Mission 017B).
+ * Onboarding navigation route.
  *
  * Both modes converge on the same [onConnected] callback with a
  * [ProfileConnectionOutcome.Success], so a freshly paired device and a
@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
  * through the identical, verified navigation path.
  *
  * - [connect] is the pre-existing API-key path (probe + save), unchanged.
- * - [connectPairing] (Mission 017B) is the pairing path: unauthenticated
+ * - [connectPairing] is the pairing path: unauthenticated
  *   pair POST, authenticated probe with strict device-credential
  *   capability confirmation, exactly one best-effort self-revoke on any
  *   post-pair failure, and persistence only after verification. It must
@@ -37,7 +37,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun OnboardingRoute(
     connect: (ProfileDraft) -> ProfileConnectionOutcome,
-    // Mission 017B: the default (pairing mode) fails closed when a test or
+    // The default (pairing mode) fails closed when a test or
     // a legacy host does not wire a pairing coordinator.
     connectPairing: (profileName: String, baseUrl: String, pairingCode: String) -> DevicePairingOutcome = { _, _, _ ->
         DevicePairingOutcome.Failure(DevicePairingFailure.InvalidInput)

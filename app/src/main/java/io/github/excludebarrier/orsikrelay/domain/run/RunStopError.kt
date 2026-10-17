@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Closed set of run-stop failure reasons (Mission 007A).
+ * Closed set of run-stop failure reasons.
  *
  * Every reason is a stable, generic code: none of them carries request
  * URLs, response bodies, exception text, profile data, run IDs or

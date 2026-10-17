@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.profile
 
 /**
- * Non-secret credential kind of a stored server profile (Mission 017B).
+ * Non-secret credential kind of a stored server profile.
  *
  * [DEVICE_CREDENTIAL] means the profile's credential was issued by a
  * device pairing (`POST /v1/devices/pair`) and can be revoked through

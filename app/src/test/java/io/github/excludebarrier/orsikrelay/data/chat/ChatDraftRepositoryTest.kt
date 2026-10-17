@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * JVM unit tests for the debounced [SharedPreferencesChatDraftRepository]
- * (Mission 009A) against a controllable in-memory [ChatDraftStore], plus the
+ * against a controllable in-memory [ChatDraftStore], plus the
  * store-ordering guarantees of the repository's single-writer and the
  * collision resistance of [chatDraftKey].
  *
@@ -293,7 +293,7 @@ class ChatDraftRepositoryTest {
         assertTrue("both keys were written", store.saveCalls >= 2)
     }
 
-    // -- profile cleanup (Mission 009B) --------------------------------------
+    // -- profile cleanup -----------------------------------------------------
 
     @Test
     fun clearProfileCancelsPendingWriteForThatProfile() = runTest {

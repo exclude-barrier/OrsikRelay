@@ -27,7 +27,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * OR-10 live: one image picked through the REAL system Photo Picker
+ * One image picked through the REAL system Photo Picker
  * (`PickVisualMedia.ImageOnly`), sent as a content part through the bridge to
  * the official core with a vision-capable provider.
  *

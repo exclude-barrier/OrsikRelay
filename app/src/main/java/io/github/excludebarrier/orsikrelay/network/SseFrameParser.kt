@@ -1,8 +1,7 @@
 package io.github.excludebarrier.orsikrelay.network
 
 /**
- * Incremental parser for the confirmed Hermes SSE framing (Mission
- * 006A).
+ * Incremental parser for the confirmed Hermes SSE framing.
  *
  * The server writes frames as
  *

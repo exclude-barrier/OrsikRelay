@@ -11,7 +11,7 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 /**
- * Mission 017B: the disconnect orchestration contract.
+ * The disconnect orchestration contract.
  *
  * - exactly ONE self-revoke per confirmed disconnect, never a retry;
  * - the local profile is removed through the verified [ProfileAdmin]

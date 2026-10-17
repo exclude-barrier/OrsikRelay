@@ -25,7 +25,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Compose tests for the run-approval GATE (Mission 014).
+ * Compose tests for the run-approval GATE.
  *
  * A live, strictly validated pending approval always renders: the event is
  * stronger evidence than cached capability metadata. Without a pending

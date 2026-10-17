@@ -11,7 +11,7 @@ import org.json.JSONObject
 
 /**
  * App-private [DeviceCredentialMetadataStore] on top of
- * [SharedPreferences] (Mission 017A).
+ * [SharedPreferences].
  *
  * Stores ONLY the non-secret metadata of the paired device, one
  * versioned JSON record per profile, in a dedicated app-private

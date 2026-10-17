@@ -24,8 +24,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Performs the single authenticated `GET /api/sessions` read
- * (Mission 004A). This class is the transport only; profile lookup and
+ * Performs the single authenticated `GET /api/sessions` read.
+ * This class is the transport only; profile lookup and
  * credential access happen in the repository layer, so the key never
  * reaches this class except as the scoped [SecretValue] argument.
  *

@@ -31,7 +31,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * JVM unit tests for the app-level [RunSessionController] (P3 background
+ * JVM unit tests for the app-level [RunSessionController] (background
  * continuity): the foreground-service lifecycle over the run's terminal
  * states, the single-slot replacement, the approval hold, and the
  * notification side effects. Every seam is a synthetic fake; no Android
@@ -93,7 +93,7 @@ class RunSessionControllerTest {
     )
 
     // ------------------------------------------------------------------
-    // P4: durable in-memory turn state for re-created screens
+    // Durable in-memory turn state for re-created screens
     // ------------------------------------------------------------------
 
     @Test
@@ -167,7 +167,7 @@ class RunSessionControllerTest {
         testScheduler.advanceUntilIdle()
         val before = built.controller.activeRun.value
 
-        // P6: the previous replacement semantics is gone. A second start
+        // The previous replacement semantics is gone. A second start
         // for another session must be rejected and must change nothing.
         val result = built.controller.startTurn(profileId, otherSessionId, "other")
         testScheduler.advanceUntilIdle()
@@ -193,7 +193,7 @@ class RunSessionControllerTest {
 
     @Test
     fun stoppedRunCancelledTerminalReleasesTheSlotAuthoritativelyNotUncertain() = runTest {
-        // OR-08c: after an accepted stop the official core ends the turn
+        // After an accepted stop the official core ends the turn
         // with the terminal run.cancelled, which the transport maps to a
         // success TurnCompleted. The controller must release the run slot
         // as an AUTHORITATIVE terminal and never leave it UNCERTAIN (the
@@ -275,7 +275,7 @@ class RunSessionControllerTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "hi")
         // No RunStarted: the POST may already have been accepted server-side,
-        // so a local transport failure must NOT free the slot (P7).
+        // so a local transport failure must NOT free the slot.
         built.source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
         testScheduler.advanceUntilIdle()
         assertTrue(built.starter.stops.get() >= 1)
@@ -423,7 +423,7 @@ class RunSessionControllerTest {
             ChatTurnEvent.ApprovalRequested(approvalRequest())
         )
         testScheduler.advanceUntilIdle()
-        // Run A is released explicitly (P6: no replacement); a late "answer"
+        // Run A is released explicitly (no replacement); a late "answer"
         // of run A arrives only after run B owns the slot.
         built.controller.cancelTurn()
         testScheduler.advanceUntilIdle()
@@ -447,7 +447,7 @@ class RunSessionControllerTest {
     }
 
     // ------------------------------------------------------------------
-    // P6: global run ownership (single slot, no replacement)
+    // Global run ownership (single slot, no replacement)
     // ------------------------------------------------------------------
 
     @Test
@@ -616,7 +616,7 @@ class RunSessionControllerTest {
             ChatTurnEvent.TurnFailed(ChatStreamError.Network)
         )
         testScheduler.advanceUntilIdle()
-        // P7: a confirmed run plus a transport failure is UNKNOWN - the
+        // A confirmed run plus a transport failure is UNKNOWN - the
         // ownership is kept and no second POST may start.
         assertNotNull(built.controller.activeRun.value)
         assertTrue(built.controller.activeRun.value?.uncertain == true)
@@ -647,7 +647,7 @@ class RunSessionControllerTest {
     }
 
     // ------------------------------------------------------------------
-    // P7: authoritative-only release and the uncertain recovery state
+    // Authoritative-only release and the uncertain recovery state
     // ------------------------------------------------------------------
 
     @Test
@@ -862,7 +862,7 @@ class RunSessionControllerTest {
             // source was ever called (the flake: line 839 timed out although
             // exactly one startTurn had returned Started).
             assertTrue("the winner's stream must open", sourceOpened.await(5, TimeUnit.SECONDS))
-            // The P6 invariant is asserted from the reserved slot, not from the
+            // The global-ownership invariant is asserted from the reserved slot, not from the
             // async stream: exactly one caller won, the other seven conflicted,
             // and the winner still owns the single slot.
             assertEquals("exactly one winner", 1, started.get())
@@ -930,7 +930,7 @@ class RunSessionControllerTest {
     }
 
     // ------------------------------------------------------------------
-    // OR-09: persisted run lease for process-death recovery
+    // Persisted run lease for process-death recovery
     // ------------------------------------------------------------------
 
     private val lease get() = RunLease(profileId, sessionId, runId)

@@ -15,7 +15,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * Mission 017B: the atomic paired-profile persistence contract.
+ * The atomic paired-profile persistence contract.
  *
  * [ServerProfileRepository.saveVerifiedPaired] writes the paired device
  * credential and the profile metadata in ONE logical transaction:

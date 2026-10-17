@@ -2,7 +2,7 @@ package io.github.excludebarrier.orsikrelay.domain.device
 
 /**
  * Unauthenticated raw transport seam for
- * `POST /v1/devices/pair` (Mission 017A).
+ * `POST /v1/devices/pair`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesDevicePairClient]. The repository

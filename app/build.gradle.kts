@@ -115,7 +115,7 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
-    // Markdown rendering for assistant messages (P2). Pure Compose, no WebView.
+    // Markdown rendering for assistant messages. Pure Compose, no WebView.
     implementation(libs.multiplatform.markdown.renderer)
     implementation(libs.multiplatform.markdown.renderer.m3)
 
@@ -127,7 +127,7 @@ dependencies {
     testImplementation(libs.okhttp.tls)
     testImplementation(libs.json)
     // Deterministic (virtual-time) tests for the debounced chat-draft
-    // repository (Mission 009A). Test-only; no production dependency.
+    // repository. Test-only; no production dependency.
     testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(platform(libs.compose.bom))

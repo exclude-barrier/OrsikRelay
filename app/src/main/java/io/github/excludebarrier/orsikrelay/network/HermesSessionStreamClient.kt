@@ -33,8 +33,8 @@ import org.json.JSONObject
 
 /**
  * Performs the single authenticated
- * `POST /api/sessions/{session_id}/chat/stream` streaming request
- * (Mission 006A). This class is the transport only; profile lookup and
+ * `POST /api/sessions/{session_id}/chat/stream` streaming request.
+ * This class is the transport only; profile lookup and
  * credential access happen in the repository layer, so the key never
  * reaches this class except as the scoped [SecretValue] argument.
  *
@@ -120,7 +120,7 @@ class HermesSessionStreamClient(
         listener: ChatStreamListener
     ): ChatStreamHandle {
         // Text-only path: the shared validator decides, and the serialized
-        // body stays exactly the pre-P5 shape (`{"message": "<text>"}`).
+        // body stays exactly the text-only shape (`{"message": "<text>"}`).
         val trimmedMessage = ChatMessageValidator.validate(message).getOrNull()
             ?: return failNow(listener, ChatStreamError.InvalidInput)
         return startTurn(
@@ -134,10 +134,10 @@ class HermesSessionStreamClient(
     }
 
     /**
-     * Attachment-aware turn (P5): the same request, headers, threading and
+     * Attachment-aware turn: the same request, headers, threading and
      * listener contract as [openTurn], with the body built as a content-part
      * list when the message carries inline images. The attachment is only ever
-     * part of THIS request; a P4 re-attach is a separate GET and never repeats
+     * part of THIS request; a stream re-attach is a separate GET and never repeats
      * it.
      */
     override fun openTurnWithAttachments(
@@ -222,7 +222,7 @@ class HermesSessionStreamClient(
     }
 
     /**
-     * Re-attaches to an already-started run (P4):
+     * Re-attaches to an already-started run:
      * `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`.
      *
      * The GET is a pure read of the server-side run buffer: it is
@@ -263,7 +263,7 @@ class HermesSessionStreamClient(
             return failNow(listener, ChatStreamError.InvalidInput)
         }
         if (resume.runId != runId) {
-            // Boundary invariant (P4): a re-attach may only ever replay
+            // Boundary invariant: a re-attach may only ever replay
             // the confirmed state of the run it targets. A snapshot of
             // a different run must never be used to build a request for
             // this one - fail closed without sending anything.
@@ -581,13 +581,13 @@ class HermesSessionStreamClient(
         409 -> ChatStreamError.Conflict
         429 -> ChatStreamError.RateLimited
         // A 5xx is NOT a proven pre-run rejection: a gateway/upstream error
-        // can be returned after the run was already admitted (P7).
+        // can be returned after the run was already admitted.
         in 500..599 -> ChatStreamError.ServerUnavailable
         else -> ChatStreamError.Http
     }
 
     /**
-     * Closed status mapping for the P4 re-attach GET (see
+     * Closed status mapping for the stream re-attach GET (see
      * [openResume]): unlike [statusReason], a 404 is not "session not
      * found" but "this run cannot be re-attached", a 409 is an
      * un-replayable gap, and a 5xx is a transient server-side failure
@@ -623,7 +623,7 @@ class HermesSessionStreamClient(
     }
 
     /**
-     * Serializes one turn body. Text-only keeps the plain pre-P5 shape
+     * Serializes one turn body. Text-only keeps the plain single-string shape
      * (`{"message": "<text>"}`); with attachments the message becomes the
      * server's content-part list, images as `data:image/...;base64,...` URLs.
      * Returns `null` when the body cannot be represented (never a partial
@@ -724,7 +724,7 @@ class HermesSessionStreamClient(
     }
 
     /**
-     * Hard byte bound for one streaming body (Mission 006A). At most
+     * Hard byte bound for one streaming body. At most
      * [maxBytes] source bytes are ever handed to the reader. The very
      * next read attempt after the budget is exhausted probes the source
      * for at most one recognition byte: if a further byte exists the
@@ -845,7 +845,7 @@ class HermesSessionStreamClient(
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(STREAM_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
-            // Timeout-chain decision (P4, Finding "no wallclock bound"):
+            // Timeout-chain decision (Finding "no wallclock bound"):
             // an ESTABLISHED SSE stream may be long-lived by design - a
             // model answer can take minutes - so the global
             // `callTimeout` stays 0 (none) and never kills a live

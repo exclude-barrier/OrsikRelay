@@ -8,10 +8,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for the pure onboarding-form validation of Mission 002A.
+ * Unit tests for the pure onboarding-form validation.
  *
- * Alle Werte sind synthetische Test-Fixturen; kein Netzwerk, keine
- * echten Hosts oder Schlüssel.
+ * All values are synthetic test fixtures; no network, no
+ * real hosts or keys.
  */
 class ProfileFormValidatorTest {
 
@@ -23,7 +23,7 @@ class ProfileFormValidatorTest {
     private fun Result<ProfileDraft>.error(): ProfileFormValidator.ValidationError? =
         exceptionOrNull() as? ProfileFormValidator.ValidationError
 
-    // Pflichtfall 3: leerer Profilname.
+    // Required case 3: empty profile name.
     @Test
     fun `empty profile name is rejected`() {
         val result = ProfileFormValidator.validate("", validUrl, syntheticKey)
@@ -43,7 +43,7 @@ class ProfileFormValidatorTest {
         assertNotNull(result.error()?.profileNameError)
     }
 
-    // Pflichtfall 4: Profilname länger als 64 Zeichen.
+    // Required case 4: profile name longer than 64 characters.
     @Test
     fun `profile name longer than 64 characters is rejected`() {
         val result = ProfileFormValidator.validate("a".repeat(65), validUrl, syntheticKey)
@@ -71,7 +71,7 @@ class ProfileFormValidatorTest {
         assertEquals("Android", result.getOrThrow().profileName)
     }
 
-    // Pflichtfall 10: leerer API-Key.
+    // Required case 10: empty API key.
     @Test
     fun `empty api key is rejected`() {
         val result = ProfileFormValidator.validate(validName, validUrl, SecretValue(""))
@@ -83,7 +83,7 @@ class ProfileFormValidatorTest {
         )
     }
 
-    // URL-Fehler werden feldbezogen gemeldet.
+    // URL errors are reported per field.
     @Test
     fun `invalid url is rejected with base url error only`() {
         val result = ProfileFormValidator.validate(validName, "http://example.org", syntheticKey)
@@ -108,7 +108,7 @@ class ProfileFormValidatorTest {
         assertNotNull(error?.apiKeyError)
     }
 
-    // Gültige Eingaben liefern einen Draft mit normalisierter URL.
+    // Valid input produces a draft with a normalized URL.
     @Test
     fun `valid input produces draft with normalized url`() {
         val result = ProfileFormValidator.validate(
@@ -123,7 +123,7 @@ class ProfileFormValidatorTest {
         assertEquals("https://example.org/p/android", draft.baseUrl)
     }
 
-    // Mission 017B: the pairing mode validates only the shared connection
+    // The pairing mode validates only the shared connection
     // fields and must never be blocked by the API-key rule.
     @Test
     fun `connection fields validate without the api key rule`() {
@@ -156,7 +156,7 @@ class ProfileFormValidatorTest {
         assertNull(urlError?.apiKeyError)
     }
 
-    // Sicherheitsdesign: kein toString, der den API-Key ausgibt.
+    // Security design: no toString that exposes the API key.
     @Test
     fun `draft toString never exposes the raw api key`() {
         val result = ProfileFormValidator.validate(validName, validUrl, syntheticKey)

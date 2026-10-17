@@ -59,7 +59,7 @@ class ChatStreamEventPipelineTest {
         pipeline.process(messageStartedFrame(2, MSG_ID))
         pipeline.process(completedFrame(3, MSG_ID, "Hallo Welt"))
 
-        // Mission 008B: a non-blank `pending_steer` string is the only
+        // A non-blank `pending_steer` string is the only
         // `run.completed` field that crosses the pipeline boundary, and it
         // is preserved exactly (no trimming, no escaping, no limit).
         val raw = "  führe  um \n\tweiter  "
@@ -711,7 +711,7 @@ class ChatStreamEventPipelineTest {
     }
 
     // ------------------------------------------------------------------
-    // OR-08c: official terminal run.cancelled / run.failed
+    // Official terminal run.cancelled / run.failed
     // ------------------------------------------------------------------
 
     @Test
@@ -931,7 +931,7 @@ class ChatStreamEventPipelineTest {
     }
 
     // ------------------------------------------------------------------
-    // P4: re-attach snapshot and resumed sequence state
+    // Re-attach snapshot and resumed sequence state
     // ------------------------------------------------------------------
 
     @Test
@@ -1020,7 +1020,7 @@ class ChatStreamEventPipelineTest {
 
     @Test
     fun endOfStreamWithoutAnyTerminalFrameIsNotAProtocolViolation() {
-        // P4 finding: a clean mid-stream EOF (the socket died at a
+        // A clean mid-stream EOF (the socket died at a
         // frame boundary, no terminal frame and no `done`) is a
         // transient disconnect, not a malformed stream. The pipeline
         // must accept that end, so the transport can map it to the

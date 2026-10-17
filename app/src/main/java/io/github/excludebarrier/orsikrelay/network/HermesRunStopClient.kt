@@ -21,7 +21,7 @@ import org.json.JSONObject
 
 /**
  * Performs the single authenticated
- * `POST /v1/runs/{run_id}/stop` write (Mission 007A). This class is the
+ * `POST /v1/runs/{run_id}/stop` write. This class is the
  * transport only; profile lookup and credential access happen in the
  * repository layer, so the key never reaches this class except as the
  * scoped [SecretValue] argument.

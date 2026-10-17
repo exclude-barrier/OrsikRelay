@@ -56,9 +56,9 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * JVM unit tests for the [ChatViewModel] turn state machine (P1 refactor).
+ * JVM unit tests for the [ChatViewModel] turn state machine.
  *
- * These tests prove the verified P0 invariants WITHOUT a device: history
+ * These tests prove the verified invariants WITHOUT a device: history
  * gating, the send/streaming lifecycle, run stop, run steer, recoverable
  * steers, draft persistence, back and approval delivery. Every seam is a
  * synthetic fake; no network, no credentials, no real server. The view model
@@ -106,7 +106,7 @@ class ChatViewModelTest {
         serviceStarter: RunForegroundServiceStarter = FakeRunServiceStarter(),
         attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
         onBack: () -> Unit = {},
-        // P4: an EXISTING controller simulates a re-created screen that
+        // An EXISTING controller simulates a re-created screen that
         // re-attaches to the same app-level run.
         controller: RunSessionController? = null,
         sessionKey: String = sessionId
@@ -281,7 +281,7 @@ class ChatViewModelTest {
         model.send()
         testScheduler.advanceUntilIdle()
         // The flow closes with NO terminal event and no confirmed start: the
-        // POST may have been accepted, so P7 keeps the ownership uncertain
+        // POST may have been accepted, so the ownership stays uncertain
         // instead of freeing the slot on a client-side failure.
         chat.complete()
         testScheduler.advanceUntilIdle()
@@ -302,7 +302,7 @@ class ChatViewModelTest {
         chat.complete()
         testScheduler.advanceUntilIdle()
         assertEquals(ChatStreamError.Timeout, model.state.value.turnFailure)
-        // P7: unknown outcome - the premature user line is dropped, the draft
+        // Unknown outcome - the premature user line is dropped, the draft
         // is kept, and the ownership stays uncertain (no new POST).
         assertTrue(model.state.value.localLines.isEmpty())
         assertEquals("hi", model.state.value.draft)
@@ -318,13 +318,13 @@ class ChatViewModelTest {
         chat.complete()
         testScheduler.advanceUntilIdle()
         assertEquals(ChatStreamError.Network, model.state.value.turnFailure)
-        // The user line is kept: the run had a confirmed start. (P0 does not
-        // reset `runStarted` on a failed turn; only the user line matters.)
+        // The user line is kept: the run had a confirmed start. (`runStarted`
+        // is not reset on a failed turn; only the user line matters.)
         assertTrue(model.state.value.localLines.any { it.role == MessageRole.USER })
     }
 
     // ------------------------------------------------------------------
-    // P4: transient stream re-attach (StreamReconnecting)
+    // Transient stream re-attach (StreamReconnecting)
     // ------------------------------------------------------------------
 
     @Test
@@ -369,7 +369,7 @@ class ChatViewModelTest {
     }
 
     // ------------------------------------------------------------------
-    // P7: unknown run outcome and manual reconciliation
+    // Unknown run outcome and manual reconciliation
     // ------------------------------------------------------------------
 
     /** Builds a model with a controllable [FakeRunStatusRequester]. */
@@ -442,7 +442,7 @@ class ChatViewModelTest {
         assertEquals("no second POST", 1, chat.calls.get())
     }
 
-    /** OR-09: in-memory lease store simulating a lease left by a dead process. */
+    /** In-memory lease store simulating a lease left by a dead process. */
     private class PreloadedLeaseStore(@Volatile var current: RunLease?) : RunLeaseStore {
         override fun load(): RunLease? = current
         override fun save(lease: RunLease) { current = lease }
@@ -592,7 +592,7 @@ class ChatViewModelTest {
         chat.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.ApprovalRequested(approval()))
         testScheduler.advanceUntilIdle()
         // A second request while one is still pending is a protocol
-        // contradiction. P7: it is a LOCAL contradiction, not a confirmed
+        // contradiction. It is a LOCAL contradiction, not a confirmed
         // server stop, so the possibly-live run is NOT released - the turn
         // stays active/uncertain and the confirmed binding is kept.
         chat.enqueue(ChatTurnEvent.ApprovalRequested(approval()))
@@ -870,7 +870,7 @@ class ChatViewModelTest {
             assertTrue(chat.opened.await(1, TimeUnit.SECONDS))
             model.handleBack()
             testScheduler.advanceUntilIdle()
-            // P3 background continuity: onBack is called exactly once, but the
+            // Background continuity: onBack is called exactly once, but the
             // run is NOT interrupted — it is owned app-level by the controller
             // and keeps streaming (the foreground service keeps the process
             // unfrozen). The screen's own turn state stays active because the
@@ -901,7 +901,7 @@ class ChatViewModelTest {
     }
 
     // ------------------------------------------------------------------
-    // P5: attachments
+    // Attachments
     // ------------------------------------------------------------------
 
     @Test
@@ -1170,7 +1170,7 @@ class ChatViewModelTest {
     fun tooLargeReadOutcomeAtSendSetsTooLargeErrorWithoutPost() {
         val source = FakeAttachmentSource().apply {
             metadata = mapOf("content://oversized" to ChatAttachmentMetadata("oversized.png", "image/png", 10L))
-            // The closed outcome (P5.1): the provider streamed more than the
+            // The closed outcome: the provider streamed more than the
             // caller's bound while never reporting a size up front.
             dataUrlResults = mapOf("content://oversized" to ChatAttachmentReadResult.TooLarge)
         }
@@ -1247,7 +1247,7 @@ class ChatViewModelTest {
             chat.complete()
             testScheduler.advanceUntilIdle()
             assertEquals(ChatStreamError.Timeout, model.state.value.turnFailure)
-            // P7: an unconfirmed timeout is an unknown outcome - the turn
+            // An unconfirmed timeout is an unknown outcome - the turn
             // stays active/uncertain (no new POST). The attachment (state AND
             // holder) and the text draft survive, so nothing is lost.
             assertTrue(model.state.value.turnUncertain)
@@ -1318,7 +1318,7 @@ class ChatViewModelTest {
     // ------------------------------------------------------------------
 
     // ------------------------------------------------------------------
-    // P4: Activity / view-model recreation rehydration
+    // Activity / view-model recreation rehydration
     // ------------------------------------------------------------------
 
     /**
@@ -1658,7 +1658,7 @@ class ChatViewModelTest {
     }
 
     // ------------------------------------------------------------------
-    // P6: global run ownership (a foreign active run rejects a second send)
+    // Global run ownership (a foreign active run rejects a second send)
     // ------------------------------------------------------------------
 
     @Test
@@ -1868,7 +1868,7 @@ class ChatViewModelTest {
     }
 
     /**
-     * Synthetic attachment source (P5): per-URI metadata and inline data
+     * Synthetic attachment source: per-URI metadata and inline data
      * URLs (missing entry = `null` read), per-URI throws, a suspending gate
      * to hold `readMetadata` (the view model's busy window), and call
      * capture.
@@ -1887,7 +1887,7 @@ class ChatViewModelTest {
         /** When non-null, `readMetadata` suspends until it completes. */
         @Volatile
         var metadataGate: CompletableDeferred<Unit>? = null
-        /** P6: when non-null, `readInlineDataUrlResult` suspends until it completes. */
+        /** When non-null, `readInlineDataUrlResult` suspends until it completes. */
         @Volatile
         var dataUrlGate: CompletableDeferred<Unit>? = null
         @Volatile
@@ -1911,7 +1911,7 @@ class ChatViewModelTest {
             return dataUrls[contentUri]
         }
 
-        /** Per-URI closed outcomes of `readInlineDataUrlResult` (P5.1). */
+        /** Per-URI closed outcomes of `readInlineDataUrlResult`. */
         @Volatile
         var dataUrlResults: Map<String, ChatAttachmentReadResult> = emptyMap()
 

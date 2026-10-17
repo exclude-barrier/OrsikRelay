@@ -2,7 +2,7 @@ package io.github.excludebarrier.orsikrelay.domain.notification
 
 /**
  * Abstraction the domain [NotificationCoordinator] uses to raise a local
- * notification (P3). The production implementation is the Android adapter
+ * notification. The production implementation is the Android adapter
  * [io.github.excludebarrier.orsikrelay.platform.notification.AndroidNotificationManager];
  * tests substitute a recording fake. Keeping this seam here means the domain
  * never touches an Android notification API.

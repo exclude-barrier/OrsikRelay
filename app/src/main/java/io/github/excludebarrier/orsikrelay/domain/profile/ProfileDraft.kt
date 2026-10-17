@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.profile
 
 /**
- * Validated onboarding values (Mission 002A).
+ * Validated onboarding values.
  *
  * Lives exclusively in memory; it is neither persisted nor sent in this
  * ticket.

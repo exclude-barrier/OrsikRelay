@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pure decision coverage for the notification policy (P3): a notification is
+ * Pure decision coverage for the notification policy: a notification is
  * posted exactly when the app is in the background AND the terminal event has
  * not already been notified. No Android, lifecycle or stream machinery is
  * involved.

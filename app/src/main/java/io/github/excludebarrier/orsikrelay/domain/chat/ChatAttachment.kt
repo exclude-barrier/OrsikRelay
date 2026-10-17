@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.chat
 
 /**
- * Closed client-side model of one chat attachment the user picked (P5 v1).
+ * Closed client-side model of one chat attachment the user picked (v1 attachment support).
  *
  * The picker result is normalized into this value before it can reach any
  * sending code. [contentUri] is the picker's `content://` reference: it stays
@@ -27,7 +27,7 @@ data class ChatAttachmentDraft(
         get() = kind == ChatAttachmentKind.IMAGE
 }
 
-/** Closed set of attachment kinds P5 v1 supports. */
+/** Closed set of attachment kinds the v1 attachment feature supports. */
 enum class ChatAttachmentKind { IMAGE }
 
 /** Closed, generic rejection reasons of the attachment gate; none carries provider data. */
@@ -43,11 +43,11 @@ enum class ChatAttachmentError {
 }
 
 /**
- * The single client-side gate for attachments (P5 v1). Client validation is a
+ * The single client-side gate for attachments (v1 attachment support). Client validation is a
  * UX gate, never a security boundary: the server validates the request body
  * itself (content-part allowlist, 10 MB body cap, MIME/type checks).
  *
- * Scope of P5 v1 is deliberately narrow, derived from the confirmed server
+ * Scope of the v1 attachment feature is deliberately narrow, derived from the confirmed server
  * contract: the session-chat endpoint accepts `text` and `image_url`/
  * `input_image` content parts, where an image part is either an `http(s)` URL
  * or a `data:image/...` URL, and it rejects `file`/`input_file` parts with

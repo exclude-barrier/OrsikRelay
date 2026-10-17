@@ -2,7 +2,7 @@ package io.github.excludebarrier.orsikrelay.data.profile
 
 /**
  * Narrow seam for removing the ordinary chat-composer drafts of one profile
- * after that profile has been deleted (Mission 009B).
+ * after that profile has been deleted.
  *
  * Placed in the data layer next to [VerifiedProfileSaver]:
  * [ServerProfileRepository] depends on this seam without touching the UI

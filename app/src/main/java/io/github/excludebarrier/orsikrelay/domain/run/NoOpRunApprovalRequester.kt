@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.run
 
 /**
- * Inert [RunApprovalRequester] default (Mission 014).
+ * Inert [RunApprovalRequester] default.
  *
  * Used only as the fail-closed default for the chat screen's approval seam
  * when a caller does not supply one (e.g. the existing Compose chat tests

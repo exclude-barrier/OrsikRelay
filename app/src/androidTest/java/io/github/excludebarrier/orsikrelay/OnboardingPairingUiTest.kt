@@ -30,7 +30,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Mission 017B: the onboarding pairing UI contract.
+ * The onboarding pairing UI contract.
  *
  * - The pairing mode is VISIBLE and the DEFAULT; in it there is no
  *   API-key field, and the pairing code is password-protected and never

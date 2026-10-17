@@ -4,8 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
- * One-shot orchestration of the "Gerät trennen" (disconnect) action
- * (Mission 017B).
+ * One-shot orchestration of the "Gerät trennen" (disconnect) action.
  *
  * Flow, in this exact order:
  * 1. Load the profile's base URL and its SEALED device key through
@@ -61,7 +60,7 @@ class DeviceDisconnectCoordinator(
 }
 
 /**
- * Narrow, UI-free seam for the disconnect path (Mission 017B).
+ * Narrow, UI-free seam for the disconnect path.
  *
  * Loads exactly what the revocation needs: the profile's HTTPS base URL
  * and its sealed credential. It returns null (never throws with details)
@@ -78,7 +77,7 @@ data class DeviceDisconnectTarget(
     val deviceKey: SecretValue
 )
 
-/** Closed outcome of one disconnect attempt (Mission 017B). */
+/** Closed outcome of one disconnect attempt. */
 sealed interface DeviceDisconnectResult {
     /** Revocation acknowledged AND the local profile was removed. */
     data object Disconnected : DeviceDisconnectResult
@@ -87,7 +86,7 @@ sealed interface DeviceDisconnectResult {
     data class Failure(val reason: DeviceDisconnectError) : DeviceDisconnectResult
 }
 
-/** Closed failure reasons of the disconnect path (Mission 017B). */
+/** Closed failure reasons of the disconnect path. */
 sealed interface DeviceDisconnectError {
     /** The profile or its sealed credential could not be loaded. */
     data object InvalidState : DeviceDisconnectError

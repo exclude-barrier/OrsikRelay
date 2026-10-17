@@ -4,8 +4,8 @@ import java.net.URI
 import java.net.URISyntaxException
 
 /**
- * Pure, local validation and normalization of the server base URL
- * (Mission 002A). No network access, no I/O.
+ * Pure, local validation and normalization of the server base URL.
+ * No network access, no I/O.
  *
  * Rules:
  * - absolute `https` URL (scheme is case-insensitive);

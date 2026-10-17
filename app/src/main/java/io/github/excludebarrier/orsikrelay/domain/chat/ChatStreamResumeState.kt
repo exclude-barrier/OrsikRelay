@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.chat
 
 /**
- * UI-safe snapshot of one streaming turn's sequence state (P4 re-attach).
+ * UI-safe snapshot of one streaming turn's sequence state (stream re-attach).
  *
  * Captured by the transport pipeline at the moment a stream dies, it is
  * the only state the client needs to re-attach to the same server run:

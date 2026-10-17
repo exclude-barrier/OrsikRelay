@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Seam for starting and stopping the run foreground service (P3).
+ * Seam for starting and stopping the run foreground service.
  *
  * The implementation (Android adapter) starts a `dataSync` foreground
  * service whose notification keeps the app process out of the cached
@@ -46,7 +46,7 @@ interface RunForegroundServiceStarter {
 }
 
 /**
- * App-level owner of the single active agent run (P3 background continuity).
+ * App-level owner of the single active agent run (background continuity).
  *
  * Orsik is a single-slot client: at most one run is active at any time.
  * This controller owns the run's STREAM (not its UI state): the streaming
@@ -64,7 +64,7 @@ interface RunForegroundServiceStarter {
  * - The service is stopped whenever the stream is no longer consumed: on
  *   an authoritative terminal (`run.completed`, the server's terminal
  *   `error` frame, a confirmed stop), on a proven pre-run rejection, and on
- *   an UNKNOWN outcome (P7). On an unknown outcome the logical run
+ *   an UNKNOWN outcome. On an unknown outcome the logical run
  *   ownership deliberately survives without a live transport (see
  *   [markTurnUncertain]); it is never released by a local transport or
  *   protocol failure.
@@ -83,16 +83,16 @@ class RunSessionController(
     // storage + JSON parsing). Defaults to [dispatcher] so tests stay on their
     // controlled dispatcher; production injects Dispatchers.IO.
     private val ioDispatcher: CoroutineDispatcher = dispatcher,
-    // OR-09: durable lease of the confirmed run, written and read on
+    // Durable lease of the confirmed run, written and read on
     // [ioDispatcher]. The default keeps the controller purely in-memory.
     private val leaseStore: RunLeaseStore = NoOpRunLeaseStore,
-    // OR-09: whether a restored lease still belongs to a known profile (a
+    // Whether a restored lease still belongs to a known profile (a
     // deleted profile has no credential, so its run could never be
     // reconciled and would block the slot forever). Called on [ioDispatcher].
     private val isLeaseRestorable: (RunLease) -> Boolean = { true }
 ) {
     /**
-     * Closed outcome of [startTurn] (P6 global run ownership).
+     * Closed outcome of [startTurn].
      *
      * The caller gets exactly one of two values instead of an exception or
      * a dynamic server detail: either it reserved the single global run
@@ -116,7 +116,7 @@ class RunSessionController(
 
     /**
      * The single active run: the small, closed in-memory state a chat
-     * screen needs to re-attach to a running turn (P4 recreation fix).
+     * screen needs to re-attach to a running turn.
      *
      * [runId] is bound only after the server confirmed the run
      * (`RunStarted`). [userMessage] is the validated user text of the turn
@@ -127,7 +127,7 @@ class RunSessionController(
      * the request the user has not decided yet (both restored when a view
      * model re-attaches to a running session).
      *
-     * Only the run identity is persisted, as a [RunLease] (OR-09): after a
+     * Only the run identity is persisted, as a [RunLease]: after a
      * process death the slot comes back as UNCERTAIN with its [runId] and
      * nothing else. No text or tool data is persisted, and no
      * server payload beyond the already UI-safe values crosses this type:
@@ -148,7 +148,7 @@ class RunSessionController(
         val reconnecting: Boolean = false,
         val pendingApproval: ApprovalRequest? = null,
         /**
-         * P7: the client lost the transport (or the reliable event
+         * The client lost the transport (or the reliable event
          * processing) while the server run may still be running. The
          * logical ownership is deliberately KEPT (no new POST, no
          * implicit server stop); only an explicit reconciliation may
@@ -208,10 +208,10 @@ class RunSessionController(
     private var runJob: Job? = null
 
     /**
-     * Identity of the turn currently owning the slot (P4). A finishing
+     * Identity of the turn currently owning the slot. A finishing
      * run's collector may still execute a late synchronous body after the
      * slot was released; the token makes such a late event a no-op instead
-     * of letting it write one run's text into a successor's slot (P6: the
+     * of letting it write one run's text into a successor's slot (the
      * slot is never replaced while active, but a terminal/cancel followed
      * by a new start must still isolate the two turns).
      */
@@ -219,7 +219,7 @@ class RunSessionController(
     private var slotTurnToken: Long = 0L
 
     /**
-     * OR-09: `true` until the persisted lease was read. While pending,
+     * `true` until the persisted lease was read. While pending,
      * [startTurn] reports [StartTurnResult.ActiveRunConflict], so a send tap
      * racing the restore can never POST a second turn next to a run that is
      * still owned on the server. Guarded by [slotLock].
@@ -236,8 +236,7 @@ class RunSessionController(
     }
 
     /**
-     * Tries to start one streaming turn for [message] in [sessionId] (P6
-     * global run ownership).
+     * Tries to start one streaming turn for [message] in [sessionId].
      *
      * Orsik is a single-slot client: the app-wide slot is owned by exactly
      * one run. If any run is already active — same session, another
@@ -246,7 +245,7 @@ class RunSessionController(
      * and does NOTHING: no second chat POST, no cancellation or replacement
      * of the existing stream, no foreground-service re-start and no change
      * to [activeRun]. The old "startTurn replaces the active run" behavior
-     * is deliberately gone: since P4 a Hermes run is independent of its
+     * is deliberately gone: a Hermes run is independent of its
      * socket, so a local stream cancel would NOT reliably stop the server
      * run and must never silently drop its ownership.
      *
@@ -261,7 +260,7 @@ class RunSessionController(
      * AUTHORITATIVE outcome: a real terminal state (`run.completed` or the
      * server's own terminal `error` frame), a proven pre-run rejection, or an
      * explicit, confirmed stop ([cancelTurn]). A local transport/protocol
-     * failure does NOT release the slot (P7): it is kept as an uncertain run
+     * failure does NOT release the slot: it is kept as an uncertain run
      * ([markTurnUncertain]) that only an explicit reconciliation
      * ([confirmTerminalForUncertainRun]) may release.
      */
@@ -270,10 +269,10 @@ class RunSessionController(
         sessionId: String,
         message: String,
         /**
-         * P5: inline image data URLs of this turn's attachments. They travel
+         * Inline image data URLs of this turn's attachments. They travel
          * only in the initial POST body - never into the durable run state
          * (they are large and carry user content the UI already shows) and
-         * never into a P4 re-attach.
+         * never into a stream re-attach.
          */
         imageDataUrls: List<String> = emptyList()
     ): StartTurnResult {
@@ -377,7 +376,7 @@ class RunSessionController(
 
     /**
      * Keeps the logical run ownership but drops the dead transport after a
-     * LOCAL contradiction or a transport/protocol failure (P7): the server
+     * LOCAL contradiction or a transport/protocol failure: the server
      * run may still be alive, so nothing is started, stopped server-side or
      * POSTed. The slot stays owned in the [ActiveRun.Status.UNCERTAIN]
      * state, the foreground service is stopped (there is no active transport
@@ -409,7 +408,7 @@ class RunSessionController(
 
     /**
      * Releases an UNCERTAIN run after an explicit reconciliation proved the
-     * server run terminal (P7). Strictly correlated: only the exact
+     * server run terminal. Strictly correlated: only the exact
      * [profileId]/[sessionId]/[runId] currently owned AND marked uncertain is
      * released; every mismatch is a no-op returning `false`, so a stale
      * reconciliation can never free a successor's slot.
@@ -440,9 +439,9 @@ class RunSessionController(
     /**
      * Clears ONE decided approval from the durable run state, so a
      * re-created screen cannot resurrect a request that is no longer
-     * answerable (P4-APPROVAL-RESURRECTION).
+     * answerable (approval resurrection on re-attach).
      *
-     * Strictly correlated (P4): the record is only dropped when the slot
+     * Strictly correlated: the record is only dropped when the slot
      * still belongs to this profile/session AND its pending approval is
      * exactly [runId]/[requestId]. A late result of an older run or an
      * older request therefore can never clear the current approval, and a
@@ -487,7 +486,7 @@ class RunSessionController(
     }
 
     /**
-     * OR-09: re-establishes a run that was confirmed before the process died
+     * Re-establishes a run that was confirmed before the process died
      * as UNCERTAIN (no transport, no foreground service, no POST). An
      * unreadable store counts as "no lease"; a lease whose profile is gone is
      * dropped because nothing could ever reconcile it.
@@ -527,7 +526,7 @@ class RunSessionController(
     }
 
     /**
-     * OR-09: mirrors the confirmed run identity of the slot into
+     * Mirrors the confirmed run identity of the slot into
      * [leaseStore]: a bound run ID writes the lease, a released slot clears
      * it. [close] cancels this collector before it empties the slot, so a
      * teardown (which is not an authoritative terminal) keeps the lease.
@@ -636,7 +635,7 @@ class RunSessionController(
                     // terminal must not be observed by the successor.
                     return
                 }
-                // P7: a failure only releases the single run slot when the
+                // A failure only releases the single run slot when the
                 // server PROVABLY ended the run (its own terminal error
                 // frame) or when the start was provably rejected before a
                 // run existed. A confirmed run plus a transport/protocol
@@ -679,7 +678,7 @@ class RunSessionController(
     /**
      * Applies [transform] to the active-run state, but only when the slot
      * still belongs to [sessionId] AND is still owned by the same turn
-     * ([turnToken], P4): an event of another session - or a late event of a
+     * ([turnToken]): an event of another session - or a late event of a
      * run that [startTurn] already replaced - can never mutate this state,
      * and the transform is never applied to a cleared slot.
      */

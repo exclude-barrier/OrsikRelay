@@ -4,7 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
 /**
- * Closed outcome of one bounded attachment read (P5.1).
+ * Closed outcome of one bounded attachment read.
  *
  * [TooLarge] is a distinct outcome from [Unreadable] on purpose: the UI must
  * report an over-limit attachment as "too large" even when the provider never

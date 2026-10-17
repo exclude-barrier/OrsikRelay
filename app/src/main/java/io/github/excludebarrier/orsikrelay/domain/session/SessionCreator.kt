@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.session
 
 /**
- * Small UI seam for creating a new session (Mission 005A).
+ * Small UI seam for creating a new session.
  *
  * The UI depends only on this interface and the domain types. The
  * production implementation is the repository in the `data` package,

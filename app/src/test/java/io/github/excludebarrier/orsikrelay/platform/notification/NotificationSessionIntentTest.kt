@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Fail-closed coverage for the notification-tap routing identifier (P3). The
+ * Fail-closed coverage for the notification-tap routing identifier. The
  * `isSafeId` gate is the only thing that decides whether an ID from an intent
  * extra may drive navigation; it is a strict, closed character-set + length
  * check, so a forged or corrupt extra is rejected.

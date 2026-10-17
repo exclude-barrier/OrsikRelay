@@ -27,7 +27,7 @@ import org.json.JSONObject
 
 /**
  * Performs the single UNAUTHENTICATED
- * `POST /v1/devices/pair` write (Mission 017A). This class is the
+ * `POST /v1/devices/pair` write. This class is the
  * transport only; it takes the base URL and the raw pairing code and
  * never receives any credential.
  *

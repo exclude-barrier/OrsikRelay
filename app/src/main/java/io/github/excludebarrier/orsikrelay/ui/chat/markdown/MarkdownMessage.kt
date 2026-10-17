@@ -44,7 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Renders an assistant message as markdown (P2).
+ * Renders an assistant message as markdown.
  *
  * This is the UI-only rendering boundary: it knows nothing about the network,
  * the repositories, the chat view model or the SSE protocol. It parses the raw

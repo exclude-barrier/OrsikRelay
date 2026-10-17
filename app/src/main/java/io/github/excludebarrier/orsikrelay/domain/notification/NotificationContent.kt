@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.notification
 
 /**
- * The two kinds of local notification this app can raise (P3). Both are
+ * The two kinds of local notification this app can raise. Both are
  * local-only: they are produced from the already-running in-process chat
  * stream and never involve a push, cloud relay or any remote channel.
  */
@@ -14,7 +14,7 @@ enum class NotificationType {
 }
 
 /**
- * Closed, lockscreen-safe routing content for one local notification (P3).
+ * Closed, lockscreen-safe routing content for one local notification.
  *
  * Only safe, navigation-identifying data crosses this boundary:
  * - [title] is a validated, short, printable display label (the server

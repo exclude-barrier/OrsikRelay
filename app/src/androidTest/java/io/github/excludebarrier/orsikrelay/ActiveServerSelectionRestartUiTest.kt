@@ -44,7 +44,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Mission 012 connected tests: the persisted active server selection.
+ * Connected tests for the persisted active server selection.
  *
  * Part A (app restart) is driven through the REAL production wiring of
  * [HermesNavHost]: a restart is modeled the way the app actually boots,
@@ -62,7 +62,7 @@ import org.junit.Test
  * - the selection store itself never contains the API key, a URL or any
  *   other data.
  *
- * Part B (Mission 012 UI contract) drives the real [ProfilesScreen]
+ * Part B (UI contract) drives the real [ProfilesScreen]
  * leaf-level: the active server switch must PERSIST first and trigger the
  * safe navigation switch only after the persist succeeded; a failed
  * persist never navigates and never applies an optimistic state change;
@@ -208,7 +208,7 @@ class ActiveServerSelectionRestartUiTest {
     }
 
     // -----------------------------------------------------------------
-    // Part B: Mission 012 UI contract (leaf-level, deterministic).
+    // Part B: UI contract (leaf-level, deterministic).
     // -----------------------------------------------------------------
 
     @Test
@@ -321,7 +321,7 @@ class ActiveServerSelectionRestartUiTest {
             }
         }
 
-        // Mission 017B: the selection tests have no device profiles.
+        // The selection tests have no device profiles.
         override fun credentialKind(profileId: String): ProfileCredentialKind =
             ProfileCredentialKind.API_KEY
     }

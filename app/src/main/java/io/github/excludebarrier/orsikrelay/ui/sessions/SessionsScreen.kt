@@ -58,7 +58,7 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /**
- * Real session list screen (Mission 004A).
+ * Real session list screen.
  *
  * States:
  * - initial [SessionListState.Loading];

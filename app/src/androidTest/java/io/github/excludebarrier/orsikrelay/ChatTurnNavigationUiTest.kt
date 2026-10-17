@@ -46,7 +46,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Navigation test for the live turn slice (Mission 006A, Batch 2):
+ * Navigation test for the live turn slice:
  * the chat screen receives the exact synthetic profile/session/message
  * values through the existing secure route, and back during a running
  * turn cancels the injected synthetic stream before returning to the
@@ -140,7 +140,7 @@ class ChatTurnNavigationUiTest {
         composeRule.onNodeWithText("Turn-Session").performClick()
         waitForText("Fixture-Chatinhalt")
 
-        // Submit über die bestehende sichere Route: exakte Werte.
+        // Submit through the existing secure route: exact values.
         composeRule
             .onNodeWithText("Nachricht")
             .performTextInput("Synthese 1")
@@ -151,10 +151,10 @@ class ChatTurnNavigationUiTest {
         assertEquals(sessionId, turnSource.sessionId.get())
         assertEquals("Synthese 1", turnSource.message.get())
 
-        // P3-Background-Continuity: Back während eines laufenden Turns bricht
-        // den Stream NICHT ab — der Run gehört dem app-weiten
-        // RunSessionController und läuft im Hintergrund weiter; die
-        // Navigation kehrt einfach zur Sessionliste zurück.
+        // Background continuity: back during a running turn does NOT cancel
+        // the stream — the run belongs to the app-wide RunSessionController
+        // and continues in the background; the navigation simply returns to
+        // the session list.
         composeRule.onNodeWithText("Zurück").performClick()
         waitForText("Turn-Session")
         assertFalse(
@@ -175,7 +175,7 @@ class ChatTurnNavigationUiTest {
      * compose ui-test 1.9.0 resolved here has no `performSystemBack`).
      *
      * The system back must navigate safely back to the session list and
-     * leave no lifecycle crash or further UI state behind. P3: the running
+     * leave no lifecycle crash or further UI state behind. The running
      * turn is NOT interrupted — it is owned app-level by the run controller
      * and continues in the background.
      */
@@ -256,7 +256,7 @@ class ChatTurnNavigationUiTest {
         // prevent the session list from appearing).
         waitForText("SystemBack-Session")
 
-        // P3: the running stream is NOT canceled by the system back — the
+        // The running stream is NOT canceled by the system back — the
         // run continues in the background under the app-level controller.
         assertFalse(
             "the running stream must survive the system back",

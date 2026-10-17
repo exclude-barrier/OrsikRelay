@@ -5,8 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * App-private [ActiveServerSelectionStore] on top of [SharedPreferences]
- * (Mission 012).
+ * App-private [ActiveServerSelectionStore] on top of [SharedPreferences].
  *
  * Stores exactly ONE plain string — the selected profile ID — in a
  * dedicated versioned key. Nothing else is stored: no API key, no URL, no

@@ -1,7 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.notification
 
 /**
- * Pure, Android-free notification policy (P3).
+ * Pure, Android-free notification policy.
  *
  * The decision is total and side-effect free so it is directly unit-testable
  * without any Android, lifecycle or stream machinery. The single rule is:
@@ -9,7 +9,7 @@ package io.github.excludebarrier.orsikrelay.domain.notification
  * actively looking) AND this exact terminal event has not already produced a
  * notification for this process lifetime.
  *
- * Foreground/background semantics (documented scope, P3):
+ * Foreground/background semantics (documented scope):
  * - the app process is alive but not visible (home button / app switch):
  *   the in-process chat stream keeps running, so a terminal event can still
  *   arrive and a notification is posted;

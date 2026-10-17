@@ -47,7 +47,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileFormValidator
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
- * Onboarding form (Mission 002A, extended in Mission 017B).
+ * Onboarding form.
  *
  * Two visible connection modes share the server name and the HTTPS base
  * URL:
@@ -120,7 +120,7 @@ fun OnboardingScreen(
     fun submit() {
         when (mode) {
             OnboardingMode.Pairing -> {
-                // Mission 017B: the pairing mode has no API-key field, so
+                // The pairing mode has no API-key field, so
                 // only the shared connection fields (name + HTTPS base URL)
                 // are validated — never the `API_KEY_EMPTY` rule. The
                 // pairing code is validated separately against the closed
@@ -259,7 +259,7 @@ fun OnboardingScreen(
                 )
 
                 if (mode == OnboardingMode.Pairing) {
-                    // Mission 017B: the pairing code is a single-use
+                    // The pairing code is a single-use
                     // secret. It is rendered with password semantics and
                     // validated locally; the API-key field is not present
                     // in this mode at all.

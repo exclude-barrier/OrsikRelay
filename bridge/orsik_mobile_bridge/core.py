@@ -341,7 +341,7 @@ def build_capabilities() -> dict:
     """The Orsik Mobile Protocol v1 capability envelope, in the exact shape the
     shipped HermesConnectionClient hard-requires.
 
-    Truthful advertisement (P13): the official Hermes core registers a
+    Truthful advertisement: the official Hermes core registers a
     session-stream approval notifier and accepts ``POST /v1/runs/{run_id}/approval``
     for the session run, so ``approval.request`` genuinely reaches the client.
     The bridge narrows the choices to the least-privilege set ``once``/``deny``

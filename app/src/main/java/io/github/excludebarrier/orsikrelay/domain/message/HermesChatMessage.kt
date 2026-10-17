@@ -2,7 +2,7 @@ package io.github.excludebarrier.orsikrelay.domain.message
 
 /**
  * One validated, displayable chat message from
- * `GET /api/sessions/{session_id}/messages` (Mission 004B).
+ * `GET /api/sessions/{session_id}/messages`.
  *
  * Only sanitized display fields are kept. `reasoning`,
  * `reasoning_content`, raw `tool_calls`, internal compression data and

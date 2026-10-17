@@ -5,14 +5,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for the pure base-URL validation of Mission 002A.
+ * Unit tests for the pure base-URL validation.
  *
  * All hosts are synthetic test fixtures; no network access, no real
  * endpoints or credentials.
  */
 class ProfileBaseUrlValidatorTest {
 
-    // Pflichtfall 1: gültige HTTPS-Origin.
+    // Required case 1: valid HTTPS origin.
     @Test
     fun `valid https origin is accepted`() {
         val result = ProfileBaseUrlValidator.validate("https://example.org")
@@ -21,7 +21,7 @@ class ProfileBaseUrlValidatorTest {
         assertEquals("https://example.org", result.getOrThrow())
     }
 
-    // Pflichtfall 2: gültige HTTPS-URL mit /p/<profile> und Normalisierung.
+    // Required case 2: valid HTTPS URL with /p/<profile> and normalization.
     @Test
     fun `valid https url with profile prefix is normalized`() {
         val result = ProfileBaseUrlValidator.validate("https://example.org/p/android/")
@@ -30,7 +30,7 @@ class ProfileBaseUrlValidatorTest {
         assertEquals("https://example.org/p/android", result.getOrThrow())
     }
 
-    // Pflichtfall 5: HTTP wird abgelehnt.
+    // Required case 5: HTTP is rejected.
     @Test
     fun `http scheme is rejected`() {
         val result = ProfileBaseUrlValidator.validate("http://example.org")
@@ -38,7 +38,7 @@ class ProfileBaseUrlValidatorTest {
         assertTrue(result.isFailure)
     }
 
-    // Pflichtfall 6: fehlender Host wird abgelehnt.
+    // Required case 6: missing host is rejected.
     @Test
     fun `missing host is rejected`() {
         val result = ProfileBaseUrlValidator.validate("https://")
@@ -46,7 +46,7 @@ class ProfileBaseUrlValidatorTest {
         assertTrue(result.isFailure)
     }
 
-    // Pflichtfall 7: Userinfo wird abgelehnt.
+    // Required case 7: userinfo is rejected.
     @Test
     fun `userinfo with password is rejected`() {
         val result = ProfileBaseUrlValidator.validate("https://user:pass@example.org")
@@ -61,7 +61,7 @@ class ProfileBaseUrlValidatorTest {
         assertTrue(result.isFailure)
     }
 
-    // Pflichtfall 8: Query wird abgelehnt.
+    // Required case 8: query is rejected.
     @Test
     fun `query is rejected`() {
         val result = ProfileBaseUrlValidator.validate("https://example.org?token=abc")
@@ -69,7 +69,7 @@ class ProfileBaseUrlValidatorTest {
         assertTrue(result.isFailure)
     }
 
-    // Pflichtfall 9: Fragment wird abgelehnt.
+    // Required case 9: fragment is rejected.
     @Test
     fun `fragment is rejected`() {
         val result = ProfileBaseUrlValidator.validate("https://example.org#section")
@@ -77,7 +77,7 @@ class ProfileBaseUrlValidatorTest {
         assertTrue(result.isFailure)
     }
 
-    // Zusatzfälle: Normalisierung.
+    // Additional cases: normalization.
     @Test
     fun `origin root with trailing slash stays at origin root`() {
         val result = ProfileBaseUrlValidator.validate("https://example.org/")
@@ -94,7 +94,7 @@ class ProfileBaseUrlValidatorTest {
         assertEquals("https://example.org:8443/p/android", result.getOrThrow())
     }
 
-    // Zusatzfälle: Ablehnung.
+    // Additional cases: rejection.
     @Test
     fun `non https absolute scheme is rejected`() {
         assertTrue(ProfileBaseUrlValidator.validate("ftp://example.org").isFailure)

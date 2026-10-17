@@ -1,8 +1,7 @@
 package io.github.excludebarrier.orsikrelay.domain.profile
 
 /**
- * Deterministic outcome of validating the persisted active server selection
- * (Mission 012).
+ * Deterministic outcome of validating the persisted active server selection.
  *
  * [Valid] holds the profile ID only when the stored ID still exists in the
  * server metadata AND has a credential. [Invalid] covers every other case

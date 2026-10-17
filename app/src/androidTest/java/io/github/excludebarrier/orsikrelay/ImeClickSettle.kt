@@ -18,8 +18,7 @@ import androidx.core.view.WindowInsetsCompat
  * soft keyboard asynchronously. The window then redispatches its own (larger)
  * IME inset and the layout moves. `performClick` injects a real touch event at
  * the node's centre, so a click issued while that move is still in flight can
- * land beside the target and never invoke the action — the residual
- * P10-group-B flake.
+ * land beside the target and never invoke the action — the residual flake.
  *
  * [settleAfterTyping] removes the asynchronous input: it closes the real IME,
  * waits — on an observable condition, never a wall-clock sleep — until the

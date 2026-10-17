@@ -6,11 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for the in-memory API-Key wrapper of Mission 002A.
+ * Unit tests for the in-memory API-key wrapper.
  *
- * Pflichtfall 11: Die Secret-Darstellung ist `[REDACTED]` und enthält
- * nie den Rohwert. Der Testwert ist ein synthetischer Platzhalter,
- * kein echter Schlüssel.
+ * Required case 11: the secret representation is `[REDACTED]` and never
+ * contains the raw value. The test value is a synthetic placeholder,
+ * not a real key.
  */
 class SecretValueTest {
 
@@ -28,7 +28,7 @@ class SecretValueTest {
         val secret = SecretValue(syntheticRaw)
         val rendered = secret.toString()
 
-        // Ganzer Rohwert sowie alle Teilstücke (Fenster 3..len) fehlen.
+        // The whole raw value and all partial pieces (window 3..len) are absent.
         assertFalse(rendered.contains(syntheticRaw))
         for (length in 3..syntheticRaw.length) {
             for (start in 0..syntheticRaw.length - length) {

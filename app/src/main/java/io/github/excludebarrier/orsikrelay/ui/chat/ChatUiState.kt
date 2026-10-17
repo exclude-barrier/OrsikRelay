@@ -53,14 +53,14 @@ internal fun buildTimeline(
     } + local
 
 /**
- * Immutable presentation state of the chat screen (P1 refactor).
+ * Immutable presentation state of the chat screen.
  *
  * This is the single, fully-observable state the screen renders from. Every
  * transition of the turn state machine is produced by [ChatViewModel] as a
  * new value of this type; the composable holds no business state of its own.
  *
  * The fields mirror the previous screen-local state one-to-one so the
- * verified P0 behavior (composer gating, run/stop/steer visibility,
+ * verified baseline behavior (composer gating, run/stop/steer visibility,
  * recoverable steers, approval delivery) is preserved exactly. [boundRunId]
  * is the server-confirmed run ID of the active turn: it is used only to
  * gate the stop/steer controls and is never rendered, logged or embedded in
@@ -71,40 +71,40 @@ internal data class ChatUiState(
     val loadInFlight: Boolean = false,
     val draft: String = "",
     /**
-     * P5: the attachment the user picked but has not sent yet, or `null`.
+     * The attachment the user picked but has not sent yet, or `null`.
      * Local-only: the picker's content URI never reaches the server, the
      * history or any log.
      */
     val attachment: ChatAttachmentDraft? = null,
-    /** P5: closed rejection of the last picker result, or `null`. */
+    /** Closed rejection of the last picker result, or `null`. */
     val attachmentError: ChatAttachmentError? = null,
-    /** P5: `true` while the picked attachment is being read/validated. */
+    /** `true` while the picked attachment is being read/validated. */
     val attachmentBusy: Boolean = false,
     val localLines: List<TimelineRow> = emptyList(),
     val turnFailure: ChatStreamError? = null,
     /**
-     * P6: the last send was rejected because another run already owns the
+     * The last send was rejected because another run already owns the
      * app-wide run slot. The draft and the picked attachment are kept; the
      * notice is generic and clears once the global run is terminal. The
      * waiting draft is never sent automatically.
      */
     val startConflict: Boolean = false,
     val turnActive: Boolean = false,
-    /** P4: the active turn's stream is being re-attached to the run. */
+    /** The active turn's stream is being re-attached to the run. */
     val reconnecting: Boolean = false,
     /**
-     * P7: the active turn's server-side outcome is UNKNOWN (the transport or
+     * The active turn's server-side outcome is UNKNOWN (the transport or
      * the reliable event processing failed while the server run may still be
      * alive). The logical run ownership is kept; no new message is sent and
      * no automatic approval/stop is performed. The composer stays disabled
      * and a manual reconciliation is offered when a confirmed run ID exists.
      */
     val turnUncertain: Boolean = false,
-    /** P7: a manual reconciliation read of the uncertain run is in flight. */
+    /** A manual reconciliation read of the uncertain run is in flight. */
     val reconcileInFlight: Boolean = false,
-    /** P7: the last reconciliation read failed with a closed, generic reason. */
+    /** The last reconciliation read failed with a closed, generic reason. */
     val reconcileFailed: Boolean = false,
-    /** P7: the last reconciliation proved the run still active server-side. */
+    /** The last reconciliation proved the run still active server-side. */
     val reconcileStillActive: Boolean = false,
     val runStarted: Boolean = false,
     val boundRunId: String? = null,
@@ -121,7 +121,7 @@ internal data class ChatUiState(
 ) {
     /**
      * The stop and steer controls are visible only for an active turn whose
-     * server-confirmed, non-blank run ID is bound (Mission 007B/008B): before
+     * server-confirmed, non-blank run ID is bound: before
      * `run.started` the controls are invisible and no stop/steer POST is
      * possible.
      */
@@ -129,7 +129,7 @@ internal data class ChatUiState(
         get() = turnActive && boundRunId?.isNotBlank() == true && !turnUncertain
 
     /**
-     * P7: the run outcome is unknown and a server-confirmed run ID is bound,
+     * The run outcome is unknown and a server-confirmed run ID is bound,
      * so a manual status reconciliation is possible and safe.
      */
     val recoveryVisible: Boolean
@@ -141,7 +141,7 @@ internal data class ChatUiState(
      * BEFORE the confirmed start does not block a new, deliberate submit;
      * only an active turn or a failure after the confirmed start does.
      *
-     * P5: a picked attachment also enables the action (an attachment-only turn
+     * A picked attachment also enables the action (an attachment-only turn
      * is a legitimate request): the text may then be blank, and
      * [ChatOutboundMessage.create] decides the exact body.
      */

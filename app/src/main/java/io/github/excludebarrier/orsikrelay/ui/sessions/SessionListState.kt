@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 
 /**
- * UI state of the session list (Mission 004A).
+ * UI state of the session list.
  *
  * Contains only domain metadata: no API key, no raw response or
  * exception text.

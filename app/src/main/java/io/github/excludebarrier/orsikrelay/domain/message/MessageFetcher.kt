@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
  * Authenticated raw read seam for
- * `GET /api/sessions/{session_id}/messages` (Mission 004B).
+ * `GET /api/sessions/{session_id}/messages`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesMessageClient]. The repository

@@ -4,7 +4,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 
 /**
  * Authenticated raw transport seam for
- * `POST /v1/runs/{run_id}/approval` (Mission 014).
+ * `POST /v1/runs/{run_id}/approval`.
  *
  * The production implementation is
  * [io.github.excludebarrier.orsikrelay.network.HermesRunApprovalClient]. The

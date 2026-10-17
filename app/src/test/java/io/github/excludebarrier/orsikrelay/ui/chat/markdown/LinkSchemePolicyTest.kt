@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for the fail-closed markdown link scheme allowlist (P2).
+ * Unit tests for the fail-closed markdown link scheme allowlist.
  *
  * The policy is the single security boundary for markdown link navigation:
  * only absolute HTTPS URLs may be opened. Everything else — dangerous schemes

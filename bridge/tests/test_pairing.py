@@ -1,4 +1,4 @@
-"""Tests for the operator pairing CLI and deep-link helpers (P13 Phase 5/6)."""
+"""Tests for the operator pairing CLI and deep-link helpers."""
 
 import contextlib
 import io
