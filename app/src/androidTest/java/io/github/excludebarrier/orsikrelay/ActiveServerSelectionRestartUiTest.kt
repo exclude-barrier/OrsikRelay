@@ -141,7 +141,7 @@ class ActiveServerSelectionRestartUiTest {
         // shown directly and onboarding never appears.
         waitForText("Session Fixture")
         assertTrue(
-            composeRule.onAllNodesWithText("Server hinzufügen")
+            composeRule.onAllNodesWithText(context.getString(R.string.onboarding_title))
                 .fetchSemanticsNodes().isEmpty()
         )
         assertTrue(
@@ -184,7 +184,7 @@ class ActiveServerSelectionRestartUiTest {
 
         setHost()
 
-        waitForText("Server hinzufügen")
+        waitForText(context.getString(R.string.onboarding_title))
     }
 
     @Test
@@ -200,9 +200,9 @@ class ActiveServerSelectionRestartUiTest {
 
         setHost()
 
-        waitForText("Der Server ist unvollständig oder nicht verfügbar.")
+        waitForText(context.getString(R.string.error_session_profile))
         assertTrue(
-            composeRule.onAllNodesWithText("Server hinzufügen")
+            composeRule.onAllNodesWithText(context.getString(R.string.onboarding_title))
                 .fetchSemanticsNodes().isEmpty()
         )
     }
@@ -245,7 +245,7 @@ class ActiveServerSelectionRestartUiTest {
         // the single active row, and Beta still offers the select action.
         assertEquals(
             1,
-            composeRule.onAllNodesWithText("Aktiver Server").fetchSemanticsNodes().size
+            composeRule.onAllNodesWithText(context.getString(R.string.profiles_active)).fetchSemanticsNodes().size
         )
         composeRule.onNodeWithTag(selectTag(BETA_ID)).assertExists()
     }

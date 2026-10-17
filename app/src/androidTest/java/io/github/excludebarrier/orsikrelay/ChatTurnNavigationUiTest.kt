@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
@@ -54,6 +55,7 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatTurnNavigationUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
         override fun start(profileId: String, sessionId: String) {}
@@ -142,10 +144,10 @@ class ChatTurnNavigationUiTest {
 
         // Submit through the existing secure route: exact values.
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Synthese 1")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(turnSource.opened.await(3, TimeUnit.SECONDS))
         assertEquals(PROFILE_ID, turnSource.profileId.get())
         assertEquals(sessionId, turnSource.sessionId.get())
@@ -155,7 +157,7 @@ class ChatTurnNavigationUiTest {
         // the stream — the run belongs to the app-wide RunSessionController
         // and continues in the background; the navigation simply returns to
         // the session list.
-        composeRule.onNodeWithText("Zurück").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         waitForText("Turn-Session")
         assertFalse(
             "the running stream must survive the back navigation",
@@ -222,18 +224,18 @@ class ChatTurnNavigationUiTest {
         composeRule.onNodeWithText("SystemBack-Session").performClick()
         // We are now on the chat screen. The title appears before the (empty)
         // history has loaded; wait until the composer accepts input.
-        waitForText("Chat")
+        waitForText(context.getString(R.string.chat_title))
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodes(hasSetTextAction() and hasText("Nachricht") and isEnabled())
+            composeRule.onAllNodes(hasSetTextAction() and hasText(context.getString(R.string.chat_input_label)) and isEnabled())
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
 
         // Start a turn that stays open (the fake never emits a terminal
         // event and never completes on its own).
-        composeRule.onNodeWithText("Nachricht").performTextInput("System back")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("System back")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(
             "stream was not started before the system back",
             turnSource.opened.await(3, TimeUnit.SECONDS)
@@ -269,7 +271,7 @@ class ChatTurnNavigationUiTest {
 
     /**
      * A double back event on the chat screen (no active turn) — as from a
-     * fast double-tap on "Zurück" or a spurious input event — must NOT pop
+     * fast double-tap on the back button or a spurious input event — must NOT pop
      * the navigation stack empty. The first back returns to the session
      * list; the second back must be a no-op. Without the guard the NavHost
      * is left without a destination, renders an empty (white) screen whose
@@ -315,7 +317,7 @@ class ChatTurnNavigationUiTest {
 
         waitForText("DoubleBack-Session")
         composeRule.onNodeWithText("DoubleBack-Session").performClick()
-        waitForText("Chat")
+        waitForText(context.getString(R.string.chat_title))
 
         // No turn is active: both backs go straight to onBack().
         composeRule.runOnIdle {

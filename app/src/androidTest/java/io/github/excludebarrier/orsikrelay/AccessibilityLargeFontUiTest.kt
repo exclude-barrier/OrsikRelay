@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionOutcome
@@ -372,9 +373,9 @@ class AccessibilityLargeFontUiTest {
         const val LARGE_FONT_SCALE = 2.0f
         const val NORMAL_FONT_SCALE = 1.0f
         const val MIN_TOUCH_TARGET_DP = 48f
-        const val ONBOARDING_SUBMIT_LABEL = "Verbindung vorbereiten"
-        const val REFRESH_LABEL = "Aktualisieren"
-        const val SEND_LABEL = "Senden"
+        val ONBOARDING_SUBMIT_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.onboarding_submit) }
+        val REFRESH_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sessions_refresh) }
+        val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
         const val PROBE_LABEL = "Fixture-Probe-Label"
         const val CHAT_MESSAGE = "Fixture-Antwort"
         val SESSION_TITLES = listOf("Fixture Alpha", "Fixture Beta", "Fixture Gamma")

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentDraftHolder
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentMetadata
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentReadResult
@@ -60,6 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * credentials.
  */
 class ChatAttachmentChipUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -137,7 +139,7 @@ class ChatAttachmentChipUiTest {
     }
 
     private fun draftText(): String? {
-        val nodes = composeRule.onAllNodesWithText("Nachricht").fetchSemanticsNodes()
+        val nodes = composeRule.onAllNodesWithText(context.getString(R.string.chat_input_label)).fetchSemanticsNodes()
         return nodes
             .firstOrNull { it.config.contains(SemanticsProperties.EditableText) }
             ?.config[SemanticsProperties.EditableText]
@@ -216,7 +218,7 @@ class ChatAttachmentChipUiTest {
         setScreen()
 
         waitForEmptySession()
-        composeRule.onNodeWithText("Nachricht").performTextInput("Text bleibt")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Text bleibt")
         composeRule.onNodeWithTag(TAG_REMOVE).performClick()
 
         // The chip is gone...
@@ -234,14 +236,14 @@ class ChatAttachmentChipUiTest {
         setScreen()
 
         waitForEmptySession()
-        composeRule.onNodeWithText("Nachricht").performTextInput("Zeile eins\nZeile zwei\nZeile drei")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Zeile eins\nZeile zwei\nZeile drei")
         composeRule.waitForIdle()
 
         // The chip stays rendered next to the multi-line draft and the real
         // send gate (text + attachment) enables the action.
         composeRule.onNodeWithTag(TAG_REMOVE).assertIsDisplayed()
         composeRule.onNodeWithText("holiday.png").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsEnabled()
         assertEquals("Zeile eins\nZeile zwei\nZeile drei", draftText())
     }
 
@@ -310,8 +312,8 @@ class ChatAttachmentChipUiTest {
 
         waitForEmptySession()
         // An attachment-only turn enables the send action.
-        composeRule.onNodeWithText("Senden").assertIsEnabled()
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
 
         // The closed TooLarge outcome maps to the too-large error label...
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -341,8 +343,8 @@ class ChatAttachmentChipUiTest {
 
         waitForEmptySession()
         // An attachment-only turn enables the send action.
-        composeRule.onNodeWithText("Senden").assertIsEnabled()
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(chat.opened.await(3, TimeUnit.SECONDS))
 
         // Uncertain run: no confirmed run ID, but the initial POST may still have
@@ -357,7 +359,7 @@ class ChatAttachmentChipUiTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_REMOVE).assertIsDisplayed()
         composeRule.onNodeWithText("holiday.png").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
         assertEquals("no second POST", 1, chat.calls.get())
     }
 
@@ -488,10 +490,10 @@ class ChatAttachmentChipUiTest {
         const val TAG_REMOVE = "composer_attachment_remove"
         // The uncertain-run notice test tag (ChatScreen's TAG_RUN_UNCERTAIN).
         const val TAG_UNCERTAIN = "chat_run_uncertain"
-        const val EMPTY_SESSION_TEXT = "Diese Session enthält noch keine Nachrichten."
-        const val ADD_LABEL = "Anhang"
-        const val REMOVE_LABEL = "Entfernen"
-        const val ERROR_SIZE_LABEL = "Der Anhang ist zu groß. Maximal 5 MiB pro Bild."
+        val EMPTY_SESSION_TEXT: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_empty) }
+        val ADD_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_add) }
+        val REMOVE_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_remove) }
+        val ERROR_SIZE_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_error_size) }
         val FORMAT_CHARS = setOf('\u202E', '\u202C', '\u200B')
     }
 }

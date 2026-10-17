@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
@@ -60,6 +61,7 @@ import org.junit.Test
  * The streaming seam is a fake: no network, no real hosts, no credentials.
  */
 class ChatScreenTurnUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
         override fun start(profileId: String, sessionId: String) {}
@@ -80,17 +82,17 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        // Empty draft: "Senden" is disabled and a tap sends nothing.
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
-        composeRule.onNodeWithText("Senden").performClick()
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        // Empty draft: the send button is disabled and a tap sends nothing.
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertEquals(0, source.calls.get())
 
         // Whitespace draft: also disabled.
-        composeRule.onNodeWithText("Nachricht").performTextInput(" \n \t ")
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput(" \n \t ")
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
         assertEquals(" \n \t ", draftText())
         assertEquals(0, source.calls.get())
     }
@@ -100,15 +102,15 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("  Doppelte Eingabe  ")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue("first stream was not started", source.opened.await(3, TimeUnit.SECONDS))
         // Second, quick tap while the turn is running.
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertEquals("exactly one stream must run", 1, source.calls.get())
         // The local user line appears immediately after an accepted submit.
         waitForText("Doppelte Eingabe")
@@ -127,10 +129,10 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
         // TurnCompleted frees the composer: the field is editable again.
-        // With an empty draft "Senden" is visible but disabled.
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        // With an empty draft the send button is visible but disabled.
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
     }
 
     @Test
@@ -138,10 +140,10 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Hallo")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Hallo")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
 
         // Both deltas visibly grow in the same line. The stream is only
         // continued after the intermediate state has been observed, because
@@ -175,10 +177,10 @@ class ChatScreenTurnUiTest {
                 .fetchSemanticsNodes().isEmpty()
         )
         // TurnCompleted frees the composer: the field is editable again.
-        // With an empty draft "Senden" is visible but disabled.
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        // With an empty draft the send button is visible but disabled.
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
         waitForFlowCompletion(source)
     }
 
@@ -187,12 +189,12 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Werkzeugtest")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
 
         source.enqueue(
             ChatTurnEvent.RunStarted("run_synthetic"),
@@ -203,10 +205,10 @@ class ChatScreenTurnUiTest {
         // after the observation, because the final line replaces the
         // composed content.
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Tool ist aktiv…")
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_tool_activity))
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Tool ist aktiv…").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_tool_activity)).assertIsDisplayed()
         // Synthetic tool name/args/preview/reasoning appear nowhere.
         listOf(
             "synthetic_tool_name",
@@ -227,9 +229,9 @@ class ChatScreenTurnUiTest {
         )
         source.complete()
         waitForFlowCompletion(source)
-        // With an empty draft "Senden" is visible but disabled.
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        // With an empty draft the send button is visible but disabled.
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
     }
 
     @Test
@@ -237,12 +239,12 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Bleibt im Entwurf")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
 
         source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
         source.complete()
@@ -258,12 +260,12 @@ class ChatScreenTurnUiTest {
         }
         composeRule.waitForIdle()
         assertEquals("Bleibt im Entwurf", draftText())
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
-        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsNotEnabled()
         assertTrue(
             "no history refresh while the run outcome is unknown",
-            composeRule.onAllNodesWithText("Verlauf aktualisieren")
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_refresh_history))
                 .fetchSemanticsNodes().isEmpty()
         )
         assertTrue(
@@ -287,12 +289,12 @@ class ChatScreenTurnUiTest {
             runStatusRequester = status
         )
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Nachrichten")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
 
         source.enqueue(
             ChatTurnEvent.RunStarted("run_synthetic"),
@@ -313,7 +315,7 @@ class ChatScreenTurnUiTest {
         assertEquals("no automatic resending", 1, source.calls.get())
         assertTrue(
             "no bare history refresh while the run outcome is unknown",
-            composeRule.onAllNodesWithText("Verlauf aktualisieren")
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_refresh_history))
                 .fetchSemanticsNodes().isEmpty()
         )
         composeRule.onNodeWithTag(RECONCILE_TAG).assertIsDisplayed()
@@ -335,7 +337,7 @@ class ChatScreenTurnUiTest {
         assertEquals("run_synthetic", status.runId.get())
         assertEquals(2, historyCalls.get())
         assertEquals("the authoritative terminal never resends the chat POST", 1, source.calls.get())
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
         assertTrue(
             "the uncertain notice must be gone after the authoritative terminal",
             composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isEmpty()
@@ -356,9 +358,9 @@ class ChatScreenTurnUiTest {
         }
         setScreen(history(longHistory), source)
 
-        composeRule.onNodeWithText("Nachricht").performTextInput("Neue Live-Nachricht")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Neue Live-Nachricht")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         waitForText("Neue Live-Nachricht")
@@ -381,16 +383,16 @@ class ChatScreenTurnUiTest {
             onBack = { backInvoked.countDown() }
         )
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Läuft noch")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         assertEquals(1, source.calls.get())
 
-        composeRule.onNodeWithText("Zurück").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         assertTrue("onBack was not invoked", backInvoked.await(3, TimeUnit.SECONDS))
         // Background continuity: the run belongs to the app-wide
         // RunSessionController, not to the screen — back does NOT cancel the
@@ -408,12 +410,12 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Plötzliches Ende")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
 
         source.enqueue(
             ChatTurnEvent.RunStarted("run_synthetic"),
@@ -432,15 +434,15 @@ class ChatScreenTurnUiTest {
             composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
         assertTrue(
             "the confirmed run ID must offer the manual status recovery",
             composeRule.onAllNodesWithTag(RECONCILE_TAG).fetchSemanticsNodes().isNotEmpty()
         )
         assertTrue(
             "no history refresh while the run outcome is unknown",
-            composeRule.onAllNodesWithText("Verlauf aktualisieren")
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_refresh_history))
                 .fetchSemanticsNodes().isEmpty()
         )
         assertEquals("no automatic retry", 1, source.calls.get())
@@ -469,19 +471,19 @@ class ChatScreenTurnUiTest {
         }
         setScreen(history(emptyList()), synchronousSource)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Sofortig")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Sofortig")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
 
         // The final text is rendered and the turn is released: the
-        // field is editable again and the (empty) draft keeps "Senden"
+        // field is editable again and the (empty) draft keeps the send button
         // disabled. With the bug present `turnActive` would never clear
         // and the field would stay disabled forever.
         waitForText("Sofort fertig")
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
     }
 
     @Test
@@ -489,17 +491,17 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Abschluss")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Abschluss")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         source.enqueue(ChatTurnEvent.RunStarted("run_synthetic"), ChatTurnEvent.TurnCompleted())
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
-                composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+                composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
                 true
             } catch (_: AssertionError) {
                 false
@@ -517,10 +519,10 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Fehler")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Fehler")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         source.enqueue(
@@ -532,11 +534,11 @@ class ChatScreenTurnUiTest {
             composeRule.onAllNodesWithTag(UNCERTAIN_TAG).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
         assertTrue(
             "a transport failure must never be shown as a finished run",
-            composeRule.onAllNodesWithText("Verlauf aktualisieren")
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_refresh_history))
                 .fetchSemanticsNodes().isEmpty()
         )
         assertEquals("no second POST", 1, source.calls.get())
@@ -552,10 +554,10 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Serverfehler")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Serverfehler")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         source.enqueue(
@@ -565,7 +567,7 @@ class ChatScreenTurnUiTest {
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
-                composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+                composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
                 true
             } catch (_: AssertionError) {
                 false
@@ -601,14 +603,14 @@ class ChatScreenTurnUiTest {
             }
         }
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         composeRule
-            .onNodeWithText("Nachricht")
+            .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Läuft in erster Session")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(firstSource.opened.await(3, TimeUnit.SECONDS))
-        waitForText("Du")
+        waitForText(context.getString(R.string.chat_role_user))
 
         // Background continuity: the running run belongs to the app-wide
         // RunSessionController, not to the screen — a session switch does NOT
@@ -629,8 +631,8 @@ class ChatScreenTurnUiTest {
                 .fetchSemanticsNodes().isEmpty()
         )
         // The history of the new session is loaded, the composer is free.
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
     }
 
     @Test
@@ -656,10 +658,10 @@ class ChatScreenTurnUiTest {
         }
 
         // Session A starts a run that stays open.
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Lauf A")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue("run A was not started", source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Lauf A")
@@ -668,13 +670,13 @@ class ChatScreenTurnUiTest {
         // Switch to session B while run A still runs.
         key.value = "session-b"
         composeRule.waitForIdle()
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
 
         // A send attempt in B is rejected: generic notice, no second POST,
         // B's draft is kept and run A is not interrupted.
-        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Lauf B")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         waitForText(CONFLICT_TEXT)
         assertEquals("exactly one POST in total", 1, source.calls.get())
         assertEquals("session B keeps its draft", "Lauf B", draftText())
@@ -694,7 +696,7 @@ class ChatScreenTurnUiTest {
         assertEquals("Lauf B", draftText())
 
         // A deliberate new send in B now starts exactly one new run.
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) { source.calls.get() == 2 }
         assertEquals(2, source.calls.get())
     }
@@ -724,19 +726,19 @@ class ChatScreenTurnUiTest {
                 )
             }
         }
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Lauf A")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Lauf A")
         key.value = "session-b"
         composeRule.waitForIdle()
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Lauf B")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         waitForText(CONFLICT_TEXT)
         println("SHOOT: p6_conflict_portrait")
         Thread.sleep(20_000)
@@ -766,19 +768,19 @@ class ChatScreenTurnUiTest {
                 )
             }
         }
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf A")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Lauf A")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         waitForText("Lauf A")
         key.value = "session-b"
         composeRule.waitForIdle()
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Lauf B")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Lauf B")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         waitForText(CONFLICT_TEXT)
         println("SHOOT: p6_conflict_portrait_dark")
         Thread.sleep(20_000)
@@ -835,10 +837,10 @@ class ChatScreenTurnUiTest {
     }
 
     private fun openApproval(source: FakeTurnSource, request: ApprovalRequest) {
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Approval lifecycle")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Approval lifecycle")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(
             ChatTurnEvent.RunStarted(request.runId),
@@ -879,7 +881,7 @@ class ChatScreenTurnUiTest {
         }
 
     private fun draftText(): String? {
-        val nodes = composeRule.onAllNodesWithText("Nachricht").fetchSemanticsNodes()
+        val nodes = composeRule.onAllNodesWithText(context.getString(R.string.chat_input_label)).fetchSemanticsNodes()
         return nodes
             .firstOrNull { it.config.contains(SemanticsProperties.EditableText) }
             ?.config[SemanticsProperties.EditableText]
@@ -969,25 +971,25 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source, runStopRequester = stopper)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Test")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Stop-Test")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // Before run.started the stop control is invisible; a tap cannot
         // reach the stop POST.
         assertTrue(
             "stop control must be invisible before RunStarted",
-            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_stop)).fetchSemanticsNodes().isEmpty()
         )
         assertEquals(0, stopper.calls.get())
 
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_stop)).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Stoppen").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).assertIsEnabled()
 
         // The terminal stream state ends the turn; afterwards the
         // stop control is invisible again.
@@ -996,7 +998,7 @@ class ChatScreenTurnUiTest {
         waitForFlowCompletion(source)
         assertTrue(
             "stop control must be invisible after the terminal event",
-            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_stop)).fetchSemanticsNodes().isEmpty()
         )
     }
 
@@ -1006,22 +1008,22 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source, runStopRequester = stopper)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Doppeltipp")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Stop-Doppeltipp")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
-        waitForText("Stoppen")
+        waitForText(context.getString(R.string.chat_stop))
 
-        composeRule.onNodeWithText("Stoppen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue("stop request must start", stopper.started.await(3, TimeUnit.SECONDS))
         // Quick second tap while the request is running: the control is
         // disabled and there is exactly one call.
         composeRule
-            .onNodeWithText("Wird gestoppt …")
+            .onNodeWithText(context.getString(R.string.chat_stopping))
             .assertIsDisplayed()
             .assertIsNotEnabled()
-        composeRule.onNodeWithText("Wird gestoppt …").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stopping)).performClick()
         assertEquals("exactly one stop request", 1, stopper.calls.get())
         assertEquals(RUN_ID, stopper.runId.get())
         assertEquals("fixture-profile-id", stopper.profileId.get())
@@ -1035,7 +1037,7 @@ class ChatScreenTurnUiTest {
         waitForFlowCompletion(source)
         assertTrue(
             "stop control must be gone after the terminal event",
-            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_stopping)).fetchSemanticsNodes().isEmpty()
         )
         assertEquals(1, stopper.calls.get())
     }
@@ -1046,19 +1048,19 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source, runStopRequester = stopper)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Accepted")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Stop-Accepted")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
-        waitForText("Stoppen")
+        waitForText(context.getString(R.string.chat_stop))
 
         stopper.gate = Channel(Channel.UNLIMITED)
-        composeRule.onNodeWithText("Stoppen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
-                composeRule.onNodeWithText("Wird gestoppt …").assertIsDisplayed()
+                composeRule.onNodeWithText(context.getString(R.string.chat_stopping)).assertIsDisplayed()
                 true
             } catch (_: AssertionError) {
                 false
@@ -1070,9 +1072,9 @@ class ChatScreenTurnUiTest {
         // cancelled locally.
         stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Wird gestoppt …").assertIsDisplayed()
-        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stopping)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
         // The collector keeps running unchanged (cancellation latch intact = 1);
         // only the terminal stream event ends it.
         assertEquals("stream must not be interrupted locally", 1L, source.canceled.count)
@@ -1084,10 +1086,10 @@ class ChatScreenTurnUiTest {
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
         assertTrue(
             "stop control must be gone after the terminal event",
-            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_stopping)).fetchSemanticsNodes().isEmpty()
         )
         // The run ID never appears in the UI.
         assertTrue(
@@ -1102,15 +1104,15 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source, runStopRequester = stopper)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Fehler")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Stop-Fehler")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
-        waitForText("Stoppen")
+        waitForText(context.getString(R.string.chat_stop))
 
         stopper.gate = Channel(Channel.UNLIMITED)
-        composeRule.onNodeWithText("Stoppen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         // Generic local message without dynamic details; the running stream
         // collection stays unchanged; another manual attempt is possible
@@ -1119,7 +1121,7 @@ class ChatScreenTurnUiTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule
-                    .onNodeWithText("Der laufende Run konnte nicht gestoppt werden.")
+                    .onNodeWithText(context.getString(R.string.error_run_stop_generic))
                     .assertIsDisplayed()
                 true
             } catch (_: AssertionError) {
@@ -1132,11 +1134,11 @@ class ChatScreenTurnUiTest {
         )
         assertEquals("running stream must stay untouched", 1L, source.canceled.count)
         assertEquals(1, stopper.calls.get())
-        composeRule.onNodeWithText("Stoppen").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).assertIsEnabled()
 
         // The deliberate manual retry sends exactly one further request.
         stopper.gate = Channel(Channel.UNLIMITED)
-        composeRule.onNodeWithText("Stoppen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         assertEquals("manual retry sends one further request", 2, stopper.calls.get())
         stopper.gate!!.trySend(RunStopResult.Accepted(RUN_ID))
@@ -1161,16 +1163,16 @@ class ChatScreenTurnUiTest {
             runStopRequester = stopper
         )
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-AlreadyTerminal")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Stop-AlreadyTerminal")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
-        waitForText("Stoppen")
+        waitForText(context.getString(R.string.chat_stop))
         assertEquals(1, historyCalls.get())
 
         stopper.gate = Channel(Channel.UNLIMITED)
-        composeRule.onNodeWithText("Stoppen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         stopper.gate!!.trySend(RunStopResult.AlreadyTerminal(RUN_ID))
 
@@ -1185,9 +1187,9 @@ class ChatScreenTurnUiTest {
         // No stop control any more; the composer is free for a new run.
         assertTrue(
             "stop control must be gone after reconciliation",
-            composeRule.onAllNodesWithText("Stoppen").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_stop)).fetchSemanticsNodes().isEmpty()
         )
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
     }
 
     @Test
@@ -1196,22 +1198,22 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source, runStopRequester = stopper)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         // First run: stop fails (generic). The fake has no gate here, so the
         // result is prepared synchronously before the tap, so that the
         // (ungated) call returns it.
-        composeRule.onNodeWithText("Nachricht").performTextInput("Erster Lauf")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Erster Lauf")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
-        waitForText("Stoppen")
+        waitForText(context.getString(R.string.chat_stop))
         stopper.release(RunStopResult.Failure(RunStopError.Network))
-        composeRule.onNodeWithText("Stoppen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
                 composeRule
-                    .onNodeWithText("Der laufende Run konnte nicht gestoppt werden.")
+                    .onNodeWithText(context.getString(R.string.error_run_stop_generic))
                     .assertIsDisplayed()
                 true
             } catch (_: AssertionError) {
@@ -1225,18 +1227,18 @@ class ChatScreenTurnUiTest {
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
 
         // Second run: the stop state of the first run is gone and only the
         // run ID of the new run is bound.
         stopper.release(RunStopResult.Accepted(NEW_RUN_ID))
-        composeRule.onNodeWithText("Nachricht").performTextInput("Zweiter Lauf")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Zweiter Lauf")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertEquals(2, source.calls.get())
         source.enqueue(ChatTurnEvent.RunStarted(NEW_RUN_ID))
-        waitForText("Stoppen")
-        composeRule.onNodeWithText("Stoppen").performClick()
+        waitForText(context.getString(R.string.chat_stop))
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         assertEquals("new run binds only its own run id", NEW_RUN_ID, stopper.runId.get())
         assertEquals("second stop is exactly one further call", 2, stopper.calls.get())
@@ -1264,20 +1266,20 @@ class ChatScreenTurnUiTest {
             runStopRequester = stopper
         )
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Stop-Back")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Stop-Back")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
-        waitForText("Stoppen")
+        waitForText(context.getString(R.string.chat_stop))
 
         // The stop call stays suspended in the request.
         stopper.gate = Channel(Channel.UNLIMITED)
-        composeRule.onNodeWithText("Stoppen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_stop)).performClick()
         assertTrue(stopper.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
             try {
-                composeRule.onNodeWithText("Wird gestoppt …").assertIsDisplayed()
+                composeRule.onNodeWithText(context.getString(R.string.chat_stopping)).assertIsDisplayed()
                 true
             } catch (_: AssertionError) {
                 false
@@ -1286,7 +1288,7 @@ class ChatScreenTurnUiTest {
 
         // Background continuity: back is synchronous and cancels nothing —
         // neither the run nor the in-flight stop request.
-        composeRule.onNodeWithText("Zurück").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         assertTrue("onBack was not invoked", backInvoked.await(3, TimeUnit.SECONDS))
         assertFalse(
             "the in-flight stop coroutine must not be canceled by back",
@@ -1311,23 +1313,25 @@ class ChatScreenTurnUiTest {
         waitForFlowCompletion(source)
         assertTrue(
             "stop control must be gone after the terminal event",
-            composeRule.onAllNodesWithText("Wird gestoppt …").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_stopping)).fetchSemanticsNodes().isEmpty()
         )
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
     }
 
     private companion object {
         const val RUN_ID = "run_synthetic"
         const val NEW_RUN_ID = "run_synthetic_2"
-        const val APPROVAL_TITLE = "Freigabe anfragen"
+        val APPROVAL_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_title) }
         // Stable test tags of the uncertain-run notice and its manual
         // status-recovery action (mirroring ChatScreen's TAG_RUN_UNCERTAIN /
         // TAG_RUN_RECONCILE).
         const val UNCERTAIN_TAG = "chat_run_uncertain"
         const val RECONCILE_TAG = "chat_run_reconcile"
         // The exact generic conflict text (no IDs, no server detail).
-        const val CONFLICT_TEXT =
-            "In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst."
+        val CONFLICT_TEXT: String by lazy {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getString(R.string.chat_run_conflict)
+        }
         const val APPROVAL_RUN_ID = "run_0123456789abcdef0123456789abcdef"
         val APPROVAL_REQUEST = ApprovalRequest(
             runId = APPROVAL_RUN_ID,
@@ -1360,10 +1364,10 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Sichtbarkeit")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Steuer-Sichtbarkeit")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // Before run.started the steer input is invisible; a tap cannot
@@ -1398,10 +1402,10 @@ class ChatScreenTurnUiTest {
         steerer.gate = Channel(Channel.UNLIMITED)
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Queued")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Steuer-Queued")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Kurs nach links")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1428,8 +1432,8 @@ class ChatScreenTurnUiTest {
         assertTrue("steer input must be cleared after queued", steerDraftText().isNullOrBlank())
         assertEquals("no new chat message from a steer", 1, source.calls.get())
         // The run is still active: composer and send are blocked.
-        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
         // The run ID never appears in the UI.
         assertTrue(
             "run id must not be rendered",
@@ -1453,10 +1457,10 @@ class ChatScreenTurnUiTest {
         steerer.gate = Channel(Channel.UNLIMITED)
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-409")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Steuer-409")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Kurs nach rechts")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1490,11 +1494,11 @@ class ChatScreenTurnUiTest {
 
         // The run is still running: the composer is blocked, but the text is
         // preserved. It is only sendable after the terminal event.
-        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsNotEnabled()
         source.enqueue(ChatTurnEvent.TurnCompleted())
         source.complete()
         waitForFlowCompletion(source)
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
         assertEquals("Kurs nach rechts", draftText())
         assertEquals("still not auto-sent after completion", 1, source.calls.get())
     }
@@ -1504,10 +1508,10 @@ class ChatScreenTurnUiTest {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source, runSteerRequester = FakeRunSteerRequester())
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Pending-Steer")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Pending-Steer")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         source.enqueue(ChatTurnEvent.TurnCompleted(pendingSteer = "Weiter mit Plan B"))
         source.complete()
@@ -1523,7 +1527,7 @@ class ChatScreenTurnUiTest {
                 false
             }
         }
-        composeRule.onNodeWithText("Nachricht").assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
 
         // Explicit action: text moves into the composer, without sending.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
@@ -1543,10 +1547,10 @@ class ChatScreenTurnUiTest {
         steerer.gate = Channel(Channel.UNLIMITED)
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Doppeltipp")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Steuer-Doppeltipp")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Doppeltipp")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1580,10 +1584,10 @@ class ChatScreenTurnUiTest {
         steerer.release(RunSteerResult.Failure(RunSteerError.Network))
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Steuer-Fehler")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Steuer-Fehler")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Kursversuch")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1622,10 +1626,10 @@ class ChatScreenTurnUiTest {
         steerer.release(RunSteerResult.NotAccepting(RUN_ID))
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Erster Lauf")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Erster Lauf")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Alter Steuerentwurf")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1647,9 +1651,9 @@ class ChatScreenTurnUiTest {
         // A new ordinary message starts a new run: the run-specific steer
         // draft must not slip into this run — but the preserved recovery text
         // is user input and is not lost.
-        composeRule.onNodeWithText("Nachricht").performTextInput("Zweiter Lauf")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Zweiter Lauf")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertEquals(2, source.calls.get())
         source.enqueue(ChatTurnEvent.RunStarted(NEW_RUN_ID))
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -1676,10 +1680,10 @@ class ChatScreenTurnUiTest {
         steerer.release(RunSteerResult.NotAccepting(RUN_ID))
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Bleibt-Stehen")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Bleibt-Stehen")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Bleibt stehen")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1720,10 +1724,10 @@ class ChatScreenTurnUiTest {
         steerer.gate = Channel(Channel.UNLIMITED)
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Ende-in-Flight")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Ende-in-Flight")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Halb weg")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1757,10 +1761,10 @@ class ChatScreenTurnUiTest {
         steerer.release(RunSteerResult.NotAccepting(RUN_ID))
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Vier-Hunderteinundneunzig")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Vier-Hunderteinundneunzig")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Rettet mich")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1782,7 +1786,7 @@ class ChatScreenTurnUiTest {
         // The ordinary composer receives a non-empty draft: the recovery
         // action must be disabled and remain a no-op, so that the user text
         // is not overwritten.
-        composeRule.onNodeWithText("Nachricht").performTextInput("Mein laufender Entwurf")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Mein laufender Entwurf")
         assertEquals("Mein laufender Entwurf", draftText())
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsNotEnabled()
 
@@ -1797,7 +1801,7 @@ class ChatScreenTurnUiTest {
         // moves exactly the one item. `performTextClearance()` really clears
         // the field (unlike `performTextInput("")`, which is a no-op),
         // exactly the precondition the action requires.
-        composeRule.onNodeWithText("Nachricht").performTextClearance()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextClearance()
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsEnabled()
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Rettet mich", draftText())
@@ -1816,10 +1820,10 @@ class ChatScreenTurnUiTest {
         steerer.release(RunSteerResult.NotAccepting(RUN_ID))
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Zwei-Erhaltung")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Zwei-Erhaltung")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steuer-A")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1865,10 +1869,10 @@ class ChatScreenTurnUiTest {
         steerer.release(RunSteerResult.NotAccepting(RUN_ID))
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Zwei-Items")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Zwei-Items")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steuer-Erstes")
         ImeClickSettle.settleAfterTyping(composeRule)
@@ -1922,10 +1926,10 @@ class ChatScreenTurnUiTest {
         steerer.gate = Channel(Channel.UNLIMITED)
         setScreen(history(emptyList()), source, runSteerRequester = steerer)
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Doppelt-Kein")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Doppelt-Kein")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         // Input with leading/trailing whitespace: the server returns the
         // normalized, trimmed wire text. The duplicate guard must compare the
@@ -1984,10 +1988,10 @@ class ChatScreenTurnUiTest {
             }
         }
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Nachricht").performTextInput("Erste Session")
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Erste Session")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue(firstSource.opened.await(3, TimeUnit.SECONDS))
         firstSource.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steht in Session 1")
@@ -2010,7 +2014,7 @@ class ChatScreenTurnUiTest {
         // (profile/session key) must disappear completely.
         key.value = "second-session"
         composeRule.waitForIdle()
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
         assertTrue(
             "recovery of the previous session must be gone",
             composeRule.onAllNodesWithTag("chatSteerSendAsNewMessage:0")

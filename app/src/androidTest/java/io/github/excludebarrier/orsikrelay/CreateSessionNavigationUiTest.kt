@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
@@ -37,6 +38,7 @@ import org.junit.Test
  * encoded through the existing route.
  */
 class CreateSessionNavigationUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
@@ -81,14 +83,14 @@ class CreateSessionNavigationUiTest {
 
         // The FAB is visible and opens the dialog.
         composeRule
-            .onNodeWithContentDescription("Neue Session anlegen")
+            .onNodeWithContentDescription(context.getString(R.string.new_session_fab))
             .performClick()
-        composeRule.onNodeWithText("Neue Session").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_title)).assertIsDisplayed()
 
         composeRule
-            .onNodeWithText("Titel (optional)")
+            .onNodeWithText(context.getString(R.string.new_session_title_label))
             .performTextInput("Synthetischer Titel")
-        composeRule.onNodeWithText("Erstellen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
 
         // The new session opens the existing chat of the synthetic ID.
         waitForText("Fixture-Chatinhalt")

@@ -191,11 +191,11 @@ class LiveBridgeApprovalE2ETest {
 
     private companion object {
         const val PROFILE_NAME = "OR-06 Live Bridge"
-        const val NEW_SESSION_FAB = "Neue Session anlegen"
-        const val NEW_SESSION_TITLE = "Neue Session"
-        const val NEW_SESSION_CREATE = "Erstellen"
-        const val COMPOSER_LABEL = "Nachricht"
-        const val SEND_LABEL = "Senden"
+        val NEW_SESSION_FAB: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_fab) }
+        val NEW_SESSION_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_title) }
+        val NEW_SESSION_CREATE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_create) }
+        val COMPOSER_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_input_label) }
+        val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
 
         // Production tags (ui/chat/ApprovalDialog.kt, ui/chat/ChatScreen.kt).
         const val TAG_DENY = "approval_deny"

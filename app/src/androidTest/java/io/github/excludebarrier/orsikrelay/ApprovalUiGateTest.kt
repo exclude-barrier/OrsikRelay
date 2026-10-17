@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalChoice
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
@@ -233,12 +234,12 @@ class ApprovalUiGateTest {
         const val RUN_ID = "run_0123456789abcdef0123456789abcdef"
         const val REQUEST_ID = "fedcba9876543210fedcba9876543210"
 
-        const val TITLE = "Freigabe anfragen"
-        const val HINT_LABEL = "Hinweis"
+        val TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_title) }
+        val HINT_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_reason_label) }
 
         const val TAG_ALLOW = "approval_allow"
         const val TAG_DENY = "approval_deny"
-        const val ALREADY_RESOLVED = "Diese Freigabe wurde bereits beantwortet."
+        val ALREADY_RESOLVED: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_already_resolved) }
 
         val REQUEST = ApprovalRequest(
             runId = RUN_ID,

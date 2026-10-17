@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.MainActivity
+import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.notification.NotificationCoordinator
 import io.github.excludebarrier.orsikrelay.platform.notification.AndroidNotificationManager
 import org.junit.Assert.assertEquals
@@ -49,6 +50,7 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class NotificationManagerInstrumentedTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val appContext: Context = instrumentation.targetContext
@@ -105,7 +107,7 @@ class NotificationManagerInstrumentedTest {
             poster = AndroidNotificationManager(appContext),
             isForeground = { false },
             serverNameProvider = { "E2ETest" },
-            fallbackTitle = "Orsik Relay",
+            fallbackTitle = context.getString(R.string.notification_fallback_title),
         )
         coordinator.onRunCompleted("profile-1", "session-1", "run-abc")
 
@@ -159,7 +161,7 @@ class NotificationManagerInstrumentedTest {
             poster = AndroidNotificationManager(appContext),
             isForeground = { false },
             serverNameProvider = { "E2EDup" },
-            fallbackTitle = "Orsik Relay",
+            fallbackTitle = context.getString(R.string.notification_fallback_title),
         )
         coordinator.onRunCompleted("profile-2", "session-2", "run-dup")
         coordinator.onRunCompleted("profile-2", "session-2", "run-dup")
@@ -183,7 +185,7 @@ class NotificationManagerInstrumentedTest {
             poster = AndroidNotificationManager(appContext),
             isForeground = { true },
             serverNameProvider = { "E2EFore" },
-            fallbackTitle = "Orsik Relay",
+            fallbackTitle = context.getString(R.string.notification_fallback_title),
         )
         coordinator.onRunCompleted("profile-3", "session-3", "run-1")
         assertNoActiveTitle("E2EFore")
@@ -195,7 +197,7 @@ class NotificationManagerInstrumentedTest {
             poster = AndroidNotificationManager(appContext),
             isForeground = { false },
             serverNameProvider = { "E2ETap" },
-            fallbackTitle = "Orsik Relay",
+            fallbackTitle = context.getString(R.string.notification_fallback_title),
         )
         coordinator.onRunCompleted("profile-6", "session-6", "run-5")
 
@@ -249,7 +251,7 @@ class NotificationManagerInstrumentedTest {
                 poster = AndroidNotificationManager(appContext),
                 isForeground = { false },
                 serverNameProvider = { "E2EAppOps" },
-                fallbackTitle = "Orsik Relay",
+                fallbackTitle = context.getString(R.string.notification_fallback_title),
             )
             // Must neither crash nor post anything.
             coordinator.onRunCompleted("profile-7", "session-7", "run-6")

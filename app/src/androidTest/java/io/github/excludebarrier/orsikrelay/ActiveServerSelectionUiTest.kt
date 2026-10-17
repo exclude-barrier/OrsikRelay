@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
@@ -42,6 +43,7 @@ import org.junit.Test
  * All fakes are synthetic; no network request and no credential read is made.
  */
 class ActiveServerSelectionUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
@@ -64,15 +66,15 @@ class ActiveServerSelectionUiTest {
 
         // Open a chat under Alpha so a Chat destination exists on the stack.
         composeRule.onNodeWithText("Session Alpha").performClick()
-        waitForText("Chat")
-        composeRule.onNodeWithText("Zurück").performClick()
+        waitForText(context.getString(R.string.chat_title))
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         waitForText("Session Alpha")
 
         // Go to the management screen: the ACTIVE server (Alpha) is marked
         // with exactly one "Aktiver Server" marker, and only the NON-active
         // server (Beta) offers the "use as active server" action.
-        composeRule.onNodeWithText("Server verwalten").performClick()
-        waitForText("Server")
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
         composeRule.onNodeWithTag(selectTag(BETA_ID)).assertExists()
         composeRule.onNodeWithTag(selectTag(ALPHA_ID)).assertDoesNotExist()
@@ -89,13 +91,13 @@ class ActiveServerSelectionUiTest {
         waitForText("Session Beta")
         composeRule.onNodeWithText("Session Alpha").assertDoesNotExist()
         assertTrue(
-            composeRule.onAllNodesWithText("Chat").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_title)).fetchSemanticsNodes().isEmpty()
         )
 
         // Re-open the management screen: the marker has MOVED to the chosen
         // server (Beta) and Beta now carries no select action.
-        composeRule.onNodeWithText("Server verwalten").performClick()
-        waitForText("Server")
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
         composeRule.onNodeWithTag(selectTag(BETA_ID)).assertDoesNotExist()
 
@@ -119,17 +121,17 @@ class ActiveServerSelectionUiTest {
         waitForText("Session Alpha")
 
         // Open the management screen and return without selecting anything.
-        composeRule.onNodeWithText("Server verwalten").performClick()
-        waitForText("Server")
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        waitForText(context.getString(R.string.profiles_title))
         // Alpha is still the active, marked server; nothing was selected.
         assertExactlyOneActiveMarker()
-        composeRule.onNodeWithText("Zurück").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         waitForText("Session Alpha")
 
         // Still on Sessions, still under Alpha; no switch happened.
         composeRule.onNodeWithText("Session Beta").assertDoesNotExist()
         assertTrue(
-            composeRule.onAllNodesWithText("Chat").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_title)).fetchSemanticsNodes().isEmpty()
         )
         // No new server was queried: the switch never started.
         assertTrue(profileIdsQueried.all { it == ALPHA_ID })
@@ -166,7 +168,7 @@ class ActiveServerSelectionUiTest {
     private fun assertExactlyOneActiveMarker() {
         assertEquals(
             1,
-            composeRule.onAllNodesWithText("Aktiver Server").fetchSemanticsNodes().size
+            composeRule.onAllNodesWithText(context.getString(R.string.profiles_active)).fetchSemanticsNodes().size
         )
     }
 

@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
@@ -27,6 +28,7 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionChatNavigationUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     // Same reason as `ActiveServerSelectionRestartUiTest`: the production
     // startup resolution runs on `Dispatchers.IO`, and with the default
@@ -93,7 +95,7 @@ class SessionChatNavigationUiTest {
         assertEquals(PROFILE_ID, receivedProfile.get())
         assertEquals(sessionId, receivedSession.get())
 
-        composeRule.onNodeWithText("Zurück").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         waitForText("Fixture-Session")
     }
 

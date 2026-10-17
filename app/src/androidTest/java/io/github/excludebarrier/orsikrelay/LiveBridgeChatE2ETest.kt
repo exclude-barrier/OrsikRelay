@@ -312,13 +312,13 @@ class LiveBridgeChatE2ETest {
 
     private companion object {
         const val PROFILE_NAME = "OR-08a Live Bridge"
-        const val SESSIONS_TITLE = "Sessions"
-        const val NEW_SESSION_FAB = "Neue Session anlegen"
-        const val NEW_SESSION_TITLE = "Neue Session"
-        const val NEW_SESSION_CREATE = "Erstellen"
-        const val ASSISTANT_ROLE = "Hermes"
-        const val COMPOSER_LABEL = "Nachricht"
-        const val SEND_LABEL = "Senden"
+        val SESSIONS_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sessions_title) }
+        val NEW_SESSION_FAB: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_fab) }
+        val NEW_SESSION_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_title) }
+        val NEW_SESSION_CREATE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_create) }
+        val ASSISTANT_ROLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_role_assistant) }
+        val COMPOSER_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_input_label) }
+        val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
 
         /** Generous, bounded wait for UI transitions (network round-trips). */
         const val UI_TIMEOUT_MS = 30_000L

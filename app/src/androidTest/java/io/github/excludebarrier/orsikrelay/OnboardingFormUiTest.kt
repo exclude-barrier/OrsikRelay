@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -31,6 +32,7 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class OnboardingFormUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     /** Synthetic fixture key; not a real credential. */
     private val syntheticApiKey = "fixture"
@@ -39,7 +41,7 @@ class OnboardingFormUiTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private fun clickSubmit() {
-        composeRule.onNodeWithText("Verbindung vorbereiten").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_submit)).performClick()
     }
 
     /**
@@ -59,7 +61,7 @@ class OnboardingFormUiTest {
 
     private fun assertApiKeyNotRenderedAsPlainText() {
         val node = composeRule
-            .onNodeWithContentDescription("API-Key", useUnmergedTree = true)
+            .onNodeWithContentDescription(context.getString(R.string.onboarding_api_key_label), useUnmergedTree = true)
             .fetchSemanticsNode()
         assertTrue(
             "API key field must be marked as a password",
@@ -75,7 +77,7 @@ class OnboardingFormUiTest {
     @Test
     fun submittingEmptyFormShowsFieldErrorsAndStaysOnOnboarding() {
         // Start screen with title.
-        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertIsDisplayed()
 
         // The API-key assertions apply to the unchanged API-key mode;
         // the default mode is the pairing mode.
@@ -84,26 +86,26 @@ class OnboardingFormUiTest {
 
         // Field-specific validation errors are shown.
         composeRule
-            .onNodeWithText("Servername darf nicht leer sein.")
+            .onNodeWithText(context.getString(R.string.error_profile_name_empty))
             .assertIsDisplayed()
         composeRule
-            .onNodeWithText("Bitte eine absolute HTTPS-URL mit Host eingeben.")
+            .onNodeWithText(context.getString(R.string.error_base_url_invalid))
             .assertIsDisplayed()
-        composeRule.onNodeWithText("API-Key darf nicht leer sein.").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.error_api_key_empty)).assertIsDisplayed()
 
         // The app stays on onboarding and does not navigate to sessions.
-        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
-        assertNoNodeWithText("Sessions")
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertIsDisplayed()
+        assertNoNodeWithText(context.getString(R.string.sessions_title))
     }
 
 
     @Test
     fun apiKeyIsHiddenInTheFieldAndNotShownAsPlainText() {
-        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertIsDisplayed()
 
         switchToApiKeyMode()
         composeRule
-            .onNodeWithContentDescription("API-Key", useUnmergedTree = true)
+            .onNodeWithContentDescription(context.getString(R.string.onboarding_api_key_label), useUnmergedTree = true)
             .performTextInput(syntheticApiKey)
 
         // The field itself is a password field: no plain text and no
@@ -111,6 +113,6 @@ class OnboardingFormUiTest {
         assertApiKeyNotRenderedAsPlainText()
 
         // Stays on onboarding as long as no valid submission is made.
-        assertNoNodeWithText("Sessions")
+        assertNoNodeWithText(context.getString(R.string.sessions_title))
     }
 }

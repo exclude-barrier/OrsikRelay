@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
@@ -181,7 +182,7 @@ class ActiveServerSelectionRecreationUiTest {
         const val BASE_URL = "https://recreation.local"
         const val SYNTHETIC_KEY = "fixture-key-recreation"
         const val SESSION_TITLE = "Session Recreation Fixture"
-        const val SESSIONS_TITLE = "Sessions"
-        const val ONBOARDING_TITLE = "Server hinzufügen"
+        val SESSIONS_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sessions_title) }
+        val ONBOARDING_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.onboarding_title) }
     }
 }

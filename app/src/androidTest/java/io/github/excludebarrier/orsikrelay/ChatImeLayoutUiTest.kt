@@ -53,6 +53,7 @@ import org.junit.Test
  * additionally exercised for the visual screenshot states.
  */
 class ChatImeLayoutUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
@@ -117,20 +118,20 @@ class ChatImeLayoutUiTest {
     @Test
     fun imeOpenResizesChatWithoutPanningOrDoubleInsets() {
         setScreen()
-        waitForText("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
         val imeBottom = fakeImeBottom()
         val navBottom = realNavBottom()
         // State A: no IME.
-        val headerTopA = boundsTop("Chat")
-        val composerTopA = boundsTop("Nachricht")
+        val headerTopA = boundsTop(context.getString(R.string.chat_title))
+        val composerTopA = boundsTop(context.getString(R.string.chat_input_label))
         val listTopA = listTop()
         val listHeightA = composerTopA - listTopA
         assertTrue("message list must have positive height without IME", listHeightA > 0)
 
         // State B: IME open (fake insets: keyboard + nav bar).
         dispatchImeInsets(imeBottom)
-        val headerTopB = boundsTop("Chat")
-        val composerTopB = boundsTop("Nachricht")
+        val headerTopB = boundsTop(context.getString(R.string.chat_title))
+        val composerTopB = boundsTop(context.getString(R.string.chat_input_label))
         val listTopB = listTop()
         val listHeightB = composerTopB - listTopB
         val rootHeight = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.height.toInt()
@@ -160,7 +161,7 @@ class ChatImeLayoutUiTest {
         )
         // 4. No double bottom inset: the composer bottom stays within its
         //    12dp bottom padding above the keyboard top edge.
-        val composerBottomB = boundsBottom("Nachricht")
+        val composerBottomB = boundsBottom(context.getString(R.string.chat_input_label))
         val keyboardTop = rootHeight - (navBottom + imeBottom)
         assertTrue(
             "composer bottom $composerBottomB must sit directly above keyboard top $keyboardTop (no double inset)",
@@ -169,27 +170,27 @@ class ChatImeLayoutUiTest {
 
         // State C: IME closed again — original layout restored.
         dispatchImeInsets(0)
-        assertEquals("header must return after the IME closes", headerTopA, boundsTop("Chat"))
-        assertEquals("composer must return after the IME closes", composerTopA, boundsTop("Nachricht"))
+        assertEquals("header must return after the IME closes", headerTopA, boundsTop(context.getString(R.string.chat_title)))
+        assertEquals("composer must return after the IME closes", composerTopA, boundsTop(context.getString(R.string.chat_input_label)))
     }
 
     @Test
     fun realKeyboardOpenKeepsHeaderAndComposerVisible() {
         setScreen()
-        waitForText("Nachricht")
-        val headerTopBefore = boundsTop("Chat")
-        val composerTopBefore = boundsTop("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
+        val headerTopBefore = boundsTop(context.getString(R.string.chat_title))
+        val composerTopBefore = boundsTop(context.getString(R.string.chat_input_label))
 
         val imeOpened = openRealKeyboard()
         if (imeOpened) awaitIme(open = true)
         composeRule.waitForIdle()
 
-        val headerTopAfter = boundsTop("Chat")
+        val headerTopAfter = boundsTop(context.getString(R.string.chat_title))
         assertEquals("header must not pan when the real keyboard opens", headerTopBefore, headerTopAfter)
         if (imeOpened) {
             assertTrue(
                 "real IME must actually open: composer must move up by a substantial inset, but it stayed at $composerTopBefore",
-                boundsTop("Nachricht") < composerTopBefore - 500
+                boundsTop(context.getString(R.string.chat_input_label)) < composerTopBefore - 500
             )
         }
         // The real IME changes the window insets in several frames; the
@@ -200,16 +201,16 @@ class ChatImeLayoutUiTest {
         // exactly on the IME edge). The invariant is unchanged and still
         // enforced - each node MUST become displayed; only the settle window
         // is tolerated instead of failing on a stale semantics snapshot.
-        composeRule.onNodeWithText("Chat").assertIsDisplayed()
-        composeRule.onNodeWithText("Nachricht").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
     }
 
     @CaptureOnly
     @Test
     fun imeScreenshotsForVisualVerification() {
         setScreen()
-        waitForText("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
         val imeBottom = fakeImeBottom()
         shoot("01_kb_closed_light")
         Thread.sleep(2_500)
@@ -221,7 +222,7 @@ class ChatImeLayoutUiTest {
         // Multi-line composer while the IME region is reserved. Focusing
         // the field makes the window re-dispatch its real insets (IME
         // closed here), so the fake IME inset is re-applied afterwards.
-        composeRule.onNodeWithText("Nachricht").performTextInput("Zweite Zeile\nDritte Zeile")
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Zweite Zeile\nDritte Zeile")
         composeRule.waitForIdle()
         dispatchImeInsets(imeBottom)
         Thread.sleep(2_000)
@@ -238,7 +239,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun realKeyboardScreenshotLight() {
         setScreen(dark = false)
-        waitForText("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
         openRealKeyboard()
         Thread.sleep(3_000)
         shoot("05_real_ime_light")
@@ -249,7 +250,7 @@ class ChatImeLayoutUiTest {
     @Test
     fun realKeyboardScreenshotDark() {
         setScreen(dark = true)
-        waitForText("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
         openRealKeyboard()
         Thread.sleep(3_000)
         shoot("06_real_ime_dark")
@@ -259,9 +260,9 @@ class ChatImeLayoutUiTest {
     @Test
     fun realKeyboardCloseThenReopenIsStable() {
         setScreen()
-        waitForText("Nachricht")
-        val headerTopClosed = boundsTop("Chat")
-        val composerTopClosed = boundsTop("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
+        val headerTopClosed = boundsTop(context.getString(R.string.chat_title))
+        val composerTopClosed = boundsTop(context.getString(R.string.chat_input_label))
 
         // State A: real keyboard open.
         val imeOpenedA = openRealKeyboard()
@@ -269,12 +270,12 @@ class ChatImeLayoutUiTest {
         assertEquals(
             "header must not pan while the real IME is open",
             headerTopClosed,
-            boundsTop("Chat")
+            boundsTop(context.getString(R.string.chat_title))
         )
         if (imeOpenedA) {
             assertTrue(
                 "real IME must actually open in state A: composer must move up",
-                boundsTop("Nachricht") < composerTopClosed - 500
+                boundsTop(context.getString(R.string.chat_input_label)) < composerTopClosed - 500
             )
         }
         shoot("07_real_ime_open")
@@ -288,12 +289,12 @@ class ChatImeLayoutUiTest {
         assertEquals(
             "header must not move when the real IME closes",
             headerTopClosed,
-            boundsTop("Chat")
+            boundsTop(context.getString(R.string.chat_title))
         )
         assertEquals(
             "composer must return to the closed position after the IME closes",
             composerTopClosed,
-            boundsTop("Nachricht")
+            boundsTop(context.getString(R.string.chat_input_label))
         )
         shoot("07a_real_ime_closed_after_back")
         Thread.sleep(2_000)
@@ -305,12 +306,12 @@ class ChatImeLayoutUiTest {
         assertEquals(
             "header must not pan on IME reopen",
             headerTopClosed,
-            boundsTop("Chat")
+            boundsTop(context.getString(R.string.chat_title))
         )
         if (imeOpenedC) {
             assertTrue(
                 "real IME must reopen in state C: composer must move up again",
-                boundsTop("Nachricht") < composerTopClosed - 500
+                boundsTop(context.getString(R.string.chat_input_label)) < composerTopClosed - 500
             )
         }
         shoot("07b_real_ime_reopened")
@@ -417,21 +418,21 @@ class ChatImeLayoutUiTest {
     private fun openRealKeyboard(): Boolean {
         if (InstrumentationRegistry.getArguments().getString("hostTap") == "true") {
             val bounds =
-                composeRule.onNodeWithText("Nachricht").fetchSemanticsNode().boundsInRoot
+                composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).fetchSemanticsNode().boundsInRoot
             val cx = ((bounds.left + bounds.right) / 2).toInt()
             val cy = ((bounds.top + bounds.bottom) / 2).toInt()
             println("TAP_TARGET: $cx $cy")
-            val composerTopClosed = boundsTop("Nachricht")
+            val composerTopClosed = boundsTop(context.getString(R.string.chat_input_label))
             val deadline = System.currentTimeMillis() + 25_000
             while (System.currentTimeMillis() < deadline) {
                 Thread.sleep(200)
-                if (boundsTop("Nachricht") < composerTopClosed - 500) {
+                if (boundsTop(context.getString(R.string.chat_input_label)) < composerTopClosed - 500) {
                     return true
                 }
             }
             return false
         }
-        composeRule.onNodeWithText("Nachricht").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performClick()
         composeRule.waitForIdle()
         showImeExplicitly()
         awaitIme(open = true, timeoutMs = 3_000)
@@ -450,7 +451,7 @@ class ChatImeLayoutUiTest {
         ImeClickSettle.forceImeInset(composeRule, ime)
     }
 
-    private fun listTop(): Int = boundsBottom("Chat")
+    private fun listTop(): Int = boundsBottom(context.getString(R.string.chat_title))
 
     private fun boundsTop(text: String): Int =
         composeRule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top.toInt()
@@ -460,7 +461,7 @@ class ChatImeLayoutUiTest {
 
     /**
      * Waits for a node with [text] and settles the UI. Callers wait for the
-     * always-present composer ("Nachricht"), never for a specific timeline
+     * always-present composer, never for a specific timeline
      * message: on a smaller CI screen an off-screen LazyColumn item is never
      * composed, so waiting for it would time out even though the layout under
      * test (header + composer) is correct and independent of message content.

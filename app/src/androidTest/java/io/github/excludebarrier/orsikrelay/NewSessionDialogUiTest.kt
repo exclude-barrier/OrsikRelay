@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
@@ -34,6 +35,7 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NewSessionDialogUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     // The dialog's create call is a BLOCKING seam executed on `Dispatchers.IO`
     // (see `NewSessionDialog.submit`). The default `createComposeRule()` uses an
@@ -56,8 +58,8 @@ class NewSessionDialogUiTest {
             SessionCreateResult.Success(CREATED_ID, null)
         })
 
-        composeRule.onNodeWithText("Neue Session").assertIsDisplayed()
-        composeRule.onNodeWithText("Abbrechen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_cancel)).performClick()
 
         waitForDialogGone()
         assertEquals(0, calls.get())
@@ -76,7 +78,7 @@ class NewSessionDialogUiTest {
             onCreated = { createdId = it }
         )
 
-        composeRule.onNodeWithText("Erstellen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
         waitForDialogGone()
 
         assertEquals(listOf<String?>(null), titles)
@@ -94,9 +96,9 @@ class NewSessionDialogUiTest {
         )
 
         composeRule
-            .onNodeWithText("Titel (optional)")
+            .onNodeWithText(context.getString(R.string.new_session_title_label))
             .performTextInput("  Synthetischer Titel  ")
-        composeRule.onNodeWithText("Erstellen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
         waitForDialogGone()
 
         assertEquals(listOf("  Synthetischer Titel  "), titles)
@@ -115,15 +117,15 @@ class NewSessionDialogUiTest {
             }
         )
 
-        composeRule.onNodeWithText("Erstellen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Die neue Session konnte nicht angelegt werden.")
+            composeRule.onAllNodesWithText(context.getString(R.string.new_session_error_generic))
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
         assertEquals(1, calls.get())
 
-        composeRule.onNodeWithText("Erneut versuchen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).performClick()
         waitForDialogGone()
         assertEquals(2, calls.get())
     }
@@ -142,9 +144,9 @@ class NewSessionDialogUiTest {
             }
         )
 
-        composeRule.onNodeWithText("Erstellen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
         assertTrue(started.await(3, TimeUnit.SECONDS))
-        composeRule.onNodeWithText("Erstellen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
         assertEquals(1, calls.get())
 
         release.countDown()
@@ -176,7 +178,7 @@ class NewSessionDialogUiTest {
 
     private fun waitForDialogGone() {
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Neue Session")
+            composeRule.onAllNodesWithText(context.getString(R.string.new_session_title))
                 .fetchSemanticsNodes().isEmpty()
         }
         composeRule.waitForIdle()

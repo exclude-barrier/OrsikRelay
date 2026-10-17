@@ -71,6 +71,7 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReadmeScreenshotsTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>(StandardTestDispatcher())
@@ -79,7 +80,7 @@ class ReadmeScreenshotsTest {
     @Test
     fun chatLight() {
         renderChat(dark = false)
-        waitForText("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
         waitForText(ASSISTANT_HEADING, substring = true)
         capture("chat")
     }
@@ -88,7 +89,7 @@ class ReadmeScreenshotsTest {
     @Test
     fun chatDark() {
         renderChat(dark = true)
-        waitForText("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
         waitForText(ASSISTANT_HEADING, substring = true)
         capture("chat-dark")
     }
@@ -136,7 +137,7 @@ class ReadmeScreenshotsTest {
                 initialPairingCode = PAIRING_CODE
             )
         }
-        waitForText("Server hinzufügen")
+        waitForText(context.getString(R.string.onboarding_title))
         capture("onboarding")
     }
 
@@ -183,11 +184,11 @@ class ReadmeScreenshotsTest {
                 onBack = {}
             )
         }
-        waitForText("Nachricht")
+        waitForText(context.getString(R.string.chat_input_label))
         waitForText(ASSISTANT_HEADING, substring = true)
-        composeRule.onNodeWithText("Nachricht").performTextInput(APPROVAL_PROMPT)
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput(APPROVAL_PROMPT)
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
         assertTrue("the synthetic turn must start", source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(
             ChatTurnEvent.RunStarted(APPROVAL_RUN_ID),
@@ -383,7 +384,7 @@ class ReadmeScreenshotsTest {
         const val PAIRING_CODE = "AB12CD34EF56GH78JK9MNPQR"
 
         const val APPROVAL_PROMPT = "Führe den Sicherheits-Check aus"
-        const val APPROVAL_TITLE = "Freigabe anfragen"
+        val APPROVAL_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_title) }
         const val APPROVAL_RUN_ID = "run_0123456789abcdef0123456789abcdef"
         val APPROVAL_REQUEST = ApprovalRequest(
             runId = APPROVAL_RUN_ID,

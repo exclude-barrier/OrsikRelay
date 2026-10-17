@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectError
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectResult
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
@@ -25,7 +26,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The "Gerät trennen" (device disconnect) UI contract.
+ * The device disconnect UI contract.
  *
  * - Only profiles whose NON-SECRET credential kind is
  *   [ProfileCredentialKind.DEVICE_CREDENTIAL] offer the action;
@@ -43,6 +44,7 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class DeviceDisconnectUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -88,7 +90,7 @@ class DeviceDisconnectUiTest {
         composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
 
         // Step 1: the confirmation dialog is open.
-        composeRule.onNodeWithText("Gerät trennen?").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.profiles_device_disconnect_title)).assertIsDisplayed()
         // Step 2 (not yet): no revocation was started.
         assertEquals(0, disconnectCalls)
     }
@@ -104,7 +106,7 @@ class DeviceDisconnectUiTest {
 
         assertEquals(0, disconnectCalls)
         assertTrue(admin.deleted.isEmpty())
-        composeRule.onNodeWithText("Gerät trennen?").assertDoesNotExist()
+        composeRule.onNodeWithText(context.getString(R.string.profiles_device_disconnect_title)).assertDoesNotExist()
         // The profile is still listed.
         composeRule.onNodeWithText("Geräteprofil").assertIsDisplayed()
     }
@@ -139,14 +141,14 @@ class DeviceDisconnectUiTest {
         composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
         composeRule.onNodeWithTag("deviceDisconnectConfirm").performClick()
 
-        waitForText("Das Gerät konnte nicht getrennt werden.")
+        waitForText(context.getString(R.string.profiles_device_disconnect_error_generic))
         assertEquals(1, disconnectCalls)
         // Remote failure: NOTHING is deleted locally, no navigation hook.
         assertTrue(admin.deleted.isEmpty())
         assertTrue(disconnectedProfiles.isEmpty())
         // The local profile remains; the dialog stays open for a retry.
         composeRule.onNodeWithText("Geräteprofil").assertIsDisplayed()
-        composeRule.onNodeWithText("Gerät trennen?").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.profiles_device_disconnect_title)).assertIsDisplayed()
     }
 
     @Test
@@ -161,7 +163,7 @@ class DeviceDisconnectUiTest {
         composeRule.onNodeWithTag("disconnectDevice:device-profile").performClick()
         composeRule.onNodeWithTag("deviceDisconnectConfirm").performClick()
 
-        waitForText("Wird getrennt …")
+        waitForText(context.getString(R.string.profiles_device_disconnecting))
         // The confirm button is disabled while the revocation runs.
         composeRule.onNodeWithTag("deviceDisconnectConfirm").assertIsNotEnabled()
         composeRule.onNodeWithTag("deviceDisconnectConfirm").performClick()
