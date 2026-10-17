@@ -19,7 +19,7 @@ them.
 
 ## Development setup
 
-You need JDK 17 and the Android SDK (platform 36, build tools 36.1.0) for the
+You need JDK 17 and the Android SDK (platform 37, build tools 36.1.0) for the
 app, and Python ≥ 3.11 with [`uv`](https://docs.astral.sh/uv/) for the bridge.
 See the README for build and test commands.
 

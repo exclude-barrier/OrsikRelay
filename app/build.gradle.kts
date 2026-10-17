@@ -25,7 +25,7 @@ val releaseSigningValues = releaseSigningVariables.map { name ->
 
 android {
     namespace = "io.github.excludebarrier.orsikrelay"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.excludebarrier.orsikrelay"

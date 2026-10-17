@@ -26,7 +26,7 @@ fi
 
 printf '\n== Android SDK (%s) ==\n' "$ANDROID_HOME"
 for path in \
-    platforms/android-36/android.jar \
+    platforms/android-37.0/android.jar \
     build-tools/36.1.0/aapt2 \
     platform-tools/adb; do
     if [ -e "$ANDROID_HOME/$path" ]; then ok "$path"; else fail "missing $path"; fi
