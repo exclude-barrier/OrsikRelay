@@ -111,8 +111,8 @@ class HermesMessageClient(
             MessageHistoryResult.Failure(MessageHistoryError.Tls)
         } catch (_: InterruptedIOException) {
             MessageHistoryResult.Failure(MessageHistoryError.Timeout)
-        } catch (_: IOException) {
-            MessageHistoryResult.Failure(MessageHistoryError.Network)
+        } catch (error: IOException) {
+            MessageHistoryResult.Failure(if (error.hasTlsFailure()) MessageHistoryError.Tls else MessageHistoryError.Network)
         } catch (_: Exception) {
             MessageHistoryResult.Failure(MessageHistoryError.IncompatibleApi)
         }

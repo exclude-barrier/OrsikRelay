@@ -125,8 +125,8 @@ class HermesDevicePairClient(
             DevicePairResult.Failure(DevicePairError.Tls)
         } catch (_: InterruptedIOException) {
             DevicePairResult.Failure(DevicePairError.Timeout)
-        } catch (_: IOException) {
-            DevicePairResult.Failure(DevicePairError.Network)
+        } catch (error: IOException) {
+            DevicePairResult.Failure(if (error.hasTlsFailure()) DevicePairError.Tls else DevicePairError.Network)
         } catch (_: Exception) {
             DevicePairResult.Failure(DevicePairError.IncompatibleApi)
         }

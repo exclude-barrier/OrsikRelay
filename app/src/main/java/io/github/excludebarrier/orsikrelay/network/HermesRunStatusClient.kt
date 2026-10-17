@@ -117,8 +117,8 @@ class HermesRunStatusClient(
             RunStatusResult.Failure(RunStatusError.Tls)
         } catch (_: InterruptedIOException) {
             RunStatusResult.Failure(RunStatusError.Timeout)
-        } catch (_: IOException) {
-            RunStatusResult.Failure(RunStatusError.Network)
+        } catch (error: IOException) {
+            RunStatusResult.Failure(if (error.hasTlsFailure()) RunStatusError.Tls else RunStatusError.Network)
         } catch (_: Exception) {
             RunStatusResult.Failure(RunStatusError.IncompatibleApi)
         }

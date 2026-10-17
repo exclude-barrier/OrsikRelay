@@ -99,8 +99,8 @@ class HermesSessionClient(
             SessionListResult.Failure(SessionListError.Tls)
         } catch (_: InterruptedIOException) {
             SessionListResult.Failure(SessionListError.Timeout)
-        } catch (_: IOException) {
-            SessionListResult.Failure(SessionListError.Network)
+        } catch (error: IOException) {
+            SessionListResult.Failure(if (error.hasTlsFailure()) SessionListError.Tls else SessionListError.Network)
         } catch (_: Exception) {
             SessionListResult.Failure(SessionListError.IncompatibleApi)
         }

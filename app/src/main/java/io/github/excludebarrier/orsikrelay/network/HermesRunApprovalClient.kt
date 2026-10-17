@@ -142,8 +142,8 @@ class HermesRunApprovalClient(
             RunApprovalResult.Failure(RunApprovalError.Tls)
         } catch (_: InterruptedIOException) {
             RunApprovalResult.Failure(RunApprovalError.Timeout)
-        } catch (_: IOException) {
-            RunApprovalResult.Failure(RunApprovalError.Network)
+        } catch (error: IOException) {
+            RunApprovalResult.Failure(if (error.hasTlsFailure()) RunApprovalError.Tls else RunApprovalError.Network)
         } catch (_: Exception) {
             RunApprovalResult.Failure(RunApprovalError.IncompatibleApi)
         }

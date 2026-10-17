@@ -520,10 +520,12 @@ class HermesSessionStreamClient(
             finishIfNotClosed(handle, finished, listener, responseRef, terminalEvent != null) {
                 ChatTurnEvent.TurnFailed(ChatStreamError.Timeout)
             }
-        } catch (_: IOException) {
+        } catch (error: IOException) {
             // Includes OkHttp's CanceledException after [ChatStreamHandle.close].
             finishIfNotClosed(handle, finished, listener, responseRef, terminalEvent != null) {
-                ChatTurnEvent.TurnFailed(ChatStreamError.Network)
+                ChatTurnEvent.TurnFailed(
+                    if (error.hasTlsFailure()) ChatStreamError.Tls else ChatStreamError.Network
+                )
             }
         } catch (_: Exception) {
             finishIfNotClosed(handle, finished, listener, responseRef, terminalEvent != null) {

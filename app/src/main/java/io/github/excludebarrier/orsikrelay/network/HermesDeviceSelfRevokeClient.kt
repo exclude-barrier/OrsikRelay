@@ -125,8 +125,8 @@ class HermesDeviceSelfRevokeClient(
             DeviceSelfRevokeResult.Failure(DeviceSelfRevokeError.Tls)
         } catch (_: InterruptedIOException) {
             DeviceSelfRevokeResult.Failure(DeviceSelfRevokeError.Timeout)
-        } catch (_: IOException) {
-            DeviceSelfRevokeResult.Failure(DeviceSelfRevokeError.Network)
+        } catch (error: IOException) {
+            DeviceSelfRevokeResult.Failure(if (error.hasTlsFailure()) DeviceSelfRevokeError.Tls else DeviceSelfRevokeError.Network)
         } catch (_: Exception) {
             DeviceSelfRevokeResult.Failure(DeviceSelfRevokeError.IncompatibleApi)
         }
