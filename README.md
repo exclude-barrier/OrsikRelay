@@ -1,175 +1,176 @@
 # Orsik Relay
 
-Inoffizieller, eigenständig entwickelter Android-Client für Hermes Agent. Hermes und seine privilegierten Werkzeuge bleiben serverseitig; Orsik Relay ist ein Kotlin-/Jetpack-Compose-Thin-Client ohne offizielle Verbindung zu Nous Research.
+An unofficial, independently developed native Android client for
+[Hermes Agent](https://github.com/NousResearch/hermes-agent). Hermes and all of
+its privileged tools stay on your own server; Orsik Relay is a Kotlin /
+Jetpack Compose thin client that talks to it through a small, self-hosted
+**Orsik Mobile Bridge**.
 
-## Projektstatus – v0.1.0-alpha.6
+> Orsik Relay is not affiliated with or endorsed by Nous Research.
 
-Dieser Stand ist ein **privater technischer Alpha-Release für Tests**, nicht für den Produktiveinsatz. Enthalten sind:
+**Status: early alpha (`0.1.0-alpha.7`).** Suitable for technical testing on
+your own setup, not for production use. There is no Play Store build and no
+public binary release yet; build from source (see below). The app's user
+interface is currently German.
 
-- sicheres Onboarding per eingeschränktem, widerrufbarem Geräte-Credential; der Pairing-Code ist der empfohlene Weg,
-- bestehendes API-Key-Onboarding als expliziter Kompatibilitätsweg,
-- Android-Keystore-geschützte Credentials und getrennte, nichtgeheime Server-/Gerätemetadaten,
-- Serververwaltung mit Auswahl, persistentem aktiven Server, Löschen sowie bestätigtem „Gerät trennen“,
-- Sessionliste, Session-Erstellung und Nachrichtenhistorie,
-- Markdown-Rendering für Assistant-Antworten mit Headings, Listen, Quotes, Inline Code und fenced Code Blocks mit Copy-Button,
-- sichere Werkzeugaktivitätsanzeige ohne Befehle, Argumente, Pfade, URLs oder Toolausgaben (auch in der geladenen Historie),
-- native Session-Chat-Approvals mit ausschließlich **Ablehnen** oder **einmal erlauben**,
-- laufende Hermes-Runs überleben Netzwerk-/SSE-Unterbrechungen: automatischer Reconnect auf dieselbe `run_id` mit `after_seq`-Replay, ohne doppelten Prompt und ohne zweiten Run,
-- laufende Runs und offene Approvals überleben eine Activity-Recreation (Rotation); veraltete Approval-Dialoge werden nicht wiederbelebt,
-- laufende Runs stoppen und per Steer-Nachricht steuern,
-- Bilder senden über den Android System Photo Picker (JPEG, PNG, WEBP, max. 1 Bild pro Turn, bis 5 MiB, ohne Storage-Berechtigung): Text + Bild oder Bild-only als multimodale Hermes-Content-Parts, inline und ohne Upload-Endpoint,
-- persistente normale Chat-Entwürfe mit server- und sessiongetrennter Speicherung,
-- geschlossene Fehlerabbildung ohne automatische Wiederholung schreibender Requests,
-- kurzlebiger Foreground Service während aktiver Runs, damit das SSE im Android-Background aktiv bleibt, mit Approval- und Run-Completed-Benachrichtigungen,
-- ein eigenständiges Material-3-Design mit persistentem Modus System, Hell oder Dunkel,
-- stabilerer IME-/Keyboard-Support inklusive adaptivem Compact Composer in Landscape (Composer und Stop-/Steer-Controls bleiben erreichbar, Anhang/Entfernen/Senden behalten 48-dp-Touch-Targets),
+## How it fits together
 
-Geräte-Credentials sind auf `chat`, `runs` und `approvals` beschränkt. Sie gewähren keinen Zugriff auf Jobs, Artefakte, Memory, Cron oder Administration und können serverseitig sofort widerrufen werden.
+```
+Android app ──HTTPS (private network)──▶ Orsik Mobile Bridge ──loopback──▶ official Hermes api_server
+ (this repo, app/)                         (this repo, bridge/)                 (unmodified)
+```
 
-## Hermes-Kompatibilität
+- The **bridge** runs next to an unmodified official Hermes installation and
+  binds to `127.0.0.1` only. TLS is provided by something you already trust,
+  for example Tailscale Serve, a reverse proxy in your LAN or WireGuard
+  (`docs/network-deployment.md`).
+- The bridge keeps the Hermes API key on the server. Phones never see it; they
+  receive a **revocable device credential** limited to `chat`, `runs` and
+  `approvals` – no jobs, memory, cron, artifacts or administration.
+- The bridge adds what the official core does not (yet) offer for mobile
+  clients: device pairing and revocation, protocol version negotiation, and
+  re-attaching to a running stream after a network drop (`after_seq` replay).
 
-Orsik Relay spricht den versionierten **Mobile-v1-Vertrag** und verbindet sich mit einer **frischen, unveränderten offiziellen Hermes-Installation** über die **Orsik Mobile Bridge** (Sidecar, P13). Der Hermes-Core bleibt unpatched; die Bridge läuft als eigener Loopback-Prozess vor dem offiziellen `api_server`.
+## Features
 
-Die Bridge **ergänzt** die Funktionen, die der offizielle Core (noch) nicht bereitstellt:
+- Pairing with a short-lived, single-use code or an `orsik://pair?…` deep link /
+  QR code; credentials are protected by the Android Keystore (an API-key mode
+  exists as an explicit compatibility path)
+- Multiple servers with an active-server selection and "disconnect this device"
+- Session list, new sessions, message history with Markdown rendering
+- Streaming answers that survive network loss, app backgrounding (short-lived
+  foreground service), rotation and process death – a run is never silently
+  re-sent; an uncertain run is reconciled with the server instead
+- Stop and steer a running turn
+- Interactive tool approvals limited to **deny** or **allow once**
+- Tool activity shown without commands, arguments, paths or output
+- One image per turn via the system Photo Picker (JPEG/PNG/WEBP, ≤ 5 MiB, no
+  storage permission)
+- Persistent drafts, light/dark theme, large-font and landscape keyboard support
+- No automatic retries of write requests; closed, user-readable error states
 
-- `device_credentials` Protokoll v1 (`POST /v1/devices/pair`, `POST /v1/devices/self/revoke`) samt Device-Scope-Allowlist,
-- `protocol_version`-Negotiation und die Mobile-Capability `session_chat_interactive_approvals`,
-- Session-Run-Re-Attach mit `after_seq`-Replay,
-- persistente Geräteverwaltung.
+## Requirements
 
-Im offiziellen Core **vorhanden** und von der Bridge durchgereicht bzw. auf den Mobile-v1-Vertrag verengt:
+- **Server:** an official Hermes Agent installation with its `api_server`,
+  Python ≥ 3.11 and [`uv`](https://docs.astral.sh/uv/) for the bridge, and a
+  private HTTPS path from your phone to the server. Set Hermes approvals to
+  `mode: manual` – the core default (`smart`) can approve some commands
+  without asking (`docs/bridge-security.md`).
+- **Phone:** Android 8.0 (API 26) or newer.
+- **Building the app:** JDK 17 and the Android SDK (platform 36, build tools
+  36.1.0). The Gradle wrapper (`./gradlew`) pins everything else.
 
-- Session-CRUD, Nachrichten und Session-Chat/Stream (die Bridge reicht den Chat-Body unverändert durch; Body-Limit 10 MB wie der offizielle `api_server`),
-- interaktive Session-Approvals (`approval.request`); die Bridge bewirbt den v1-Vertrag und verengt die Entscheidungen auf `once`/`deny`,
-- `POST /v1/runs/{run_id}/approval` und `GET /v1/runs/{run_id}`.
+## Quick start
 
-Der Client benötigt damit keinen privaten Hermes-Fork. Der Fresh-Install-Pfad (unveränderter offizieller Core + Bridge) ist auf build-host live verifiziert; Installation, HTTPS und Betrieb stehen in `docs/bridge-installation.md`, die Live-Ergebnisse in `docs/bridge-e2e.md` und `docs/hermes-fresh-compat.md`.
+1. **Install the bridge** on the Hermes host. Dependencies are installed
+   hash-pinned from `bridge/uv.lock`:
 
-**Verbleibende reale Grenze:** Die device- und reconnect-spezifischen Mobile-v1-Erweiterungen (Device-Pairing/-Credentials/-Scope, `protocol_version`-Negotiation, `after_seq`-Re-Attach) sind **noch nicht Teil der öffentlichen Hermes-Version**; sie liefert derzeit die separate Bridge. Die Veröffentlichung des Serververtrags im offiziellen Core (Upstream) bleibt Voraussetzung für einen allgemein nutzbaren Release ohne Bridge.
+   ```sh
+   bridge/install.sh
+   # edit ~/.local/orsik-mobile-bridge/bridge.env, then check it:
+   bridge/install.sh --check
+   ```
 
-## Pairing mit der Orsik Mobile Bridge
+   Configuration, systemd unit, HTTPS options, update, backup and rollback are
+   described in `docs/bridge-installation.md`.
 
-Voraussetzung ist eine installierte Bridge vor einer unveränderten offiziellen Hermes-Installation (Installation, privates HTTPS, Update und Rollback: `docs/bridge-installation.md`).
+2. **Expose it privately over HTTPS**, e.g. inside a tailnet:
 
-Auf dem Server erzeugt der Operator den einmaligen Pairing-Code **lokal** über die Bridge-CLI:
+   ```sh
+   tailscale serve --bg --https=8443 http://127.0.0.1:9842
+   ```
+
+3. **Create a pairing code** on the server. This is a local CLI; the bridge has
+   no HTTP admin interface:
+
+   ```sh
+   BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env \
+     ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin pairing-code \
+     --base-url https://<your-host>:8443
+   ```
+
+   The code is valid for 300 seconds and can be used once. With `qrencode`
+   installed, a QR code for the deep link is printed as well.
+
+4. **Pair the app:** open *Server hinzufügen* (add server), enter a name and the
+   HTTPS base URL, choose *Pairing-Code* and enter the code – or simply open the
+   deep link. The app verifies the connection and the exact capability contract
+   before it stores anything.
+
+List or revoke devices on the server with `admin list-devices` and
+`admin revoke-device <device_id>`; a paired phone can also revoke its own
+credential via *Gerät trennen* (disconnect device).
+
+## Building from source
 
 ```sh
-BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
-  $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code \
-  --base-url https://<host>
+./gradlew :app:testDebugUnitTest      # JVM unit tests
+./gradlew :app:lintDebug              # Android lint
+./gradlew :app:assembleDebug          # debug APK
+./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.github.excludebarrier.orsikrelay.CaptureOnly,io.github.excludebarrier.orsikrelay.LiveBridge
+                                      # instrumented tests (emulator or device)
 ```
 
-Der Befehl gibt einen Code (24 Zeichen, single-use, 300 Sekunden gültig) und einen Deep-Link `orsik://pair?…` aus; ein ASCII-QR-Code, sofern `qrencode` installiert ist.
-
-In Orsik Relay:
-
-1. **Server hinzufügen** öffnen.
-2. Name und privat erreichbare HTTPS-Basis-URL der Bridge eingeben.
-3. **Pairing-Code** auswählen und den angezeigten Code eingeben.
-4. Die App prüft Verbindung, Authentifizierung und den exakten Capability-Vertrag, bevor lokal etwas gespeichert wird.
-
-Geräte auflisten oder sofort widerrufen (ebenfalls lokal, kein HTTP-Admin):
+Bridge tests:
 
 ```sh
-BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
-  $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin list-devices
-BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
-  $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin revoke-device <device_id>
+cd bridge
+uv run --locked python -m unittest discover -s tests
 ```
 
-Alternativ kann das gekoppelte Gerät in der App über **Gerät trennen** sein eigenes Credential widerrufen.
+Release signing is fed only from environment variables and fails closed; see
+`docs/release.md`. `scripts/verify-environment.sh` checks a local toolchain.
 
-## Verifikation des Alpha-6-Stands
+## Verification
 
-Belege: `docs/bridge-e2e.md` (P13, Fresh-Install-Pfad) und die App-Regressionsläufe.
+Every pull request runs JVM unit tests, lint, a debug build, the instrumented
+suite on an API 36 emulator, a release build with SBOM and checksums, and the
+bridge tests (`.github/workflows/`). Live end-to-end runs against an unmodified
+official Hermes core with a real model provider – pairing, chat, stop/steer,
+reconnect, approvals, process death and an image turn – are documented in
+`docs/bridge-e2e.md`; compatibility with several Hermes core revisions in
+`docs/hermes-fresh-compat.md`.
 
-App-Suite, Builds und Version (real auf build-host):
+## Known limitations
 
-- 823 JVM-/Unit-Tests: 0 Fehler, 0 Errors, 0 Skips
-- 247 Connected-/Compose-Tests auf `emulator-5554` (API 36): 0 Fehler, 0 Errors, 1 dokumentierter Skip (`NotificationManagerInstrumentedTest.systemNotificationsDisabled_viaAppOps_postsNothingAndDoesNotCrash`); zwei vorangegangene volle Läufe trafen den bekannten IME-/Landscape-Flake (`ChatLandscapeComposerUiTest`), die Klasse isoliert 12/12 grün (siehe `docs/connected-test-stability.md`)
-- `lint`, `assembleDebug` und `compileDebugAndroidTestKotlin`: BUILD SUCCESSFUL
-- `versionName=0.1.0-alpha.6`, `versionCode=6`
-- keine echten Credentials im Repository
+- Device pairing, protocol negotiation and stream re-attach are not part of the
+  official Hermes release; the bridge is required until they are upstream.
+- No per-device isolation: the official core has no per-device ownership, so
+  every paired device acts on behalf of the single owner across all sessions
+  and runs.
+- Only images are supported as attachments (one per turn); vision depends on
+  the configured model.
+- Approvals do not show the command that is being approved yet.
+- Voice input and bot management are not implemented.
 
-Fresh-Install-Pfad (P13, `docs/bridge-e2e.md`):
+## Documentation
 
-- Bridge-Live-Akzeptanz gegen einen frischen offiziellen Hermes-Core (`NousResearch/hermes-agent`): 37/37 grün
-- realer Android-Live-Test `LiveBridgeE2ETest` (Pairing und Capability-Negotiation über HTTPS): 1/1 grün
+Most design documents are currently written in German.
 
-Früherer App-E2E gegen den privaten lokalen Mobile-v1-Serverstand (Alpha-5-Stand, **nicht** der Fresh-Install-Pfad): Text-Chat, Bild-Turn (genau ein Image-Part), Reconnect auf dieselbe `run_id` mit `after_seq` ohne zweiten POST, Activity-Recreation mit gebundenem Run, Approval `once` und `deny`, Compact-Landscape mit erreichbaren Stop-/Steer-Controls.
+| Document | Content |
+|---|---|
+| `docs/architecture.md` | implemented architecture of the app |
+| `docs/mobile-wire-contract.md` | versioned Mobile v1 protocol between app and bridge |
+| `docs/bridge-installation.md` | bridge installation and operation |
+| `docs/bridge-security.md` | threat model and security properties of the bridge |
+| `docs/network-deployment.md` | private network options (LAN, WireGuard, Tailscale) |
+| `docs/bridge-e2e.md` | live end-to-end evidence |
+| `docs/hermes-fresh-compat.md` | compatibility with the official Hermes core |
+| `docs/release.md` | release signing, SBOM, provenance, branch rules |
+| `docs/toolchain.md` | example local toolchain |
 
-Auf dem Fresh-Install-Pfad **nicht verifiziert** (`docs/bridge-e2e.md` §5): echter Assistant-Inhalt (kein Provider konfiguriert), positiver interaktiver Approval `once`/`deny` mit echtem Tool-Aufruf, UI-Automation der Onboarding-/Lifecycle-/Bild-Flows sowie ein Bild-Turn Ende-zu-Ende gegen den offiziellen Core (ob der Core multimodale Content-Parts verarbeitet, ist im Repo nicht belegt).
+## Security
 
-## Installation des privaten Alpha-Releases
+Please report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
+not in public issues. Principles this project follows: no secrets in the
+repository, no publicly reachable Hermes port, no disabled TLS checks and no
+automatic approval of tool calls.
 
-1. Im [GitHub-Releasebereich](https://github.com/exclude-barrier/OrsikRelay/releases) `v0.1.0-alpha.6` öffnen.
-2. Die APK `orsik-relay-v0.1.0-alpha.6-debug.apk` herunterladen.
-3. Installation aus der verwendeten Datei-/Browser-App einmalig erlauben und die APK installieren.
+## Contributing
 
-Die APK ist mit dem Android-Debug-Key signiert. Sie ist ausschließlich zum manuellen Testen bestimmt und bildet noch keinen stabilen Update- oder Store-Kanal.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Bekannte Grenzen
+## License
 
-- Signing-Konfiguration über Umgebungsvariablen vorhanden (docs/release.md); produktiver Key und Pipeline offen.
-- Die device- und reconnect-spezifischen Mobile-v1-Erweiterungen (Device-Pairing/-Credentials/-Scope, `protocol_version`-Negotiation, `after_seq`-Re-Attach) sind noch nicht in der öffentlichen Hermes-Version enthalten; sie liefert die Orsik Mobile Bridge (`docs/bridge-installation.md`). Bis zu einem Upstream-Beitrag ist die Bridge der erforderliche Serverbaustein.
-- Keine garantierte Per-Device-Isolation: Der offizielle Core kennt keine Ressourcen-Ownership pro Gerät; gepaarte Geräte handeln als Delegierte des einen Owners über alle Sessions/Runs (`docs/hermes-fresh-compat.md` §7).
-- PDF-, Text- und allgemeine Dateianhänge werden nicht unterstützt, und es wird maximal ein Bild pro Turn übertragen.
-- Vision-Support hängt vom verwendeten Hermes-Modell ab.
-- Sprache und Bot-Verwaltung sind noch nicht enthalten.
-- Nach einer Activity-Recreation kann das Laden der Historie einmalig fehlschlagen; „Erneut versuchen“ lädt sie nach, der laufende Run bleibt dabei gebunden.
-- Im Compact-Modus (sehr flaches Fenster, z. B. Landscape mit offener Tastatur) bleibt die Nachrichtenliste ausgeblendet, bis wieder genug Höhe verfügbar ist; Header, Eingabe und die Stop-/Steer-Controls bleiben sichtbar.
-- Die Benutzeroberfläche wird nach realer Nutzung schrittweise weiter angepasst.
-
-## Lokale Entwicklungsumgebung auf build-host
-
-- Temurin JDK 17
-- Android SDK Platform 36
-- Android Build Tools 36.1.0
-- Android Platform Tools
-- Android Emulator mit AVD `Hermes_API_36`
-- Gradle 9.7.1 (nur für den initialen Wrapper-Bootstrap; maßgeblich ist `./gradlew`)
-
-Prüfung:
-
-```bash
-scripts/verify-environment.sh
-```
-
-## Entwicklung
-
-Maßgeblich für alle Builds und Tests ist der versionierte **Gradle Wrapper 9.7.0** (`./gradlew`). Der Version Catalog liegt in `gradle/libs.versions.toml` (AGP 9.3.1, Kotlin 2.4.20).
-
-```bash
-./gradlew test                       # Unit-Tests (JVM)
-./gradlew lint                       # Lint
-./gradlew assembleDebug              # Debug-APK
-./gradlew connectedDebugAndroidTest  # Instrumentationstests (AVD nötig)
-```
-
-## Alpha-Releases
-
-Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/OrsikRelay/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
-
-- Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.6`, später `v0.1.0-beta.1`.
-- CI (Unit-Tests, Lint, `assembleDebug` und Instrumentationstests auf API 36) liegt in `.github/workflows/android.yml`; die Gradle-Wrapper-Validation ist Teil des Workflows.
-- Signing-Konfiguration über Umgebungsvariablen vorhanden (docs/release.md); produktiver Key und Pipeline offen.
-- Der Signing-Key kommt niemals ins Repository.
-- Lizenz: **Apache-2.0** (siehe `LICENSE`). Vor einem öffentlichen bzw. Play-Store-Release sind zusätzlich Datenschutztext, Support- und Updatekonzept sowie vollständige Store-Metadaten erforderlich.
-
-## Verbindliche Dokumente
-
-- `docs/architecture.md` – implementierte Architektur (Ist) und Abweichungen
-- `docs/first-slice-contract.md` – Vertrag für den ersten vertikalen Slice
-- `docs/api-capability-matrix.md` – bestätigte Server-API-Fähigkeiten
-- `docs/mobile-wire-contract.md` – versionierter Mobile-v1-Vertrag
-- `docs/bridge-installation.md` – Installation und Betrieb der Orsik Mobile Bridge (Fresh-Install-Pfad)
-- `docs/bridge-e2e.md` – Live-Nachweis gegen einen frischen offiziellen Hermes
-- `docs/toolchain.md` – lokale Toolchain (beispielhafter Stand)
-
-## Sicherheitsgrenzen
-
-- keine Secrets im Repository
-- kein öffentlich erreichbarer Hermes-Port
-- keine deaktivierte TLS-Prüfung
-- keine automatische Approval-Bestätigung
-- keine ungeprüften Agent-Diffs oder erfundenen Testergebnisse
+[Apache License 2.0](LICENSE).

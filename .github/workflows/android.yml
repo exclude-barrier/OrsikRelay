@@ -1,7 +1,7 @@
 name: Android CI
 
-# Reproducible gates for Orsik Relay. Every job mirrors a check that was
-# previously only run manually on build-host (see README "Verifikation").
+# Reproducible gates for Orsik Relay: unit tests, lint, builds, instrumented
+# tests and a release build run on every push and pull request to main.
 # The `release` job signs with a throwaway key generated on the runner: that
 # signature is NOT distributable and only proves the pipeline. No secret is
 # stored in GitHub and no artifact is published outside the workflow run.
