@@ -1,6 +1,8 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -58,6 +60,19 @@ class ApprovalDialogUiTest {
                 "$forbidden must never be shown",
                 composeRule.onAllNodesWithText(forbidden).fetchSemanticsNodes().isEmpty()
             )
+        }
+    }
+
+    @Test
+    fun dialogDrawsAnOpaqueSurfaceBehindItsContent() {
+        // BasicAlertDialog has no container of its own; without the surface
+        // the prompt would be drawn transparently over the chat behind it.
+        setDialog(fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }))
+
+        val pixels = composeRule.onNodeWithTag(TAG_SURFACE).captureToImage().toPixelMap()
+        // Top padding row (above the title) and the centre: background only.
+        listOf(pixels.width / 2 to 4, pixels.width / 2 to pixels.height / 2).forEach { (x, y) ->
+            assertEquals("surface pixel ($x,$y) must be opaque", 1f, pixels[x, y].alpha, 0.001f)
         }
     }
 
@@ -286,6 +301,7 @@ class ApprovalDialogUiTest {
         const val ERROR_GENERIC = "Die Entscheidung konnte nicht übermittelt werden."
         const val ALREADY_RESOLVED = "Diese Freigabe wurde bereits beantwortet."
 
+        const val TAG_SURFACE = "approval_surface"
         const val TAG_DENY = "approval_deny"
         const val TAG_ALLOW = "approval_allow"
 

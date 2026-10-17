@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -142,65 +144,74 @@ fun ApprovalDialog(
         // No outside-tap confirmation: the dialog is non-dismissable.
         onDismissRequest = {}
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Text(
-                text = stringResource(R.string.approval_title),
-                style = MaterialTheme.typography.titleLarge
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            FieldLabel(label = stringResource(R.string.approval_action_label))
-            Text(
-                text = stringResource(R.string.approval_action_value),
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            FieldLabel(label = stringResource(R.string.approval_reason_label))
-            Text(
-                text = stringResource(R.string.approval_safe_description),
-                style = MaterialTheme.typography.bodyLarge
-            )
-            when (outcome) {
-                ApprovalOutcome.Failed -> {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.approval_error_generic),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                ApprovalOutcome.AlreadyResolved -> {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.approval_already_resolved),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                null -> Unit
-            }
-            if (inFlight) {
-                Spacer(modifier = Modifier.height(8.dp))
+        // BasicAlertDialog draws no container of its own: without this
+        // surface the dialog text would sit transparently over the chat.
+        Surface(
+            shape = AlertDialogDefaults.shape,
+            color = AlertDialogDefaults.containerColor,
+            tonalElevation = AlertDialogDefaults.TonalElevation,
+            modifier = Modifier.testTag(TAG_SURFACE)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
                 Text(
-                    text = stringResource(R.string.approval_in_flight),
-                    style = MaterialTheme.typography.bodyMedium
+                    text = stringResource(R.string.approval_title),
+                    style = MaterialTheme.typography.titleLarge
                 )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            // Deny first (filled, primary, safe default), then Allow
-            // (secondary, the only conscious approval path).
-            Row {
-                Button(
-                    onClick = { decide(RunApprovalChoice.DENY) },
-                    enabled = buttonsEnabled,
-                    modifier = Modifier.testTag(TAG_DENY)
-                ) {
-                    Text(text = stringResource(R.string.approval_deny))
+                Spacer(modifier = Modifier.height(16.dp))
+                FieldLabel(label = stringResource(R.string.approval_action_label))
+                Text(
+                    text = stringResource(R.string.approval_action_value),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FieldLabel(label = stringResource(R.string.approval_reason_label))
+                Text(
+                    text = stringResource(R.string.approval_safe_description),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                when (outcome) {
+                    ApprovalOutcome.Failed -> {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.approval_error_generic),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    ApprovalOutcome.AlreadyResolved -> {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.approval_already_resolved),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    null -> Unit
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                TextButton(
-                    onClick = { decide(RunApprovalChoice.ONCE) },
-                    enabled = buttonsEnabled,
-                    modifier = Modifier.testTag(TAG_ALLOW)
-                ) {
-                    Text(text = stringResource(R.string.approval_allow))
+                if (inFlight) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.approval_in_flight),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                // Deny first (filled, primary, safe default), then Allow
+                // (secondary, the only conscious approval path).
+                Row {
+                    Button(
+                        onClick = { decide(RunApprovalChoice.DENY) },
+                        enabled = buttonsEnabled,
+                        modifier = Modifier.testTag(TAG_DENY)
+                    ) {
+                        Text(text = stringResource(R.string.approval_deny))
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    TextButton(
+                        onClick = { decide(RunApprovalChoice.ONCE) },
+                        enabled = buttonsEnabled,
+                        modifier = Modifier.testTag(TAG_ALLOW)
+                    ) {
+                        Text(text = stringResource(R.string.approval_allow))
+                    }
                 }
             }
         }
@@ -222,5 +233,6 @@ private enum class ApprovalOutcome {
     AlreadyResolved
 }
 
+private const val TAG_SURFACE = "approval_surface"
 private const val TAG_DENY = "approval_deny"
 private const val TAG_ALLOW = "approval_allow"
