@@ -36,7 +36,7 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           # The action's default `packages: tools platform-tools` is broken:
           # the legacy `tools` package was removed from the SDK repository, so
@@ -93,7 +93,7 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           # The app pins buildToolsVersion 36.1.0; install it explicitly so the
           # build does not depend on AGP's implicit SDK auto-download.
@@ -164,7 +164,7 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0'
 
