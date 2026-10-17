@@ -1,155 +1,154 @@
-# Architektur (Ist-Stand)
+# Architecture (current state)
 
-Dieses Dokument beschreibt die **tatsächlich implementierte** Architektur von
-Orsik Relay und markiert ausdrücklich die Stellen, an denen der
-ursprüngliche (interne) Gesamtplan (Soll) vom Code (Ist) abweicht. Maßgeblich ist
-der Code; Abweichungen sind teils bewusst, teils offen.
+This document describes the **actually implemented** architecture of
+Orsik Relay and explicitly marks the places where the
+original (internal) overall plan (target) deviates from the code (actual). The
+code is authoritative; deviations are partly deliberate, partly open.
 
-Grundlegend überarbeitet für `v0.1.0-alpha.6`. Spätere Bausteine – Mobile Bridge,
-Run-Lease nach Process Death, Release-Pipeline – beschreiben
+Substantially revised for `v0.1.0-alpha.6`. Later components – Mobile Bridge,
+run lease after process death, release pipeline – are described in
 `docs/bridge-security.md`, `docs/mobile-wire-contract.md`, `docs/bridge-e2e.md`
-und `docs/release.md`.
+and `docs/release.md`.
 
-## 1. Modul- und Build-Struktur
+## 1. Module and build structure
 
-- **Ein einzelnes Gradle-Modul** `app` (Namespace `io.github.excludebarrier.orsikrelay`).
-  Der ursprüngliche Plan sah Multi-Modul (`core/`, `data/`, `feature/`) vor und
-  erlaubte ausdrücklich den Start als einzelnes `app`-Modul. Paketgrenzen
-  bleiben die Schichtgrenzen.
-- Kein DI-Framework. Der produktive Graph wird von Hand in
-  `di/AppDependencies.kt` gebaut und prozessweit in `AppDependenciesHolder`
-  gecacht. `HermesNavHost` löst bei Bedarf `AppDependenciesHolder.get(...)` auf;
-  Test-Injektionen umgehen den Cache und bauen einen isolierten Graphen.
+- **A single Gradle module** `app` (namespace `io.github.excludebarrier.orsikrelay`).
+  The original plan envisioned multi-module (`core/`, `data/`, `feature/`) and
+  explicitly allowed starting as a single `app` module. Package boundaries
+  remain the layer boundaries.
+- No DI framework. The production graph is built by hand in
+  `di/AppDependencies.kt` and cached process-wide in `AppDependenciesHolder`.
+  `HermesNavHost` resolves `AppDependenciesHolder.get(...)` as needed;
+  test injections bypass the cache and build an isolated graph.
 - Wrapper `9.8.1`, Kotlin `2.4.21`, AGP `9.3.1`, Compose BOM `2025.12.00`,
   `minSdk 26`, `compileSdk 37`, `targetSdk 36`, JDK 17.
 
-## 2. Schichten
+## 2. Layers
 
 ```
 Compose UI  →  ViewModel  →  Domain-Seams (Use Cases)  →  Data-Repositories  →  REST/SSE + Platform/Security
 ```
 
-- `ui/` kennt keine Netzwerk-DTOs; `ChatViewModel` hält einen unveränderlichen
+- `ui/` knows no network DTOs; `ChatViewModel` holds an immutable
   `ChatUiState`.
-- `domain/` enthält geschlossene Ergebnis-/Fehlertypen und Seams
+- `domain/` contains closed result/error types and seams
   (`RunStopRequester`, `RunSteerRequester`, `RunApprovalRequester`, …).
-- `data/` implementiert die Seams gegen `network/` und die Stores.
-- `network/` enthält je Endpunkt einen Client plus `SseFrameParser` und
+- `data/` implements the seams against `network/` and the stores.
+- `network/` contains one client per endpoint plus `SseFrameParser` and
   `ChatStreamEventPipeline`.
-- `security/credential/` (Keystore) und `platform/` (Attachment, Notification,
-  Foreground-Service) sind die Android-Adapter.
+- `security/credential/` (Keystore) and `platform/` (attachment, notification,
+  foreground service) are the Android adapters.
 
-## 3. Abweichungen Soll → Ist
+## 3. Deviations target → actual
 
-| Plan (Soll) | Ist | Bewertung |
+| Plan (target) | Actual | Assessment |
 |---|---|---|
-| Multi-Modul `core/`/`data/`/`feature/` | Ein `app`-Modul | bewusst (der Plan erlaubte es) |
-| Room für Profile/Cache/Drafts | SharedPreferences mit versionierten Keys | bewusst: Room ist keine Dependency; das Repo-Muster ist SharedPreferences + versionierter Key |
-| DataStore für Drafts | SharedPreferences (`chat.draft.v1.*`) | bewusst, s. o. |
-| `docs/security-threat-model.md`, `docs/testing.md`, `docs/release-checklist.md` | nicht vorhanden | offen |
-| Network Security Config (Datei) | `android:usesCleartextTraffic="false"` + HTTPS-only im Client | bewusst/minimal: Klartext ist ohnehin blockiert |
-| Zertifikats-Pinning | nicht implementiert | offen (Plan: „optional nach stabiler Strategie“) |
-| Release-Signing / AAB / CI | Signing-Konfiguration über Umgebungsvariablen vorhanden (`docs/release.md`); CI vorhanden (`​.github/workflows/android.yml`: Unit-Tests, Lint, `assembleDebug`, Instrumented API 36) | Signing/AAB vorhanden; produktiver Key und Pipeline offen |
-| `HermesApplication.kt` | nicht vorhanden (Application-Klasse unnötig) | bewusst |
+| Multi-module `core/`/`data/`/`feature/` | One `app` module | deliberate (the plan allowed it) |
+| Room for profiles/cache/drafts | SharedPreferences with versioned keys | deliberate: Room is not a dependency; the repo pattern is SharedPreferences + versioned key |
+| DataStore for drafts | SharedPreferences (`chat.draft.v1.*`) | deliberate, see above |
+| `docs/security-threat-model.md`, `docs/testing.md`, `docs/release-checklist.md` | not present | open |
+| Network Security Config (file) | `android:usesCleartextTraffic="false"` + HTTPS-only in the client | deliberate/minimal: cleartext is blocked anyway |
+| Certificate pinning | not implemented | open (plan: “optional after a stable strategy”) |
+| Release signing / AAB / CI | signing configuration via environment variables present (`docs/release.md`); CI present (`.github/workflows/android.yml`: unit tests, lint, `assembleDebug`, instrumented API 36) | signing/AAB present; productive key and pipeline open |
+| `HermesApplication.kt` | not present (application class unnecessary) | deliberate |
 
-## 4. Bekannte, bewusst getragene Grenzen
+## 4. Known, deliberately accepted limits
 
-- **Prozess-Tod-Recovery nur als Run-Lease.** Die Live-Run-Bindung
-  (`AppDependenciesHolder`, `RunSessionController.ActiveRun`) überlebt
-  Activity-/ViewModel-Recreation innerhalb desselben Prozesses. Ein
-  Prozess-Kill beendet den SSE-Socket, beweist aber **nicht** ein terminales
-  Run-Ende auf dem Server (ein Mobile-v1-Run mit
-  `X-Hermes-Interactive-Approvals`-Opt-in läuft unabhängig vom Socket weiter,
-  siehe §5). Deshalb persistiert der Controller für einen **vom Server
-  bestätigten** Run genau ein minimales Lease (`profileId`, `sessionId`,
-  `runId`; `SharedPreferencesRunLeaseStore`, kein Text, keine Tool-Daten,
-  keine Credentials). Nach einem Neustart kommt der Slot als `UNCERTAIN`
-  zurück: kein Foreground-Service, kein Re-Attach, **kein zweiter POST**;
-  Senden bleibt gesperrt, bis die bestehende manuelle Reconciliation
-  (`GET /v1/runs/{run_id}`) ein terminales Ende beweist. Solange das Lease
-  noch gelesen wird, meldet `startTurn` einen Konflikt. Ein Lease eines
-  gelöschten Profils wird verworfen (ohne Credential nicht abgleichbar); ein
-  unlesbarer Store zählt als „kein Lease“. Grenzen: Ein Run, dessen
-  `RunStarted` vor dem Prozess-Tod noch nicht ankam, hat keine `runId` und
-  wird nicht wiederhergestellt; ein automatisches `after_seq`-Re-Attach nach
-  Prozess-Tod gibt es nicht.
-- **Test-Seam im Produktionscode.** `MainActivity.sessionPageSourceForTests`
-  (`@VisibleForTesting`, Default `null`) überspringt in `androidTest` die
-  Sessionliste. In Produktion ist sie immer `null`; der Seam ist bewusst und als
-  vertretbar dokumentiert, weil ein realer Activity-Recreation-Test sonst einen
-  echten Netzwerkpfad bräuchte.
-- **Serververtrag nicht öffentlich (Mobile-v1-Erweiterungen).** Die
-  device- und reconnect-spezifischen Mobile-v1-Erweiterungen
-  (`device_credentials`, `protocol_version`-Negotiation samt Capability
-  `session_chat_interactive_approvals`, Session-Run-Re-Attach mit `after_seq`)
-  sind **nicht** in der öffentlichen Hermes-Version enthalten. Für eine frische,
-  unveränderte offizielle Hermes-Installation liefert sie die **Orsik Mobile
-  Bridge** als Sidecar (`docs/bridge-installation.md`, `docs/bridge-e2e.md`); der
-  Core bleibt unpatched. Die darunterliegenden Core-Funktionen (Session-Chat/
-  Stream, interaktive Session-Approvals `approval.request`) sind vorhanden und
-  werden durchgereicht bzw. auf `once`/`deny` verengt; ob der Core multimodale
-  Content-Parts verarbeitet, ist auf dem Bridge-Pfad nicht verifiziert. Der
-  Client-Opt-in-Header `X-Hermes-Interactive-Approvals` des privaten
-  Mobile-v1-Stands wird auf dem Bridge-Pfad nicht benötigt (der Core ist
-  interaktiv, sobald der Stream-Notifier registriert ist). Ohne Bridge oder
-  einen gleichwertigen Serverstand ist die App nicht nutzbar. Die
-  Veröffentlichung des Serververtrags im offiziellen Core (Upstream) ist
-  Voraussetzung für einen allgemein nutzbaren Release ohne Bridge (siehe
+- **Process-death recovery only as a run lease.** The live run binding
+  (`AppDependenciesHolder`, `RunSessionController.ActiveRun`) survives
+  activity/ViewModel recreation within the same process. A
+  process kill terminates the SSE socket but does **not** prove a terminal
+  run end on the server (a mobile-v1 run with the
+  `X-Hermes-Interactive-Approvals` opt-in continues independently of the socket,
+  see §5). Therefore the controller persists exactly one minimal lease for a
+  **server-confirmed** run (`profileId`, `sessionId`,
+  `runId`; `SharedPreferencesRunLeaseStore`, no text, no tool data,
+  no credentials). After a restart the slot comes back as `UNCERTAIN`:
+  no foreground service, no re-attach, **no second POST**;
+  sending remains blocked until the existing manual reconciliation
+  (`GET /v1/runs/{run_id}`) proves a terminal end. As long as the lease
+  is still being read, `startTurn` reports a conflict. A lease of a
+  deleted profile is discarded (cannot be reconciled without a credential); an
+  unreadable store counts as “no lease”. Limits: a run whose
+  `RunStarted` had not yet arrived before process death has no `runId` and
+  is not restored; there is no automatic `after_seq` re-attach after
+  process death.
+- **Test seam in production code.** `MainActivity.sessionPageSourceForTests`
+  (`@VisibleForTesting`, default `null`) skips the
+  session list in `androidTest`. In production it is always `null`; the seam is deliberate and
+  documented as acceptable, because a real activity recreation test would otherwise need a
+  real network path.
+- **Server contract not public (mobile-v1 extensions).** The
+  device- and reconnect-specific mobile-v1 extensions
+  (`device_credentials`, `protocol_version` negotiation including the capability
+  `session_chat_interactive_approvals`, session-run re-attach with `after_seq`)
+  are **not** contained in the public Hermes version. For a fresh,
+  unmodified official Hermes installation, the **Orsik Mobile
+  Bridge** provides them as a sidecar (`docs/bridge-installation.md`, `docs/bridge-e2e.md`); the
+  core remains unpatched. The underlying core functions (session chat/
+  stream, interactive session approvals `approval.request`) are present and
+  are passed through or narrowed to `once`/`deny`; whether the core processes multimodal
+  content parts is not verified on the bridge path. The
+  client opt-in header `X-Hermes-Interactive-Approvals` of the private
+  mobile-v1 build is not needed on the bridge path (the core is
+  interactive as soon as the stream notifier is registered). Without the bridge or
+  an equivalent server build, the app is not usable. The
+  publication of the server contract in the official core (upstream) is
+  a prerequisite for a generally usable release without the bridge (see
   `README.md`).
 
-## 5. Run-Lifecycle-Invarianten
+## 5. Run lifecycle invariants
 
-Orsik hat genau **einen** app-weiten Run-Slot. Seine Freigabe beruht
-ausschließlich auf **autoritativer** Server-Information; ein clientseitiger
-Transport-, Timeout-, TLS- oder Protokollfehler darf niemals als
-Server-Terminal gelten.
+Orsik has exactly **one** app-wide run slot. Its release is based
+exclusively on **authoritative** server information; a client-side
+transport, timeout, TLS, or protocol error must never count as a
+server terminal.
 
-Klassifikation eines fehlgeschlagenen Turns (`RunTermination`, geschlossen):
+Classification of a failed turn (`RunTermination`, closed):
 
-- **`AuthoritativeTerminal`** – der Server hat das Run-Ende nachweislich
-  bestätigt: `run.completed` (Erfolg) oder der servereigene `error`-Frame
-  (`ChatStreamError.ServerError`, immer gefolgt von `done`; der Server setzt
-  dabei einen terminalen Status). Nur hier wird der Slot freigegeben.
-- **`TransportOutcomeUnknown`** – bestätigter Run + lokaler
-  Transport-/Protokollfehler, **oder** unbestätigter Start nach dem initialen
+- **`AuthoritativeTerminal`** – the server has demonstrably
+  confirmed the run end: `run.completed` (success) or the server's own `error` frame
+  (`ChatStreamError.ServerError`, always followed by `done`; the server sets
+  a terminal status in the process). Only here is the slot released.
+- **`TransportOutcomeUnknown`** – confirmed run + local
+  transport/protocol error, **or** unconfirmed start after the initial
   POST (`Network`/`Timeout`/`Tls`/`IncompatibleApi`/5xx `ServerUnavailable`):
-  Der POST kann serverseitig bereits akzeptiert sein. Die Ownership bleibt
-  erhalten (`ActiveRun.Status.UNCERTAIN`), es wird **kein** zweiter POST
-  gesendet, kein impliziter Server-Stop ausgelöst und keine automatische
-  Approval-Aktion ausgeführt. Der FGS wird gestoppt (kein aktiver Transport),
-  die logische Ownership bleibt davon getrennt bestehen.
-- **`LocalRequestRejected`** – der Start wurde nachweislich abgelehnt, bevor
-  ein Run entstand (lokale Validierung oder eine 3xx/4xx-HTTP-Antwort; **kein
-  5xx**, das ein Gateway nach einer bereits erfolgten Admission liefern kann).
-  Der Slot wird freigegeben; ein neuer, bewusster Turn ist möglich.
+  The POST may already have been accepted server-side. Ownership is
+  retained (`ActiveRun.Status.UNCERTAIN`), **no** second POST is
+  sent, no implicit server stop is triggered, and no automatic
+  approval action is performed. The FGS is stopped (no active transport),
+  logical ownership remains separate from it.
+- **`LocalRequestRejected`** – the start was demonstrably rejected before
+  a run came into existence (local validation or a 3xx/4xx HTTP response; **no
+  5xx**, which a gateway may deliver after admission has already occurred).
+  The slot is released; a new, deliberate turn is possible.
 
-Weitere Invarianten:
+Further invariants:
 
-- **`RunStopResult.Accepted` ist nicht terminal.** Nur
-  `AlreadyTerminal` löst die autoritative Freigabe (`cancelTurn`) aus; der
-  Stream läuft bis zu seinem eigenen Terminal weiter.
-- **Lokale Widersprüche (doppelte Approval-Nachricht) geben den Slot nicht
-  frei.** `RunSessionController.markTurnUncertain` verwirft den toten lokalen
-  Stream, hält aber die Ownership; es wird niemals automatisch `once`/`deny`
-  gesendet.
-- **Wiederherstellung ist explizit und lesend.** Ein bestätigter,
-  unbestimmter Run kann manuell über `GET /v1/runs/{run_id}` abgeglichen
-  werden (`RunStatusRequester`): ein terminaler Server-Status gibt den Slot
-  autoritativ frei und lädt den Verlauf neu; `running`/`queued`/
-  `waiting_for_approval`/`stopping` oder ein Lesefehler ändern nichts. Ohne
-  bestätigte Run-ID gibt es **keinen** sicheren Abgleich; der Zustand wird
-  ehrlich als unbestimmt gezeigt (siehe §6, Serververtrags-Lücke).
-- **Keine automatische Freigabe durch `cancelTurn`-Semantik allein.** Der
-  Collector-`finally` setzt den Slot nicht mehr zurück; nur die
-  Terminal-Handler, `cancelTurn` (autoritativ), `markTurnUncertain`,
-  `confirmTerminalForUncertainRun` und `close` ändern ihn.
+- **`RunStopResult.Accepted` is not terminal.** Only
+  `AlreadyTerminal` triggers the authoritative release (`cancelTurn`); the
+  stream continues until its own terminal.
+- **Local contradictions (duplicate approval message) do not release the slot.**
+  `RunSessionController.markTurnUncertain` discards the dead local
+  stream but retains ownership; `once`/`deny` is never sent automatically.
+- **Recovery is explicit and read-only.** A confirmed,
+  uncertain run can be reconciled manually via `GET /v1/runs/{run_id}`
+  (`RunStatusRequester`): a terminal server status releases the slot
+  authoritatively and reloads the history; `running`/`queued`/
+  `waiting_for_approval`/`stopping` or a read error change nothing. Without a
+  confirmed run ID there is **no** safe reconciliation; the state is
+  honestly shown as undetermined (see §6, server contract gap).
+- **No automatic release through `cancelTurn` semantics alone.** The
+  collector `finally` no longer resets the slot; only the
+  terminal handlers, `cancelTurn` (authoritative), `markTurnUncertain`,
+  `confirmTerminalForUncertainRun`, and `close` change it.
 
-## 6. Sicherheitsinvarianten (verifiziert im Code)
+## 6. Security invariants (verified in code)
 
-- Credentials nur im Android Keystore (`AndroidKeystoreCredentialStore`,
-  AES-256-GCM, Schlüssel pro Profil, versioniertes Payload).
-- `allowBackup=false`, kein Klartext, keine TLS-Ausnahmen, keine Redirects,
-  keine Retry schreibender Requests.
-- Approvals ausschließlich `once`/`deny`, nie automatisch.
-- Fehlerflächen sind geschlossen und ohne Body-/URL-/Key-Echo.
-- Tool-Aktivität wird redigiert (keine Kommandos/Pfade/URLs/Tool-Ausgaben).
+- Credentials only in the Android Keystore (`AndroidKeystoreCredentialStore`,
+  AES-256-GCM, key per profile, versioned payload).
+- `allowBackup=false`, no cleartext, no TLS exceptions, no redirects,
+  no retry of writing requests.
+- Approvals exclusively `once`/`deny`, never automatically.
+- Error surfaces are closed and contain no body/URL/key echo.
+- Tool activity is redacted (no commands/paths/URLs/tool outputs).

@@ -58,7 +58,7 @@ Out of scope:
 ## Security model
 
 The threat model, trust boundaries and known residual risks are documented in
-`docs/bridge-security.md` (German). Key properties:
+[`docs/bridge-security.md`](docs/bridge-security.md). Key properties:
 
 - the Hermes API key never leaves the server; phones only hold revocable
   device credentials limited to `chat`, `runs` and `approvals`,

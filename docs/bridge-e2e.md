@@ -1,24 +1,24 @@
-# Orsik Mobile Bridge – End-to-End-Nachweis
+# Orsik Mobile Bridge – End-to-End Proof
 
-Stand: 2026-10-10. Alle Zahlen sind real auf build-host ausgeführt.
+Status: 2026-10-10. All numbers were actually executed on build-host.
 
-## 1. Aufbau
+## 1. Setup
 
-- **Offizieller Core:** `NousResearch/hermes-agent` `f86276d2`, isolierte
-  Installation (`~/hermes-official-src`, venv Python 3.14), `HERMES_HOME`
-  `~/hermes-official-home`, `api_server` auf `127.0.0.1:8899`. Gestartet als
-  transiente User-Unit `p13-gw.service`; unveränderter Code.
-- **Bridge:** aus dem Quellstand (`uv`/venv), Loopback `127.0.0.1:9842`,
-  `BRIDGE_UPSTREAM=http://127.0.0.1:8899`, persistenter Store
+- **Official core:** `NousResearch/hermes-agent` `f86276d2`, isolated
+  installation (`~/hermes-official-src`, Python 3.14 venv), `HERMES_HOME`
+  `~/hermes-official-home`, `api_server` on `127.0.0.1:8899`. Started as a
+  transient user unit `p13-gw.service`; unmodified code.
+- **Bridge:** from the source state (`uv`/venv), loopback `127.0.0.1:9842`,
+  `BRIDGE_UPSTREAM=http://127.0.0.1:8899`, persistent store
   `state.db`.
-- **Privates HTTPS:** `tailscale serve --bg --https=8443 http://127.0.0.1:9842`
-  (tailnet-only, gültiges Zertifikat, kein Funnel, kein öffentlicher Port). Die
-  bestehende `:443`-Zuordnung blieb unangetastet.
-- **Android:** Emulator `Hermes_API_36` (API 36), App-Debug-Build.
+- **Private HTTPS:** `tailscale serve --bg --https=8443 http://127.0.0.1:9842`
+  (tailnet-only, valid certificate, no Funnel, no public port). The
+  existing `:443` mapping remained untouched.
+- **Android:** emulator `Hermes_API_36` (API 36), app debug build.
 
-## 2. Live-Akzeptanz (`bridge/tests/acceptance_live.py`) — 37/37 grün
+## 2. Live acceptance (`bridge/tests/acceptance_live.py`) — 37/37 green
 
-Ausgeführt auf build-host mit dem Bridge-venv gegen die laufende Bridge:
+Executed on build-host with the bridge venv against the running bridge:
 
 ```
 PASS health_200_ok / operator_issues_code / pair_201 / pair_permissions
@@ -35,15 +35,15 @@ PASS self_revoke_200 / revoked_token_401
 SUMMARY: 37/37
 ```
 
-Bedeutung: Pairing/Single-Use, Capability-Negotiation (device_credentials +
-interaktive Approvals exakt v1), Approval-Eskalationsschutz lokal, vollständiger
-Chat-SSE-Lebenszyklus inkl. terminalem `run.completed`, **Re-Attach auf dieselbe
-`run_id` mit Replay**, unbekannter Run `404`, durabler Self-Revoke.
+Meaning: pairing/single-use, capability negotiation (device_credentials +
+interactive approvals exactly v1), approval escalation protection local, complete
+chat SSE lifecycle incl. terminal `run.completed`, **re-attach to the same
+`run_id` with replay**, unknown run `404`, durable self-revoke.
 
-## 3. Realer Android-Live-Test (`LiveBridgeE2ETest`) — 1/1 grün
+## 3. Real Android live test (`LiveBridgeE2ETest`) — 1/1 green
 
-Ausgeführt auf `emulator-5554` mit Instrumentation-Argumenten
-(`liveBaseUrl=https://<bridge-host>.<tailnet>.ts.net:8443`, frischer `livePairingCode`):
+Executed on `emulator-5554` with instrumentation arguments
+(`liveBaseUrl=https://<bridge-host>.<tailnet>.ts.net:8443`, fresh `livePairingCode`):
 
 ```
 Starting 1 tests on Hermes_API_36(AVD) - 16
@@ -51,47 +51,47 @@ Finished 1 tests on Hermes_API_36(AVD) - 16
 BUILD SUCCESSFUL
 ```
 
-Der Test paart und negotiiert **mit den echten App-Clients** (`HermesDevicePairClient`,
-`HermesConnectionClient`) über HTTPS zur Bridge vor dem offiziellen Core und
-prüft `device_credentials` + `session_chat_interactive_approvals`.
+The test pairs and negotiates **with the real app clients** (`HermesDevicePairClient`,
+`HermesConnectionClient`) over HTTPS to the bridge in front of the official core and
+checks `device_credentials` + `session_chat_interactive_approvals`.
 
-Der Test trägt `@LiveBridge` und ist aus der Regulärsuite und CI ausgeschlossen
-(`notAnnotation=…CaptureOnly,…LiveBridge`); ohne Argumente skippt die JUnit-
-Annahme. Er läuft nur explizit gegen den Live-Stack.
+The test carries `@LiveBridge` and is excluded from the regular suite and CI
+(`notAnnotation=…CaptureOnly,…LiveBridge`); without arguments the JUnit
+assumption skips. It runs only explicitly against the live stack.
 
-## 4. Android-Regression (build-host)
+## 4. Android regression (build-host)
 
-- `:app:testDebugUnitTest --rerun-tasks`: **823 Tests, 0 Fehler/Errors/Skips**.
+- `:app:testDebugUnitTest --rerun-tasks`: **823 tests, 0 failures/errors/skips**.
 - `:app:lintDebug`, `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`:
   BUILD SUCCESSFUL.
 - `:app:connectedDebugAndroidTest` (API 36, `notAnnotation=…CaptureOnly,…LiveBridge`):
-  **247 Tests, 1 dokumentierter Skip, 0 Fehler — Voll-Suite grün.** Zwei
-  vorangegangene volle Läufe trafen je den bekannten IME-/Landscape-Flake
+  **247 tests, 1 documented skip, 0 failures — full suite green.** Two
+  preceding full runs each hit the known IME/landscape flake
   (`ChatLandscapeComposerUiTest.composerStaysAboveTheKeyboardWithAttachmentAndMultilineDraft`);
-  die Klasse isoliert: **12/12 grün**. Der Flake ist umgebungsbedingt
-  (IME-Layout); kein
-  Produktcode geändert.
-- Bridge-unit: **100 Tests, 0 Fehler**.
+  the class in isolation: **12/12 green**. The flake is environmental
+  (IME layout); no
+  product code changed.
+- Bridge unit: **100 tests, 0 failures**.
 
-## 5. Nicht verifiziert
+## 5. Not verified
 
-- Echter Assistant-Inhalt (kein Provider konfiguriert; keine Modell-/Provider-
-  Änderung).
-- Positiver interaktiver Approval `once`/`deny` mit echtem Tool-Aufruf (ohne
-  Provider keine Pending-Approval); Negativpfade live grün.
-- UI-Automation der Onboarding-/Lifecycle-/Bild-Flows.
+- Real assistant content (no provider configured; no model/provider
+  change).
+- Positive interactive approval `once`/`deny` with a real tool call (without a
+  provider, no pending approval); negative paths green live.
+- UI automation of the onboarding/lifecycle/image flows.
 
-## 6. Live-Onboarding-UI-E2E
+## 6. Live onboarding UI E2E
 
-`LiveBridgeOnboardingE2ETest` fährt den vollständigen Onboarding-Weg über die
-**echten Compose-Screens und die Produktions-`AppDependencies`** (kein direkter
-Client-Aufruf): Deep Link `orsik://pair?server=…&code=…` an `MainActivity` →
-Bestätigung im Onboarding → HTTPS-Pairing → Keystore-/Metadaten-Persistenz des
-Device-Credentials → Sessions-Ansicht des neuen Profils → positive
-Capability-Negotiation. Der Test trägt `@LiveBridge`, ist aus der Regulärsuite
-und CI ausgeschlossen und skippt ohne Argumente über die JUnit-Annahme.
+`LiveBridgeOnboardingE2ETest` drives the complete onboarding path through the
+**real Compose screens and the production `AppDependencies`** (no direct
+client call): deep link `orsik://pair?server=…&code=…` to `MainActivity` →
+confirmation in onboarding → HTTPS pairing → Keystore/metadata persistence of the
+device credential → sessions view of the new profile → positive
+capability negotiation. The test carries `@LiveBridge`, is excluded from the regular suite
+and CI, and skips without arguments via the JUnit assumption.
 
-Aufruf gegen den Live-Stack (frischer `livePairingCode`):
+Invocation against the live stack (fresh `livePairingCode`):
 
 ```
 ./gradlew :app:connectedDebugAndroidTest \
@@ -100,40 +100,39 @@ Aufruf gegen den Live-Stack (frischer `livePairingCode`):
   -Pandroid.testInstrumentationRunnerArguments.livePairingCode=<frischer-code>
 ```
 
-**Live-Lauf 2026-10-16 grün:** Emulator `ci_default` (API 36) gegen
-`build-host` (Tailscale-HTTPS :8443 → Bridge `or-night-integration` → offizieller
-Core `f86276d2`), je ein frischer Code: `LiveBridgeOnboardingE2ETest`
-1/1 (0 Skip, 4,5 s) und `LiveBridgeE2ETest` 1/1 (0 Skip). Ohne Argumente:
-1 Skip, 0 Fehler.
+**Live run 2026-10-16 green:** emulator `ci_default` (API 36) against
+`build-host` (Tailscale HTTPS :8443 → bridge `or-night-integration` → official
+core `f86276d2`), one fresh code each: `LiveBridgeOnboardingE2ETest`
+1/1 (0 skips, 4.5 s) and `LiveBridgeE2ETest` 1/1 (0 skips). Without arguments:
+1 skip, 0 failures.
 
-## 7. Live-Chat-UI-E2E
+## 7. Live chat UI E2E
 
-Eigener instrumentierter Test: `LiveBridgeChatE2ETest` (`@LiveBridge`, aus der
-Regulärsuite und CI ausgeschlossen wie `LiveBridgeE2ETest`). Er fährt die
-ECHTE `MainActivity`, die echten Compose-Screens und den Produktions-Graph
-(`AppDependenciesHolder`) gegen den Live-Stack und deckt den providerlosen
-Teil des Live-Chats ab:
+Its own instrumented test: `LiveBridgeChatE2ETest` (`@LiveBridge`, excluded from the
+regular suite and CI like `LiveBridgeE2ETest`). It drives the
+REAL `MainActivity`, the real Compose screens, and the production graph
+(`AppDependenciesHolder`) against the live stack and covers the providerless
+part of the live chat:
 
-1. Vorbedingung ohne UI-Onboarding: alle gespeicherten Profile über
-   `profileAdmin` löschen, dann das Profil über den Produktionspfad pairen
-   (`DevicePairingCoordinator` aus `AppDependencies`), die aktive Auswahl und
-   die verifizierte Approval-Capability persistieren (wie ein erfolgreiches
-   Onboarding). Nach dem Lauf wird das erzeugte Profil wieder gelöscht.
-2. Neue Session über die echte Sessions-UI (FAB + „Neue Session"-Dialog).
-3. Eine Nachricht über das echte Composer-Feld senden.
-4. Bounded warten (kein `Thread.sleep`) auf den TERMINALEN Run-Zustand: eine
-   Assistant-Nachricht ist vorhanden und der Composer ist wieder sendebereit.
-   Der Assistant-INHALT wird NICHT geprüft.
-5. Genau EINE User-Nachricht mit dem gesendeten Text im Transcript.
-6. `scenario.recreate()`: dasselbe Transcript ohne erneuten Send.
-7. Zusätzlich liest der Test den Transcript über den Produktionspfad
-   (`messageHistorySource`) und prüft genau eine User-Nachricht mit dem Text.
+1. Precondition without UI onboarding: delete all stored profiles via
+   `profileAdmin`, then pair the profile via the production path
+   (`DevicePairingCoordinator` from `AppDependencies`), persist the active selection and
+   the verified approval capability (like a successful
+   onboarding). After the run, the created profile is deleted again.
+2. New session via the real sessions UI (FAB + **Neue Session** (New session) dialog).
+3. Send a message via the real composer field.
+4. Bounded wait (no `Thread.sleep`) for the TERMINAL run state: an
+   assistant message is present and the composer is ready to send again.
+   The assistant CONTENT is NOT checked.
+5. Exactly ONE user message with the sent text in the transcript.
+6. `scenario.recreate()`: the same transcript without sending again.
+7. Additionally, the test reads the transcript via the production path
+   (`messageHistorySource`) and checks exactly one user message with the text.
 
-Der gesendete Text ist pro Lauf eindeutig (UUID-Suffix), damit Schritt 5/7
-nicht mit Nachrichten früherer Läufe kollidieren.
+The sent text is unique per run (UUID suffix) so that step 5/7
+does not collide with messages from earlier runs.
 
-Aufruf (explizit gegen den Live-Stack; `<tailnet>` und `<frischer-code>`
-einsetzen):
+Invocation (explicitly against the live stack; substitute `<tailnet>` and `<frischer-code>`):
 
 ```
 ./gradlew :app:connectedDebugAndroidTest \
@@ -142,78 +141,78 @@ einsetzen):
   -Pandroid.testInstrumentationRunnerArguments.livePairingCode=<frischer-code>
 ```
 
-Ohne `liveBaseUrl`/`livePairingCode` skippt die JUnit-Annahme.
+Without `liveBaseUrl`/`livePairingCode` the JUnit assumption skips.
 
-Abgrenzung: Stop/Steer und das Trennen mit identischer `run_id` setzen einen
-LANGE laufenden Turn voraus und damit einen Modellprovider. Sie sind
-NICHT Teil dieses Tests und werden hier nicht geprüft.
+Scope: stop/steer and disconnecting with an identical `run_id` require a
+LONG-running turn and thus a model provider. They are
+NOT part of this test and are not checked here.
 
-**Live-Lauf 2026-10-16** (Emulator `ci_default` API 36 → `build-host`, Core
-`f86276d2` ohne Provider): Schritte 1–5 **grün** (Bridge-Log: genau ein
-`POST …/chat/stream` 200). Schritt 6 **scheitert erwartbar**: nach der
-Recreation lädt die App `GET …/messages` neu, und der providerlose Core
-persistiert keine Nachrichten (leere History vor und nach dem Turn; 0 Messages
-in allen Live-Sessions). Schritte 6–7 sind damit erst mit einem Provider
-nachweisbar; offen bleibt, ob die App den lokalen Transcript über die
-Recreation halten sollte, wenn der Server leer antwortet.
+**Live run 2026-10-16** (emulator `ci_default` API 36 → `build-host`, core
+`f86276d2` without a provider): steps 1–5 **green** (bridge log: exactly one
+`POST …/chat/stream` 200). Step 6 **fails as expected**: after the
+recreation the app reloads `GET …/messages`, and the providerless core
+does not persist messages (empty history before and after the turn; 0 messages
+in all live sessions). Steps 6–7 are therefore only provable with a provider;
+it remains open whether the app should retain the local transcript across the
+recreation when the server responds empty.
 
-**Live-Lauf mit Provider (DeepSeek, 2026-10-16): 1/1 grün, alle 7 Schritte**
-(nach Scroll-Fix: eine echte Antwort schiebt die User-Zeile aus der Lazy-Liste;
-der Test scrollt jetzt vor dem Zählen).
+**Live run with provider (DeepSeek, 2026-10-16): 1/1 green, all 7 steps**
+(after the scroll fix: a real answer pushes the user line out of the lazy list;
+the test now scrolls before counting).
 
-## 8. Bildturn-Transport
+## 8. Image turn transport
 
-Live-Sonde 2026-10-16 (Bridge → Core `f86276d2`, ein `image_url`-Content-Part,
-PNG-Header + Padding): vor dem Fix 256 KiB → 200, aber **1 MiB / 3 MiB / 5 MiB →
-502 `upstream_frame_too_large`**, weil der Core in `run.started` die komplette
-`user_message` samt Base64-Bild echot (1 MiB roh → 1 398 522-Byte-Frame) und
-die Relay-Grenze 1 MiB beträgt. Nach dem Fix (Echo-Redaktion, siehe
-`bridge-security.md`) 1 KiB / 1 MiB / 5 MiB → **200 mit vollständigem
-Lebenszyklus**, `acceptance_live.py` weiter 37/37. Ohne Provider ist nur der
-Transport belegt (Core nimmt den Content-Part an, siehe Echo); Bildverständnis
-und Photo-Picker-UI-Pfad sind offen.
+Live probe 2026-10-16 (bridge → core `f86276d2`, one `image_url` content part,
+PNG header + padding): before the fix 256 KiB → 200, but **1 MiB / 3 MiB / 5 MiB →
+502 `upstream_frame_too_large`**, because the core echoes the complete
+`user_message` including the Base64 image in `run.started` (1 MiB raw → 1 398 522-byte frame) and
+the relay limit is 1 MiB. After the fix (echo redaction, see
+`bridge-security.md`) 1 KiB / 1 MiB / 5 MiB → **200 with complete
+lifecycle**, `acceptance_live.py` still 37/37. Without a provider, only the
+transport is proven (the core accepts the content part, see echo); image understanding
+and the photo picker UI path remain open.
 
-## 9. Live-Run-Control-E2E
+## 9. Live run control E2E
 
-**Zweck:** der zweite reale Android-Live-Test. `LiveBridgeChatE2ETest`
-deckt nur den provider-losen Sende-Pfad ab; `LiveBridgeRunControlE2ETest` fährt über denselben
-Produktionspfad (`MainActivity`, echte Compose-Screens, `AppDependenciesHolder`)
-die **Laufsteuerung** gegen den Live-Stack mit echtem Modellprovider (DeepSeek).
-Ein langer Lauf entsteht deterministisch über die Anweisung, im Terminal-Tool
-`sleep 40 && echo fertig` auszuführen (`sleep` braucht kein Approval).
-Assistant-Inhalt wird nie geprüft.
+**Purpose:** the second real Android live test. `LiveBridgeChatE2ETest`
+covers only the providerless send path; `LiveBridgeRunControlE2ETest` drives through the same
+production path (`MainActivity`, real Compose screens, `AppDependenciesHolder`)
+the **run control** against the live stack with a real model provider (DeepSeek).
+A long run arises deterministically via the instruction to execute
+`sleep 40 && echo fertig` in the terminal tool (`sleep` needs no approval).
+Assistant content is never checked.
 
-Pro Test ist genau **ein** frischer Pairing-Code verfügbar; deshalb fährt
-`LiveBridgeRunControlE2ETest` in genau **einem** `@Test` drei Phasen nacheinander
-in derselben Session:
+Per test, exactly **one** fresh pairing code is available; therefore
+`LiveBridgeRunControlE2ETest` drives three phases in sequence
+in exactly **one** `@Test` in the same session:
 
-- **Phase A – Stop:** lange Nachricht senden, auf den Stop-Button
-  (`composer_run_stop`) warten, die `run_id` aus dem Produktions-Controller
-  (`RunSessionController.activeRun`) lesen, stoppen und den terminalen Zustand
-  abwarten. Über den Produktionspfad `GET /v1/runs/{run_id}`
-  (`RunStatusRequester`) wird zusätzlich geprüft, dass der gestoppte Lauf
-  terminal und **nicht** `completed` ist (der Core meldet einen gestoppten
-  Lauf als `cancelled`). Genau eine User-Nachricht für den Text.
-- **Phase B – Steer:** lange Nachricht senden, während des Laufs über
-  `chatSteerInput`/`chatSteerSend` steuern. Erwartet wird ein
-  Queued-Ack (`chatSteerQueuedStatus`) oder ein recoverbarer Eintrag (409);
-  kein `chatSteerFailedStatus`, der Lauf endet terminal.
-- **Phase C – Disconnect/Re-Attach:** lange Nachricht senden, `run_id`
-  merken. Emulator-Netz über
+- **Phase A – Stop:** send a long message, wait for the stop button
+  (`composer_run_stop`), read the `run_id` from the production controller
+  (`RunSessionController.activeRun`), stop, and await the terminal state.
+  Via the production path `GET /v1/runs/{run_id}`
+  (`RunStatusRequester`) it additionally checks that the stopped run is
+  terminal and **not** `completed` (the core reports a stopped
+  run as `cancelled`). Exactly one user message for the text.
+- **Phase B – Steer:** send a long message, steer during the run via
+  `chatSteerInput`/`chatSteerSend`. Expected is a
+  queued ack (`chatSteerQueuedStatus`) or a recoverable entry (409);
+  no `chatSteerFailedStatus`, the run ends terminally.
+- **Phase C – Disconnect/re-attach:** send a long message, note the `run_id`.
+  Disconnect the emulator network via
   `InstrumentationRegistry…uiAutomation.executeShellCommand("svc wifi disable")`
-  / `("svc data disable")` trennen (Descriptor vollständig lesen und schließen),
-  begrenzt auf eine sichtbare Reaktion warten, dann wieder aktivieren (immer
-  in `finally`/`@After`). Zulässig ist der Re-Attach auf **dieselbe**
-  `run_id` (kein zweiter POST) **oder** der ehrliche Zustand
-  (`chat_run_uncertain`) mit `chat_run_reconcile`. Danach muss die ursprüngliche
-  `run_id` terminal sein und es darf genau **eine** User-Nachricht vorliegen;
-  zuletzt belegt ein Produktions-Transkript-Read, dass jeder Phasentext genau
-  einmal gespeichert ist. Alle Wartezeiten sind `bounded waitUntil` (max. 120 s
-  pro Run-Phase), ohne `Thread.sleep`-Ketten.
+  / `("svc data disable")` (read the descriptor completely and close it),
+  wait bounded for a visible reaction, then re-enable (always
+  in `finally`/`@After`). Permitted is the re-attach to the **same**
+  `run_id` (no second POST) **or** the honest state
+  (`chat_run_uncertain`) with `chat_run_reconcile`. After that, the original
+  `run_id` must be terminal and there must be exactly **one** user message;
+  finally, a production transcript read proves that each phase text is stored exactly
+  once. All waits are `bounded waitUntil` (max. 120 s
+  per run phase), without `Thread.sleep` chains.
 
-Beide Tests tragen `@LiveBridge` und sind aus der Regulärsuite/CI ausgeschlossen
-(`notAnnotation=…CaptureOnly,…LiveBridge`); ohne Argumente skippt die
-JUnit-Annahme. Nur explizit gegen den Live-Stack ausführen:
+Both tests carry `@LiveBridge` and are excluded from the regular suite/CI
+(`notAnnotation=…CaptureOnly,…LiveBridge`); without arguments the
+JUnit assumption skips. Run only explicitly against the live stack:
 
 ```
 ./gradlew :app:connectedDebugAndroidTest \
@@ -222,41 +221,41 @@ JUnit-Annahme. Nur explizit gegen den Live-Stack ausführen:
   -Pandroid.testInstrumentationRunnerArguments.livePairingCode=<frischer-code>
 ```
 
-`<tailnet>` ist der Tailnet-Hostname des Bridge-Rechners, `<frischer-code>` ein
-neu erzeugter, einmaliger 24-stelliger Pairing-Code. Der Live-Lauf wird vom
-Orchestrator ausgeführt; der Test selbst prüft nur Übersetzung und Doku
+`<tailnet>` is the tailnet hostname of the bridge machine, `<frischer-code>` a
+newly generated, one-time 24-character pairing code. The live run is executed by the
+orchestrator; the test itself only checks translation and docs
 (`:app:compileDebugAndroidTestKotlin`, `git diff --check`).
 
-## 10. Echter Provider und reale Approvals
+## 10. Real provider and real approvals
 
-**Provider:** Nur im isolierten Test-Home `~/hermes-official-home` auf
-`build-host`: `config.yaml` mit `model.provider: deepseek`,
-`model.default: deepseek-flash` und `approvals.mode: manual`; der Key liegt als
-`DEEPSEEK_API_KEY` in `~/hermes-official-home/.env` (0600, nie ausgegeben).
-Das produktive Gateway (`~/.hermes`) ist unverändert. Nachweis: Chat-SSE mit
-echten `assistant.delta`-Frames, `acceptance_live.py` 37/37; Bildturn mit echtem
-64×64-PNG (rot) → Antwort „Rot“.
+**Provider:** Only in the isolated test home `~/hermes-official-home` on
+`build-host`: `config.yaml` with `model.provider: deepseek`,
+`model.default: deepseek-flash`, and `approvals.mode: manual`; the key resides as
+`DEEPSEEK_API_KEY` in `~/hermes-official-home/.env` (0600, never output).
+The productive gateway (`~/.hermes`) is unchanged. Proof: chat SSE with
+real `assistant.delta` frames, `acceptance_live.py` 37/37; image turn with a real
+64×64 PNG (red) → answer „Rot“.
 
-**Approvals:** Bridge-Probe (`once` → genau einmal ausgeführt, `deny` → nicht,
-`always`/`session` → lokal 400; Details `bridge-security.md` §4.1) und UI-Test
-`LiveBridgeApprovalE2ETest` (`@LiveBridge`): echter `rm -rf` auf einen nicht
-existierenden `/tmp`-Pfad → Produktions-Approval-Dialog → erst „Ablehnen“, dann
-„Erlauben“; beide Turns enden terminal, nie UNCERTAIN, je genau eine
-User-Nachricht. Live 2026-10-16: **1/1 grün**; Bridge-Audit zeigt
-`choice=deny status=200` und `choice=once status=200` für dasselbe Gerät.
+**Approvals:** Bridge probe (`once` → executed exactly once, `deny` → not,
+`always`/`session` → local 400; details `bridge-security.md` §4.1) and UI test
+`LiveBridgeApprovalE2ETest` (`@LiveBridge`): real `rm -rf` on a non-
+existent `/tmp` path → production approval dialog → first **Ablehnen** (Deny), then
+**Erlauben** (Allow); both turns end terminally, never UNCERTAIN, exactly one
+user message each. Live 2026-10-16: **1/1 green**; bridge audit shows
+`choice=deny status=200` and `choice=once status=200` for the same device.
 
-Zwei dabei gefundene Defekte (behoben in `or-night-integration`):
-1. Die Bridge reichte den Core-`approval.request` roh durch (16 Felder,
-   `choices=[once,session,always,deny]`), die App lehnt ihn strikt ab → jetzt
-   Normalisierung auf die Mobile-v1-Form in der Bridge.
-2. Nach Stop sendet der Core `run.cancelled` (statt `run.completed`); die App
-   kannte nur `run.completed` → jeder Stop endete UNCERTAIN.
+Two defects found in the process (fixed in `or-night-integration`):
+1. The bridge passed through the core `approval.request` raw (16 fields,
+   `choices=[once,session,always,deny]`), the app rejects it strictly → now
+   normalization to the mobile-v1 shape in the bridge.
+2. After stop, the core sends `run.cancelled` (instead of `run.completed`); the app
+   only knew `run.completed` → every stop ended UNCERTAIN.
 
-## 11. Echter Process Death während eines Runs
+## 11. Real process death during a run
 
-`LiveBridgeProcessDeathE2ETest` (`@LiveBridge`) läuft in **zwei getrennten
-Instrumentation-Aufrufen**, die App bleibt dazwischen installiert (kein
-`connectedDebugAndroidTest`: das deinstalliert nach dem Lauf):
+`LiveBridgeProcessDeathE2ETest` (`@LiveBridge`) runs in **two separate
+instrumentation invocations**, the app remains installed in between (no
+`connectedDebugAndroidTest`: that uninstalls after the run):
 
 ```
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
@@ -267,40 +266,40 @@ C=io.github.excludebarrier.orsikrelay.LiveBridgeProcessDeathE2ETest
 adb shell am instrument -w -e class "$C#startLongRunThenDie" -e or09Phase start \
   -e or09Title "'Process-Death <id>'" -e liveBaseUrl https://<bridge-host>.<tailnet>.ts.net:8443 \
   -e livePairingCode <frischer-code> $R
-adb shell pidof io.github.excludebarrier.orsikrelay      # leer: Prozess ist tot
+adb shell pidof io.github.excludebarrier.orsikrelay      # empty: process is dead
 adb shell am instrument -w -e class "$C#recoverAfterProcessDeath" -e or09Phase recover \
   -e or09Title "'Process-Death <id>'" $R
 ```
 
-Phase 1 sendet über die echte UI einen langen Turn (`sleep 45`), wartet auf die
-server-bestätigte `run_id` und das persistierte Lease und endet ohne Cleanup;
-das Ende der Instrumentation beendet den App-Prozess. Phase 2 startet kalt,
-prüft das überlebende Lease, öffnet die Session über die echte Liste, erwartet
-UNCERTAIN, reconciled explizit bis zum terminalen Server-Status, prüft das
-gelöschte Lease und genau eine User-Nachricht.
+Phase 1 sends a long turn via the real UI (`sleep 45`), waits for the
+server-confirmed `run_id` and the persisted lease, and ends without cleanup;
+the end of the instrumentation terminates the app process. Phase 2 starts cold,
+checks the surviving lease, opens the session via the real list, expects
+UNCERTAIN, reconciles explicitly until the terminal server status, checks the
+deleted lease and exactly one user message.
 
-**Live 2026-10-16: beide Phasen OK**, `pidof` nach Phase 1 leer. Bridge-Log: genau
-ein `chat`-POST, danach nur `GET /v1/runs/{id}` (Reconcile-Polls, ~50 s
-`running`, dann terminal) – kein zweiter POST.
+**Live 2026-10-16: both phases OK**, `pidof` after phase 1 empty. Bridge log: exactly
+one `chat` POST, afterwards only `GET /v1/runs/{id}` (reconcile polls, ~50 s
+`running`, then terminal) – no second POST.
 
-## 12. Bildturn über den echten Photo Picker
+## 12. Image turn via the real photo picker
 
-`LiveBridgeImageTurnE2ETest` (`@LiveBridge`) tippt die Produktions-Anhang-Aktion
-(`PickVisualMedia.ImageOnly`) und wartet begrenzt auf das Thumbnail. Den
-System-Picker (eigene App `com.google.android.photopicker`) bedient der Host:
+`LiveBridgeImageTurnE2ETest` (`@LiveBridge`) taps the production attachment action
+(`PickVisualMedia.ImageOnly`) and waits bounded for the thumbnail. The
+system picker (separate app `com.google.android.photopicker`) is operated by the host:
 
 ```
-adb push red.png /sdcard/Pictures/or10-red.png        # 256×256, einfarbig rot
+adb push red.png /sdcard/Pictures/or10-red.png        # 256×256, solid red
 adb shell content call --method scan_file --uri content://media --arg /sdcard/Pictures/or10-red.png
 adb shell am instrument -w -e class io.github.excludebarrier.orsikrelay.LiveBridgeImageTurnE2ETest \
   -e liveBaseUrl https://<bridge-host>.<tailnet>.ts.net:8443 -e livePairingCode <frischer-code> \
   io.github.excludebarrier.orsikrelay.test/androidx.test.runner.AndroidJUnitRunner &
-# sobald der Picker den Fokus hat: Bounds des Eintrags "Photo taken …" aus
-# `adb shell uiautomator dump` lesen und dessen Mitte antippen
+# once the picker has focus: read the bounds of the "Photo taken …" entry from
+# `adb shell uiautomator dump` and tap its center
 adb shell input tap <x> <y>
 ```
 
-Danach sendet der Test die Frage nach der Farbe, wartet auf den terminalen Turn
-(nie UNCERTAIN, Anhang verbraucht) und prüft als einzige Inhaltsaussage, dass
-die Antwort „rot“ enthält. **Live 2026-10-16 (DeepSeek `deepseek-flash`): 1/1
-grün**, genau ein `chat/stream`-POST mit 200.
+Afterwards the test sends the question about the color, waits for the terminal turn
+(never UNCERTAIN, attachment consumed), and as the only content assertion checks that
+the answer contains „rot“. **Live 2026-10-16 (DeepSeek `deepseek-flash`): 1/1
+green**, exactly one `chat/stream` POST with 200.

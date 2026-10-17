@@ -1,87 +1,87 @@
-# Android-Toolchain
+# Android Toolchain
 
-## Benötigte Werkzeuge
+## Required Tools
 
-Maßgeblich für alle Builds ist ausschließlich der versionierte Gradle Wrapper
-(`./gradlew`, Gradle 9.8.1); eine separate Gradle-Installation ist nicht nötig.
+The only authoritative source for all builds is the versioned Gradle wrapper
+(`./gradlew`, Gradle 9.8.1); a separate Gradle installation is not needed.
 
-- JDK `17` (z. B. Temurin), im `PATH` oder über `JAVA_HOME`
-- Android SDK (Standardort `~/Android/Sdk`, sonst `ANDROID_HOME` setzen) mit
-  - Android Platform `37` (`platforms;android-37.0`; Zielplattform bleibt `targetSdk 36`)
+- JDK `17` (e.g. Temurin), in the `PATH` or via `JAVA_HOME`
+- Android SDK (default location `~/Android/Sdk`, otherwise set `ANDROID_HOME`) with
+  - Android platform `37` (`platforms;android-37.0`; target platform remains `targetSdk 36`)
   - Build Tools `36.1.0`
   - Platform Tools
-- nur für Instrumentationstests: Android Emulator, ein API-36-System-Image
-  (z. B. Google APIs) und ein AVD, oder ein angeschlossenes Gerät; unter Linux
-  sollte KVM verfügbar sein
-- der projektspezifische SDK-Pfad steht in `local.properties` (absichtlich nicht
-  versioniert; Android Studio legt die Datei an, alternativ `sdk.dir=…`)
+- for instrumentation tests only: Android emulator, an API 36 system image
+  (e.g. Google APIs) and an AVD, or a connected device; on Linux
+  KVM should be available
+- the project-specific SDK path is in `local.properties` (intentionally not
+  versioned; Android Studio creates the file, alternatively `sdk.dir=…`)
 
-## Prüfung
+## Check
 
 ```bash
 scripts/verify-environment.sh
 ```
 
-Das Skript respektiert vorhandene `JAVA_HOME`/`ANDROID_HOME`-Werte, prüft Java 17,
-die SDK-Pakete und den Gradle Wrapper und meldet Emulator-Bestandteile nur als
-Hinweis. Ausgabe je Prüfung `OK`/`WARN`/`FAIL`, am Ende `ENVIRONMENT-OK`
-(Exit 0) oder `ENVIRONMENT-FAIL (<n>)` (Exit 1).
+The script respects existing `JAVA_HOME`/`ANDROID_HOME` values, checks Java 17,
+the SDK packages and the Gradle wrapper, and reports emulator components only as a
+note. Output per check `OK`/`WARN`/`FAIL`, at the end `ENVIRONMENT-OK`
+(exit 0) or `ENVIRONMENT-FAIL (<n>)` (exit 1).
 
-## Coverage (Report, kein Gate)
+## Coverage (Report, No Gate)
 
 ```bash
 ./gradlew :app:createDebugUnitTestCoverageReport
 ```
 
-Erzeugt den JaCoCo-HTML/XML-Report der JVM-Unit-Tests unter
-`app/build/reports/coverage/test/debug/` (`report.xml` für Maschinenauswertung).
-Der `debug`-Build-Typ aktiviert dafür `enableUnitTestCoverage = true` (AGP-eigenes
-JaCoCo). Der Schritt ist reiner Report und **kein Schwellwert-Gate**; die CI lädt
-ihn über den bestehenden `app/build/reports/**`-Upload mit hoch. Instrumentation-
-Coverage (`enableAndroidTestCoverage`) ist bewusst **nicht** aktiviert.
+Generates the JaCoCo HTML/XML report of the JVM unit tests under
+`app/build/reports/coverage/test/debug/` (`report.xml` for machine evaluation).
+The `debug` build type enables `enableUnitTestCoverage = true` for this (AGP's own
+JaCoCo). The step is a pure report and **not a threshold gate**; CI uploads
+it via the existing `app/build/reports/**` upload. Instrumentation
+coverage (`enableAndroidTestCoverage`) is deliberately **not** enabled.
 
-Baseline (`:app:testDebugUnitTest` + Coverage, 823 Tests, 0 Fehler,
-Stand 2026-10-16, Basis `main@f1311d1`):
+Baseline (`:app:testDebugUnitTest` + coverage, 823 tests, 0 failures,
+as of 2026-10-16, base `main@f1311d1`):
 
-| Bereich | LINE | BRANCH |
+| Area | LINE | BRANCH |
 | --- | --- | --- |
-| Gesamt | 52,8 % | 55,3 % |
-| `io.github.excludebarrier.orsikrelay.domain.run` | 94,6 % | 84,4 % |
-| `io.github.excludebarrier.orsikrelay.network` | 88,4 % | 83,6 % |
-| `io.github.excludebarrier.orsikrelay.data.message` | 95,4 % | 86,0 % |
+| Overall | 52.8 % | 55.3 % |
+| `io.github.excludebarrier.orsikrelay.domain.run` | 94.6 % | 84.4 % |
+| `io.github.excludebarrier.orsikrelay.network` | 88.4 % | 83.6 % |
+| `io.github.excludebarrier.orsikrelay.data.message` | 95.4 % | 86.0 % |
 
-Schwellwerte werden erst nach einer risikobasierten Bewertung eingeführt, nicht
-auf Basis dieser Baseline automatisch.
+Thresholds are introduced only after a risk-based assessment, not
+automatically based on this baseline.
 
-## Bridge-Coverage (Report, kein Gate)
+## Bridge Coverage (Report, No Gate)
 
-Die Python-Bridge (`bridge/`) misst ihre Testabdeckung mit `coverage`. Die
-Version ist exakt gepinnt (PEP-735-Dependency-Group `dev` in
-`bridge/pyproject.toml`, `uv.lock`): `coverage==7.16.2`. Es ist eine reine
-Entwicklungsabhängigkeit: `install.sh` exportiert mit `--no-dev`
-(`uv export --frozen --no-dev --no-emit-project`), die Installation der Bridge
-bleibt daher unberührt.
+The Python bridge (`bridge/`) measures its test coverage with `coverage`. The
+version is pinned exactly (PEP-735 dependency group `dev` in
+`bridge/pyproject.toml`, `uv.lock`): `coverage==7.16.2`. It is a pure
+development dependency: `install.sh` exports with `--no-dev`
+(`uv export --frozen --no-dev --no-emit-project`), so installing the bridge
+remains unaffected.
 
-Konfiguration in `bridge/pyproject.toml`:
+Configuration in `bridge/pyproject.toml`:
 
 - `[tool.coverage.run]`: `source = ["orsik_mobile_bridge"]`, `branch = true`
 - `[tool.coverage.report]`: `show_missing = true`, `skip_covered = false`
-- kein `fail_under`: der Report ist bewusst kein Gate.
+- no `fail_under`: the report is deliberately not a gate.
 
-Befehle (aus `bridge/` ausführen):
+Commands (run from `bridge/`):
 
 ```bash
 uv lock --check
-uv sync --locked          # installiert die dev-Gruppe standardmäßig mit
+uv sync --locked          # installs the dev group by default
 uv run --locked coverage run -m unittest discover -s tests -v
 uv run --locked coverage report
 uv run --locked coverage xml -o dist/coverage.xml
 ```
 
-Gemessene Baseline (Datum 2026-10-16, Basis `main@f1311d1`; 137 Tests,
+Measured baseline (date 2026-10-16, base `main@f1311d1`; 137 tests,
 `branch = true`):
 
-| Modul | Line | Branch | Combined |
+| Module | Line | Branch | Combined |
 | --- | --- | --- | --- |
 | `core.py` | 99% (186/187) | 96% (54/56) | 99% |
 | `server.py` | 81% (334/411) | 69% (95/138) | 78% |
@@ -89,9 +89,9 @@ Gemessene Baseline (Datum 2026-10-16, Basis `main@f1311d1`; 137 Tests,
 | `runhub.py` | 91% (169/185) | 74% (49/66) | 87% |
 | `sse.py` | 99% (90/91) | 84% (27/32) | 95% |
 | `pairing.py` | 85% (17/20) | 75% (3/4) | 83% |
-| **Gesamt** | **87% (951/1093)** | **78% (255/328)** | **85%** |
+| **Total** | **87% (951/1093)** | **78% (255/328)** | **85%** |
 
-`Combined` ist der von `coverage` gemeldete Mischwert; `Line` und `Branch`
-sind aus den Zählern abgeleitet. Der CI-Job (`Bridge CI`) ersetzt den
-Unit-Test-Schritt durch `coverage run`, gibt den Report aus und lädt
-`dist/coverage.xml` als Artefakt hoch.
+`Combined` is the mixed value reported by `coverage`; `Line` and `Branch`
+are derived from the counters. The CI job (`Bridge CI`) replaces the
+unit test step with `coverage run`, prints the report and uploads
+`dist/coverage.xml` as an artifact.

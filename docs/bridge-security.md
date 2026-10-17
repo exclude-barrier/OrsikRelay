@@ -1,144 +1,144 @@
 # Orsik Mobile Bridge – Security Threat Model
 
-Stand: 2026-10-10.
+As of: 2026-10-10.
 
-## 1. Schutzobjekt
+## 1. Protected Asset
 
-Der Hermes-Master-API-Key gewährt mittelbar Zugriff auf mächtige Tools. Die
-Bridge hält ihn serverseitig (Loopback-Prozess) und gibt ihn **nie** an Clients.
-Geräte erhalten nur kurzlebige, einzeln widerrufbare Device-Tokens mit der festen
-Rechte-Allowlist `{chat, runs, approvals}`.
+The Hermes master API key indirectly grants access to powerful tools. The
+bridge holds it server-side (loopback process) and **never** gives it to clients.
+Devices receive only short-lived, individually revocable device tokens with the fixed
+permission allowlist `{chat, runs, approvals}`.
 
 ## 2. Trust Boundaries
 
-- **Android-Gerät**: untrusted; nur Device-Token, kein Master-Key, kein Admin.
-- **TLS-Terminator** (Tailscale Serve / Reverse-Proxy): vertrauenswürdig für
-  Transport, aber die Bridge prüft nicht auf ihn — sie bindet nur Loopback.
-- **Bridge-Prozess**: privilegiert (hält Master-Key). Schutz durch Loopback-
-  Bindung, 0600-Secrets, minimale Angriffsfläche, geschlossene Route-/Query-Allowlist.
-- **Offizieller Hermes-Core**: autoritativ für Run-Status und Approvals; unverändert.
+- **Android device**: untrusted; device token only, no master key, no admin.
+- **TLS terminator** (Tailscale Serve / reverse proxy): trusted for
+  transport, but the bridge does not validate it — it binds only loopback.
+- **Bridge process**: privileged (holds master key). Protection through loopback
+  binding, 0600 secrets, minimal attack surface, closed route/query allowlist.
+- **Official Hermes core**: authoritative for run status and approvals; unchanged.
 
-## 3. Bedrohungen & Maßnahmen
+## 3. Threats & Measures
 
-| Bedrohung | Maßnahme |
+| Threat | Measure |
 |---|---|
-| Master-Key-Leak an Gerät/Log | Key nur serverseitig; nie im Body/Response; geschlossene Fehler |
-| Master-Key-Exfiltration durch fehlkonfiguriertes `BRIDGE_UPSTREAM` | Ziel wird beim Start geprüft: nur Loopback-HTTP-**IP** mit explizitem Port (kein Hostname, kein Pfad/Query/Fragment, kein Userinfo); sonst bricht der Start ab, ohne den Wert zu wiederholen |
-| Approval-Eskalation (`session`/`always`) | Lokale Validierung erlaubt nur `once`/`deny`; ungültig → `400`, **kein** Upstream-POST |
-| Redirect-Credential-Hop | `allow_redirects=False`; `3xx` → `502`, `Location` verworfen |
-| SSRF/Path Traversal | Geschlossene Route-Allowlist; Segment-Validierung; Exact-Match |
-| Query-Injection | Query-Allowlist pro Route; sonst `403` |
-| Body-Overflow | Limit `10_000_000`; Oversize → `413`; malformed JSON → `400` |
-| Brute-Force Pairing | Rate-Limit; harte Code-/Device-Caps; Single-Use atomar |
-| Token-/Code-Diebstahl at rest | Nur SHA-256-Hashes; DB 0600/0700; nie geloggt |
-| Persistentes Credential kompromittiert | Einzelwiderruf durabel über Neustart |
-| Restore alter Store-Stand | Backup/Restore nur Operator-seitig (Dateisystemrecht); ein Restore stellt den Autorisierungszustand zum Backup-Zeitpunkt wieder her — danach widerrufene Geräte sind wieder gültig (`admin list-devices` prüfen, betroffene Geräte erneut widerrufen); Pre-Migration-Backup automatisch, kein Down-Migrate |
-| Store-Ausfall | Fail-closed (`503 store_unavailable`), nie fail-open |
-| Blockierender Store-Zugriff | Store-Aufrufe laufen seriell in einem eigenen DB-Thread und blockieren den aiohttp-Eventloop nie |
-| Öffentliche Admin-Oberfläche | Kein HTTP-Admin; Codes nur lokale Operator-CLI |
-| Run-Verlust/Duplikat bei Disconnect | Server-seitiger Stream-Takeover + `after_seq`-Replay; kein zweiter POST |
-| Fingierte Run-Completion | Nie erfundene Events; nicht rekonstruierbar → `409`/`404` |
-| Speichererschöpfung durch Upstream/Runs | Frame ≤ 1 MiB **nach** Redaktion (sonst `502 upstream_frame_too_large` bzw. Abbruchkommentar, kein `done`; Bild-Echo siehe §3.1); Fehlerkörper ≤ 64 KiB; Backlog je Run 1000 Frames/4 MiB; Subscriber-Queue 256/2 MiB, max. 4 je Run (Drop statt Block); max. 16 aktive Runs (`503 bridge_busy` vor dem Upstream-POST); terminale Runs ≤ 64 MiB |
-| Öffentlicher API-Port | Bind nur `127.0.0.1`; TLS extern; kein Funnel |
-| TLS-Bypass | Bridge terminiert kein TLS; App erzwingt HTTPS + Systemtrust |
+| Master key leak to device/log | key only server-side; never in body/response; closed errors |
+| Master key exfiltration through misconfigured `BRIDGE_UPSTREAM` | target is checked at startup: only loopback HTTP **IP** with explicit port (no hostname, no path/query/fragment, no userinfo); otherwise startup aborts without repeating the value |
+| Approval escalation (`session`/`always`) | local validation allows only `once`/`deny`; invalid → `400`, **no** upstream POST |
+| Redirect credential hop | `allow_redirects=False`; `3xx` → `502`, `Location` discarded |
+| SSRF/path traversal | closed route allowlist; segment validation; exact match |
+| Query injection | query allowlist per route; otherwise `403` |
+| Body overflow | limit `10_000_000`; oversize → `413`; malformed JSON → `400` |
+| Brute-force pairing | rate limit; hard code/device caps; single-use atomic |
+| Token/code theft at rest | SHA-256 hashes only; DB 0600/0700; never logged |
+| Persistent credential compromised | individual revocation durable across restarts |
+| Restoring an old store state | backup/restore operator-side only (file system permission); a restore restores the authorization state at the backup time — devices revoked afterwards are valid again (check `admin list-devices`, revoke affected devices again); pre-migration backup automatic, no down-migrate |
+| Store failure | fail-closed (`503 store_unavailable`), never fail-open |
+| Blocking store access | store calls run serially in a dedicated DB thread and never block the aiohttp event loop |
+| Public admin surface | no HTTP admin; codes only via local operator CLI |
+| Run loss/duplicate on disconnect | server-side stream takeover + `after_seq` replay; no second POST |
+| Fabricated run completion | never invented events; not reconstructible → `409`/`404` |
+| Memory exhaustion through upstream/runs | frame ≤ 1 MiB **after** redaction (otherwise `502 upstream_frame_too_large` or abort comment, no `done`; image echo see §3.1); error body ≤ 64 KiB; backlog per run 1000 frames/4 MiB; subscriber queue 256/2 MiB, max. 4 per run (drop instead of block); max. 16 active runs (`503 bridge_busy` before the upstream POST); terminal runs ≤ 64 MiB |
+| Public API port | bind only `127.0.0.1`; TLS external; no funnel |
+| TLS bypass | bridge does not terminate TLS; app enforces HTTPS + system trust |
 
-## 3.1 Bild-Echo in `run.started`
+## 3.1 Image Echo in `run.started`
 
-Der Core echot im ersten `run.started`-Frame den kompletten Request inklusive
-`user_message` (u. a. `content[1].image_url.url` als
-`data:image/...;base64,...`). Ein Rohbild bis 5 MiB (`MAX_IMAGE_BYTES` der App)
-ergibt dabei einen Frame deutlich über 1 MiB, obwohl der Request zulässig ist
-(base64-Body bis 8 MiB, Bridge-Body-Limit 10 MB). Ohne Gegenmaßnahme antwortete
-die Bridge auf jeden Bildturn mit `502 upstream_frame_too_large`.
+In the first `run.started` frame, the core echoes the complete request including
+`user_message` (among others `content[1].image_url.url` as
+`data:image/...;base64,...`). A raw image up to 5 MiB (`MAX_IMAGE_BYTES` of the app)
+thus results in a frame well over 1 MiB, although the request is permissible
+(base64 body up to 8 MiB, bridge body limit 10 MB). Without a countermeasure,
+the bridge responded to every image turn with `502 upstream_frame_too_large`.
 
-Der Session-Chat-Pump (`_pump_chat_stream`) dekodiert deshalb **nur dort** mit
-`_MAX_ECHO_FRAME_BYTES = _MAX_BODY_BYTES + 64 KiB` (der Core echot höchstens den
-Request-Body plus Envelope). Für jeden `run.started`-Frame, dessen `data`-JSON ein
-Objekt mit `user_message` ist, entfernt die Bridge genau diesen Schlüssel; alle
-übrigen Felder (`seq`, `run_id`, …), vorhandene `id:`/`event:`-Zeilen und deren
-Reihenfolge bleiben erhalten. Dies ist die **einzige** Stelle, an der die Bridge
-Upstream-Inhalt re-serialisiert statt byte-identisch weiterzureichen.
+The session chat pump (`_pump_chat_stream`) therefore decodes **only there** with
+`_MAX_ECHO_FRAME_BYTES = _MAX_BODY_BYTES + 64 KiB` (the core echoes at most the
+request body plus envelope). For every `run.started` frame whose `data` JSON is
+an object with `user_message`, the bridge removes exactly this key; all
+other fields (`seq`, `run_id`, …), existing `id:`/`event:` lines and their
+order are preserved. This is the **only** place where the bridge
+re-serializes upstream content instead of passing it through byte-identically.
 
-**Nach** der Redaktion gilt für jeden Frame unverändert `sse.MAX_FRAME_BYTES`
-(1 MiB, gemessen an `len(frame.raw)`): ein größerer Frame führt zum selben
-Verhalten wie zuvor (`502 upstream_frame_too_large` vor dem ersten Frame, sonst
-Abbruchkommentar `: bridge_upstream_frame_too_large`, nie ein erfundenes `done`).
-`sse.MAX_FRAME_BYTES` und alle Puffer-/Queue-Grenzen in `runhub.py` bleiben
-unverändert. Der roh proxied `GET /v1/runs/{run_id}/events` läuft nicht über den
-SSEDecoder und hat keinen Frame-Grenzwert; dort greift der Defekt nicht.
+**After** redaction, `sse.MAX_FRAME_BYTES` applies unchanged to every frame
+(1 MiB, measured on `len(frame.raw)`): a larger frame leads to the same
+behavior as before (`502 upstream_frame_too_large` before the first frame, otherwise
+abort comment `: bridge_upstream_frame_too_large`, never an invented `done`).
+`sse.MAX_FRAME_BYTES` and all buffer/queue limits in `runhub.py` remain
+unchanged. The raw proxied `GET /v1/runs/{run_id}/events` does not go through the
+SSEDecoder and has no frame limit; the defect does not apply there.
 
-## 4. Single-Owner-Delegation (Restrisiko)
+## 4. Single-Owner Delegation (Residual Risk)
 
-Die offizielle Hermes-API kennt **keine** Ressourcen-Ownership pro Gerät. Jedes
-gepairte Gerät handelt als Delegierter des einen Owners über **alle**
-Sessions/Runs. Die Route-Allowlist begrenzt Endpunkte, **nicht** einzelne
-Ressourcen. Garantierte Per-Device-Isolation wird nicht bereitgestellt und nicht
-vorgetäuscht; sie erfordert eine Hermes-Core-Erweiterung.
+The official Hermes API has **no** resource ownership per device. Every
+paired device acts as a delegate of the one owner across **all**
+sessions/runs. The route allowlist limits endpoints, **not** individual
+resources. Guaranteed per-device isolation is not provided and not
+pretended; it requires a Hermes core extension.
 
-Wirksame Einschränkungen: Pairing ist Operator-gated (lokale CLI), jedes Token
-ist durabel einzeln widerrufbar, die Approval-Auswahl ist auf `once`/`deny`
-verengt.
+Effective restrictions: pairing is operator-gated (local CLI), every token
+is durably individually revocable, the approval choice is narrowed to
+`once`/`deny`.
 
-## 4.1 Revalidierung gegen reale positive Approvals (2026-10-16)
+## 4.1 Revalidation Against Real Positive Approvals (2026-10-16)
 
-Live auf `build-host`: offizieller Core `f86276d2` mit echtem Provider
-(DeepSeek, `deepseek-flash`, nur im isolierten Test-Home), Bridge
-`or-night-integration`, echter Tool-Request (`rm -rf` auf ein vorher angelegtes
-Marker-Verzeichnis unter `/tmp`).
+Live on `build-host`: official core `f86276d2` with a real provider
+(DeepSeek, `deepseek-flash`, only in the isolated test home), bridge
+`or-night-integration`, real tool request (`rm -rf` on a previously created
+marker directory under `/tmp`).
 
-| Antwort des Geräts | Bridge | Core / Wirkung |
+| Device response | Bridge | Core / effect |
 |---|---|---|
-| `once` | `200`, weitergeleitet | genau ein `approval.request`, `tool.completed`, Marker gelöscht, Run `completed` |
-| `deny` | `200`, weitergeleitet | `tool.failed`, Marker unverändert, Run `completed` |
-| `always` / `session` | **`400` lokal**, kein Upstream-POST | erst das folgende `deny` löst auf, Marker unverändert |
+| `once` | `200`, forwarded | exactly one `approval.request`, `tool.completed`, marker deleted, run `completed` |
+| `deny` | `200`, forwarded | `tool.failed`, marker unchanged, run `completed` |
+| `always` / `session` | **`400` local**, no upstream POST | only the following `deny` resolves, marker unchanged |
 
-Der Core bietet im `approval.request` `choices = [once, session, always, deny]`
-an; die Verengung auf `once`/`deny` leistet ausschließlich die Bridge – lokal
-bei der Antwort **und** im Stream: Die Bridge bringt jedes `approval.request`
-auf die Mobile-v1-Form (`session_id`, `run_id`, `seq`, `ts`, `request_id`,
-feste `description`, `choices = [once, deny]`) und verwirft alle übrigen Felder
-(`command`, `pattern_keys`, `allow_session`, `allow_permanent`, …). Vorher
-(bis 2026-10-16) reichte sie den Core-Frame roh durch; die App lehnt ihn strikt
-als Protokollfehler ab, ein echtes Approval hätte den Turn auf dem Gerät also
-in UNCERTAIN geworfen. Fehlt ein v1-Feld, bleibt der Frame unverändert (die App
-lehnt ihn ab, die Bridge erfindet nichts). Folge für das Produkt: Das Gerät
-zeigt nur den festen Hinweistext, **nicht** das Kommando (bewusste Produktentscheidung).
+In `approval.request`, the core offers `choices = [once, session, always, deny]`;
+the narrowing to `once`/`deny` is performed exclusively by the bridge — locally
+on the response **and** in the stream: The bridge converts every `approval.request`
+to the Mobile-v1 form (`session_id`, `run_id`, `seq`, `ts`, `request_id`,
+fixed `description`, `choices = [once, deny]`) and discards all other fields
+(`command`, `pattern_keys`, `allow_session`, `allow_permanent`, …). Previously
+(until 2026-10-16) it passed the core frame through raw; the app rejects it strictly
+as a protocol error, so a real approval would have thrown the turn on the device
+into UNCERTAIN. If a v1 field is missing, the frame remains unchanged (the app
+rejects it, the bridge invents nothing). Consequence for the product: The device
+shows only the fixed notice text, **not** the command (deliberate product decision).
 
-**Befund: Approval-Modus des Cores.** Mit dem Core-Default `approvals.mode:
-smart` bewertet ein Hilfs-LLM gefährliche Kommandos und genehmigt als harmlos
-eingestufte **ohne** `approval.request`: live wurde `rm -rf /tmp/<marker>` ohne
-Rückfrage ausgeführt. Die mobile Approval-Fläche sieht nur, was der Core
-eskaliert; die Bridge kann das nicht erzwingen. **Betriebsanforderung:** Das
-Hermes-Home hinter der Bridge setzt `approvals.mode: manual` (siehe
-`bridge-installation.md`). Mit `manual` kam jede Ausführung nur nach
-`approval.request` zustande (Tabelle oben).
+**Finding: core approval mode.** With the core default `approvals.mode:
+smart`, a helper LLM evaluates dangerous commands and approves those classified as
+harmless **without** `approval.request`: live, `rm -rf /tmp/<marker>` was executed
+without asking. The mobile approval surface sees only what the core
+escalates; the bridge cannot enforce this. **Operational requirement:** The
+Hermes home behind the bridge sets `approvals.mode: manual` (see
+`bridge-installation.md`). With `manual`, every execution occurred only after
+`approval.request` (table above).
 
-**Nachvollziehbarkeit.** Jede zustandsändernde Gerätanfrage erzeugt eine
-Audit-Zeile (Logger `orsik_mobile_bridge.audit`):
+**Auditability.** Every state-changing device request creates an
+audit line (logger `orsik_mobile_bridge.audit`):
 `audit action=<chat|approval|stop|steer> device=<device_id> run=/session=<id>
-[choice=<once|deny|rejected>] [status=<http>]`. Abgelehnte Choices werden als
-`rejected` geführt (Rohwert = Client-Eingabe, nie geloggt); Tokens,
-Master-Key und Nachrichteninhalte erscheinen nie. Die Zeile entsteht, sobald
-der Upstream-Status feststeht, also vor der Antwort an das Gerät.
+[choice=<once|deny|rejected>] [status=<http>]`. Rejected choices are recorded as
+`rejected` (raw value = client input, never logged); tokens,
+master key and message content never appear. The line is created as soon as
+the upstream status is determined, i.e. before the response to the device.
 
-Unverändert gilt §4: Jedes gepairte Gerät kann Approvals/Stop/Steer für
-**jeden** Run des Owners senden (keine Per-Device-Isolation); das Audit macht
-das zurechenbar, verhindert es aber nicht. **Live belegt (2026-10-16):** Gerät B
-liest Run-Status und Session-Verlauf von Gerät A (`200`) und beantwortet dessen
-`approval.request` mit `once` (`200`, Kommando ausgeführt); das Audit führt
-`chat` unter Gerät A und `approval … choice=once` unter Gerät B.
+§4 continues to apply unchanged: Every paired device can send approvals/stop/steer for
+**any** run of the owner (no per-device isolation); the audit makes
+this attributable but does not prevent it. **Proven live (2026-10-16):** Device B
+reads the run status and session history of device A (`200`) and answers its
+`approval.request` with `once` (`200`, command executed); the audit records
+`chat` under device A and `approval … choice=once` under device B.
 
-## 5. Nicht-Ziele / Grenzen
+## 5. Non-Goals / Limits
 
-- Kein Schutz gegen einen kompromittierten Bridge-Prozess (der hätte
-  Hermes-API-Rechte) — gemildert durch Loopback, OS-Rechte, Minimalfläche.
-- Kein Schutz gegen ein kompromittiertes Operator-Konto (CLI + Store-Zugriff).
-- Die Bridge beweist nichts über die Vertrauenswürdigkeit des TLS-Terminators;
-  bei ungültigem Zertifikat bricht der **Client** ab.
+- No protection against a compromised bridge process (it would have
+  Hermes API rights) — mitigated by loopback, OS rights, minimal surface.
+- No protection against a compromised operator account (CLI + store access).
+- The bridge proves nothing about the trustworthiness of the TLS terminator;
+  the **client** aborts on an invalid certificate.
 
-## 6. Secrets-Handling
+## 6. Secrets Handling
 
-- `API_SERVER_KEY` nur aus 0600-Env gelesen, nur im Upstream-Header.
-- Pairing-Codes/Tokens: einmalige Ausgabe, nur Hash at rest, nie in Logs,
-  Fehlerkörpern, URLs (außer dem `orsik://pair`-Link) oder Reports.
-- Keine Credentials in Git; `bridge.env`, `state.db` sind ausgeschlossen.
+- `API_SERVER_KEY` read only from a 0600 env, only in the upstream header.
+- Pairing codes/tokens: one-time output, hash at rest only, never in logs,
+  error bodies, URLs (except the `orsik://pair` link) or reports.
+- No credentials in Git; `bridge.env`, `state.db` are excluded.

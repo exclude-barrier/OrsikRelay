@@ -1,48 +1,48 @@
 # Hermes Mobile Wire Contract
 
-**Status:** Stabilisierter, versionierter Client-Vertrag für Orsik Relay.
-**Client:** `HermesConnectionClient` (Capability-Negotiation), `HermesDevicePairClient`,
+**Status:** Stabilized, versioned client contract for Orsik Relay.
+**Client:** `HermesConnectionClient` (capability negotiation), `HermesDevicePairClient`,
 `HermesDeviceSelfRevokeClient`, `HermesRunApprovalClient`, `HermesSessionStreamClient`.
-**Ziel:** Orsik Relay hängt nicht dauerhaft von einem privaten, inkompatiblen
-Hermes-Sonderstand ab, sondern spricht einen explizit versionierten, fail-closed
-verhandelbaren Mobile-Vertrag.
+**Goal:** Orsik Relay does not depend permanently on a private, incompatible
+Hermes special build, but speaks an explicitly versioned, fail-closed,
+negotiable mobile contract.
 
 ---
 
-## 1. Protocol-Versionierung (explizit)
+## 1. Protocol versioning (explicit)
 
-- **Eine** Mobile-Protocol-Version versioniert alle weichen Mobile-Fähigkeiten
-  (session-chat interactive approvals **und** device credentials).
-- Client spricht **Mobile Protocol Version 1**:
+- **One** mobile protocol version versions all soft mobile capabilities
+  (session-chat interactive approvals **and** device credentials).
+- The client speaks **Mobile Protocol Version 1**:
   `HermesConnectionClient.MOBILE_PROTOCOL_VERSION = 1`.
-- Verhandelbar ist ausschließlich die geschlossene Menge
+- The only negotiable set is the closed set
   `SUPPORTED_MOBILE_PROTOCOL_VERSIONS = { 1 }`.
-- **Fail-closed-Regel** (zentral in `isSupportedMobileProtocolVersion`):
-  Ein Vertrag wird nur akzeptiert, wenn `protocol_version`
-  ein **Integer** aus `SUPPORTED_MOBILE_PROTOCOL_VERSIONS` ist.
-  - fehlt (`null`) → **closed** (Legacy, kann nicht verhandelt werden)
-  - nicht-Integer (String `"1"`, Float `1.0`, Array) → **closed**
-  - Integer außerhalb der Menge (`0`, `2`, `3`, …) → **closed**
-- Implizite Versionsannahmen: **keine.** Die Version wird nicht aus der
-  Dokument-Form, der `/health`-`version`-String oder Endpunkt-Anzahl
-  abgeleitet, sondern ausschließlich aus dem expliziten Feld.
+- **Fail-closed rule** (central in `isSupportedMobileProtocolVersion`):
+  A contract is accepted only if `protocol_version`
+  is an **integer** from `SUPPORTED_MOBILE_PROTOCOL_VERSIONS`.
+  - missing (`null`) → **closed** (legacy, cannot be negotiated)
+  - non-integer (string `"1"`, float `1.0`, array) → **closed**
+  - integer outside the set (`0`, `2`, `3`, …) → **closed**
+- Implicit version assumptions: **none.** The version is not derived from the
+  document shape, the `/health` `version` string, or the number of endpoints,
+  but exclusively from the explicit field.
 
-> `/health.version` (z. B. `0.20-test`) ist ein **freier, nicht-versionsbindender**
-> String. Er wird nur zur Anzeige gespeichert und steuert **keine**
-> Feature-Freischaltung.
+> `/health.version` (e.g. `0.20-test`) is a **free, non-version-binding**
+> string. It is stored for display only and controls **no**
+> feature enablement.
 
-## 2. Vertragsschichten
+## 2. Contract layers
 
-### 2.1 `GET /health` (hart, fail-closed → `INCOMPATIBLE_API`)
+### 2.1 `GET /health` (hard, fail-closed → `INCOMPATIBLE_API`)
 ```json
 { "status": "ok", "platform": "hermes-agent", "version": "<non-blank string>" }
 ```
-- `status` exakt `ok`, `platform` exakt `hermes-agent`, `version` nicht-leer.
-- Jede Abweichung → Probe schlägt fehl (`INCOMPATIBLE_API`).
+- `status` exactly `ok`, `platform` exactly `hermes-agent`, `version` non-empty.
+- Any deviation → probe fails (`INCOMPATIBLE_API`).
 
-### 2.2 `GET /v1/capabilities` (hart + weich)
+### 2.2 `GET /v1/capabilities` (hard + soft)
 
-**Harter Kern (fail-closed → `INCOMPATIBLE_API`):**
+**Hard core (fail-closed → `INCOMPATIBLE_API`):**
 ```jsonc
 {
   "object": "hermes.api_server.capabilities",
@@ -57,271 +57,271 @@ verhandelbaren Mobile-Vertrag.
   }
 }
 ```
-- Alle Felder sind **Pflicht** und werden strikt auf exakten Wert geprüft.
-- Die drei Kern-Endpoints werden auf exakte `method`+`path` geprüft.
+- All fields are **required** and are strictly checked for exact value.
+- The three core endpoints are checked for exact `method`+`path`.
 
-**Weiche Mobile-Fähigkeiten (fail-closed → `false`, Verbindung bleibt nutzbar):**
+**Soft mobile capabilities (fail-closed → `false`, connection remains usable):**
 
 1. `session_chat_interactive_approvals`
    - Gate: `features.run_approval_response == true`.
    - `features.session_chat_interactive_approvals`:
-     exakt `{ enabled:true, protocol_version:1, event:"approval.request",
+     exactly `{ enabled:true, protocol_version:1, event:"approval.request",
      choices:["once","deny"], response_endpoint:"run_approval" }`.
-     `choices` exakt zwei Einträge, in dieser Reihenfolge.
+     `choices` exactly two entries, in this order.
    - `endpoints.run_approval`: `{ method:"POST", path:"/v1/runs/{run_id}/approval" }`.
-   - Ergebnis `Success.sessionChatInteractiveApprovals`; persistiert pro Profil
-     (`SharedPreferencesRunApprovalCapabilityStore`); bei `true` sendet der
-     Stream-Client das Header-Flag `X-Hermes-Interactive-Approvals: 1`.
+   - Result `Success.sessionChatInteractiveApprovals`; persisted per profile
+     (`SharedPreferencesRunApprovalCapabilityStore`); when `true`, the
+     stream client sends the header flag `X-Hermes-Interactive-Approvals: 1`.
 
 2. `device_credentials` (Protocol v1)
    - `features.device_credentials`:
-     exakt `{ enabled:true, protocol_version:1,
+     exactly `{ enabled:true, protocol_version:1,
      pair_endpoint:"device_pair", self_revoke_endpoint:"device_self_revoke" }`.
    - `endpoints.device_pair`: `{ method:"POST", path:"/v1/devices/pair" }`.
    - `endpoints.device_self_revoke`: `{ method:"POST", "path": "/v1/devices/self/revoke" }`.
-   - Ergebnis `Success.deviceCredentialsSupported`.
+   - Result `Success.deviceCredentialsSupported`.
 
-> **Feld-Striktheit:** Die weichen Vertrag-Objekte werden auf **exakt die
-> erwartete Feldmenge** geprüft (fehlendes **oder** zusätzliches Feld → closed).
-> Das ist bewusst konservativ: der Client aktiviert eine Mobile-Fähigkeit nur,
-> wenn der Server exakt die v1-Form bewirbt. Siehe §4 „Upgrade-Regeln“.
+> **Field strictness:** The soft contract objects are checked against **exactly
+> the expected field set** (missing **or** additional field → closed).
+> This is deliberately conservative: the client enables a mobile capability only
+> when the server advertises exactly the v1 shape. See §4 “Upgrade rules”.
 
 ### 2.3 `POST /v1/devices/pair` (unauthenticated)
-- Body exakt `{ "code": "<24-Zeichen-Code>" }`, `Content-Type: application/json`,
-  **kein** `Authorization`.
-- Code wird lokal normalisiert (trim, uppercase, `-`/Leerzeichen/`_` entfernt)
-  und muss exakt 24 Zeichen aus dem Alphabet (A–Z ohne I/L/O/U + 1–9) sein;
-  sonst lokal abgelehnt (kein Request).
-- Erfolg 201, exakt:
+- Body exactly `{ "code": "<24-character code>" }`, `Content-Type: application/json`,
+  **no** `Authorization`.
+- The code is normalized locally (trim, uppercase, remove `-`/whitespace/`_`)
+  and must be exactly 24 characters from the alphabet (A–Z without I/L/O/U + 1–9);
+  otherwise rejected locally (no request).
+- Success 201, exactly:
   ```jsonc
   { "object": "hermes.device.credential",
     "device_id": "<uuid>",
     "device_key": "hd_<43 base64url>",
     "profile": "<string>", "label": "<string>",
-    "permissions": ["approvals","chat","runs"],   // exakt diese Menge, jede Reihenfolge
+    "permissions": ["approvals","chat","runs"],   // exactly this set, any order
     "issued_at": <finite number> }
   ```
-- **Keine Ausweitung:** `permissions` muss exakt `{ approvals, chat, runs }`
-  sein; jedes zusätzliche Recht (z. B. `admin`, `jobs`, `memory`, `cron`) →
-  `IncompatibleApi` (closed). Mobile-Credentials reichen nie über
-  `chat`/`runs`/`approvals` hinaus.
-- Fehlercodes 400/409/429/500 → geschlossene Reason; jeder andere Code/
-  -Zustand → closed.
+- **No expansion:** `permissions` must be exactly `{ approvals, chat, runs }`;
+  every additional right (e.g. `admin`, `jobs`, `memory`, `cron`) →
+  `IncompatibleApi` (closed). Mobile credentials never exceed
+  `chat`/`runs`/`approvals`.
+- Error codes 400/409/429/500 → closed reason; every other code/
+  state → closed.
 
-### 2.4 `POST /v1/devices/self/revoke` (Bearer Device-Key)
-- Body exakt 0 Bytes, kein `Content-Type`.
-- Erfolg 200, exakt `{ "revoked": true|false, "device_id": "<uuid>" }`
-  (`revoked=true` frisch, `revoked=false` bereits widerrufen).
-- 401 → closed (unterscheidet nicht API-Key / unbekannt / widerrufen).
+### 2.4 `POST /v1/devices/self/revoke` (Bearer device key)
+- Body exactly 0 bytes, no `Content-Type`.
+- Success 200, exactly `{ "revoked": true|false, "device_id": "<uuid>" }`
+  (`revoked=true` fresh, `revoked=false` already revoked).
+- 401 → closed (does not distinguish API key / unknown / revoked).
 
 ### 2.5 `POST /v1/runs/{run_id}/approval` (Bearer)
 - Body `{ "choice": "once"|"deny", "request_id": "<id>" }`.
-- **Entscheidung ausschließlich `once` / `deny`** (`RunApprovalChoice`).
-  `session`/`always` sind im Client nicht darstellbar.
-- Erfolg 200, exakt:
+- **Decision exclusively `once` / `deny`** (`RunApprovalChoice`).
+  `session`/`always` cannot be represented in the client.
+- Success 200, exactly:
   `{ "object":"hermes.run.approval_response", "run_id":<requested>,
   "choice":<sent>, "resolved":<n>=1> }`.
-- 409 (`approval_not_pending`/`approval_not_active`) → `NoPending`, nie
-  neu abgesendet. **Approvals werden niemals automatisch bestätigt.**
+- 409 (`approval_not_pending`/`approval_not_active`) → `NoPending`, never
+  resubmitted. **Approvals are never confirmed automatically.**
 
-## 3. Capability-Negotiation & Fail-Closed
+## 3. Capability negotiation & fail-closed
 
-| Situation | Ergebnis |
+| Situation | Result |
 |---|---|
-| harter Kern inkorrekt/fehlend | Probe `Failure(INCOMPATIBLE_API)` |
-| weicher Vertrag: fehlt / teilweise / malformed | Feature `false`, Verbindung `Success` |
-| `protocol_version` fehlt / nicht-Integer / außerhalb `{1}` | Feature `false` |
+| hard core incorrect/missing | probe `Failure(INCOMPATIBLE_API)` |
+| soft contract: missing / partial / malformed | feature `false`, connection `Success` |
+| `protocol_version` missing / non-integer / outside `{1}` | feature `false` |
 | `permissions` ≠ `{approvals,chat,runs}` | `pair` → `IncompatibleApi` |
-| nicht-JSON / oversized / falsches `object`/`platform` | Probe `Failure(INCOMPATIBLE_API)` |
+| non-JSON / oversized / wrong `object`/`platform` | probe `Failure(INCOMPATIBLE_API)` |
 | 401/403 | `INVALID_CREDENTIALS` |
-| 429 | `RATE_LIMITED` (nie retry) |
-| Redirect / TLS-Fehler / Timeout / Netzwerk | geschlossene Reason, nie gefolgt |
+| 429 | `RATE_LIMITED` (never retry) |
+| redirect / TLS error / timeout / network | closed reason, never followed |
 
-Invarianten (invariante Sicherheitsgrenzen, nicht verhandelbar):
-- HTTPS-only, TLS aktiv, kein Klartext, keine Redirects, keine
-  Verbindungs-/Write-Retries.
-- Kein Zugriff auf Admin, Jobs, Memory, Cron oder andere privilegierte APIs.
-- Keine Secrets oder sensitiven Tool-Payloads in Mobile-Responses; Fehler
-  enthalten keine Body-/URL-/Key-/Server-Details.
-- Approvals nie automatisch.
+Invariants (invariant security boundaries, non-negotiable):
+- HTTPS-only, TLS active, no cleartext, no redirects, no
+  connection/write retries.
+- No access to admin, jobs, memory, cron, or other privileged APIs.
+- No secrets or sensitive tool payloads in mobile responses; errors
+  contain no body/URL/key/server details.
+- Approvals never automatically.
 
-## 4. Upgrade- / Kompatibilitätsregeln
+## 4. Upgrade / compatibility rules
 
-- **Rückwärtskompatibel:** Ein Server, der exakt den v1-Vertrag bewirbt, wird
-  akzeptiert. Der Client hängt nicht an einem privaten Sonderstand, sondern an
-  der **dokumentierten v1-Form**.
-- **Kein implizites Weiterschalten:** Ein Server, der die v1-Form ändert
-  (Feld ergänzt/umbenennt) oder eine andere `protocol_version` bewirbt, wird
-  **fail-closed** abgelehnt. Es gibt keinen stillen Fallback.
-- **Zukunftsversion (v2):** Um v2 zu unterstützen, (a) `SUPPORTED_MOBILE_PROTOCOL_VERSIONS`
-  auf `{ 1, 2 }` erweitern **und** (b) ein v2-Feldschema ergänzen. Die v1-Form
-  wird dabei **nicht** stillerweitert. Bis dahin bleibt v2 closed.
-- **Keine Desktop-/CLI-Regressions:** Die Änderungen liegen ausschließlich im
-  Android-Client; die Hermes-Server-Konfiguration (Loopback/LAN-VPN,
-  `127.0.0.1:8642`) und die Desktop-/CLI-Nutzung bleiben unberührt.
+- **Backward compatible:** A server that advertises exactly the v1 contract is
+  accepted. The client does not depend on a private special build but on
+  the **documented v1 shape**.
+- **No implicit stepping forward:** A server that changes the v1 shape
+  (adds/renames a field) or advertises a different `protocol_version` is
+  **fail-closed** rejected. There is no silent fallback.
+- **Future version (v2):** To support v2, (a) extend `SUPPORTED_MOBILE_PROTOCOL_VERSIONS`
+  to `{ 1, 2 }` **and** (b) add a v2 field schema. The v1 shape
+  is **not** silently extended in the process. Until then, v2 remains closed.
+- **No desktop/CLI regressions:** The changes are exclusively in the
+  Android client; the Hermes server configuration (loopback/LAN-VPN,
+  `127.0.0.1:8642`) and desktop/CLI usage remain untouched.
 
-## 5. Gap-Analyse
+## 5. Gap analysis
 
-> **Quellen-Basis:** dokumentierter Live-Status (auf dem Hermes-Server am
-> 30.08.2026 verifiziert) + Client-Code. Die Hermes-
-> Quellcode-Basis selbst ist **nicht** lokal und von diesem Rechner nicht
-> erreichbar (Hermes-Server, `127.0.0.1:8642`); eine frische Gegenlektüre des
-> Hermes-Quellcodes erfolgte hierbei **nicht**.
+> **Source basis:** documented live status (verified on the Hermes server on
+> 30.08.2026) + client code. The Hermes
+> source base itself is **not** local and is not reachable from this machine
+> (Hermes server, `127.0.0.1:8642`); a fresh cross-reading of the
+> Hermes source code did **not** take place here.
 
-1. **Was Orsik Relay erwartet:** exakt der v1-Vertrag in §2 (harter Kern +
-   zwei weiche Fähigkeiten + pair/revoke/approval-Endpoints). Fail-closed.
-2. **Was Hermes laut dokumentiertem Live-Status anbietet:** Chat/Streaming,
-   Runs, Approval, Sessions, Skills, Toolsets, Modelle; **nicht** Admin-Write,
-   Jobs-Admin, Memory-Write, Audio/Realtime, CORS. `jobs_admin=false`.
-3. **Private Hermes-Änderungen, die momentan benötigt werden:** Die
-   Mobile-Endpoints (`/v1/devices/pair`, `/v1/devices/self/revoke`,
-   `session_chat_interactive_approvals`, `X-Hermes-Interactive-Approvals`) sind
-   Teil des privaten Hermes-Server-Stands. Sie sind im Client-Vertrag jetzt
-   explizit versioniert, sodass sie **1:1 in einen offiziellen, versionierten
-   Hermes-Mobile-Vertrag überführbar** sind, ohne dass der Client an den
-   privaten Stand gekoppelt bleibt.
-4. **Was für einen stabilen, versionierten, upstream-fähigen Vertrag nötig ist:**
-   - (erledigt) explizite `protocol_version`-Negotiation im Client;
-   - (erledigt) dokumentierter Wire Contract + Upgrade-Regeln (dieses Dokument);
-   - (offen, Server-seitig) Hermes soll `protocol_version` als stabile,
-     dokumentierte Größe ausliefern und bei Formänderungen bumpen;
-   - (offen, Server-seitig) ein optionales top-level `protocol_version` in
-     `/v1/capabilities`, das die Mobile-Protocol-Version unabhängig von den
-     per-Feature-Blöcken kennzeichnet (Client-optional; kein harten
-     Requirement, um Kompatibilität zum aktuellen Stand zu halten).
+1. **What Orsik Relay expects:** exactly the v1 contract in §2 (hard core +
+   two soft capabilities + pair/revoke/approval endpoints). Fail-closed.
+2. **What Hermes offers according to the documented live status:** chat/streaming,
+   runs, approval, sessions, skills, toolsets, models; **not** admin write,
+   jobs admin, memory write, audio/realtime, CORS. `jobs_admin=false`.
+3. **Private Hermes changes that are currently required:** The
+   mobile endpoints (`/v1/devices/pair`, `/v1/devices/self/revoke`,
+   `session_chat_interactive_approvals`, `X-Hermes-Interactive-Approvals`) are
+   part of the private Hermes server build. They are now
+   explicitly versioned in the client contract, so that they can be
+   **transferred 1:1 into an official, versioned
+   Hermes mobile contract** without the client remaining coupled to the
+   private build.
+4. **What is needed for a stable, versioned, upstream-capable contract:**
+   - (done) explicit `protocol_version` negotiation in the client;
+   - (done) documented wire contract + upgrade rules (this document);
+   - (open, server-side) Hermes should expose `protocol_version` as a stable,
+     documented quantity and bump it on shape changes;
+   - (open, server-side) an optional top-level `protocol_version` in
+     `/v1/capabilities` that identifies the mobile protocol version independently of the
+     per-feature blocks (client-optional; no hard
+     requirement, in order to keep compatibility with the current state).
 
-## 6. Verifikation
+## 6. Verification
 
-- `./gradlew test` — bestehende + neue Compatibility-Tests.
-- Neue Tests: `MobileProtocolCompatibilityTest` (v1 offen; 0/2/3/100/fehlend/
-  nicht-Integer closed; pro-Fähigkeit-Independenz; malformed → `INCOMPATIBLE_API`).
-- Unverändert: `HermesConnectionClientTest`, `DeviceCredentialCapabilityTest`
-  (exakt-Feld-Striktheit bleibt bestehen → alle bisherigen Tests grün).
+- `./gradlew test` — existing + new compatibility tests.
+- New tests: `MobileProtocolCompatibilityTest` (v1 open; 0/2/3/100/missing/
+  non-integer closed; per-capability independence; malformed → `INCOMPATIBLE_API`).
+- Unchanged: `HermesConnectionClientTest`, `DeviceCredentialCapabilityTest`
+  (exact-field strictness remains → all previous tests green).
 
-## 7. Pairing-Deep-Link / Bootstrap-Contract (Zero-Config)
+## 7. Pairing deep link / bootstrap contract (zero-config)
 
-**Status:** Client-seitiges Bootstrap-Contract für das Orsik-Relay-Onboarding.
-Der Deep-Link ist der **einzige** Input, den eine frische App braucht, um
-Server-Base-URL + Pairing-Code zu erhalten — ohne manuelles Base-URL- oder
-API-Key-Eingeben (Product Gate).
+**Status:** Client-side bootstrap contract for Orsik Relay onboarding.
+The deep link is the **only** input a fresh app needs in order to obtain
+the server base URL + pairing code — without manually entering a base URL or
+API key (product gate).
 
-### 7.1 Format (exakt)
+### 7.1 Format (exact)
 
 ```
 orsik://pair?server=<urlencoded-HTTPS-BaseURL>&code=<24-Char-Code>
 ```
 
-- `scheme` exakt `orsik` (Client case-insensitive), `host` exakt `pair`.
-- Query: **exakt zwei** Parameter, beide Pflicht: `server` + `code`.
-- `server`: percent-encodierte (UTF-8) HTTPS-Base-URL (`:`→`%3A`,
-  `/`→`%2F`); der Client dekodiert robust (bereits-plain-Werte akzeptiert).
-- `code`: der rohe 24-Char-Code verbatim (Großbuchstaben/Ziffern, keine
-  Sonderzeichen → Percent-Encoding wirkt hier als no-op). **Keine**
-  Anzeige-Dashes im Link (die gibt es nur im CLI-Output).
+- `scheme` exactly `orsik` (client case-insensitive), `host` exactly `pair`.
+- Query: **exactly two** parameters, both required: `server` + `code`.
+- `server`: percent-encoded (UTF-8) HTTPS base URL (`:`→`%3A`,
+  `/`→`%2F`); the client decodes robustly (already-plain values accepted).
+- `code`: the raw 24-char code verbatim (uppercase letters/digits, no
+  special characters → percent-encoding is a no-op here). **No**
+  display dashes in the link (those exist only in the CLI output).
 
-### 7.2 Fail-closed-Parser (Client: `PairingDeepLink.parse`)
+### 7.2 Fail-closed parser (client: `PairingDeepLink.parse`)
 
-Liefert `null`, wirft nie (auch bei malformedem Percent-Encoding).
+Returns `null`, never throws (even on malformed percent-encoding).
 
-| Regel | Ergebnis |
+| Rule | Result |
 |---|---|
-| blank / falsches `scheme` oder `host` / fehlende Query | `null` |
-| fehlendes oder leeres `server` bzw. `code` | `null` |
-| `#`-Fragment | `null` |
-| `server` nicht absolute HTTPS oder mit `user:pass@` | `null` |
-| `code` verletzt den `DevicePairCode`-Contract (≠24 / ∉31-Alphabet) | `null` |
-| malformedes Percent-Encoding (z. B. `%ZZ`) | `null` (kein Exception) |
+| blank / wrong `scheme` or `host` / missing query | `null` |
+| missing or empty `server` or `code` | `null` |
+| `#` fragment | `null` |
+| `server` not absolute HTTPS or with `user:pass@` | `null` |
+| `code` violates the `DevicePairCode` contract (≠24 / ∉31 alphabet) | `null` |
+| malformed percent-encoding (e.g. `%ZZ`) | `null` (no exception) |
 
-### 7.3 Code-Regeln
+### 7.3 Code rules
 
-- Länge **exakt 24**, Alphabet **exakt 31** Zeichen: `A–Z` ohne `I/L/O/U`
+- Length **exactly 24**, alphabet **exactly 31** characters: `A–Z` without `I/L/O/U`
   + `1–9`.
-- Anzeige (CLI): 6 Gruppen à 4 Zeichen, durch `-` getrennt (29 Zeichen).
-- Client-Normalisierung: trim → uppercase → `-`/`_`/Whitespace entfernen →
-  exakt-24- + Alphabet-Check; Abweichung wird lokal abgelehnt (kein Request).
-- **TTL 300 s, Single-Use, SHA-256-Hash at Rest.** Nach Redeem oder Ablauf
-  unbrauchbar.
-- **Device-Key (`hd_`) nie im Link** — erst nach erfolgreichem Redeem.
+- Display (CLI): 6 groups of 4 characters, separated by `-` (29 characters).
+- Client normalization: trim → uppercase → remove `-`/`_`/whitespace →
+  exact-24 + alphabet check; deviation is rejected locally (no request).
+- **TTL 300 s, single-use, SHA-256 hash at rest.** Unusable after redeem or expiry.
+- **Device key (`hd_`) never in the link** — only after a successful redeem.
 
-### 7.4 Server-URL-Regeln
+### 7.4 Server URL rules
 
-- Absolute HTTPS-URL, Host erforderlich, **keine** User-Info, kein Klartext.
-- Fail-closed: `http://`, relative/schemeless, `user:pass@host` → abgelehnt.
-- Server-seitige Quelle: `API_SERVER_PUBLIC_BASE_URL` (`.env`/Environment).
+- Absolute HTTPS URL, host required, **no** user info, no cleartext.
+- Fail-closed: `http://`, relative/schemeless, `user:pass@host` → rejected.
+- Server-side source: `API_SERVER_PUBLIC_BASE_URL` (`.env`/environment).
 
-### 7.5 Zero-Config-Flow (Client)
+### 7.5 Zero-config flow (client)
 
-1. `hermes devices pair --label X` erzeugt den 24-Char-Code; mit gesetztem
-   `API_SERVER_PUBLIC_BASE_URL` zusätzlich Deep-Link + ASCII-QR.
-2. App öffnet `orsik://pair?…` (Tap oder QR-Scan; `BROWSABLE`-intent-filter).
-3. `MainActivity` (`onCreate`/`onNewIntent`) parst den Link fail-closed →
+1. `hermes devices pair --label X` generates the 24-char code; with
+   `API_SERVER_PUBLIC_BASE_URL` set, additionally a deep link + ASCII QR.
+2. The app opens `orsik://pair?…` (tap or QR scan; `BROWSABLE` intent filter).
+3. `MainActivity` (`onCreate`/`onNewIntent`) parses the link fail-closed →
    `PairingBootstrap`.
-4. Onboarding pre-füllt Profilname (Host-Label), Base-URL + Pairing-Code.
-5. Nutzer tippt **Connect** → `DevicePairingCoordinator.connect` (re-validiert
-   URL + Code) → `POST /v1/devices/pair`.
-6. `201` → Device-Key im Keystore, Verbindung aktiv.
-- **Kein Auto-Connect:** das Pairing erfordert die explizite Connect-Zustimmung
-  des Nutzers (Pre-Fill ja, Auto-Submit nein).
+4. Onboarding pre-fills the profile name (host label), base URL + pairing code.
+5. The user taps **Connect** → `DevicePairingCoordinator.connect` (re-validates
+   URL + code) → `POST /v1/devices/pair`.
+6. `201` → device key in the Keystore, connection active.
+- **No auto-connect:** pairing requires the user's explicit connect consent
+  (pre-fill yes, auto-submit no).
 
-### 7.6 Protocol-Version
+### 7.6 Protocol version
 
-Pairing gehört zu **Mobile Protocol v1** (Feature `device_credentials`,
-`protocol_version=1`, §2.2). Der Deep-Link selbst ist versionsfrei (nur
-Client-Bootstrap); die Vertragssicherheit kommt aus den Pair-/Revoke-Endpoints
-(§2.3/§2.4) und dem Code-Contract (§7.3).
+Pairing belongs to **Mobile Protocol v1** (feature `device_credentials`,
+`protocol_version=1`, §2.2). The deep link itself is version-free (only
+client bootstrap); contract security comes from the pair/revoke endpoints
+(§2.3/§2.4) and the code contract (§7.3).
 
-### 7.7 Server-seitige Generierung (Private Extension)
-Die **kanonische** Mobile-v1-Quelle (`hermes devices pair`) gibt **nur** den
-24-Char-Code aus. Die Deep-Link- + ASCII-QR-Generierung
-(`_build_bootstrap_link` / `_render_qr_ascii` / `_public_base_url`) ist eine
-**private Server-Erweiterung** (dev-laptop-Teststand), die
-`API_SERVER_PUBLIC_BASE_URL` + Code zum obigen Link bündelt. Sie ist **nicht**
-Teil des kanonischen Mobile-v1-Commits und wird nicht als stehender
-Vertrag vorausgesetzt — der Client-Contract (§7.1–§7.6) bleibt davon unabhängig.
+### 7.7 Server-side generation (private extension)
+The **canonical** mobile-v1 source (`hermes devices pair`) outputs **only** the
+24-char code. The deep-link + ASCII QR generation
+(`_build_bootstrap_link` / `_render_qr_ascii` / `_public_base_url`) is a
+**private server extension** (dev-laptop test setup) that bundles
+`API_SERVER_PUBLIC_BASE_URL` + code into the link above. It is **not**
+part of the canonical mobile-v1 commit and is not assumed as a standing
+contract — the client contract (§7.1–§7.6) remains independent of it.
 
-Der **Orsik Mobile Bridge**-Sidecar implementiert denselben Pairing-Vertrag
-für eine frische, unveränderte offizielle Hermes-Installation; dort erzeugt die
-lokale Operator-CLI (`orsik-mobile-bridge admin pairing-code`) Code, Deep-Link und
-optional einen QR-Code (`docs/bridge-installation.md`).
+The **Orsik Mobile Bridge** sidecar implements the same pairing contract
+for a fresh, unmodified official Hermes installation; there the
+local operator CLI (`orsik-mobile-bridge admin pairing-code`) generates the code, deep link, and
+optionally a QR code (`docs/bridge-installation.md`).
 
-## 8. Run-Autorität & Recovery
+## 8. Run authority & recovery
 
-**Status:** Read-only gegen den lokal vorhandenen Mobile-v1-Quellstand geprüft
-(im Hermes-Mobile-v1-Quellstand: `gateway/platforms/api_server.py`,
-`api_server_runs.py`, `api_server_run_idempotency.py`). Die Freigabe der
-Single-Slot-Run-Ownership stützt sich auf diese Aussagen. Kein E2E-Lauf gegen einen
-echten Server (nicht verifiziert, s. unten).
+**Status:** Checked read-only against the locally available mobile-v1 source state
+(in the Hermes mobile-v1 source state: `gateway/platforms/api_server.py`,
+`api_server_runs.py`, `api_server_run_idempotency.py`). The approval of
+single-slot run ownership relies on these statements. No E2E run against a
+real server (not verified, see below).
 
-### 8.1 Run-Unabhängigkeit vom SSE-Socket
+### 8.1 Run independence from the SSE socket
 
-`POST /api/sessions/{session_id}/chat/stream` führt den Run in einer
-Hintergrund-Task aus. Bei einem Socket-Disconnect:
+`POST /api/sessions/{session_id}/chat/stream` executes the run in a
+background task. On a socket disconnect:
 
-- **mit** Header `X-Hermes-Interactive-Approvals` (Client sendet ihn nur bei
-  bestätigter Fähigkeit `session_chat_interactive_approvals`): der Run läuft
-  weiter, der begrenzte Replay-Puffer (`_SessionEventQueue`, nicht
-  destruktiv) bewahrt den Tail inkl. terminalem `run.completed`/`error` und
+- **with** header `X-Hermes-Interactive-Approvals` (the client sends it only when the
+  `session_chat_interactive_approvals` capability is confirmed): the run continues,
+  the bounded replay buffer (`_SessionEventQueue`, not
+  destructive) preserves the tail including the terminal `run.completed`/`error` and
   `done`;
-- **ohne** diesen Header: `_drain_session_stream_task_on_disconnect`
-  unterbricht den laufenden Run.
+- **without** this header: `_drain_session_stream_task_on_disconnect`
+  interrupts the running run.
 
-Die Annahme „ein Hermes-Run ist unabhängig vom Socket" gilt also nur für
-das Mobile-v1-Opt-in. Ein terminaler Abschluss ist `assistant.completed` →
-`run.completed` → `done` bzw. `error` → `done` (Server setzt den Status auf
+The assumption “a Hermes run is independent of the socket” therefore applies only to
+the mobile-v1 opt-in. A terminal completion is `assistant.completed` →
+`run.completed` → `done` or `error` → `done` (the server sets the status to
 `failed`).
 
-### 8.2 Re-Attach (bestehend)
+### 8.2 Re-attach (existing)
 
 `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`:
-streng exklusives Replay (`seq > N`), danach Follow bis zum Terminal. Nicht
-replaybarer Puffer → 409 `resume_gap`; unbekannter/fremder Run bzw.
-Session-Mismatch → 404. Client: ungültige `after_seq` wird lokal abgelehnt.
+strictly exclusive replay (`seq > N`), then follow until terminal. Non-
+replayable buffer → 409 `resume_gap`; unknown/foreign run or
+session mismatch → 404. Client: an invalid `after_seq` is rejected locally.
 
-### 8.3 Run-Status lesen (`_handle_get_run`)
+### 8.3 Reading run status (`_handle_get_run`)
 
-`GET /v1/runs/{run_id}` (Bearer, `permission="status"`) liefert das pollable
-Statusobjekt `{"object":"hermes.run","run_id":<id>,"status":<s>, …}` für den
-eigenen Run. Geschlossene Statusmenge (`_set_run_status`):
+`GET /v1/runs/{run_id}` (Bearer, `permission="status"`) returns the pollable
+status object `{"object":"hermes.run","run_id":<id>,"status":<s>, …}` for the
+client's own run. Closed status set (`_set_run_status`):
 
 ```
 queued, running, waiting_for_approval, stopping,
@@ -329,63 +329,62 @@ completed, failed, cancelled, interrupted
 ```
 
 `TERMINAL_STATUSES` (`api_server_run_idempotency.py`) =
-`{completed, failed, cancelled, interrupted}`. Terminale Status werden bis
-`_RUN_STATUS_TTL = 3600 s` zum Polling aufbewahrt
-(`_RUN_STREAM_TTL = 300 s` betrifft nur den Transport-Puffer). Fremder/
-unbekannter/abgelaufener Run → 404 `run_not_found`.
+`{completed, failed, cancelled, interrupted}`. Terminal statuses are retained
+until `_RUN_STATUS_TTL = 3600 s` for polling
+(`_RUN_STREAM_TTL = 300 s` concerns only the transport buffer). Foreign/
+unknown/expired run → 404 `run_not_found`.
 
-Client-Vertrag: **nur** ein terminaler Status gibt die Run-Ownership
-autoritativ frei; `queued`/`running`/`waiting_for_approval`/`stopping` oder ein
-Lesefehler ändern nichts. Der Client liest ausschließlich `run_id` und
-`status`; `output`, `error`, `usage`, `session_id`, `pending_steer` usw. werden
-weder gelesen noch propagiert.
+Client contract: **only** a terminal status authoritatively releases
+run ownership; `queued`/`running`/`waiting_for_approval`/`stopping` or a
+read error change nothing. The client reads exclusively `run_id` and
+`status`; `output`, `error`, `usage`, `session_id`, `pending_steer`, etc. are
+neither read nor propagated.
 
-> **Vertragslücke:** `GET /v1/runs/{run_id}` ist (wie `stop`/`steer`) **nicht**
-> Teil der verhandelten Capability-Menge aus §2.2; der Client nutzt es wie die
-> übrigen `/v1/runs/{run_id}/*`-Endpunkte aus demselben authentifizierten
-> Namensraum. Für einen vollständig upstream-fähigen, fail-closed
-> verhandelten Vertrag sollte der Server diese Run-Status-Fähigkeit (inkl.
-> `protocol_version`) explizit ausweisen.
+> **Contract gap:** `GET /v1/runs/{run_id}` is (like `stop`/`steer`) **not**
+> part of the negotiated capability set from §2.2; the client uses it like the
+> other `/v1/runs/{run_id}/*` endpoints from the same authenticated
+> namespace. For a fully upstream-capable, fail-closed
+> negotiated contract, the server should explicitly expose this run-status capability (including
+> `protocol_version`).
 
-### 8.4 Grenze ohne bestätigte Run-ID
+### 8.4 Boundary without a confirmed run ID
 
-Fehlt nach dem initialen POST eine bestätigte Run-ID (`run.started` nie
-gesehen), existiert **kein** Discovery-/Reconciliation-Endpunkt
-(`session → run`). Der POST kann serverseitig trotzdem akzeptiert worden sein.
-Der Client gibt die Ownership dann **nicht** frei und sendet **keinen** neuen POST;
-der Ausgang wird ehrlich als unbestimmt dargestellt. Eine sichere Recovery
-erfordert eine zusätzliche Server-Fähigkeit (z. B. Session→aktiver-Run-
-Discovery oder eine idempotente Startbestätigung).
+If no confirmed run ID exists after the initial POST (`run.started` never
+seen), there is **no** discovery/reconciliation endpoint
+(`session → run`). The POST may nevertheless have been accepted server-side.
+The client then **does not** release ownership and sends **no** new POST;
+the outcome is honestly presented as undetermined. Safe recovery
+requires an additional server capability (e.g. session→active-run
+discovery or an idempotent start confirmation).
 
-Auch ein 5xx auf den initialen Streaming-POST gilt als unbestimmt (ein
-Gateway/Upstream kann ihn nach bereits erfolgter Admission liefern); nur eine
-3xx/4xx-Antwort belegt eine Ablehnung vor dem Run.
+A 5xx on the initial streaming POST also counts as undetermined (a
+gateway/upstream may deliver it after admission has already occurred); only a
+3xx/4xx response proves a rejection before the run.
 
-### 8.5 E2E-Vorbehalt
+### 8.5 E2E caveat
 
-Es wurde **kein** echter Hermes-Mobile-v1-E2E-Test ausgeführt. Die
-Korrektheit der Endpunkt-/Status-Annahmen stützt sich auf die lokale
-Quelle und MockWebServer-Tests, nicht auf einen Live-Server.
+**No** real Hermes mobile-v1 E2E test was executed. The
+correctness of the endpoint/status assumptions relies on the local
+source and MockWebServer tests, not on a live server.
 
-## 9. Status der Mobile Bridge (2026-10-10)
+## 9. Status of the Mobile Bridge (2026-10-10)
 
-Der Client-Vertrag dieses Dokuments ist unverändert gültig. Neu ist, dass der
-**Server** (Orsik Mobile Bridge, Branch `p13/full-mobile-bridge`) ihn jetzt
-vollständig in Front eines **unveränderten** offiziellen Hermes (`f86276d2`)
-erfüllt:
+The client contract of this document remains valid unchanged. What is new is that the
+**server** (Orsik Mobile Bridge, branch `p13/full-mobile-bridge`) now
+fully satisfies it in front of an **unmodified** official Hermes (`f86276d2`):
 
-- `session_chat_interactive_approvals` wird exakt v1 beworben (`once`/`deny`);
-  `approval.request` erreicht den Client auf dem Session-Chat-Stream, die Antwort
-  erfolgt über `POST /v1/runs/{run_id}/approval`. Der offizielle Core emittiert
-  die Events (nicht simuliert).
-- Der in §8.2 beschriebene Re-Attach
-  `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N` ist jetzt
-  **server-seitig verfügbar**: Die Bridge übernimmt den Chat-Stream, puffert
-  Events pro `run_id`/`seq` und replayt exklusiv ab `after_seq`, dann Live-Follow.
-  Lücke → `409 resume_gap`; unbekannter Run → `404 run_not_found`. Kein
-  erneuter Chat-POST, keine erfundenen Events.
-- Persistente Device-Credentials: Pairing und (individueller) Revoke überleben
-  den Bridge-Neustart; Tokens/Code nur als SHA-256-Hash at rest.
+- `session_chat_interactive_approvals` is advertised exactly as v1 (`once`/`deny`);
+  `approval.request` reaches the client on the session chat stream, the response
+  is sent via `POST /v1/runs/{run_id}/approval`. The official core emits
+  the events (not simulated).
+- The re-attach described in §8.2
+  `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N` is now
+  **available server-side**: the bridge takes over the chat stream, buffers
+  events per `run_id`/`seq`, and replays exclusively from `after_seq`, then live-follows.
+  Gap → `409 resume_gap`; unknown run → `404 run_not_found`. No
+  renewed chat POST, no invented events.
+- Persistent device credentials: pairing and (individual) revoke survive
+  the bridge restart; tokens/code only as SHA-256 hash at rest.
 
-Grenzen bleiben: **keine** Per-Device-Ressourcen-Isolation (Single-Owner-
-Delegation) und **kein** Session→Run-Discovery-Endpunkt.
+Limits remain: **no** per-device resource isolation (single-owner
+delegation) and **no** session→run discovery endpoint.
