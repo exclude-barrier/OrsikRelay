@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.AnnotatedString
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
@@ -31,6 +32,7 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatMarkdownUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     // The markdown renderer parses asynchronously: `rememberMarkdownState`'s
     // `LaunchedEffect` calls `MarkdownStateImpl.parse`, which runs its work on
@@ -75,13 +77,13 @@ class ChatMarkdownUiTest {
         renderMarkdown("```kotlin\nval a = 1\n```")
         waitForText("KOTLIN")
         waitForText("val a = 1")
-        waitForText("Kopieren")
+        waitForText(context.getString(R.string.chat_code_copy))
     }
 
     @Test
     fun codeBlockWithoutLanguageShowsFallbackLabel() {
         renderMarkdown("```\nplain text\n```")
-        waitForText("CODE")
+        waitForText(context.getString(R.string.chat_code_language_fallback))
         waitForText("plain text")
     }
 
@@ -96,8 +98,8 @@ class ChatMarkdownUiTest {
                 }
             }
         }
-        waitForText("Kopieren")
-        composeRule.onNodeWithText("Kopieren").performClick()
+        waitForText(context.getString(R.string.chat_code_copy))
+        composeRule.onNodeWithText(context.getString(R.string.chat_code_copy)).performClick()
 
         // The clipboard must receive exactly the code body, not the fence or
         // the language tag.
@@ -105,7 +107,7 @@ class ChatMarkdownUiTest {
         assertEquals(code, clipboard.lastText.toString())
 
         // Discreet copy feedback, not a toast.
-        waitForText("Kopiert")
+        waitForText(context.getString(R.string.chat_code_copied))
     }
 
     @Test

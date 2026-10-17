@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
@@ -32,6 +33,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class ChatScreenUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     private val noOpRunServiceStarter = object : RunForegroundServiceStarter {
         override fun start(profileId: String, sessionId: String) {}
@@ -58,9 +60,9 @@ class ChatScreenUiTest {
         })
 
         assertTrue(started.await(3, TimeUnit.SECONDS))
-        composeRule.onNodeWithText("Nachrichten werden geladen…").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_loading)).assertIsDisplayed()
         release.countDown()
-        waitForText("Diese Session enthält noch keine Nachrichten.")
+        waitForText(context.getString(R.string.chat_empty))
     }
 
     @Test
@@ -82,7 +84,12 @@ class ChatScreenUiTest {
         })
 
         waitForText("Fixture-Antwort")
-        listOf("Du", "Hermes", "System", "Tool: fixture_tool").forEach {
+        listOf(
+            context.getString(R.string.chat_role_user),
+            context.getString(R.string.chat_role_assistant),
+            context.getString(R.string.chat_role_system),
+            context.getString(R.string.chat_role_tool_named, "fixture_tool")
+        ).forEach {
             composeRule.onNodeWithText(it).assertIsDisplayed()
         }
         // Non-tool content is rendered verbatim…
@@ -107,7 +114,7 @@ class ChatScreenUiTest {
             )
         })
 
-        waitForText("Tool-Aktivität")
+        waitForText(context.getString(R.string.chat_tool_activity_history))
         composeRule.onAllNodesWithText("rm -rf /tmp/orsik_p3_e2e_dir").assertCountEquals(0)
     }
 
@@ -138,9 +145,9 @@ class ChatScreenUiTest {
             }
         })
 
-        waitForText("Die Nachrichten konnten nicht geladen werden.")
+        waitForText(context.getString(R.string.error_chat_generic))
         assertEquals(1, calls.get())
-        composeRule.onNodeWithText("Erneut versuchen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).performClick()
         waitForText("Nach Retry")
         assertEquals(2, calls.get())
     }
@@ -153,8 +160,8 @@ class ChatScreenUiTest {
             onBack = { invoked.set(true) }
         )
 
-        waitForText("Diese Session enthält noch keine Nachrichten.")
-        composeRule.onNodeWithText("Zurück").performClick()
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         assertTrue(invoked.get())
     }
 

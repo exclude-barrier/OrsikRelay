@@ -94,7 +94,7 @@ class ChatDraftPersistenceUiTest {
         setScreen(drafts)
 
         waitForComposerText("Wiederhergestellter Entwurf")
-        composeRule.onNodeWithText("Senden").assertIsEnabled()
+        composeRule.onNodeWithText(context().getString(R.string.chat_send)).assertIsEnabled()
     }
 
     @Test
@@ -144,7 +144,7 @@ class ChatDraftPersistenceUiTest {
 
         // Typing schedules the debounced, latest-value write; advancing the
         // main clock past the debounce window lets it run.
-        composeRule.onNodeWithText("Nachricht").performTextInput("Überlebt Neuaufbau")
+        composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Überlebt Neuaufbau")
         composeRule.mainClock.advanceTimeBy(700)
         composeRule.waitForIdle()
 
@@ -224,8 +224,8 @@ class ChatDraftPersistenceUiTest {
         setScreen(drafts, runController = controllerFor(source))
 
         waitForEmpty()
-        composeRule.onNodeWithText("Nachricht").performTextInput("Wird gesendet")
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Wird gesendet")
+        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // The server-confirmed handoff clears the composer AND the stored
@@ -247,8 +247,8 @@ class ChatDraftPersistenceUiTest {
         setScreen(drafts, runController = controllerFor(source))
 
         waitForEmpty()
-        composeRule.onNodeWithText("Nachricht").performTextInput("Bleibt erhalten")
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Bleibt erhalten")
+        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // Uncertain run: the initial POST failed with NO confirmed run ID, but it
@@ -262,9 +262,9 @@ class ChatDraftPersistenceUiTest {
 
         assertEquals("Bleibt erhalten", draftText())
         assertEquals("Bleibt erhalten", drafts.stored(PROFILE, SESSION))
-        composeRule.onNodeWithText("Senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Senden").assertIsNotEnabled()
-        composeRule.onNodeWithText("Nachricht").assertIsNotEnabled()
+        composeRule.onNodeWithText(context().getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithText(context().getString(R.string.chat_send)).assertIsNotEnabled()
+        composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).assertIsNotEnabled()
         assertTrue(
             "the honest uncertain notice must be shown, never a stopped run",
             composeRule.onAllNodesWithTag("chat_run_uncertain")
@@ -311,8 +311,8 @@ class ChatDraftPersistenceUiTest {
             }
         }
         waitForEmpty()
-        composeRule.onNodeWithText("Nachricht").performTextInput("Ordinary message")
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Ordinary message")
+        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -324,7 +324,7 @@ class ChatDraftPersistenceUiTest {
         composeRule.onNodeWithTag("chatSteerSend").performClick()
         assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Als neue Nachricht senden")
+            composeRule.onAllNodesWithText(context().getString(R.string.chat_steer_send_as_new_message))
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -344,7 +344,7 @@ class ChatDraftPersistenceUiTest {
         waitForEmpty()
         assertTrue(
             "recovery must not be restored by the draft store",
-            composeRule.onAllNodesWithText("Als neue Nachricht senden")
+            composeRule.onAllNodesWithText(context().getString(R.string.chat_steer_send_as_new_message))
                 .fetchSemanticsNodes().isEmpty()
         )
     }
@@ -432,7 +432,7 @@ class ChatDraftPersistenceUiTest {
         waitForEmpty()
 
         // Newer local intent while the same-key load is still in flight.
-        composeRule.onNodeWithText("Nachricht").performTextInput("Neuer Eingabe")
+        composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Neuer Eingabe")
 
         // The delayed SAME-key load completes with an OLDER stored value.
         repo.release(PROFILE, SESSION, "Alter gespeicherter Wert")
@@ -478,8 +478,8 @@ class ChatDraftPersistenceUiTest {
         }
         waitForEmpty()
 
-        composeRule.onNodeWithText("Nachricht").performTextInput("Wird gesendet")
-        composeRule.onNodeWithText("Senden").performClick()
+        composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Wird gesendet")
+        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // The successful send handoff clears composer + stored state, with
@@ -534,7 +534,7 @@ class ChatDraftPersistenceUiTest {
             }
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Diese Session enthält noch keine Nachrichten.")
+            composeRule.onAllNodesWithText(context().getString(R.string.chat_empty))
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
@@ -556,7 +556,7 @@ class ChatDraftPersistenceUiTest {
 
     private fun draftText(): String? {
         return composeRule
-            .onAllNodesWithText("Nachricht")
+            .onAllNodesWithText(context().getString(R.string.chat_input_label))
             .fetchSemanticsNodes()
             .firstOrNull { it.config.contains(SemanticsProperties.EditableText) }
             ?.config[SemanticsProperties.EditableText]

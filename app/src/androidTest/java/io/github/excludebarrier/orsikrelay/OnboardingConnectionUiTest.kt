@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.profile.VerifiedProfileSaver
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionProbe
@@ -34,6 +35,7 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingConnectionUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     // `OnboardingRoute` writes its `connectionState` right after
     // `withContext(Dispatchers.IO) { connect(...) }` inside a
@@ -66,7 +68,7 @@ class OnboardingConnectionUiTest {
         setRoute(coordinator)
 
         submitValidForm()
-        waitForText("Sessions")
+        waitForText(context.getString(R.string.sessions_title))
 
         assertEquals(1, probeCalls.get())
         assertEquals(1, saveCalls.get())
@@ -89,7 +91,7 @@ class OnboardingConnectionUiTest {
         setRoute(coordinator)
 
         submitValidForm()
-        waitForText("Der API-Key wurde abgelehnt.")
+        waitForText(context.getString(R.string.error_connection_invalid_credentials))
 
         // The form is scrollable and submitValidForm() scrolled to the submit
         // button, so the title may be scrolled out of view; scroll it back in
@@ -97,7 +99,7 @@ class OnboardingConnectionUiTest {
         // The open soft keyboard may pan the whole window, making a display
         // check geometry-dependent; the title exists only on the onboarding
         // screen, so its existence proves we stayed there.
-        composeRule.onNodeWithText("Server hinzufügen").assertExists()
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertExists()
         assertEquals(0, saveCalls.get())
     }
 
@@ -114,12 +116,12 @@ class OnboardingConnectionUiTest {
         setRoute(coordinator)
 
         submitValidForm()
-        waitForText("Der Server konnte nicht sicher gespeichert werden.")
+        waitForText(context.getString(R.string.error_connection_persistence))
 
         // The open soft keyboard may pan the whole window, making a display
         // check geometry-dependent; the title exists only on the onboarding
         // screen, so its existence proves we stayed there.
-        composeRule.onNodeWithText("Server hinzufügen").assertExists()
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertExists()
     }
 
     @Test
@@ -140,12 +142,12 @@ class OnboardingConnectionUiTest {
 
         submitValidForm()
         assertTrue(started.await(3, TimeUnit.SECONDS))
-        waitForText("Verbindung wird geprüft…")
+        waitForText(context.getString(R.string.onboarding_connecting))
         composeRule.onNodeWithTag("onboardingSubmitButton").assertIsNotEnabled()
         assertEquals(1, probeCalls.get())
 
         release.countDown()
-        waitForText("Sessions")
+        waitForText(context.getString(R.string.sessions_title))
         assertEquals(1, probeCalls.get())
     }
 
@@ -154,7 +156,7 @@ class OnboardingConnectionUiTest {
             HermesTheme {
                 var connected by remember { mutableStateOf(false) }
                 if (connected) {
-                    Text("Sessions")
+                    Text(context.getString(R.string.sessions_title))
                 } else {
                     OnboardingRoute(
                         connect = { draft -> coordinator.connect(draft) },
@@ -173,7 +175,7 @@ class OnboardingConnectionUiTest {
             .performTextInput("Fixture")
         composeRule.onNodeWithTag("onboardingBaseUrl")
             .performTextInput(BASE_URL)
-        composeRule.onNodeWithContentDescription("API-Key", useUnmergedTree = true)
+        composeRule.onNodeWithContentDescription(context.getString(R.string.onboarding_api_key_label), useUnmergedTree = true)
             .performTextInput(FIXTURE_KEY)
         composeRule.onNodeWithTag("onboardingSubmitButton")
             .performScrollTo()

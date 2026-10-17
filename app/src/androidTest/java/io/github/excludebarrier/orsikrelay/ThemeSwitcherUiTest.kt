@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
@@ -35,6 +36,7 @@ import org.junit.Test
  * existing [HermesTheme].
  */
 class ThemeSwitcherUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -66,7 +68,7 @@ class ThemeSwitcherUiTest {
         }
 
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("System").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.theme_mode_system)).assertIsDisplayed()
         assertEquals(ThemeMode.System, fakeStore.value)
     }
 
@@ -79,14 +81,14 @@ class ThemeSwitcherUiTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription("Darstellung").performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.theme_switcher_description)).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Hell").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_light)).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Hell").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.theme_mode_light)).performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Hell").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.theme_mode_light)).assertIsDisplayed()
         assertEquals(1, fakeStore.writes)
         assertEquals(ThemeMode.Light, fakeStore.value)
     }
@@ -101,16 +103,16 @@ class ThemeSwitcherUiTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription("Darstellung").performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.theme_switcher_description)).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Dunkel").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_dark)).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Dunkel").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.theme_mode_dark)).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             captured == Color(0xFF0D1117)
         }
 
-        composeRule.onNodeWithText("Dunkel").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.theme_mode_dark)).assertIsDisplayed()
         assertEquals(ThemeMode.Dark, fakeStore.value)
     }
 
@@ -139,14 +141,14 @@ class ThemeSwitcherUiTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription("Darstellung").performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.theme_switcher_description)).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Dunkel").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_dark)).fetchSemanticsNodes().isNotEmpty()
         }
 
-        assertTrue(composeRule.onAllNodesWithText("System").fetchSemanticsNodes().isNotEmpty())
-        assertTrue(composeRule.onAllNodesWithText("Hell").fetchSemanticsNodes().isNotEmpty())
-        assertTrue(composeRule.onAllNodesWithText("Dunkel").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_system)).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_light)).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText(context.getString(R.string.theme_mode_dark)).fetchSemanticsNodes().isNotEmpty())
     }
 
     private fun waitForText(text: String) {

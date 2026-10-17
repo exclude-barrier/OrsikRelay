@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentDraftHolder
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentMetadata
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentReadResult
@@ -684,15 +685,15 @@ class ChatLandscapeComposerUiTest {
     private companion object {
         const val PROFILE_ID = "fixture-profile-id"
         const val SESSION_ID = "fixture-session-id"
-        const val HEADER_LABEL = "Chat"
-        const val INPUT_LABEL = "Nachricht"
-        const val SEND_LABEL = "Senden"
-        const val ADD_LABEL = "Anhang"
-        const val REMOVE_LABEL = "Entfernen"
+        val HEADER_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_title) }
+        val INPUT_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_input_label) }
+        val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
+        val ADD_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_add) }
+        val REMOVE_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_remove) }
         const val ATTACHMENT_NAME = "holiday.png"
         const val ATTACHMENT_SIZE = "1.4 MiB"
         const val RUN_ID = "run_fixture_0001"
-        const val SIZE_ERROR_LABEL = "Der Anhang ist zu groß. Maximal 5 MiB pro Bild."
+        val SIZE_ERROR_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_error_size) }
         const val STEER_INPUT_TAG = "chatSteerInput"
         const val STEER_SEND_TAG = "chatSteerSend"
         const val MIN_TOUCH_TARGET_DP = 48f

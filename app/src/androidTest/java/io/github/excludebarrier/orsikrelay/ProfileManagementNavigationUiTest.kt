@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
@@ -30,6 +31,7 @@ import org.junit.Test
  * request is made.
  */
 class ProfileManagementNavigationUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
@@ -45,16 +47,16 @@ class ProfileManagementNavigationUiTest {
     fun profileButtonOpensTheProfileListWithStoredProfiles() {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
-        waitForText("Sessions")
-        composeRule.onNodeWithText("Server verwalten").performClick()
+        waitForText(context.getString(R.string.sessions_title))
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
 
-        waitForText("Server")
+        waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Alpha").assertExists()
         composeRule.onNodeWithText("https://alpha.local").assertExists()
         composeRule.onNodeWithText("Beta").assertExists()
 
-        composeRule.onNodeWithText("Zurück").performClick()
-        waitForText("Sessions")
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        waitForText(context.getString(R.string.sessions_title))
     }
 
     @Test
@@ -86,24 +88,24 @@ class ProfileManagementNavigationUiTest {
 
         waitForText("Session Alpha")
         composeRule.onNodeWithText("Session Alpha").performClick()
-        waitForText("Chat")
+        waitForText(context.getString(R.string.chat_title))
 
-        composeRule.onNodeWithText("Zurück").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
         waitForText("Session Alpha")
-        composeRule.onNodeWithText("Server verwalten").performClick()
-        waitForText("Server")
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        waitForText(context.getString(R.string.profiles_title))
 
         composeRule.onNodeWithText("Alpha").performClick()
-        waitForText("Server löschen?")
+        waitForText(context.getString(R.string.profiles_delete_title))
         // Pre-deletion loads (Sessions + Chat) legitimately queried the
         // active profile; only post-deletion loads must not.
         val queriesBeforeDeletion = profileIdsQueried.size
-        composeRule.onNodeWithText("Löschen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.profiles_delete_confirm)).performClick()
 
-        waitForText("Der Server ist unvollständig oder nicht verfügbar.")
+        waitForText(context.getString(R.string.error_session_profile))
         // The safe state: no chat entry is alive any more.
         assertTrue(
-            composeRule.onAllNodesWithText("Chat").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText(context.getString(R.string.chat_title)).fetchSemanticsNodes().isEmpty()
         )
         assertEquals(1, admin.deletedCount)
         // Only Alpha (the active profile) was deleted; Beta survives.
@@ -120,12 +122,12 @@ class ProfileManagementNavigationUiTest {
     fun cancelKeepsTheProfileAndNoDeletionIsStarted() {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
-        waitForText("Sessions")
-        composeRule.onNodeWithText("Server verwalten").performClick()
-        waitForText("Server")
+        waitForText(context.getString(R.string.sessions_title))
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Beta").performClick()
-        waitForText("Server löschen?")
-        composeRule.onNodeWithText("Abbrechen").performClick()
+        waitForText(context.getString(R.string.profiles_delete_title))
+        composeRule.onNodeWithText(context.getString(R.string.new_session_cancel)).performClick()
 
         waitForText("Beta")
         composeRule.onNodeWithText("Alpha").assertExists()
@@ -152,17 +154,17 @@ class ProfileManagementNavigationUiTest {
         }
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID), admin = failingAdmin)
 
-        waitForText("Sessions")
-        composeRule.onNodeWithText("Server verwalten").performClick()
-        waitForText("Server")
+        waitForText(context.getString(R.string.sessions_title))
+        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+        waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Alpha").performClick()
-        waitForText("Server löschen?")
-        composeRule.onNodeWithText("Löschen").performClick()
+        waitForText(context.getString(R.string.profiles_delete_title))
+        composeRule.onNodeWithText(context.getString(R.string.profiles_delete_confirm)).performClick()
 
-        waitForText("Der Server konnte nicht gelöscht werden.")
+        waitForText(context.getString(R.string.profiles_delete_error_generic))
         composeRule.onNodeWithText("Alpha").assertExists()
         // The retry action replaces the confirm label after the failure.
-        composeRule.onNodeWithText("Erneut versuchen").assertExists()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).assertExists()
     }
 
     private fun setHost(

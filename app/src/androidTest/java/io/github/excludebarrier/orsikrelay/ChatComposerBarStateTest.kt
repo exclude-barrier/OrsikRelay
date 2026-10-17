@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentKind
 import io.github.excludebarrier.orsikrelay.ui.chat.ComposerBar
@@ -36,6 +37,7 @@ import org.junit.Test
  * No network, no picker, no credentials: only labels and callbacks.
  */
 class ChatComposerBarStateTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -211,11 +213,13 @@ class ChatComposerBarStateTest {
             .asImageBitmap()
 
     private companion object {
-        const val ADD_LABEL = "Anhang"
-        const val REMOVE_LABEL = "Entfernen"
-        const val BUSY_LABEL = "Anhang wird gelesen …"
-        const val UNREADABLE_LABEL = "Der Anhang konnte nicht gelesen werden."
-        const val CONFLICT_LABEL =
-            "In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst."
+        val ADD_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_add) }
+        val REMOVE_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_remove) }
+        val BUSY_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_busy) }
+        val UNREADABLE_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_attachment_error_unreadable) }
+        val CONFLICT_LABEL: String by lazy {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getString(R.string.chat_run_conflict)
+        }
     }
 }

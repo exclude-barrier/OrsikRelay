@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
@@ -20,6 +21,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class SessionStartupNavigationUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
@@ -45,8 +47,8 @@ class SessionStartupNavigationUiTest {
             startup = StartupProfile.None
         )
 
-        waitForText("Server hinzufügen")
-        composeRule.onNodeWithText("Server hinzufügen").assertIsDisplayed()
+        waitForText(context.getString(R.string.onboarding_title))
+        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertIsDisplayed()
     }
 
     @Test
@@ -60,9 +62,9 @@ class SessionStartupNavigationUiTest {
         }
         setHost(source, startup = StartupProfile.Unavailable)
 
-        waitForText("Der Server ist unvollständig oder nicht verfügbar.")
+        waitForText(context.getString(R.string.error_session_profile))
         composeRule.onNodeWithText(
-            "Der Server ist unvollständig oder nicht verfügbar."
+            context.getString(R.string.error_session_profile)
         ).assertIsDisplayed()
     }
 

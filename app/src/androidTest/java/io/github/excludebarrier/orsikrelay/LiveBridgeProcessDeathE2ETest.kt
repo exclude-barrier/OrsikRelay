@@ -192,8 +192,8 @@ class LiveBridgeProcessDeathE2ETest {
 
     private companion object {
         const val PROFILE_NAME = "OR-09 Live Bridge"
-        const val COMPOSER_LABEL = "Nachricht"
-        const val SEND_LABEL = "Senden"
+        val COMPOSER_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_input_label) }
+        val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
         const val TAG_RUN_UNCERTAIN = "chat_run_uncertain"
         const val TAG_RUN_RECONCILE = "chat_run_reconcile"
         const val UI_TIMEOUT_MS = 30_000L

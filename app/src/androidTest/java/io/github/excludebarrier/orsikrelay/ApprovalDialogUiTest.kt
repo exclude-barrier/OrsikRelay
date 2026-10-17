@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalChoice
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalError
@@ -41,6 +42,7 @@ import org.junit.Test
  * be represented by [ApprovalRequest].
  */
 class ApprovalDialogUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -289,17 +291,19 @@ class ApprovalDialogUiTest {
         const val REQUEST_ID = "fedcba9876543210fedcba9876543210"
         const val COMMAND = "synthetic-command"
 
-        const val TITLE = "Freigabe anfragen"
-        const val ACTION_LABEL = "Aktion"
-        const val ACTION_VALUE = "Hermes-Run"
+        val TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_title) }
+        val ACTION_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_action_label) }
+        val ACTION_VALUE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_action_value) }
         const val TARGET_LABEL = "Ziel"
-        const val REASON_LABEL = "Hinweis"
-        const val SAFE_DESCRIPTION =
-            "Eine potenziell gefährliche Aktion benötigt deine Freigabe."
+        val REASON_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_reason_label) }
+        val SAFE_DESCRIPTION: String by lazy {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getString(R.string.approval_safe_description)
+        }
         const val RISK_NOTE =
             "Sicherheitsmodul empfiehlt Ablehnung. Erlauben nur, wenn du die Aktion bewusst freigibst."
-        const val ERROR_GENERIC = "Die Entscheidung konnte nicht übermittelt werden."
-        const val ALREADY_RESOLVED = "Diese Freigabe wurde bereits beantwortet."
+        val ERROR_GENERIC: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_error_generic) }
+        val ALREADY_RESOLVED: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_already_resolved) }
 
         const val TAG_SURFACE = "approval_surface"
         const val TAG_DENY = "approval_deny"

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionOutcome
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairError
@@ -47,6 +48,7 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class OnboardingPairingUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -67,7 +69,10 @@ class OnboardingPairingUiTest {
         // The recommendation hint is visible, the pairing-code field is
         // present with password semantics, and the API-key field does not
         // exist in this mode at all.
-        composeRule.onNodeWithText("Pairing-Code (empfohlen)").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            context.getString(R.string.onboarding_mode_pairing) +
+                " (" + context.getString(R.string.onboarding_mode_pairing_recommended) + ")"
+        ).assertIsDisplayed()
         assertPasswordField()
         composeRule.onNodeWithTag("onboardingApiKey").assertDoesNotExist()
     }
@@ -141,7 +146,7 @@ class OnboardingPairingUiTest {
             .performScrollTo()
             .performClick()
         assertTrue("the pairing request started", started.await(3, TimeUnit.SECONDS))
-        waitForText("Verbindung wird geprüft…")
+        waitForText(context.getString(R.string.onboarding_connecting))
         composeRule.onNodeWithTag("onboardingSubmitButton").assertIsNotEnabled()
         assertEquals(1, pairingCallCount.get())
         // Double tap: the button is disabled, so no second request starts.
@@ -149,7 +154,7 @@ class OnboardingPairingUiTest {
         assertEquals(1, pairingCallCount.get())
 
         release.countDown()
-        waitForText("Die Verbindungsdaten sind ungültig.")
+        waitForText(context.getString(R.string.error_connection_invalid_input))
         assertEquals(1, pairingCallCount.get())
     }
 
@@ -173,21 +178,21 @@ class OnboardingPairingUiTest {
 
         val cases = listOf(
             DevicePairingFailure.Pairing(DevicePairError.PairingCodeInvalid) to
-                "Der Pairing-Code ist ungültig",
+                context.getString(R.string.error_pairing_code_invalid),
             DevicePairingFailure.Pairing(DevicePairError.DeviceLimitExceeded) to
-                "Zu viele Geräte",
+                context.getString(R.string.error_pairing_device_limit),
             DevicePairingFailure.Pairing(DevicePairError.PairRateLimited) to
-                "Zu viele Pairing-Anfragen",
+                context.getString(R.string.error_pairing_rate_limited),
             DevicePairingFailure.Pairing(DevicePairError.Tls) to
-                "sichere Serververbindung",
+                context.getString(R.string.error_connection_tls),
             DevicePairingFailure.Pairing(DevicePairError.Timeout) to
-                "nicht rechtzeitig geantwortet",
+                context.getString(R.string.error_connection_timeout),
             DevicePairingFailure.Pairing(DevicePairError.Network) to
-                "nicht erreichbar",
-            DevicePairingFailure.IncompatiblePairing to "kein sicheres Geräte-Pairing",
-            DevicePairingFailure.Persistence to "nicht sicher gespeichert",
+                context.getString(R.string.error_connection_network),
+            DevicePairingFailure.IncompatiblePairing to context.getString(R.string.error_pairing_incompatible_api),
+            DevicePairingFailure.Persistence to context.getString(R.string.error_connection_persistence),
             DevicePairingFailure.Verification(ConnectionFailureReason.INVALID_CREDENTIALS) to
-                "Geräte-Zugang wurde vom Server abgelehnt"
+                context.getString(R.string.error_pairing_credential_rejected)
         )
         cases.forEach { (failure, expectedText) ->
             outcome = DevicePairingOutcome.Failure(failure)
@@ -220,7 +225,7 @@ class OnboardingPairingUiTest {
             .performClick()
 
         composeRule
-            .onNodeWithText("Bitte einen gültigen Pairing-Code eingeben.")
+            .onNodeWithText(context.getString(R.string.error_pairing_code_local_invalid))
             .assertIsDisplayed()
         assertEquals(0, pairingCallCount.get())
     }
@@ -256,7 +261,7 @@ class OnboardingPairingUiTest {
         // Pattern proven in ChatDraftPersistenceUiTest: read the merged
         // field node's configuration directly.
         val field = composeRule
-            .onNodeWithContentDescription("Pairing-Code", useUnmergedTree = true)
+            .onNodeWithContentDescription(context.getString(R.string.onboarding_pairing_code_label), useUnmergedTree = true)
             .fetchSemanticsNode()
         assertTrue(
             "the pairing code field has password semantics",

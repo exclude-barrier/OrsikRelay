@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
@@ -21,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class SessionsScreenUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -38,9 +40,9 @@ class SessionsScreenUiTest {
         )
 
         assertTrue(started.await(3, TimeUnit.SECONDS))
-        composeRule.onNodeWithText("Sessions werden geladen…").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_loading)).assertIsDisplayed()
         release.countDown()
-        waitForText("Keine Sessions vorhanden.")
+        waitForText(context.getString(R.string.sessions_empty))
     }
 
     @Test
@@ -64,17 +66,17 @@ class SessionsScreenUiTest {
         )
 
         waitForText("Erste Fixture-Session")
-        composeRule.onNodeWithText("cli · Angepinnt").assertIsDisplayed()
+        composeRule.onNodeWithText("cli · " + context.getString(R.string.session_pinned)).assertIsDisplayed()
         composeRule.onNodeWithText("7 Nachrichten").assertIsDisplayed()
-        composeRule.onNodeWithText("Unbenannte Session").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.session_fallback_title)).assertIsDisplayed()
     }
 
     @Test
     fun emptyStateOnlyFollowsSuccessfulEmptyPage() {
         setScreen(SessionPageSource { _, _, _ -> success(emptyList(), false) })
 
-        waitForText("Keine Sessions vorhanden.")
-        composeRule.onNodeWithText("Keine Sessions vorhanden.").assertIsDisplayed()
+        waitForText(context.getString(R.string.sessions_empty))
+        composeRule.onNodeWithText(context.getString(R.string.sessions_empty)).assertIsDisplayed()
     }
 
     @Test
@@ -90,9 +92,9 @@ class SessionsScreenUiTest {
             }
         )
 
-        waitForText("Die Sessions konnten nicht geladen werden.")
+        waitForText(context.getString(R.string.error_session_generic))
         assertEquals(1, calls.get())
-        composeRule.onNodeWithText("Erneut versuchen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).performClick()
         waitForText("Nach Retry")
         assertEquals(2, calls.get())
     }
@@ -111,8 +113,8 @@ class SessionsScreenUiTest {
             }
         )
 
-        waitForText("Mehr laden")
-        composeRule.onNodeWithText("Mehr laden").performClick()
+        waitForText(context.getString(R.string.sessions_load_more))
+        composeRule.onNodeWithText(context.getString(R.string.sessions_load_more)).performClick()
         waitForText("Seite Zwei")
 
         composeRule.onNodeWithText("Seite Eins").assertIsDisplayed()
@@ -140,12 +142,12 @@ class SessionsScreenUiTest {
         )
 
         assertTrue(started.await(3, TimeUnit.SECONDS))
-        composeRule.onNodeWithText("Aktualisieren").performClick()
-        composeRule.onNodeWithText("Aktualisieren").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_refresh)).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_refresh)).performClick()
         assertEquals(1, calls.get())
         assertEquals(1, maxActive.get())
         release.countDown()
-        waitForText("Keine Sessions vorhanden.")
+        waitForText(context.getString(R.string.sessions_empty))
     }
 
     private fun setScreen(source: SessionPageSource) {

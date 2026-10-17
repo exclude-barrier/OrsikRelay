@@ -150,8 +150,8 @@ class LiveBridgeImageTurnE2ETest {
 
     private companion object {
         const val PROFILE_NAME = "OR-10 Live Bridge"
-        const val COMPOSER_LABEL = "Nachricht"
-        const val SEND_LABEL = "Senden"
+        val COMPOSER_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_input_label) }
+        val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
         const val QUESTION = "Welche Farbe hat das Bild? Antworte mit einem einzigen Wort."
         const val TAG_ATTACHMENT_ADD = "composer_attachment_add"
         const val TAG_ATTACHMENT_THUMBNAIL = "composer_attachment_thumbnail"

@@ -22,7 +22,7 @@ class AppBrandingUiTest {
             context.packageName,
             0
         ).loadLabel(context.packageManager).toString()
-        assertEquals("Orsik Relay", label)
+        assertEquals(context.getString(R.string.app_name), label)
     }
 
     @Test
