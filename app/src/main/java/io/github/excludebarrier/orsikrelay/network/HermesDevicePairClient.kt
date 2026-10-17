@@ -31,8 +31,7 @@ import org.json.JSONObject
  * transport only; it takes the base URL and the raw pairing code and
  * never receives any credential.
  *
- * Wire contract (server contract v1, read-only reference documented in
- * internal task log):
+ * Wire contract (server contract v1, docs/mobile-wire-contract.md §2.3):
  * - the request carries the exact JSON body `{"code": "<code>"}` with
  *   `Content-Type: application/json` and NO `Authorization` header
  *   (the pairing endpoint is unauthenticated);

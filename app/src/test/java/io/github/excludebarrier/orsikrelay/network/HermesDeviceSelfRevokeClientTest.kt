@@ -21,7 +21,7 @@ import org.junit.Test
 /**
  * Mission 017A: transport contract of the single authenticated
  * `POST /v1/devices/self/revoke` write. Wire format per server contract
- * v1 (read-only reference in internal task log): `Authorization: Bearer <device
+ * v1 (docs/mobile-wire-contract.md §2.4): `Authorization: Bearer <device
  * key>`, no request body (exact empty JSON object, no Content-Type); 200
  * with EXACTLY `{"revoked":bool,"device_id":<uuid>}`; 401 is the closed
  * invalid-credentials answer (no credential-class oracle); 403/404/429

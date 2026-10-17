@@ -65,7 +65,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * disposal/rebuild boundary a recreation produces). It is strictly NOT a
  * real Activity/config recreation: no `onSaveInstanceState` /
  * `onConfigurationChanged` callbacks are exercised (see the test's
- * honest-scope comment and internal task log, NICHT VERIFIZIERT).
+ * honest-scope comment, NICHT VERIFIZIERT).
  */
 class ChatDraftPersistenceUiTest {
 
@@ -107,7 +107,7 @@ class ChatDraftPersistenceUiTest {
         // recreation produces. What this test does NOT exercise are the
         // actual Android lifecycle callbacks (`onSaveInstanceState` /
         // `onConfigurationChanged`); a genuine ActivityScenario
-        // config-recreation run remains NICHT VERIFIZIERT (see internal task log).
+        // config-recreation run remains NICHT VERIFIZIERT.
         // REAL production implementation: app-private SharedPreferences on
         // the real device storage.
         val context = context()

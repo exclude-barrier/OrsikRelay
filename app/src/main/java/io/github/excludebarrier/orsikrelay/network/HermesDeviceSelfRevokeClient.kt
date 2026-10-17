@@ -28,8 +28,7 @@ import org.json.JSONObject
  * the repository layer, so the key never reaches this class except as
  * the scoped [SecretValue] argument.
  *
- * Wire contract (server contract v1, read-only reference documented in
- * internal task log):
+ * Wire contract (server contract v1, docs/mobile-wire-contract.md §2.4):
  * - the request carries `Authorization: Bearer <device key>` and an
  *   exactly zero-byte request body with no `Content-Type` header (OkHttp
  *   requires a RequestBody object for POST, but the server contract is

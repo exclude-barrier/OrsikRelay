@@ -2,8 +2,8 @@
 
 Dieses Dokument beschreibt die **tatsächlich implementierte** Architektur von
 Orsik Relay und markiert ausdrücklich die Stellen, an denen der
-`internal plan` (Soll) vom Code (Ist) abweicht. Maßgeblich ist der
-Code; Abweichungen sind teils bewusst, teils offen.
+ursprüngliche (interne) Gesamtplan (Soll) vom Code (Ist) abweicht. Maßgeblich ist
+der Code; Abweichungen sind teils bewusst, teils offen.
 
 Stand: `v0.1.0-alpha.6` (`versionCode 6`), inklusive CI-Workflow,
 Apache-2.0-Lizenz und Audit-Härtungen.

@@ -102,7 +102,7 @@ Auf dem Fresh-Install-Pfad **nicht verifiziert** (`docs/bridge-e2e.md` §5): ech
 
 ## Installation des privaten Alpha-Releases
 
-1. Im privaten [GitHub-Releasebereich](https://github.com/exclude-barrier/Orsik-Relay/releases) `v0.1.0-alpha.6` öffnen.
+1. Im [GitHub-Releasebereich](https://github.com/exclude-barrier/OrsikRelay/releases) `v0.1.0-alpha.6` öffnen.
 2. Die APK `orsik-relay-v0.1.0-alpha.6-debug.apk` herunterladen.
 3. Installation aus der verwendeten Datei-/Browser-App einmalig erlauben und die APK installieren.
 
@@ -149,7 +149,7 @@ Maßgeblich für alle Builds und Tests ist der versionierte **Gradle Wrapper 9.7
 
 ## Alpha-Releases
 
-Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/Orsik-Relay/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
+Nach größeren, vollständig geprüften Funktionsständen erscheint ein nummeriertes [GitHub-Alpha-Release](https://github.com/exclude-barrier/OrsikRelay/releases). Alpha-Releases sind Vorabversionen für technische Tests und nicht für den Produktiveinsatz bestimmt.
 
 - Versionsschema: SemVer-Prereleases wie `v0.1.0-alpha.6`, später `v0.1.0-beta.1`.
 - CI (Unit-Tests, Lint, `assembleDebug` und Instrumentationstests auf API 36) liegt in `.github/workflows/android.yml`; die Gradle-Wrapper-Validation ist Teil des Workflows.

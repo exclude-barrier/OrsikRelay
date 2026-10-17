@@ -192,8 +192,8 @@ in derselben Session:
   (`RunSessionController.activeRun`) lesen, stoppen und den terminalen Zustand
   abwarten. Über den Produktionspfad `GET /v1/runs/{run_id}`
   (`RunStatusRequester`) wird zusätzlich geprüft, dass der gestoppte Lauf
-  terminal und **nicht** `completed` ist (`cancelled` gemäß
-  `internal plan`, Task 3.2). Genau eine User-Nachricht für den Text.
+  terminal und **nicht** `completed` ist (der Core meldet einen gestoppten
+  Lauf als `cancelled`). Genau eine User-Nachricht für den Text.
 - **Phase B – Steer:** lange Nachricht senden, während des Laufs über
   `chatSteerInput`/`chatSteerSend` steuern. Erwartet wird ein
   Queued-Ack (`chatSteerQueuedStatus`) oder ein recoverbarer Eintrag (409);

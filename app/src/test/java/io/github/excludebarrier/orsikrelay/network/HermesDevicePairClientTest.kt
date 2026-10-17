@@ -22,7 +22,7 @@ import org.junit.Test
 /**
  * Mission 017A: transport contract of the single UNAUTHENTICATED
  * `POST /v1/devices/pair` write. Wire format per server contract v1
- * (read-only reference in internal task log): exact body `{"code":"<code>"}` with
+ * (docs/mobile-wire-contract.md §2.3): exact body `{"code":"<code>"}` with
  * `Content-Type: application/json` and NO Authorization header; 201 with
  * EXACTLY the closed credential field set; 400/409/429/500 with closed
  * error codes. The code is normalized locally; the key is `hd_` + 43

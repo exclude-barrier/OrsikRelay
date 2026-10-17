@@ -195,8 +195,8 @@ class LiveBridgeRunControlE2ETest {
 
         // The server status read only exists for a confirmed run id; a stopped
         // run must settle TERMINAL and must NOT read as "completed" (the
-        // production plan, internal plan Task 3.2, ends a stopped run
-        // with the terminal status `cancelled`).
+        // core ends a stopped run with the terminal status `cancelled`,
+        // docs/bridge-e2e.md).
         val status = awaitTerminalRunStatus(profileId, runIdBeforeStop)
         assertTrue("the stopped run must be terminal, was $status", status.isTerminal)
         assertNotEquals(
