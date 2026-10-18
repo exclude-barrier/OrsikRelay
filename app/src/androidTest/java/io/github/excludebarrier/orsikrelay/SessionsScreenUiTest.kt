@@ -1,9 +1,16 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -21,6 +28,9 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -74,7 +84,10 @@ class SessionsScreenUiTest {
         )
 
         waitForText("Erste Fixture-Session")
-        composeRule.onNodeWithText("cli · " + context.getString(R.string.session_pinned)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_group_pinned))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Erste Fixture-Session")
+            .assertContentDescriptionContains(context.getString(R.string.session_source_terminal))
         composeRule.onNodeWithText(
             context.resources.getQuantityString(
                 R.plurals.session_message_count,
@@ -91,6 +104,137 @@ class SessionsScreenUiTest {
 
         waitForText(context.getString(R.string.sessions_empty))
         composeRule.onNodeWithText(context.getString(R.string.sessions_empty)).assertIsDisplayed()
+    }
+
+    @Test
+    fun groupHeadersFollowTheFixedOrderAndAreHeadings() {
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                success(
+                    listOf(
+                        session("older", "Ältere Session", lastActive = epoch("2026-10-01T10:00:00Z")),
+                        session("today", "Heutige Session", lastActive = epoch("2026-10-18T10:00:00Z")),
+                        session(
+                            "pinned",
+                            "Angepinnte Session",
+                            lastActive = epoch("2020-01-01T10:00:00Z"),
+                            pinned = true
+                        ),
+                        session("recent", "Letzte Woche", lastActive = epoch("2026-10-12T10:00:00Z")),
+                        session("yesterday", "Gestrige Session", lastActive = epoch("2026-10-17T10:00:00Z"))
+                    ),
+                    false
+                )
+            },
+            clock = fixedClock()
+        )
+
+        waitForText("Angepinnte Session")
+        val headers = listOf(
+            R.string.sessions_group_pinned,
+            R.string.sessions_group_today,
+            R.string.sessions_group_yesterday,
+            R.string.sessions_group_last_7_days,
+            R.string.sessions_group_older
+        ).map { context.getString(it) }
+        headers.forEach { header -> waitForText(header) }
+
+        val tops = headers.map { header ->
+            composeRule.onNodeWithText(header).fetchSemanticsNode().boundsInRoot.top
+        }
+        assertEquals(tops.sorted(), tops)
+        composeRule.onNodeWithText(context.getString(R.string.sessions_group_today))
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+    }
+
+    @Test
+    fun onlyNonEmptyGroupHeadersAreShown() {
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                success(
+                    listOf(session("today", "Nur heute", lastActive = epoch("2026-10-18T10:00:00Z"))),
+                    false
+                )
+            },
+            clock = fixedClock()
+        )
+
+        waitForText(context.getString(R.string.sessions_group_today))
+        listOf(
+            R.string.sessions_group_pinned,
+            R.string.sessions_group_yesterday,
+            R.string.sessions_group_last_7_days,
+            R.string.sessions_group_older
+        ).forEach { resource ->
+            composeRule.onAllNodesWithText(context.getString(resource)).assertCountEquals(0)
+        }
+    }
+
+    @Test
+    fun rowIsOneClickTargetWithMinimumHeightAndSourceName() {
+        var opened = 0
+        var openedId: String? = null
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                success(
+                    listOf(
+                        session(
+                            id = "fixture-row",
+                            title = "Telegram-Session",
+                            source = "telegram",
+                            messageCount = 12,
+                            lastActive = epoch("2026-10-18T10:00:00Z")
+                        )
+                    ),
+                    false
+                )
+            },
+            clock = fixedClock(),
+            onSessionSelected = { id, _ ->
+                opened++
+                openedId = id
+            }
+        )
+
+        waitForText("Telegram-Session")
+        val row = composeRule.onNode(hasText("Telegram-Session") and hasClickAction())
+        row.assertIsDisplayed()
+        row.assertHeightIsAtLeast(56.dp)
+        row.assertContentDescriptionContains(context.getString(R.string.session_source_telegram))
+        composeRule.onAllNodes(hasText("Telegram-Session") and hasClickAction())
+            .assertCountEquals(1)
+
+        row.performClick()
+        assertEquals(1, opened)
+        assertEquals("fixture-row", openedId)
+    }
+
+    @Test
+    fun missingProfileShowsActionableHint() {
+        setScreen(SessionPageSource { _, _, _ -> SessionListResult.Failure(SessionListError.MissingProfile) })
+
+        waitForText(context.getString(R.string.error_session_profile))
+        composeRule.onNodeWithTag("sessionsErrorHint")
+            .assertIsDisplayed()
+            .assertTextEquals(context.getString(R.string.sessions_error_hint_missing_profile))
+    }
+
+    @Test
+    fun networkFailureShowsReachabilityHint() {
+        setScreen(SessionPageSource { _, _, _ -> SessionListResult.Failure(SessionListError.Network) })
+
+        waitForText(context.getString(R.string.error_session_generic))
+        composeRule.onNodeWithTag("sessionsErrorHint")
+            .assertIsDisplayed()
+            .assertTextEquals(context.getString(R.string.sessions_error_hint_unreachable))
+    }
+
+    @Test
+    fun httpFailureShowsNoHint() {
+        setScreen(SessionPageSource { _, _, _ -> SessionListResult.Failure(SessionListError.Http) })
+
+        waitForText(context.getString(R.string.error_session_generic))
+        composeRule.onAllNodesWithTag("sessionsErrorHint").assertCountEquals(0)
     }
 
     @Test
@@ -251,16 +395,20 @@ class SessionsScreenUiTest {
         source: SessionPageSource,
         onOpenProfileManagement: () -> Unit = {},
         onOpenSettings: () -> Unit = {},
-        onOpenAbout: () -> Unit = {}
+        onOpenAbout: () -> Unit = {},
+        onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
+        clock: Clock = Clock.systemDefaultZone()
     ) {
         composeRule.setContent {
             HermesTheme {
                 SessionsScreen(
                     pageSource = source,
                     profileId = PROFILE_ID,
+                    onSessionSelected = onSessionSelected,
                     onOpenProfileManagement = onOpenProfileManagement,
                     onOpenSettings = onOpenSettings,
-                    onOpenAbout = onOpenAbout
+                    onOpenAbout = onOpenAbout,
+                    clock = clock
                 )
             }
         }
@@ -283,15 +431,21 @@ class SessionsScreenUiTest {
         title: String?,
         source: String? = null,
         messageCount: Long? = null,
-        pinned: Boolean = false
+        pinned: Boolean = false,
+        lastActive: Long? = null
     ) = HermesSession(
         id = id,
         title = title,
         source = source,
-        lastActiveEpochSeconds = null,
+        lastActiveEpochSeconds = lastActive,
         messageCount = messageCount,
         pinned = pinned
     )
+
+    private fun epoch(instant: String): Long = Instant.parse(instant).epochSecond
+
+    private fun fixedClock(): Clock =
+        Clock.fixed(Instant.parse("2026-10-18T12:00:00Z"), ZoneOffset.UTC)
 
     private companion object {
         const val PROFILE_ID = "fixture-profile-id"

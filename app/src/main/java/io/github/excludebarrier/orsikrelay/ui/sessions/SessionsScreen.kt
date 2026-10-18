@@ -1,29 +1,29 @@
 package io.github.excludebarrier.orsikrelay.ui.sessions
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +42,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
@@ -53,6 +56,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Clock
+import java.time.ZoneId
 import java.util.Locale
 
 /**
@@ -60,10 +65,12 @@ import java.util.Locale
  *
  * States:
  * - initial [SessionListState.Loading];
- * - success: server-ordered list with title, optional source, message
- *   count, pin status and locally formatted last activity;
+ * - success: server-ordered list grouped into pinned, today, yesterday,
+ *   the last seven days and older, with compact rows (title, source icon,
+ *   message count and last activity). Empty groups are omitted;
  * - empty: only when the server really delivered an empty `data` list;
- * - failure: a localized generic text with a manual retry.
+ * - failure: a localized generic text, an actionable hint where the
+ *   failure allows one, and a manual retry.
  *
  * Refresh reloads page 0; load-more appends the next page and only appears
  * when `has_more` is true. A load in flight blocks every further load, so
@@ -73,7 +80,9 @@ import java.util.Locale
  * about screen; the appearance switcher lives in settings now.
  *
  * [pageSource] is the test seam; production injects the repository.
- * The API key and raw response/exception text never enter the state.
+ * [clock] is the test seam for deterministic date grouping; production uses
+ * the system clock and zone. The API key and raw response/exception text
+ * never enter the state.
  */
 @Composable
 fun SessionsScreen(
@@ -85,7 +94,8 @@ fun SessionsScreen(
     onSessionCreated: (sessionId: String) -> Unit = {},
     onOpenProfileManagement: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
-    onOpenAbout: () -> Unit = {}
+    onOpenAbout: () -> Unit = {},
+    clock: Clock = Clock.systemDefaultZone()
 ) {
     val configuration = LocalConfiguration.current
     val locale = remember(configuration) { configuration.locales[0] }
@@ -241,6 +251,7 @@ fun SessionsScreen(
                     else ->
                         stringResource(R.string.error_session_generic)
                 }
+                val hint = sessionErrorHint(current.error)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -253,6 +264,17 @@ fun SessionsScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center
                     )
+                    if (hint != null) {
+                        Text(
+                            text = hint,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .padding(top = 8.dp)
+                                .testTag("sessionsErrorHint")
+                        )
+                    }
                     Button(
                         onClick = { loadPage(offset = 0, append = false) },
                         modifier = Modifier.padding(top = 16.dp)
@@ -273,6 +295,14 @@ fun SessionsScreen(
                             .padding(top = 24.dp)
                     )
                 } else {
+                    val now = remember(current.sessions) { clock.instant() }
+                    val sections = remember(current.sessions, now) {
+                        SessionGrouping.groupSessions(
+                            sessions = current.sessions,
+                            now = now,
+                            zone = clock.zone
+                        )
+                    }
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -280,18 +310,42 @@ fun SessionsScreen(
                         // Bottom padding clears the floating 56dp FAB
                         // (56 + 16 margin) so the last session or the
                         // "load more" button is never hidden underneath.
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp)
                     ) {
-                        items(current.sessions, key = { it.id }) { session ->
-                            SessionRow(
-                                session = session,
-                                locale = locale,
-                                onClick = { onSessionSelected(session.id, session.title) }
-                            )
+                        sections.forEach { section ->
+                            item(key = "section-${section.group.name}") {
+                                SessionGroupHeader(section.group)
+                            }
+                            itemsIndexed(
+                                items = section.sessions,
+                                key = { _, session -> "session-${session.id}" }
+                            ) { index, session ->
+                                Column {
+                                    if (index > 0) {
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.outlineVariant
+                                        )
+                                    }
+                                    SessionRow(
+                                        session = session,
+                                        locale = locale,
+                                        zone = clock.zone,
+                                        showTimeOnly = SessionGrouping.dayGroupOf(
+                                            session.lastActiveEpochSeconds,
+                                            now,
+                                            clock.zone
+                                        ).let {
+                                            it == SessionGroup.Today || it == SessionGroup.Yesterday
+                                        },
+                                        onClick = {
+                                            onSessionSelected(session.id, session.title)
+                                        }
+                                    )
+                                }
+                            }
                         }
                         if (current.hasMore) {
-                            item {
+                            item(key = "load-more") {
                                 val offset = current.sessions.size
                                 Button(
                                     onClick = { loadPage(offset = offset, append = true) },
@@ -339,18 +393,44 @@ fun SessionsScreen(
 }
 
 @Composable
+private fun SessionGroupHeader(group: SessionGroup) {
+    Text(
+        text = stringResource(group.titleRes()),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 8.dp)
+            .semantics { heading() }
+    )
+}
+
+@Composable
 private fun SessionRow(
     session: HermesSession,
     locale: Locale,
+    zone: ZoneId,
+    showTimeOnly: Boolean,
     onClick: () -> Unit
 ) {
     val title = session.title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.session_fallback_title)
-    val source = session.source?.takeIf { it.isNotBlank() }
-    val lastActive = SessionListFormatter.formatLastActive(
-        session.lastActiveEpochSeconds,
-        locale
-    )
+    val source = sessionSourceDescriptor(session.source)
+    val sourceName = source.displayName()
+    val sourceIcon = source.icon()
+    val lastActive = if (showTimeOnly) {
+        SessionListFormatter.formatLastActiveTime(
+            session.lastActiveEpochSeconds,
+            locale,
+            zone
+        )
+    } else {
+        SessionListFormatter.formatLastActiveDate(
+            session.lastActiveEpochSeconds,
+            locale,
+            zone
+        )
+    }
     val messageCount = session.messageCount?.let { count ->
         pluralStringResource(
             R.plurals.session_message_count,
@@ -358,55 +438,83 @@ private fun SessionRow(
             SessionListFormatter.formatMessageCount(count, locale).orEmpty()
         )
     }
-    val pinned = if (session.pinned) {
-        stringResource(R.string.session_pinned)
-    } else {
-        null
-    }
+    val meta = buildMetaLine(messageCount, lastActive)
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            .heightIn(min = 56.dp)
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp)
-        ) {
+        if (sourceIcon != null) {
+            Icon(
+                imageVector = sourceIcon,
+                contentDescription = sourceName,
+                modifier = Modifier.size(24.dp)
+            )
+        } else {
+            Spacer(modifier = Modifier.size(24.dp))
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            buildDetailLine(source, pinned)
-                ?.let { detail ->
-                    Text(
-                        text = detail,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-            buildMetaLine(messageCount, lastActive)
-                ?.let { meta ->
-                    Text(
-                        text = meta,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
+            if (meta != null) {
+                Text(
+                    text = meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
     }
 }
 
-private fun buildDetailLine(source: String?, pinned: String?): String? {
-    val parts = listOfNotNull(source, pinned)
-    return parts.joinToString(separator = " · ")
+@Composable
+private fun SessionSourceDescriptor.displayName(): String? = when (this) {
+    SessionSourceDescriptor.Missing -> null
+    SessionSourceDescriptor.Terminal -> stringResource(R.string.session_source_terminal)
+    SessionSourceDescriptor.Telegram -> stringResource(R.string.session_source_telegram)
+    SessionSourceDescriptor.Email -> stringResource(R.string.session_source_email)
+    SessionSourceDescriptor.Sms -> stringResource(R.string.session_source_sms)
+    SessionSourceDescriptor.WhatsApp -> stringResource(R.string.session_source_whatsapp)
+    SessionSourceDescriptor.Signal -> stringResource(R.string.session_source_signal)
+    SessionSourceDescriptor.Scheduled -> stringResource(R.string.session_source_scheduled)
+    is SessionSourceDescriptor.Other -> rawName
+}
+
+private fun SessionGroup.titleRes(): Int = when (this) {
+    SessionGroup.Pinned -> R.string.sessions_group_pinned
+    SessionGroup.Today -> R.string.sessions_group_today
+    SessionGroup.Yesterday -> R.string.sessions_group_yesterday
+    SessionGroup.LastSevenDays -> R.string.sessions_group_last_7_days
+    SessionGroup.Older -> R.string.sessions_group_older
+}
+
+@Composable
+private fun sessionErrorHint(error: SessionListError): String? = when (error) {
+    SessionListError.MissingProfile ->
+        stringResource(R.string.sessions_error_hint_missing_profile)
+    SessionListError.Network,
+    SessionListError.Timeout ->
+        stringResource(R.string.sessions_error_hint_unreachable)
+    SessionListError.Tls ->
+        stringResource(R.string.sessions_error_hint_tls)
+    SessionListError.InvalidCredentials ->
+        stringResource(R.string.sessions_error_hint_credentials)
+    SessionListError.RateLimited ->
+        stringResource(R.string.sessions_error_hint_rate_limited)
+    SessionListError.IncompatibleApi ->
+        stringResource(R.string.sessions_error_hint_incompatible_api)
+    SessionListError.InvalidInput,
+    SessionListError.Http -> null
 }
 
 private fun buildMetaLine(messageCount: String?, lastActive: String?): String? {

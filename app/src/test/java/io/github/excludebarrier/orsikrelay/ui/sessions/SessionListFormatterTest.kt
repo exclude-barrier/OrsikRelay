@@ -1,48 +1,53 @@
 package io.github.excludebarrier.orsikrelay.ui.sessions
 
+import java.time.ZoneOffset
 import java.util.Locale
-import java.util.TimeZone
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Before
 import org.junit.Test
 
 class SessionListFormatterTest {
 
-    private lateinit var originalTimeZone: TimeZone
-
-    @Before
-    fun setUp() {
-        originalTimeZone = TimeZone.getDefault()
-        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-    }
-
-    @After
-    fun tearDown() {
-        TimeZone.setDefault(originalTimeZone)
-    }
+    private val utc = ZoneOffset.UTC
 
     @Test
-    fun germanTimestampUsesGermanLocalizedFormat() {
+    fun germanTimeUsesGermanLocalizedFormat() {
         assertEquals(
-            "01.01.1970, 00:00",
-            SessionListFormatter.formatLastActive(0L, Locale.GERMANY)
+            "00:00",
+            SessionListFormatter.formatLastActiveTime(0L, Locale.GERMANY, utc)
         )
     }
 
     @Test
-    fun englishTimestampUsesEnglishLocalizedFormat() {
+    fun englishTimeUsesEnglishLocalizedFormat() {
         assertEquals(
-            "Jan 1, 1970, 12:00 AM",
-            SessionListFormatter.formatLastActive(0L, Locale.US)
+            "12:00 AM",
+            SessionListFormatter.formatLastActiveTime(0L, Locale.US, utc)
+        )
+    }
+
+    @Test
+    fun germanDateUsesGermanLocalizedFormat() {
+        assertEquals(
+            "01.01.1970",
+            SessionListFormatter.formatLastActiveDate(0L, Locale.GERMANY, utc)
+        )
+    }
+
+    @Test
+    fun englishDateUsesEnglishLocalizedFormat() {
+        assertEquals(
+            "Jan 1, 1970",
+            SessionListFormatter.formatLastActiveDate(0L, Locale.US, utc)
         )
     }
 
     @Test
     fun absentOrNegativeTimestampIsOmitted() {
-        assertNull(SessionListFormatter.formatLastActive(null, Locale.GERMANY))
-        assertNull(SessionListFormatter.formatLastActive(-1L, Locale.GERMANY))
+        assertNull(SessionListFormatter.formatLastActiveTime(null, Locale.GERMANY, utc))
+        assertNull(SessionListFormatter.formatLastActiveTime(-1L, Locale.GERMANY, utc))
+        assertNull(SessionListFormatter.formatLastActiveDate(null, Locale.GERMANY, utc))
+        assertNull(SessionListFormatter.formatLastActiveDate(-1L, Locale.GERMANY, utc))
     }
 
     @Test
