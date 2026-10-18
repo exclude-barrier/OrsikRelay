@@ -25,7 +25,7 @@ The user interface is available in English and German; choose the language
 under **⋮ → Settings → Language**.*
 
 > **Early alpha (`0.1.0-alpha.8`).** For technical testing on your own setup.
-> No Play Store build or binary release yet – [build from source](#building-from-source).
+> No Play Store build yet – install the APK from the [releases](https://github.com/exclude-barrier/OrsikRelay/releases) or [build from source](#building-from-source).
 > Not affiliated with or endorsed by Nous Research.
 
 [How it works](#how-it-works) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Limits](#compatibility-and-limits) · [Troubleshooting](#troubleshooting) · [Documentation](#documentation)
@@ -73,51 +73,156 @@ under **⋮ → Settings → Language**.*
 
 ## Quick start
 
-You need an official **Hermes Agent** installation with its `api_server`, Python
-≥ 3.11 and [`uv`](https://docs.astral.sh/uv/) on the server, and an Android
-8.0+ phone that can reach the server privately.
+You need:
 
-**1. Install the bridge** on the Hermes host (dependencies are installed
-hash-pinned from `bridge/uv.lock`):
+- a server with **Hermes Agent** and its `api_server` enabled (it listens on
+  `127.0.0.1`, port `8642` by default),
+- a **private network** between server and phone, for example
+  [Tailscale](https://tailscale.com/) on both,
+- an Android **8.0+** phone.
+
+### 1. Install the app
+
+Download `orsik-relay-<version>.apk` from the
+[latest release](https://github.com/exclude-barrier/OrsikRelay/releases) on
+your phone and open it. Android asks once whether your browser may install
+apps.
+
+### 2. Set up the bridge on the server
+
+The app talks to a small **Orsik Mobile Bridge** that runs next to Hermes on
+the same server. Choose one way.
+
+#### Option A: let Hermes do it
+
+Send this message to your Hermes agent, for example via Telegram or the CLI.
+Hermes installs everything that does not need root, tells you the one command
+that does, and stops if anything fails.
+
+```text
+Please install the Orsik Mobile Bridge for the Orsik Relay app on this server.
+Rules: work as the user that runs Hermes; do not change Hermes itself (no core
+files, no config.yaml or .env edits, no restarts of the gateway); never print
+API keys or other secrets; no "curl | bash"; never open a public port or use
+Tailscale Funnel; do not run commands that need root, tell me instead. If a
+step fails, stop and show me the error.
+
+1. Check: the api_server answers on 127.0.0.1 (port = API_SERVER_PORT in
+   ~/.hermes/.env, default 8642) with HTTP 200 on /health; ~/.hermes/config.yaml
+   has "approvals: mode: manual" (if not, stop and tell me); git, uv and
+   Python >= 3.11 are installed (if uv is missing, tell me how to install it,
+   e.g. "pipx install uv"); "loginctl show-user $USER -p Linger" says yes (if
+   not, tell me to run "sudo loginctl enable-linger <user>").
+2. git clone https://github.com/exclude-barrier/OrsikRelay.git ~/OrsikRelay,
+   then in ~/OrsikRelay: git checkout "$(git describe --tags --abbrev=0)".
+3. Run ~/OrsikRelay/bridge/install.sh --systemd
+   (if Python 3.14 is not available, prefix it with BRIDGE_PYTHON=<installed
+   version, e.g. 3.12>).
+4. In ~/.local/orsik-mobile-bridge/bridge.env set BRIDGE_UPSTREAM to
+   http://127.0.0.1:<api port>, BRIDGE_HERMES_ENV to the absolute path of
+   ~/.hermes/.env and BRIDGE_STATE_DB to the absolute path of
+   ~/.local/orsik-mobile-bridge/state.db; keep BRIDGE_BIND=127.0.0.1 and
+   BRIDGE_PORT=9842; comments only on their own lines.
+5. Run ~/OrsikRelay/bridge/install.sh --check until it ends with
+   "PREFLIGHT: PASS" (a warning about BRIDGE_PUBLIC_BASE_URL is fine for now),
+   then: systemctl --user enable --now orsik-mobile-bridge.service
+6. Tell me to run "sudo tailscale serve --bg --https=8443 http://127.0.0.1:9842"
+   and to send you the https URL that "tailscale serve status" shows.
+7. When I send the URL: set BRIDGE_PUBLIC_BASE_URL in bridge.env to it, run
+   systemctl --user restart orsik-mobile-bridge.service, then create a pairing
+   code with
+   BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin pairing-code --base-url <URL>
+   and give me the code and the orsik://pair link. The code works once and
+   for 5 minutes.
+```
+
+#### Option B: do it yourself
+
+Run these as the user that runs Hermes, in this order.
 
 ```sh
-bridge/install.sh
-# edit ~/.local/orsik-mobile-bridge/bridge.env, then:
+# 1. Tools: git, Python >= 3.11 and uv (e.g. "sudo apt install pipx && pipx install uv")
+git clone https://github.com/exclude-barrier/OrsikRelay.git ~/OrsikRelay
+cd ~/OrsikRelay && git checkout "$(git describe --tags --abbrev=0)"
+
+# 2. Install (add BRIDGE_PYTHON=3.12 in front if Python 3.14 is not available)
+bridge/install.sh --systemd
+```
+
+```sh
+# 3. Edit ~/.local/orsik-mobile-bridge/bridge.env (replace <user>; port = API_SERVER_PORT in ~/.hermes/.env)
+BRIDGE_BIND=127.0.0.1
+BRIDGE_PORT=9842
+BRIDGE_UPSTREAM=http://127.0.0.1:8642
+BRIDGE_HERMES_ENV=/home/<user>/.hermes/.env
+BRIDGE_STATE_DB=/home/<user>/.local/orsik-mobile-bridge/state.db
+BRIDGE_PUBLIC_BASE_URL=https://<server>.<tailnet>.ts.net:8443
+```
+
+```sh
+# 4. Check and start ("PREFLIGHT: PASS" expected)
 bridge/install.sh --check
-```
+systemctl --user enable --now orsik-mobile-bridge.service
 
-Configuration, systemd unit, updates, backup and rollback:
-[bridge installation](docs/bridge-installation.md).
+# 5. Private HTTPS inside the tailnet (needs root; no Funnel, no public port)
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:9842
 
-**2. Set Hermes approvals to manual** in its `config.yaml`
-(`approvals: mode: manual`). The core default `smart` can approve some commands
-without asking; `install.sh --check` warns about it.
-
-**3. Expose the bridge privately over HTTPS**, for example inside a tailnet:
-
-```sh
-tailscale serve --bg --https=8443 http://127.0.0.1:9842
-```
-
-**4. Create a pairing code** – a local CLI, the bridge has no HTTP admin
-interface:
-
-```sh
+# 6. Pairing code (works once, for 5 minutes; prints a QR code if qrencode is installed)
 BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env \
   ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin pairing-code \
-  --base-url https://<your-host>:8443
+  --base-url https://<server>.<tailnet>.ts.net:8443
 ```
 
-With `qrencode` installed, a QR code for the deep link is printed as well.
+Hermes must ask before dangerous commands: keep `approvals: mode: manual` in
+`~/.hermes/config.yaml`; the core default `smart` can approve some commands
+without asking. More options (systemd, other networks, backup):
+[bridge installation](docs/bridge-installation.md).
 
-**5. Pair the app:** build and install it ([building from source](#building-from-source)),
-open the deep link or tap **Add server**, enter a name and the HTTPS URL,
-choose **Pairing code** and enter the code. The app checks the connection and
-the exact capability contract before it stores anything.
+### 3. Pair the app
+
+Open the `orsik://pair` link or scan the QR code on the phone, or tap **Add
+server**, enter a name, the HTTPS URL and the pairing code, and tap
+**Connect**. The phone must be in the same private network (Tailscale on).
+The app checks the connection and the exact capability contract before it
+stores anything.
 
 <p align="center">
   <img src="docs/images/onboarding.png" width="28%" alt="Adding a server with a pairing code">
 </p>
+
+### Updating
+
+- **App:** install the new APK over the old one. It is signed with the same
+  key, so your servers and pairing are kept. [Obtainium](https://github.com/ImranR98/Obtainium)
+  can watch the GitHub releases and tell you about new versions.
+- **Bridge with Hermes:** send Hermes:
+
+  ```text
+  Please update the Orsik Mobile Bridge on this server. Same rules as for the
+  installation. Create a backup first:
+  BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin backup ~/.local/orsik-mobile-bridge/state.db.bak-<date>
+  then in ~/OrsikRelay: git fetch --tags and
+  git checkout "$(git describe --tags --abbrev=0 origin/main)", run
+  bridge/install.sh --update --systemd, systemctl --user restart
+  orsik-mobile-bridge.service and bridge/install.sh --check, and show me the
+  result.
+  ```
+
+- **Bridge yourself:**
+
+  ```sh
+  BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env \
+    ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin backup \
+    ~/.local/orsik-mobile-bridge/state.db.bak-$(date +%F)
+  cd ~/OrsikRelay && git fetch --tags
+  git checkout "$(git describe --tags --abbrev=0 origin/main)"
+  bridge/install.sh --update --systemd
+  systemctl --user restart orsik-mobile-bridge.service
+  bridge/install.sh --check
+  ```
+
+  `bridge.env` and the device store are kept, paired phones stay paired.
+  Update app and bridge to the same release.
 
 ## Using the app
 

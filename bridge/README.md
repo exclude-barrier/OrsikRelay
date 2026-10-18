@@ -166,7 +166,7 @@ $BRIDGE_HOME/venv/bin/orsik-mobile-bridge              # serve
 ```
 BRIDGE_BIND=127.0.0.1
 BRIDGE_PORT=9842
-BRIDGE_UPSTREAM=http://127.0.0.1:8899
+BRIDGE_UPSTREAM=http://127.0.0.1:8642
 BRIDGE_HERMES_ENV=/home/USER/.hermes/.env
 BRIDGE_STATE_DB=/home/USER/.local/orsik-mobile-bridge/state.db
 BRIDGE_PUBLIC_BASE_URL=https://<host>

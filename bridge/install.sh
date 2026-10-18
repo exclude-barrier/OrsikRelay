@@ -113,7 +113,7 @@ if [ "$CHECK" -eq 1 ]; then
 
   # 5. The upstream must be a plain-HTTP loopback IP with an explicit port.
   UPSTREAM="$(env_value BRIDGE_UPSTREAM)"
-  UPSTREAM="${UPSTREAM:-http://127.0.0.1:8899}"
+  UPSTREAM="${UPSTREAM:-http://127.0.0.1:8642}"
   LOOPBACK_HTTP='^http://(127\.[0-9]+\.[0-9]+\.[0-9]+|\[::1\]):[0-9]+$'
   UPSTREAM_OK=0
   if [[ "$UPSTREAM" =~ $LOOPBACK_HTTP ]]; then
@@ -273,7 +273,7 @@ if [ ! -f "$ENV" ]; then
 # Loopback only. TLS is provided out-of-band (e.g. Tailscale Serve).
 BRIDGE_BIND=127.0.0.1
 BRIDGE_PORT=9842
-BRIDGE_UPSTREAM=http://127.0.0.1:8899
+BRIDGE_UPSTREAM=http://127.0.0.1:8642
 # Path to the Hermes install env file that holds API_SERVER_KEY (0600).
 BRIDGE_HERMES_ENV=/home/USER/.hermes/.env
 # Persistent device/pairing store (created 0600). Defaults under BRIDGE_HOME.

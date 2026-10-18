@@ -13,11 +13,11 @@ import unittest
 
 from orsik_mobile_bridge import server as bridge_server
 
-DEFAULT_UPSTREAM = "http://127.0.0.1:8899"
+DEFAULT_UPSTREAM = "http://127.0.0.1:8642"
 
 # The mandated error text is fixed and public; it intentionally contains the
 # example loopback URL. It must never be built from the rejected value.
-ERROR_MESSAGE = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8899"
+ERROR_MESSAGE = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8642"
 
 ACCEPTED = (
     "http://127.0.0.1:8899",
