@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.ui.chat
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,10 +36,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -321,9 +328,60 @@ onClick = { viewModel.handleBack() }
 
             is MessageHistoryState.Ready -> {
                 val timeline = buildTimeline(current.messages, state.localLines)
-                LaunchedEffect(timeline.size) {
-                    if (timeline.isNotEmpty()) {
-                        timelineListState.scrollToItem(timeline.lastIndex)
+                // Tail-follow bookkeeping. `followTail` starts true so an
+                // opened session lands at the end; only a settled USER scroll
+                // re-evaluates it (true while the viewport parks within
+                // FOLLOW_TAIL_THRESHOLD of the end). Content that grows while
+                // the user has scrolled away must never yank the viewport.
+                var followTail by remember(profileId, sessionId) { mutableStateOf(true) }
+                val followThresholdPx = with(LocalDensity.current) {
+                    FOLLOW_TAIL_THRESHOLD.roundToPx()
+                }
+                if (!compactComposer) {
+                    // One collector owns both signals, so a settled user
+                    // scroll and the next content growth are processed in
+                    // order and can never race each other: a user scroll
+                    // re-defines `followTail`; while no scroll is in progress,
+                    // a layout change (a growing streamed row or a new row)
+                    // scrolls to the end only when the viewport was parked at
+                    // the tail. The compact regime does not compose the
+                    // timeline, so no scroll state exists there.
+                    LaunchedEffect(timelineListState) {
+                        // Every scroll the screen did not start itself is the
+                        // user's: a touch drag or fling, but also an
+                        // accessibility scroll action (TalkBack, switch
+                        // access), which produces no drag interaction.
+                        var selfScroll = false
+                        var userScrollInProgress = false
+                        snapshotFlow {
+                            timelineListState.isScrollInProgress to timelineListState.layoutInfo
+                        }.collect { (scrolling, info) ->
+                            if (scrolling) {
+                                if (!selfScroll) userScrollInProgress = true
+                                return@collect
+                            }
+                            if (userScrollInProgress) {
+                                // The user's drag/fling settled: freeze the
+                                // current position as the new reference.
+                                userScrollInProgress = false
+                                followTail = info.isAtTail(followThresholdPx)
+                                return@collect
+                            }
+                            if (followTail && !info.isAtTail(TAIL_SCROLL_EPSILON_PX)) {
+                                // `layoutInfo` changes while a frame is
+                                // measuring. Forcing a remeasure from that
+                                // phase throws ("performMeasureAndLayout
+                                // called during measure layout"), so the
+                                // scroll is deferred to the next frame.
+                                withFrameNanos { }
+                                selfScroll = true
+                                try {
+                                    timelineListState.scrollToTail()
+                                } finally {
+                                    selfScroll = false
+                                }
+                            }
+                        }
                     }
                 }
                 // The middle region (timeline plus every status/control block)
@@ -367,6 +425,7 @@ onClick = { viewModel.handleBack() }
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
+                            .testTag(TAG_TIMELINE)
                     ) {
                         items(timeline, key = { it.key }) { message ->
                             CompositionLocalProvider(
@@ -1202,6 +1261,61 @@ internal val COMPACT_FIELD_HEIGHT = 56.dp
 
 /** Thumbnail edge in the compact composer row. */
 internal val COMPACT_THUMBNAIL_SIZE = 24.dp
+
+/**
+ * Maximum distance from the end of the timeline that still counts as
+ * "parked at the tail" for tail-follow. A few pixels of scroll slack (for
+ * example a rounding remainder) must not stop the view from following a
+ * streamed answer.
+ */
+internal val FOLLOW_TAIL_THRESHOLD = 48.dp
+
+/**
+ * Pixel slack for the exact-end scroll. It only absorbs integer rounding:
+ * unlike [FOLLOW_TAIL_THRESHOLD] (which classifies whether the user parked at
+ * the end), it must never leave part of the last row below the fold.
+ */
+private const val TAIL_SCROLL_EPSILON_PX = 1
+
+internal const val TAG_TIMELINE = "chat_timeline"
+
+/**
+ * True when the final timeline row is visible and its end lies within
+ * [thresholdPx] of the viewport end. An empty or not-yet-measured list has
+ * no tail to seek, so it reports `true` and the scroll effect stays idle.
+ */
+private fun LazyListLayoutInfo.isAtTail(thresholdPx: Int): Boolean {
+    val last = visibleItemsInfo.lastOrNull() ?: return true
+    return last.index == totalItemsCount - 1 &&
+        last.offset + last.size <= viewportEndOffset + thresholdPx
+}
+
+/**
+ * Scrolls to the very end without animation.
+ *
+ * A streamed answer can be taller than the viewport, so landing on its item
+ * index alone would leave its end below the fold (and would flash back to
+ * the row start on every growth). When the last row is already visible the
+ * index jump is skipped and only the remaining distance is scrolled;
+ * otherwise (initial open, a new row) the last item is requested first.
+ */
+private suspend fun LazyListState.scrollToTail() {
+    val info = layoutInfo
+    val lastIndex = info.totalItemsCount - 1
+    if (lastIndex < 0) return
+    if (info.visibleItemsInfo.lastOrNull()?.index != lastIndex) {
+        scrollToItem(lastIndex)
+    }
+    // Scroll exactly the residual distance instead of an unbounded delta,
+    // so a single immediate scroll reaches the end of the content.
+    val after = layoutInfo
+    val last = after.visibleItemsInfo.lastOrNull()
+    if (last == null || last.index != lastIndex) return
+    val remaining = last.offset + last.size - after.viewportEndOffset
+    if (remaining > 0) {
+        scrollBy(remaining.toFloat())
+    }
+}
 
 internal const val TAG_RUN_STOP = "composer_run_stop"
 internal const val TAG_COMPOSER_BAR = "composer_bar"

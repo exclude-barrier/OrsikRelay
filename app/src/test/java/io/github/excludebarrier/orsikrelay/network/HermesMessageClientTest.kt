@@ -78,7 +78,7 @@ class HermesMessageClientTest {
         )
         assertEquals("200", request.requestUrl!!.queryParameter("limit"))
         assertEquals("0", request.requestUrl!!.queryParameter("offset"))
-        assertEquals("oldest", request.requestUrl!!.queryParameter("order"))
+        assertEquals("latest", request.requestUrl!!.queryParameter("order"))
         assertEquals("Bearer $FIXTURE_KEY", request.getHeader("Authorization"))
         assertFalse(request.requestUrl!!.toString().contains(FIXTURE_KEY))
         assertFalse(result.toString().contains(FIXTURE_KEY))
@@ -245,7 +245,7 @@ class HermesMessageClientTest {
             base().put("pagination", pagination(200, 0, 0).put("limit", "200")),
             base().put("pagination", pagination(200, 0, 0).put("offset", 1.5)),
             base().put("pagination", pagination(200, 0, 0).put("order", 7)),
-            base().put("pagination", pagination(200, 0, 0).put("order", "latest")),
+            base().put("pagination", pagination(200, 0, 0).put("order", "oldest")),
             base().put("pagination", pagination(200, 0, 0).put("returned", -1)),
             base().put("data", oneEntry).put("pagination", pagination(200, 0, 0))
         )
@@ -330,7 +330,7 @@ class HermesMessageClientTest {
 
     @Test
     fun nonFiniteTimestampLiteralsAreRejectedAsIncompatible() {
-        val raw = """{"object":"list","session_id":"synthetic-id","data":[{"id":1,"role":"user","content":"x","timestamp":NaN}],"pagination":{"limit":200,"offset":0,"order":"oldest","returned":1}}"""
+        val raw = """{"object":"list","session_id":"synthetic-id","data":[{"id":1,"role":"user","content":"x","timestamp":NaN}],"pagination":{"limit":200,"offset":0,"order":"latest","returned":1}}"""
         server.enqueue(MockResponse().setBody(raw))
 
         assertFailure(fetch(), MessageHistoryError.IncompatibleApi)
@@ -365,13 +365,47 @@ class HermesMessageClientTest {
     }
 
     @Test
-    fun declaredAndStreamedOversizedBodiesAreRejected() {
-        val oversized = "a".repeat(512 * 1024 + 1)
+    fun oneMebibytePageIsReadButBodiesAboveEightMebibytesAreRejectedFailClosed() {
+        // A real Telegram session with tool output delivered 776 233 bytes,
+        // which the old 512 KiB ceiling discarded. One MiB must now be read.
+        val largeContent = "a".repeat(MEBIBYTE)
+        val body = base()
+            .put("data", JSONArray().put(message(1, "assistant", largeContent)))
+            .put("pagination", pagination(200, 0, 1))
+        server.enqueue(jsonResponse(body))
+
+        val result = fetch() as MessageHistoryResult.Success
+        assertEquals(MEBIBYTE, result.page.messages.single().content.length)
+
+        val oversized = "a".repeat(MAX_RESPONSE_BYTES + 1)
         server.enqueue(MockResponse().setBody(oversized))
         assertFailure(fetch(), MessageHistoryError.IncompatibleApi)
 
         server.enqueue(MockResponse().setChunkedBody(oversized, 1024))
         assertFailure(fetch(), MessageHistoryError.IncompatibleApi)
+    }
+
+    @Test
+    fun latestPageKeepsHermesChronologicalOrder() {
+        // Hermes get_messages(..., latest=True) selects the newest rows in
+        // descending id order and reverses them back into chronological
+        // insertion order (hermes_state_messages.py, api_server.py), so the
+        // client must pass that order through unchanged - no local reversal.
+        val newestIds = 801L..804L
+        val data = JSONArray().apply {
+            newestIds.forEach { id -> put(message(id, "user", "Nachricht $id")) }
+        }
+        server.enqueue(
+            jsonResponse(
+                base()
+                    .put("data", data)
+                    .put("pagination", pagination(200, 0, data.length()))
+            )
+        )
+
+        val result = fetch() as MessageHistoryResult.Success
+
+        assertEquals(newestIds.toList(), result.page.messages.map { it.id })
     }
 
     @Test
@@ -443,7 +477,7 @@ class HermesMessageClientTest {
     private fun pagination(limit: Int, offset: Int, returned: Int): JSONObject = JSONObject()
         .put("limit", limit)
         .put("offset", offset)
-        .put("order", "oldest")
+        .put("order", "latest")
         .put("returned", returned)
 
     private fun message(id: Long, role: String, content: String): JSONObject = JSONObject()
@@ -473,5 +507,7 @@ class HermesMessageClientTest {
     private companion object {
         const val FIXTURE_KEY = "fixture-credential"
         const val SESSION_ID = "synthetic-id"
+        const val MEBIBYTE = 1024 * 1024
+        const val MAX_RESPONSE_BYTES = 8 * MEBIBYTE
     }
 }
