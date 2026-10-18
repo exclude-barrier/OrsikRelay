@@ -110,6 +110,14 @@
     <string name="settings_privacy_section">Privacy</string>
     <string name="settings_screen_protection_label">Screen protection</string>
     <string name="settings_screen_protection_description">No screenshots and no preview in the app switcher.</string>
+    <string name="settings_app_lock_label">App lock</string>
+    <string name="settings_app_lock_description">Unlock with fingerprint, face or device PIN when opening the app and after 30 seconds in the background.</string>
+    <string name="settings_app_lock_unavailable">Set up a screen lock on the device first.</string>
+    <string name="app_lock_locked">Orsik Relay is locked</string>
+    <string name="app_lock_unlock">Unlock</string>
+    <string name="app_lock_device_lock_missing">The device no longer has a screen lock, so the app lock has been turned off.</string>
+    <string name="app_lock_continue">Continue</string>
+    <string name="app_lock_prompt_title">Unlock Orsik Relay</string>
     <string name="settings_about_section">About the app</string>
     <string name="settings_version_label">Version</string>
     <string name="settings_license_label">License</string>

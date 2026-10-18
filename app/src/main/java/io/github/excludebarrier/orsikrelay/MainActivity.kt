@@ -2,7 +2,6 @@ package io.github.excludebarrier.orsikrelay
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.VisibleForTesting
@@ -19,11 +18,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.LocalActivity
 import androidx.core.view.WindowCompat
+import androidx.fragment.app.FragmentActivity
+import io.github.excludebarrier.orsikrelay.data.settings.AppLockSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.navigation.initialDestination
+import io.github.excludebarrier.orsikrelay.security.applock.AndroidAppAuthenticator
+import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
+import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
+import io.github.excludebarrier.orsikrelay.security.applock.AppLockHolder
+import io.github.excludebarrier.orsikrelay.ui.lock.AppLockGate
 import io.github.excludebarrier.orsikrelay.ui.settings.ApplyScreenProtection
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
@@ -37,8 +43,10 @@ import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 /**
  * Single entry point of the app. Hosts the Compose navigation shell;
  * all navigation logic lives in [HermesNavHost] and [io.github.excludebarrier.orsikrelay.navigation.AppNavigationState].
+ *
+ * A [FragmentActivity] because the app lock hosts [androidx.biometric.BiometricPrompt].
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     // Product Gate: a pairing deep link (orsik://pair?server=...&code=...)
     // received via onCreate or onNewIntent is parsed once and handed to the
     // onboarding screen as a pre-fill, so the user never types a base URL or
@@ -52,6 +60,13 @@ class MainActivity : ComponentActivity() {
     private val notificationBootstrap = mutableStateOf<Pair<String, String>?>(null)
 
     /**
+     * Process-scoped app-lock state. Created before the first composition so
+     * the cold-start lock decision is in place, and reused across
+     * configuration changes through [AppLockHolder].
+     */
+    private lateinit var appLockController: AppLockController
+
+    /**
      * Applies the persisted app language before the first frame on API < 33.
      * On API 33+ the framework applies the app locale from LocaleManager
      * before the activity is created, so the base context stays untouched.
@@ -63,6 +78,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        appLockController = AppLockHolder.get(applicationContext, appLockStoreForTests)
         // Consume the launch intent exactly once. On a configuration-change
         // recreation the framework re-delivers the SAME intent, so re-parsing
         // it here would replay a notification tap (the user is thrown back
@@ -86,16 +102,30 @@ class MainActivity : ComponentActivity() {
             ApplyScreenProtection(screenProtectionController)
             val darkTheme = themeController.mode.resolve(isSystemInDarkTheme())
             SystemBarAppearance(darkTheme)
+            val activity = LocalActivity.current
+            // BiometricPrompt needs the hosting FragmentActivity; tests inject
+            // an AppAuthenticator so the system prompt is never shown.
+            val appAuthenticator = remember(activity) {
+                appAuthenticatorForTests
+                    ?: (activity as? FragmentActivity)?.let(::AndroidAppAuthenticator)
+            }
             HermesTheme(darkTheme = darkTheme) {
                 HermesAppSurface {
-                    HermesNavHost(
-                        startDestination = initialDestination(),
-                        sessionPageSource = sessionPageSourceForTests,
-                        themeController = themeController,
-                        screenProtectionController = screenProtectionController,
-                        pairingBootstrap = pairingBootstrap.value,
-                        notificationBootstrap = notificationBootstrap.value
-                    )
+                    AppLockGate(
+                        controller = appLockController,
+                        appAuthenticator = appAuthenticator
+                    ) {
+                        HermesNavHost(
+                            startDestination = initialDestination(),
+                            sessionPageSource = sessionPageSourceForTests,
+                            themeController = themeController,
+                            screenProtectionController = screenProtectionController,
+                            appLockController = appLockController,
+                            appAuthenticator = appAuthenticator,
+                            pairingBootstrap = pairingBootstrap.value,
+                            notificationBootstrap = notificationBootstrap.value
+                        )
+                    }
                 }
             }
         }
@@ -104,10 +134,12 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         AppForegroundTracker.activityStarted()
+        appLockController.onActivityStarted()
     }
 
     override fun onStop() {
         super.onStop()
+        appLockController.onActivityStopped()
         AppForegroundTracker.activityStopped()
     }
     override fun onNewIntent(intent: Intent) {
@@ -132,6 +164,28 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         @Volatile
         internal var sessionPageSourceForTests: SessionPageSource? = null
+
+        /**
+         * Test-only seam for the app lock: a fake store and authenticator keep
+         * the real preferences and the system prompt out of instrumentation
+         * tests. `null` (always in production) uses the persisted store and
+         * [AndroidAppAuthenticator].
+         */
+        @VisibleForTesting
+        @Volatile
+        internal var appLockStoreForTests: AppLockSettingStore? = null
+
+        @VisibleForTesting
+        @Volatile
+        internal var appAuthenticatorForTests: AppAuthenticator? = null
+
+        /** Clears every app-lock test seam and the process-scoped controller. */
+        @VisibleForTesting
+        internal fun resetAppLockForTests() {
+            appLockStoreForTests = null
+            appAuthenticatorForTests = null
+            AppLockHolder.resetForTest()
+        }
     }
 }
 

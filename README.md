@@ -265,6 +265,7 @@ stores anything.
 | Light / dark mode | **⋮ → Settings → Appearance** (System / Light / Dark) |
 | Chat text size | **⋮ → Settings → Chat** |
 | Block screenshots | **⋮ → Settings → Privacy → Screen protection** |
+| Lock the app | **⋮ → Settings → Privacy → App lock** |
 | App version and license | **⋮ → About the app** |
 
 On the server, `admin list-devices` and `admin revoke-device <device_id>` list
