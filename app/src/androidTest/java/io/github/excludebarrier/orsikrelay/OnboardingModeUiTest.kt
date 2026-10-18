@@ -31,7 +31,9 @@ import org.junit.runner.RunWith
  *   "Pairing code (recommended)" label making the left segment taller)
  *   and offer a 48 dp touch target, at font scale 1.0 and 1.3.
  * - The selected state is exposed through semantics and reinforced by
- *   the built-in check mark and a semibold label, not colour alone.
+ *   the segment colour and a semibold label, not colour alone.
+ * - The selected segment renders no check mark: its label stays centred
+ *   in the segment instead of being shifted by an icon slot.
  * - The info button reaches the explanation dialog; OK closes it and
  *   neither mode nor fields change.
  */
@@ -120,9 +122,10 @@ class OnboardingModeUiTest {
 
     /**
      * The label sits in the middle of its segment: the text box's centre is
-     * at most [MAX_LABEL_OFFSET_DP] away from the segment's centre (the
-     * selected segment's check mark shifts the label by half its width), and
-     * wrapped lines share one centre.
+     * at most [MAX_LABEL_OFFSET_DP] away from the segment's centre. A visible
+     * check mark or an empty icon slot would shift the label by about 16 dp;
+     * this tight bound therefore also proves the selected segment renders no
+     * icon. Wrapped lines share one centre.
      */
     private fun assertCenteredLabel(label: String, segmentTag: String) {
         val node = composeRule.onNodeWithText(label, useUnmergedTree = true)
@@ -204,7 +207,10 @@ class OnboardingModeUiTest {
     }
 
     private companion object {
-        /** Half of the check mark plus its spacing in a selected segment. */
-        const val MAX_LABEL_OFFSET_DP = 16f
+        /**
+         * Allowed sub-pixel drift of a centred label. Anything larger would
+         * mean the segment still reserves space for a check-mark icon.
+         */
+        const val MAX_LABEL_OFFSET_DP = 2f
     }
 }

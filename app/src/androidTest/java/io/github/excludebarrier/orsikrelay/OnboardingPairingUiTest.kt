@@ -154,7 +154,7 @@ class OnboardingPairingUiTest {
         assertEquals(1, pairingCallCount.get())
 
         release.countDown()
-        waitForText(context.getString(R.string.error_connection_invalid_input))
+        waitForText(context.getString(R.string.onboarding_error_invalid_input_title))
         assertEquals(1, pairingCallCount.get())
     }
 
@@ -178,40 +178,51 @@ class OnboardingPairingUiTest {
 
         val cases = listOf(
             DevicePairingFailure.Pairing(DevicePairError.PairingCodeInvalid) to
-                context.getString(R.string.error_pairing_code_invalid),
+                (R.string.onboarding_error_pairing_code_invalid_title to
+                    R.string.onboarding_error_pairing_code_invalid_text),
             DevicePairingFailure.Pairing(DevicePairError.DeviceLimitExceeded) to
-                context.getString(R.string.error_pairing_device_limit),
+                (R.string.onboarding_error_pairing_device_limit_title to
+                    R.string.onboarding_error_pairing_device_limit_text),
             DevicePairingFailure.Pairing(DevicePairError.PairRateLimited) to
-                context.getString(R.string.error_pairing_rate_limited),
+                (R.string.onboarding_error_pairing_rate_limited_title to
+                    R.string.onboarding_error_pairing_rate_limited_text),
             DevicePairingFailure.Pairing(DevicePairError.Tls) to
-                context.getString(R.string.error_connection_tls),
+                (R.string.onboarding_error_tls_title to R.string.onboarding_error_tls_text),
             DevicePairingFailure.Pairing(DevicePairError.Timeout) to
-                context.getString(R.string.error_connection_timeout),
+                (R.string.onboarding_error_timeout_title to R.string.onboarding_error_timeout_text),
             DevicePairingFailure.Pairing(DevicePairError.Network) to
-                context.getString(R.string.error_connection_network),
-            DevicePairingFailure.IncompatiblePairing to context.getString(R.string.error_pairing_incompatible_api),
-            DevicePairingFailure.Persistence to context.getString(R.string.error_connection_persistence),
+                (R.string.onboarding_error_network_title to R.string.onboarding_error_network_text),
+            DevicePairingFailure.IncompatiblePairing to
+                (R.string.onboarding_error_pairing_incompatible_title to
+                    R.string.onboarding_error_pairing_incompatible_text),
+            DevicePairingFailure.Persistence to
+                (R.string.onboarding_error_persistence_title to R.string.onboarding_error_persistence_text),
             DevicePairingFailure.Verification(ConnectionFailureReason.INVALID_CREDENTIALS) to
-                context.getString(R.string.error_pairing_credential_rejected)
+                (R.string.onboarding_error_pairing_credential_rejected_title to
+                    R.string.onboarding_error_pairing_credential_rejected_text)
         )
-        cases.forEach { (failure, expectedText) ->
+        cases.forEach { (failure, copy) ->
             outcome = DevicePairingOutcome.Failure(failure)
             fillPairingForm()
             composeRule.onNodeWithTag("onboardingSubmitButton")
                 .performScrollTo()
                 .performClick()
-            waitForText(expectedText)
-            // The closed banner must not contain any raw fixture value.
-            composeRule
-                .onAllNodes(hasText(expectedText, substring = true))
-                .fetchSemanticsNodes()
-                .forEach { node ->
-                    val texts = node.config[SemanticsProperties.Text]
-                    assertTrue(
-                        "no raw URL in the UI for $expectedText",
-                        texts?.none { it.text.contains("example.invalid") } ?: false
-                    )
-                }
+            val expectedTexts = listOf(copy.first, copy.second)
+                .map { context.getString(it) }
+            expectedTexts.forEach { waitForText(it) }
+            // The closed card must not contain any raw fixture value.
+            expectedTexts.forEach { expectedText ->
+                composeRule
+                    .onAllNodes(hasText(expectedText, substring = true))
+                    .fetchSemanticsNodes()
+                    .forEach { node ->
+                        val texts = node.config[SemanticsProperties.Text]
+                        assertTrue(
+                            "no raw URL in the UI for $expectedText",
+                            texts?.none { it.text.contains("example.invalid") } ?: false
+                        )
+                    }
+            }
         }
     }
 

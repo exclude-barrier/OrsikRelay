@@ -58,6 +58,9 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationPermissionRequester
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
+import io.github.excludebarrier.orsikrelay.ui.common.NoticeAction
+import io.github.excludebarrier.orsikrelay.ui.common.NoticeCard
+import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import io.github.excludebarrier.orsikrelay.platform.attachment.ChatAttachmentThumbnails
@@ -570,8 +573,8 @@ internal fun TurnFailureBlock(
             stringResource(R.string.sessions_error_hint_incompatible_api)
         else -> null
     }
-    ChatNotice(
-        tone = ChatNoticeTone.Error,
+    NoticeCard(
+        tone = NoticeTone.Error,
         title = when (error) {
             ChatStreamError.InvalidCredentials ->
                 stringResource(R.string.error_connection_invalid_credentials)
@@ -604,7 +607,7 @@ internal fun TurnFailureBlock(
         },
         actions = if (showRefreshHistory) {
             listOf(
-                ChatNoticeAction(
+                NoticeAction(
                     label = stringResource(R.string.chat_refresh_history),
                     onClick = onRefreshHistory
                 )
@@ -650,8 +653,8 @@ internal fun RunUncertainBlock(
     unavailable: Boolean,
     onReconcile: () -> Unit
 ) {
-    ChatNotice(
-        tone = ChatNoticeTone.Error,
+    NoticeCard(
+        tone = NoticeTone.Error,
         title = stringResource(R.string.chat_run_uncertain_title),
         text = when {
             stillActive -> stringResource(R.string.chat_run_uncertain_still_active)
@@ -660,7 +663,7 @@ internal fun RunUncertainBlock(
         },
         actions = if (canReconcile) {
             listOf(
-                ChatNoticeAction(
+                NoticeAction(
                     label = if (inFlight) {
                         stringResource(R.string.chat_run_uncertain_checking)
                     } else {
@@ -812,8 +815,8 @@ internal fun SteerRecoveryBlock(
     actionTestTag: String,
     modifier: Modifier = Modifier
 ) {
-    ChatNotice(
-        tone = ChatNoticeTone.Info,
+    NoticeCard(
+        tone = NoticeTone.Info,
         title = if (total > 1) {
             stringResource(R.string.chat_steer_recovery_title_counter, index + 1, total)
         } else {
@@ -823,7 +826,7 @@ internal fun SteerRecoveryBlock(
         textTestTag = "chatSteerRecoveryText",
         secondaryText = if (enabled) null else clearDraftHint,
         actions = listOf(
-            ChatNoticeAction(
+            NoticeAction(
                 label = actionLabel,
                 onClick = onSendAsNewMessage,
                 enabled = enabled,

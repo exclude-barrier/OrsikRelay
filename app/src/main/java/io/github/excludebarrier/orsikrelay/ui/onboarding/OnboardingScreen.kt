@@ -57,6 +57,8 @@ import io.github.excludebarrier.orsikrelay.domain.device.DevicePairCode
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileFormValidator
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
+import io.github.excludebarrier.orsikrelay.ui.common.NoticeCard
+import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
 
 /**
  * Onboarding form.
@@ -229,7 +231,8 @@ fun OnboardingScreen(
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                     modifier = Modifier
                         .fillMaxHeight()
-                        .testTag("onboardingModePairing")
+                        .testTag("onboardingModePairing"),
+                    icon = {}
                 ) {
                     Text(
                         text = stringResource(R.string.onboarding_mode_pairing) +
@@ -248,7 +251,8 @@ fun OnboardingScreen(
                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                     modifier = Modifier
                         .fillMaxHeight()
-                        .testTag("onboardingModeApiKey")
+                        .testTag("onboardingModeApiKey"),
+                    icon = {}
                 ) {
                     Text(
                         text = stringResource(R.string.onboarding_mode_api_key),
@@ -386,23 +390,15 @@ fun OnboardingScreen(
         }
 
         if (connectionState is OnboardingConnectionState.Failure) {
-            Text(
-                text = stringResource(onboardingFailureMessage(connectionState.reason)),
-                color = MaterialTheme.colorScheme.error,
+            val (title, text) = onboardingFailureCopy(connectionState.reason)
+            NoticeCard(
+                tone = NoticeTone.Error,
+                title = stringResource(title),
+                text = stringResource(text),
                 modifier = Modifier
                     .padding(top = 16.dp)
                     .testTag("onboardingConnectionError")
             )
-            onboardingFailureHint(connectionState.reason)?.let { hint ->
-                Text(
-                    text = stringResource(hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .testTag("onboardingConnectionHint")
-                )
-            }
         }
 
         Button(
@@ -465,38 +461,45 @@ private fun apiKeyErrorMessage(code: String): Int = when (code) {
     else -> R.string.error_api_key_generic
 }
 
-private fun onboardingFailureMessage(reason: OnboardingFailureReason): Int = when (reason) {
-    OnboardingFailureReason.INVALID_INPUT -> R.string.error_connection_invalid_input
-    OnboardingFailureReason.INVALID_CREDENTIALS -> R.string.error_connection_invalid_credentials
-    OnboardingFailureReason.RATE_LIMITED -> R.string.error_connection_rate_limited
-    OnboardingFailureReason.INCOMPATIBLE_API -> R.string.error_connection_incompatible_api
-    OnboardingFailureReason.TLS -> R.string.error_connection_tls
-    OnboardingFailureReason.TIMEOUT -> R.string.error_connection_timeout
-    OnboardingFailureReason.NETWORK -> R.string.error_connection_network
-    OnboardingFailureReason.HTTP -> R.string.error_connection_http
-    OnboardingFailureReason.PERSISTENCE -> R.string.error_connection_persistence
-    OnboardingFailureReason.PAIRING_CODE_INVALID -> R.string.error_pairing_code_invalid
-    OnboardingFailureReason.PAIRING_DEVICE_LIMIT -> R.string.error_pairing_device_limit
-    OnboardingFailureReason.PAIRING_RATE_LIMITED -> R.string.error_pairing_rate_limited
-    OnboardingFailureReason.PAIRING_INVALID_REQUEST -> R.string.error_pairing_invalid_request
-    OnboardingFailureReason.PAIRING_INCOMPATIBLE -> R.string.error_pairing_incompatible_api
-    OnboardingFailureReason.PAIRING_FAILED -> R.string.error_pairing_failed
-    OnboardingFailureReason.PAIRING_CREDENTIAL_REJECTED -> R.string.error_pairing_credential_rejected
-}
-
 /**
- * Static, input-free action hint shown below [onboardingFailureMessage].
+ * Static, input-free title and one-sentence action text for a failed
+ * connection attempt.
  *
- * Returns `null` for reasons without a useful, safe next action. The hints
- * contain no URLs, host names, server messages, or exception text.
+ * Neither half contains URLs, host names, server messages, or exception
+ * text. The title names the problem, the text says what the user can do.
  */
-internal fun onboardingFailureHint(reason: OnboardingFailureReason): Int? = when (reason) {
-    OnboardingFailureReason.TLS -> R.string.onboarding_hint_tls
-    OnboardingFailureReason.INCOMPATIBLE_API,
-    OnboardingFailureReason.PAIRING_INCOMPATIBLE -> R.string.onboarding_hint_incompatible_api
-    OnboardingFailureReason.NETWORK,
-    OnboardingFailureReason.TIMEOUT -> R.string.onboarding_hint_network
-    OnboardingFailureReason.PAIRING_CODE_INVALID -> R.string.onboarding_hint_pairing_code_invalid
-    OnboardingFailureReason.INVALID_CREDENTIALS -> R.string.onboarding_hint_invalid_credentials
-    else -> null
+internal fun onboardingFailureCopy(reason: OnboardingFailureReason): Pair<Int, Int> = when (reason) {
+    OnboardingFailureReason.INVALID_INPUT ->
+        R.string.onboarding_error_invalid_input_title to R.string.onboarding_error_invalid_input_text
+    OnboardingFailureReason.INVALID_CREDENTIALS ->
+        R.string.onboarding_error_invalid_credentials_title to R.string.onboarding_error_invalid_credentials_text
+    OnboardingFailureReason.RATE_LIMITED ->
+        R.string.onboarding_error_rate_limited_title to R.string.onboarding_error_rate_limited_text
+    OnboardingFailureReason.INCOMPATIBLE_API ->
+        R.string.onboarding_error_incompatible_api_title to R.string.onboarding_error_incompatible_api_text
+    OnboardingFailureReason.TLS ->
+        R.string.onboarding_error_tls_title to R.string.onboarding_error_tls_text
+    OnboardingFailureReason.TIMEOUT ->
+        R.string.onboarding_error_timeout_title to R.string.onboarding_error_timeout_text
+    OnboardingFailureReason.NETWORK ->
+        R.string.onboarding_error_network_title to R.string.onboarding_error_network_text
+    OnboardingFailureReason.HTTP ->
+        R.string.onboarding_error_http_title to R.string.onboarding_error_http_text
+    OnboardingFailureReason.PERSISTENCE ->
+        R.string.onboarding_error_persistence_title to R.string.onboarding_error_persistence_text
+    OnboardingFailureReason.PAIRING_CODE_INVALID ->
+        R.string.onboarding_error_pairing_code_invalid_title to R.string.onboarding_error_pairing_code_invalid_text
+    OnboardingFailureReason.PAIRING_DEVICE_LIMIT ->
+        R.string.onboarding_error_pairing_device_limit_title to R.string.onboarding_error_pairing_device_limit_text
+    OnboardingFailureReason.PAIRING_RATE_LIMITED ->
+        R.string.onboarding_error_pairing_rate_limited_title to R.string.onboarding_error_pairing_rate_limited_text
+    OnboardingFailureReason.PAIRING_INVALID_REQUEST ->
+        R.string.onboarding_error_pairing_invalid_request_title to R.string.onboarding_error_pairing_invalid_request_text
+    OnboardingFailureReason.PAIRING_INCOMPATIBLE ->
+        R.string.onboarding_error_pairing_incompatible_title to R.string.onboarding_error_pairing_incompatible_text
+    OnboardingFailureReason.PAIRING_FAILED ->
+        R.string.onboarding_error_pairing_failed_title to R.string.onboarding_error_pairing_failed_text
+    OnboardingFailureReason.PAIRING_CREDENTIAL_REJECTED ->
+        R.string.onboarding_error_pairing_credential_rejected_title to
+            R.string.onboarding_error_pairing_credential_rejected_text
 }
