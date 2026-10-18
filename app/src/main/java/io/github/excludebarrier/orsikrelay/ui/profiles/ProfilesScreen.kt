@@ -1,24 +1,36 @@
 package io.github.excludebarrier.orsikrelay.ui.profiles
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectError
@@ -50,11 +63,14 @@ import kotlinx.coroutines.withContext
  *
  * - Lists the stored servers exactly as [ProfileAdmin.listProfiles]
  *   reports them (name plus base URL); no network request is made here.
- * - The currently active server is marked; the unambiguous action
- *   [R.string.profiles_select_active] switches the active server via
- *   [onServerSelected]. Selection is pure metadata.
- * - Deletion is a separate, confirmed action (tap the row to open the
- *   dialog).
+ * - Each row is compact and carries the non-secret credential kind as a
+ *   chip ("Gekoppelt" / "API-Key"); the active server shows the "Aktiv"
+ *   chip. Tapping a non-active row switches the active server via
+ *   [onServerSelected] (exactly like the ⋮ action
+ *   [R.string.profiles_select_active]). Tapping the active row does
+ *   nothing. Selection is pure metadata.
+ * - Deletion is a separate, confirmed action behind the row's ⋮ menu. It
+ *   opens the existing confirmation dialog unchanged.
  * - A profile whose credential kind is
  *   [ProfileCredentialKind.DEVICE_CREDENTIAL] (derived from NON-SECRET
  *   device metadata only) has exactly ONE removal action, "Löschen".
@@ -93,7 +109,10 @@ fun ProfilesScreen(
     onDeviceDisconnected: (profileId: String) -> Unit = {},
     disconnect: (profileId: String) -> DeviceDisconnectResult = {
         DeviceDisconnectResult.Failure(DeviceDisconnectError.InvalidState)
-    }
+    },
+    // Opens the onboarding route to add another server. The bottom action
+    // is always present, also in the empty state.
+    onAddServer: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var profiles by remember { mutableStateOf<List<ServerProfile>?>(null) }
@@ -268,6 +287,12 @@ fun ProfilesScreen(
         loadProfiles()
     }
 
+    fun requestDelete(target: ServerProfile) {
+        deleteTarget = target
+        removalStep = RemovalStep.Idle
+        removeFailure = RemoveFailure.None
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -289,74 +314,98 @@ fun ProfilesScreen(
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
-        when (val current = profiles) {
-            null -> if (loadFailed) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(R.string.profiles_error_generic),
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { loadProfiles() },
-                        modifier = Modifier.testTag("profiles_retry")
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            when (val current = profiles) {
+                null -> if (loadFailed) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(text = stringResource(R.string.sessions_retry))
+                        Text(
+                            text = stringResource(R.string.profiles_error_generic),
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { loadProfiles() },
+                            modifier = Modifier.testTag("profiles_retry")
+                        ) {
+                            Text(text = stringResource(R.string.sessions_retry))
+                        }
                     }
-                }
-            } else {
-                Text(
-                    text = stringResource(R.string.profiles_loading),
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp)
-                )
-            }
-
-            else -> {
-                if (current.isEmpty()) {
+                } else {
                     Text(
-                        text = stringResource(R.string.profiles_empty),
+                        text = stringResource(R.string.profiles_loading),
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 24.dp)
                     )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(current, key = { it.id }) { profile ->
-                            ProfileRow(
-                                profile = profile,
-                                isActive = profile.id == activeProfileId,
-                                isSelecting = selecting != null,
-                                onClick = {
-                                    if (deleteTarget == null) {
-                                        deleteTarget = profile
-                                        removalStep = RemovalStep.Idle
-                                        removeFailure = RemoveFailure.None
+                }
+
+                else -> {
+                    if (current.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.profiles_empty),
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 24.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 8.dp)
+                        ) {
+                            itemsIndexed(current, key = { _, profile -> profile.id }) { index, profile ->
+                                Column {
+                                    if (index > 0) {
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.outlineVariant
+                                        )
                                     }
-                                },
-                                onUseAsActive = { confirmSelect(profile) }
-                            )
+                                    ProfileRow(
+                                        profile = profile,
+                                        isActive = profile.id == activeProfileId,
+                                        isSelecting = selecting != null,
+                                        credentialKind = credentialKinds[profile.id],
+                                        onClick = {
+                                            if (profile.id != activeProfileId) {
+                                                confirmSelect(profile)
+                                            }
+                                        },
+                                        onUseAsActive = { confirmSelect(profile) },
+                                        onDelete = { requestDelete(profile) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+        // Same bottom placement as the composer: the list takes the
+        // remaining height and this action stays at the bottom edge. The
+        // activity root already applies the safe-drawing insets, so no
+        // navigation-bar inset is added here.
+        Button(
+            onClick = onAddServer,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp)
+                .testTag("addServerButton")
+        ) {
+            Text(text = stringResource(R.string.onboarding_title))
         }
     }
 
@@ -517,71 +566,164 @@ private fun ProfileRow(
     profile: ServerProfile,
     isActive: Boolean,
     isSelecting: Boolean,
+    credentialKind: ProfileCredentialKind?,
     onClick: () -> Unit,
-    onUseAsActive: () -> Unit
+    onUseAsActive: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    Card(
+    var menuOpen by remember(profile.id) { mutableStateOf(false) }
+    val address = remember(profile.baseUrl) {
+        profile.baseUrl.removePrefix("https://")
+    }
+    // The active row and every row while a selection is in flight are
+    // disabled, so a tap can neither re-select the active server nor start a
+    // second selection.
+    val rowEnabled = !isActive && !isSelecting
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = if (isActive) {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        }
+            .heightIn(min = 64.dp)
+            .clickable(enabled = rowEnabled, onClick = onClick)
+            .padding(vertical = 8.dp)
+            .testTag("serverRow:${profile.id}"),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        Icon(
+            imageVector = DnsIcon,
+            // Decorative: the row already names the server.
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = profile.profileName,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            if (isActive ||
+                credentialKind == ProfileCredentialKind.DEVICE_CREDENTIAL ||
+                credentialKind == ProfileCredentialKind.API_KEY
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = profile.profileName,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = profile.baseUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-                if (isActive) {
-                    // Visible marker only; it carries no testTag because the
-                    // clickable Card is a semantics merge boundary, so a tag
-                    // on this inner Text is not addressable by itself. The
-                    // test asserts the marker by its unique visible text.
-                    Text(
-                        text = stringResource(R.string.profiles_active),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            if (!isActive) {
-                // Separate, unambiguous action: tapping the row
-                // opens the deletion confirmation, while only this button
-                // selects the server. Selection reads no credential on this
-                // path. The inner button intercepts taps on its own area.
-                TextButton(
-                    onClick = onUseAsActive,
-                    enabled = !isSelecting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .testTag("selectActiveServer:${profile.id}")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 6.dp)
                 ) {
-                    Text(text = stringResource(R.string.profiles_select_active))
+                    if (isActive) {
+                        ProfileChip(
+                            label = stringResource(R.string.profiles_chip_active),
+                            highlighted = true,
+                            showCheck = true
+                        )
+                    }
+                    when (credentialKind) {
+                        ProfileCredentialKind.DEVICE_CREDENTIAL -> ProfileChip(
+                            label = stringResource(R.string.profiles_chip_paired),
+                            highlighted = false
+                        )
+
+                        ProfileCredentialKind.API_KEY -> ProfileChip(
+                            label = stringResource(R.string.profiles_chip_api_key),
+                            highlighted = false
+                        )
+
+                        // A failed kind query shows no credential chip; the
+                        // removal path still treats it as a device profile.
+                        null -> Unit
+                    }
                 }
             }
+        }
+        Box {
+            IconButton(
+                onClick = { menuOpen = true },
+                enabled = !isSelecting,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("serverActions:${profile.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = stringResource(R.string.profiles_actions)
+                )
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false }
+            ) {
+                if (!isActive) {
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.profiles_select_active)) },
+                        onClick = {
+                            menuOpen = false
+                            onUseAsActive()
+                        },
+                        enabled = !isSelecting,
+                        modifier = Modifier.testTag("selectActiveServer:${profile.id}")
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.profiles_delete_confirm)) },
+                    onClick = {
+                        menuOpen = false
+                        onDelete()
+                    },
+                    enabled = !isSelecting,
+                    modifier = Modifier.testTag("serverDelete:${profile.id}")
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileChip(
+    label: String,
+    highlighted: Boolean,
+    showCheck: Boolean = false
+) {
+    val containerColor = if (highlighted) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (highlighted) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        color = containerColor,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (showCheck) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }

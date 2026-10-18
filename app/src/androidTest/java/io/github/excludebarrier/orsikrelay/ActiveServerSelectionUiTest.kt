@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -77,14 +78,13 @@ class ActiveServerSelectionUiTest {
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).assertExists()
-        composeRule.onNodeWithTag(selectTag(ALPHA_ID)).assertDoesNotExist()
+        composeRule.onNodeWithTag(rowTag(ALPHA_ID)).assertIsNotEnabled()
 
         // Capture the queries issued before the switch so the post-switch
         // slice can be asserted in isolation.
         composeRule.waitForIdle()
         val queriesBeforeSwitch = profileIdsQueried.size
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).performClick()
+        composeRule.onNodeWithTag(rowTag(BETA_ID)).performClick()
 
         // The safe state: back on Sessions, the chosen server's (Beta)
         // sessions are shown, the previous server's (Alpha) sessions are gone,
@@ -100,7 +100,7 @@ class ActiveServerSelectionUiTest {
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).assertDoesNotExist()
+        composeRule.onNodeWithTag(rowTag(BETA_ID)).assertIsNotEnabled()
 
         // Every session query issued after the switch was for the chosen
         // server (Beta) — the removed chat never re-fetched under Alpha and
@@ -170,17 +170,17 @@ class ActiveServerSelectionUiTest {
     }
 
     /**
-     * The "Aktiver Server" marker text is only rendered on the Profiles
-     * screen and only for the single active row.
+     * The active chip text is only rendered on the Profiles screen and only
+     * for the single active row.
      */
     private fun assertExactlyOneActiveMarker() {
         assertEquals(
             1,
-            composeRule.onAllNodesWithText(context.getString(R.string.profiles_active)).fetchSemanticsNodes().size
+            composeRule.onAllNodesWithText(context.getString(R.string.profiles_chip_active)).fetchSemanticsNodes().size
         )
     }
 
-    private fun selectTag(profileId: String) = "selectActiveServer:$profileId"
+    private fun rowTag(profileId: String) = "serverRow:$profileId"
 
     private fun sessionsSourceFor(
         profileIdsQueried: CopyOnWriteArrayList<String>

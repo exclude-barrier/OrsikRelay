@@ -217,7 +217,7 @@ class ActiveServerSelectionRestartUiTest {
         setProfilesLeaf(admin)
 
         waitForText("Beta")
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).performClick()
+        composeRule.onNodeWithTag(rowTag(BETA_ID)).performClick()
         composeRule.waitForIdle()
 
         // Exactly the persist happened first and the navigation switch
@@ -234,7 +234,7 @@ class ActiveServerSelectionRestartUiTest {
         setProfilesLeaf(admin)
 
         waitForText("Beta")
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).performClick()
+        composeRule.onNodeWithTag(rowTag(BETA_ID)).performClick()
         composeRule.waitForIdle()
 
         // The persist was attempted exactly once ...
@@ -242,12 +242,12 @@ class ActiveServerSelectionRestartUiTest {
         // ... but it failed, so the navigation switch was NEVER triggered.
         assertTrue(events.none { it.startsWith("navigate:") })
         // No optimistic state change: the previous server (Alpha) is still
-        // the single active row, and Beta still offers the select action.
+        // the single active row, and Beta is still selectable.
         assertEquals(
             1,
-            composeRule.onAllNodesWithText(context.getString(R.string.profiles_active)).fetchSemanticsNodes().size
+            composeRule.onAllNodesWithText(context.getString(R.string.profiles_chip_active)).fetchSemanticsNodes().size
         )
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).assertExists()
+        composeRule.onNodeWithTag(rowTag(BETA_ID)).assertExists()
     }
 
     @Test
@@ -258,11 +258,11 @@ class ActiveServerSelectionRestartUiTest {
 
         waitForText("Beta")
         // First tap starts the persist (in flight, the fake is blocked).
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).performClick()
+        composeRule.onNodeWithTag(rowTag(BETA_ID)).performClick()
         composeRule.waitForIdle()
-        // While a selection is in flight the button is disabled, so a
-        // second tap cannot start a second selection.
-        composeRule.onNodeWithTag(selectTag(BETA_ID)).assertIsNotEnabled()
+        // While a selection is in flight the row is disabled, so a second
+        // tap cannot start a second selection.
+        composeRule.onNodeWithTag(rowTag(BETA_ID)).assertIsNotEnabled()
 
         release.countDown()
         // The selection resumes on Dispatchers.IO and only then navigates on
@@ -284,7 +284,7 @@ class ActiveServerSelectionRestartUiTest {
 
     private val events = CopyOnWriteArrayList<String>()
 
-    private fun selectTag(profileId: String) = "selectActiveServer:$profileId"
+    private fun rowTag(profileId: String) = "serverRow:$profileId"
 
     private fun setProfilesLeaf(admin: ProfileAdmin) {
         composeRule.setContent {

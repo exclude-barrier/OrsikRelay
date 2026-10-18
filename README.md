@@ -123,8 +123,8 @@ the exact capability contract before it stores anything.
 
 | Task | Where |
 | --- | --- |
-| Add a server | **Add server** (or open an `orsik://pair` link) |
-| Switch or remove servers | **⋮ → Manage servers** |
+| Add a server | **⋮ → Manage servers → Add server** (or open an `orsik://pair` link) |
+| Switch or remove servers | **⋮ → Manage servers**, then tap a server or use its ⋮ |
 | Disconnect this phone from a server | **⋮ → Manage servers → tap the server → Delete** (the device is disconnected on the server first) |
 | Start a conversation | **+** (New session) on the session list |
 | Stop a running answer | **Stop** |

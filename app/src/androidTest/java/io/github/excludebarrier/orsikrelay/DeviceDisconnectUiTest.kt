@@ -85,7 +85,7 @@ class DeviceDisconnectUiTest {
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
 
         composeRule.onNodeWithText(context.getString(R.string.profiles_delete_title)).assertIsDisplayed()
         // The device-specific text states that the server comes first.
@@ -105,7 +105,7 @@ class DeviceDisconnectUiTest {
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteDismiss").performClick()
 
         assertEquals(0, disconnectCalls)
@@ -120,7 +120,7 @@ class DeviceDisconnectUiTest {
         admin.kinds["device-profile"] = ProfileCredentialKind.DEVICE_CREDENTIAL
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         composeRule.waitUntil(timeoutMillis = 10_000) { disconnectedProfiles.size == 1 }
@@ -140,7 +140,7 @@ class DeviceDisconnectUiTest {
         disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.RevokeFailed)
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
@@ -166,7 +166,7 @@ class DeviceDisconnectUiTest {
         disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.InvalidState)
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
@@ -182,7 +182,7 @@ class DeviceDisconnectUiTest {
         disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.RevokeFailed)
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
         waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
 
@@ -203,7 +203,7 @@ class DeviceDisconnectUiTest {
         disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.RevokeFailed)
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
         waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
         assertEquals(1, disconnectCalls)
@@ -223,7 +223,7 @@ class DeviceDisconnectUiTest {
         admin.kinds["api-profile"] = ProfileCredentialKind.API_KEY
         setContent()
 
-        composeRule.onNodeWithText("API-Profil").performClick()
+        openDeleteDialog("api-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         composeRule.waitUntil(timeoutMillis = 10_000) { deletedProfiles.size == 1 }
@@ -242,7 +242,7 @@ class DeviceDisconnectUiTest {
         disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.DeletionFailed)
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         waitForText(context.getString(R.string.profiles_delete_error_generic))
@@ -259,7 +259,7 @@ class DeviceDisconnectUiTest {
         disconnectRelease = release
         setContent()
 
-        composeRule.onNodeWithText("Geräteprofil").performClick()
+        openDeleteDialog("device-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         waitForText(context.getString(R.string.profiles_delete_disconnecting))
@@ -277,7 +277,7 @@ class DeviceDisconnectUiTest {
         admin.kinds["api-profile"] = ProfileCredentialKind.API_KEY
         setContent()
 
-        composeRule.onNodeWithText("API-Profil").performClick()
+        openDeleteDialog("api-profile")
 
         val dismissBounds = composeRule.onNodeWithTag("profileDeleteDismiss").getBoundsInRoot()
         val confirmBounds = composeRule.onNodeWithTag("profileDeleteConfirm").getBoundsInRoot()
@@ -295,7 +295,7 @@ class DeviceDisconnectUiTest {
         disconnectResult = DeviceDisconnectResult.Failure(DeviceDisconnectError.InvalidState)
         setContent()
 
-        composeRule.onNodeWithText("Unbekanntes Profil").performClick()
+        openDeleteDialog("unknown-profile")
         composeRule.onNodeWithTag("profileDeleteConfirm").performClick()
 
         waitForText(context.getString(R.string.profiles_delete_revoke_error_generic))
@@ -303,6 +303,11 @@ class DeviceDisconnectUiTest {
         assertTrue("nothing may be deleted without the user's second action", admin.deleted.isEmpty())
         assertTrue(deletedProfiles.isEmpty())
         composeRule.onNodeWithTag("profileDeleteLocalOnly").assertIsDisplayed()
+    }
+
+    private fun openDeleteDialog(profileId: String) {
+        composeRule.onNodeWithTag("serverActions:$profileId").performClick()
+        composeRule.onNodeWithTag("serverDelete:$profileId").performClick()
     }
 
     private fun setContent() {
