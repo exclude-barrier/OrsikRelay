@@ -89,7 +89,8 @@
     <string name="chat_loading">Loading messages…</string>
     <string name="chat_stream_reconnecting">Reconnecting…</string>
     <string name="chat_run_conflict">Another session is already responding. End that run first.</string>
-    <string name="chat_run_uncertain">The outcome of this run is unclear. The connection was interrupted; no new message will be sent.</string>
+    <string name="chat_run_uncertain">The connection was interrupted. Nothing is sent again.</string>
+    <string name="chat_run_uncertain_title">Run outcome unknown</string>
     <string name="chat_run_uncertain_check">Check status</string>
     <string name="chat_run_uncertain_checking">Checking status…</string>
     <string name="chat_run_uncertain_still_active">The run is still active on the server. No new message was sent.</string>
@@ -113,6 +114,8 @@
     <string name="chat_tool_activity">Tool is active…</string>
     <string name="chat_tool_activity_named">Tool active: %1$s</string>
     <string name="chat_refresh_history">Refresh history</string>
+    <string name="chat_turn_failure_refresh_hint">The answer may still have finished on the server. Refresh history loads the current state; if that does not help, open the session again later.</string>
+    <string name="chat_turn_failure_draft_kept">Your message was not sent and is still in the message field.</string>
     <string name="chat_stop">Stop</string>
     <string name="chat_stopping">Stopping…</string>
     <string name="error_run_stop_generic">The running run could not be stopped.</string>
@@ -121,9 +124,13 @@
     <string name="chat_steering">Steering…</string>
     <string name="chat_steer_queued">Steering queued.</string>
     <string name="error_run_steer_generic">The steer message could not be sent.</string>
-    <string name="chat_steer_recovery_note">The steer message was not accepted and can be sent as a new message.</string>
+    <string name="chat_steer_recovery_title">Steer not applied</string>
+    <string name="chat_steer_recovery_title_counter">Steer not applied (%1$d/%2$d)</string>
+    <string name="chat_steer_recovery_quote">“%1$s”</string>
+    <string name="chat_steer_recovery_clear_draft_hint">Clear the message field first.</string>
     <string name="chat_steer_send_as_new_message">Send as new message</string>
     <string name="error_chat_not_found">This session was not found.</string>
+    <string name="chat_history_error_session_not_found">The session was deleted on the server or is no longer available. Go back to the session list.</string>
     <string name="error_chat_generic">The messages could not be loaded.</string>
     <string name="error_session_profile">The server is incomplete or unavailable.</string>
     <string name="error_session_generic">The sessions could not be loaded.</string>
