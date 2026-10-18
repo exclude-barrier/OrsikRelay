@@ -43,11 +43,12 @@ import kotlinx.coroutines.launch
 /**
  * The safe run-approval decision dialog.
  *
- * This composable is the ONLY approval UI in the app. It renders exactly
- * the harmless, evidenced [ApprovalRequest] fields and nothing else —
- * no run ID, request ID, command, arguments, path, URL, pattern key,
- * tool output, environment output or exception detail. The only descriptive
- * text in the model is the exact protocol-defined neutral sentence.
+ * This composable is the ONLY approval UI in the app. It renders fixed app
+ * copy and no request detail at all — neither from [ApprovalRequest] nor
+ * from any server value: no run ID, request ID, command, arguments, path,
+ * URL, pattern key, tool output, environment output or exception detail.
+ * The body states that Hermes wants to run an action and that allowing
+ * applies to this one action only.
  *
  * Safety rules:
  * - "Ablehnen" is the first, neutral outlined button: it is the safe
@@ -168,16 +169,16 @@ fun ApprovalDialog(
                     style = MaterialTheme.typography.titleLarge
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                FieldLabel(label = stringResource(R.string.approval_action_label))
                 Text(
-                    text = stringResource(R.string.approval_action_value),
-                    style = MaterialTheme.typography.bodyLarge
+                    text = stringResource(R.string.approval_body_request),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                FieldLabel(label = stringResource(R.string.approval_reason_label))
                 Text(
-                    text = stringResource(R.string.approval_safe_description),
-                    style = MaterialTheme.typography.bodyLarge
+                    text = stringResource(R.string.approval_body_once),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 when (outcome) {
                     ApprovalOutcome.Failed -> {
@@ -249,15 +250,6 @@ fun ApprovalDialog(
             }
         }
     }
-}
-
-@Composable
-private fun FieldLabel(label: String) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.padding(bottom = 2.dp)
-    )
 }
 
 /** Closed, non-serialised outcome states for the approval dialog. */

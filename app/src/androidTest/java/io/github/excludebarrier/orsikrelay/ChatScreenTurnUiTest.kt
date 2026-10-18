@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -39,6 +40,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_RUN_STOP
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -2134,6 +2136,54 @@ class ChatScreenTurnUiTest {
                 .fetchSemanticsNodes().isEmpty()
         )
         assertEquals("no steer request for the second session", 0, secondSteer.calls.get())
+    }
+
+    @Test
+    fun steerRecoveryCardSitsAboveTheStopAndSteerControls() {
+        val steerer = FakeRunSteerRequester()
+        val source = FakeTurnSource()
+        steerer.release(RunSteerResult.NotAccepting(RUN_ID))
+        setScreen(history(emptyList()), source, runSteerRequester = steerer)
+
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Oben")
+        ImeClickSettle.settleAfterTyping(composeRule)
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+        composeRule.onNodeWithTag("chatSteerInput").performTextInput("Nach oben")
+        ImeClickSettle.settleAfterTyping(composeRule)
+        composeRule.onNodeWithTag("chatSteerSend").performClick()
+        assertTrue(steerer.started.await(3, TimeUnit.SECONDS))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                composeRule.onNodeWithTag("chatSteerRecovery:0").assertIsDisplayed()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+
+        // #32: the "not taken over" note belongs above the course-correction
+        // controls, not between the steer field and the message field. The run
+        // is still active here, so stop and steer controls are bound too.
+        val recoveryTop = composeRule.onNodeWithTag("chatSteerRecovery:0")
+            .assertIsDisplayed()
+            .getBoundsInRoot().top
+        val steerTop = composeRule.onNodeWithTag("chatSteerInput")
+            .assertIsDisplayed()
+            .getBoundsInRoot().top
+        val stopTop = composeRule.onNodeWithTag(TAG_RUN_STOP)
+            .assertIsDisplayed()
+            .getBoundsInRoot().top
+
+        assertTrue(
+            "recovery card top ($recoveryTop) must be above the steer input top ($steerTop)",
+            recoveryTop < steerTop
+        )
+        assertTrue(
+            "recovery card top ($recoveryTop) must be above the stop button top ($stopTop)",
+            recoveryTop < stopTop
+        )
     }
 
     /**

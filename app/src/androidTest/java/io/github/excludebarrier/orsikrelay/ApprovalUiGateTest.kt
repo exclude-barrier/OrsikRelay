@@ -84,7 +84,7 @@ class ApprovalUiGateTest {
 
         composeRule.waitForIdle()
         composeRule.onNodeWithText(TITLE).assertIsDisplayed()
-        composeRule.onNodeWithText(HINT_LABEL).assertIsDisplayed()
+        composeRule.onNodeWithText(BODY_REQUEST).assertIsDisplayed()
     }
 
     @Test
@@ -235,7 +235,10 @@ class ApprovalUiGateTest {
         const val REQUEST_ID = "fedcba9876543210fedcba9876543210"
 
         val TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_title) }
-        val HINT_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_reason_label) }
+        val BODY_REQUEST: String by lazy {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getString(R.string.approval_body_request)
+        }
 
         const val TAG_ALLOW = "approval_allow"
         const val TAG_DENY = "approval_deny"

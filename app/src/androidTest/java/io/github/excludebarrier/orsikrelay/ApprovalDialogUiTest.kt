@@ -59,10 +59,8 @@ class ApprovalDialogUiTest {
         setDialog(fake(requester = { _, _, _, _ -> RunApprovalResult.NoPending(RUN_ID) }))
 
         composeRule.onNodeWithText(TITLE).assertIsDisplayed()
-        composeRule.onNodeWithText(ACTION_LABEL).assertIsDisplayed()
-        composeRule.onNodeWithText(ACTION_VALUE).assertIsDisplayed()
-        composeRule.onNodeWithText(REASON_LABEL).assertIsDisplayed()
-        composeRule.onNodeWithText(SAFE_DESCRIPTION).assertIsDisplayed()
+        composeRule.onNodeWithText(BODY_REQUEST).assertIsDisplayed()
+        composeRule.onNodeWithText(BODY_ONCE).assertIsDisplayed()
 
         listOf(RUN_ID, REQUEST_ID, COMMAND, TARGET_LABEL, RISK_NOTE).forEach { forbidden ->
             assertTrue(
@@ -403,14 +401,15 @@ class ApprovalDialogUiTest {
         const val COMMAND = "synthetic-command"
 
         val TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_title) }
-        val ACTION_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_action_label) }
-        val ACTION_VALUE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_action_value) }
-        const val TARGET_LABEL = "Ziel"
-        val REASON_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_reason_label) }
-        val SAFE_DESCRIPTION: String by lazy {
+        val BODY_REQUEST: String by lazy {
             InstrumentationRegistry.getInstrumentation().targetContext
-                .getString(R.string.approval_safe_description)
+                .getString(R.string.approval_body_request)
         }
+        val BODY_ONCE: String by lazy {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getString(R.string.approval_body_once)
+        }
+        const val TARGET_LABEL = "Ziel"
         const val RISK_NOTE =
             "Sicherheitsmodul empfiehlt Ablehnung. Erlauben nur, wenn du die Aktion bewusst freigibst."
         val ERROR_GENERIC: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_error_generic) }

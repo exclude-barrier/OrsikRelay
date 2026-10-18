@@ -131,7 +131,7 @@ class LiveBridgeApprovalE2ETest {
                 uncertainPresent()
         }
         assertFalse("the approval must not end the turn uncertain", uncertainPresent())
-        composeRule.onNodeWithText(context.getString(R.string.approval_safe_description))
+        composeRule.onNodeWithText(context.getString(R.string.approval_body_request))
             .assertExists()
 
         composeRule.onNodeWithTag(buttonTag).performClick()

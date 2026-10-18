@@ -75,6 +75,7 @@
     <string name="settings_about_section">Über die App</string>
     <string name="settings_version_label">Version</string>
     <string name="settings_license_label">Lizenz</string>
+    <string name="settings_source_label">Quellcode</string>
     <string name="session_fallback_title">Unbenannte Session</string>
     <string name="new_session_title">Neue Session</string>
     <string name="new_session_title_label">Titel (optional)</string>
@@ -169,11 +170,9 @@
     <string name="profiles_delete_revoke_error_generic">Das Gerät konnte nicht vom Server getrennt werden.</string>
     <string name="profiles_delete_local_only">Nur auf diesem Gerät entfernen</string>
     <string name="profiles_delete_local_only_warning">Der Zugang bleibt auf dem Server gültig, bis er dort widerrufen wird (admin list-devices, admin revoke-device &lt;device_id&gt;).</string>
-    <string name="approval_title">Freigabe anfragen</string>
-    <string name="approval_action_label">Aktion</string>
-    <string name="approval_action_value">Hermes-Run</string>
-    <string name="approval_reason_label">Hinweis</string>
-    <string name="approval_safe_description">Eine potenziell gefährliche Aktion benötigt deine Freigabe.</string>
+    <string name="approval_title">Freigabe nötig</string>
+    <string name="approval_body_request">Hermes möchte für diese Antwort eine Aktion ausführen, die deine Freigabe braucht – z. B. einen Befehl auf dem Server.</string>
+    <string name="approval_body_once">„Erlauben“ gilt nur für diese eine Aktion.</string>
     <string name="approval_allow">Erlauben</string>
     <string name="approval_deny">Ablehnen</string>
     <string name="approval_in_flight">Entscheidung wird gesendet …</string>

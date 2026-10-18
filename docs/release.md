@@ -131,8 +131,11 @@ read -rsp "Keystore password: " ORSIK_RELEASE_STORE_PASSWORD; echo
 export ORSIK_RELEASE_STORE_PASSWORD
 export ORSIK_RELEASE_KEY_PASSWORD="$ORSIK_RELEASE_STORE_PASSWORD"
 export ORSIK_RELEASE_KEY_ALIAS=orsik-release
-./gradlew --offline :app:bundleRelease :app:assembleRelease
+./gradlew --no-configuration-cache --offline :app:bundleRelease :app:assembleRelease
 ```
+
+The configuration cache stores configuration inputs on disk, and the signing
+environment variables must never end up there.
 
 `isMinifyEnabled` remains `false`; R8/ProGuard shrinking is a separate
 initiative and is **not** part of the release build here.

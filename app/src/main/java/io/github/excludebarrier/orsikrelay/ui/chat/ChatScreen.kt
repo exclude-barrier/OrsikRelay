@@ -392,6 +392,27 @@ onClick = { viewModel.handleBack() }
                 if (state.startConflict) {
                     ConflictBlock()
                 }
+                // Recoverable steers: each preserved item is
+                // rendered as its own ordered block. They belong above the
+                // steer control: the note refers to a course correction that
+                // was not taken over, so it must not sit between the steer
+                // field and the message field.
+                if (state.steerRecovery.isNotEmpty()) {
+                    state.steerRecovery.forEachIndexed { index, text ->
+                        SteerRecoveryBlock(
+                            index = index,
+                            total = state.steerRecovery.size,
+                            text = text,
+                            actionLabel = steerSendAsNewMessageLabel,
+                            clearDraftHint = steerClearDraftHintLabel,
+                            enabled = state.draft.isBlank(),
+                            onSendAsNewMessage = { viewModel.sendRecoveryAsNewMessage(index) },
+                            testTag = "chatSteerRecovery:$index",
+                            actionTestTag = "chatSteerSendAsNewMessage:$index",
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
                 // Stop control and steer control:
                 // visible only for an active turn whose server-confirmed,
                 // non-blank run ID is bound.
@@ -417,24 +438,6 @@ onClick = { viewModel.handleBack() }
                         onSteer = { viewModel.steer() },
                         modifier = Modifier.padding(top = 8.dp)
                     )
-                }
-                // Recoverable steers: each preserved item is
-                // rendered as its own ordered block.
-                if (state.steerRecovery.isNotEmpty()) {
-                    state.steerRecovery.forEachIndexed { index, text ->
-                        SteerRecoveryBlock(
-                            index = index,
-                            total = state.steerRecovery.size,
-                            text = text,
-                            actionLabel = steerSendAsNewMessageLabel,
-                            clearDraftHint = steerClearDraftHintLabel,
-                            enabled = state.draft.isBlank(),
-                            onSendAsNewMessage = { viewModel.sendRecoveryAsNewMessage(index) },
-                            testTag = "chatSteerRecovery:$index",
-                            actionTestTag = "chatSteerSendAsNewMessage:$index",
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
                 }
                 // Transient re-attach status while the stream is
                 // being re-attached to the still-running server run.
