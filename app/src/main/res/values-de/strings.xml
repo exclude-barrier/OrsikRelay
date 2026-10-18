@@ -34,6 +34,10 @@
     <string name="sessions_loading">Sessions werden geladen…</string>
     <string name="sessions_empty">Keine Sessions vorhanden.</string>
     <string name="sessions_refresh">Aktualisieren</string>
+    <string name="sessions_search_placeholder">Nach Titel suchen</string>
+    <string name="sessions_search_clear">Suche löschen</string>
+    <string name="sessions_search_no_results">Keine Session mit „%1$s“ im Titel.</string>
+    <string name="sessions_search_only_loaded_hint">Durchsucht werden nur die geladenen Sessions. Lade mehr, um weiter zu suchen.</string>
     <string name="sessions_more_options">Weitere Optionen</string>
     <string name="theme_mode_system">System</string>
     <string name="theme_mode_light">Hell</string>
