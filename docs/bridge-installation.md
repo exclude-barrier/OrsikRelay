@@ -8,7 +8,8 @@ As of: 2026-10-10. Target path: **fresh, unmodified official Hermes installation
 
 - Official Hermes (Git state, tested here: `NousResearch/hermes-agent`
   `f86276d2`, Python 3.14) runs with an active `api_server` on **loopback**
-  (default `127.0.0.1:8899` or `:8642`), `API_SERVER_KEY` in a 0600 env.
+  (Hermes default `127.0.0.1:8642`, see `API_SERVER_PORT` in `~/.hermes/.env`),
+  `API_SERVER_KEY` in a 0600 env.
 - A private HTTPS access path to the server (see §4): Tailscale Serve,
   WireGuard+reverse proxy or LAN with a valid certificate.
 - `uv` and a Python ≥ 3.11 (bridge venv separate from the Hermes venv).
@@ -22,8 +23,14 @@ As of: 2026-10-10. Target path: **fresh, unmodified official Hermes installation
 
 ## 2. Installation
 
+Get the source of the latest release as the user that runs Hermes, then run
+the installer from it (without a path argument it installs the `bridge/`
+directory it lives in):
+
 ```sh
-./install.sh [--update] [--systemd] /pfad/zum/bridge/source
+git clone https://github.com/exclude-barrier/OrsikRelay.git ~/OrsikRelay
+cd ~/OrsikRelay && git checkout "$(git describe --tags --abbrev=0)"
+bridge/install.sh [--update] [--systemd] [/path/to/bridge/source]
 ```
 
 - Creates `$BRIDGE_HOME` (default `~/.local/orsik-mobile-bridge`, 0700) and a
@@ -50,7 +57,7 @@ BRIDGE_BIND=127.0.0.1
 BRIDGE_PORT=9842
 # official api_server; loopback HTTP IP with port only, no hostname,
 # no path — otherwise the bridge does not start
-BRIDGE_UPSTREAM=http://127.0.0.1:8899
+BRIDGE_UPSTREAM=http://127.0.0.1:8642
 # file with API_SERVER_KEY (0600)
 BRIDGE_HERMES_ENV=/home/USER/.hermes/.env
 BRIDGE_STATE_DB=/home/USER/.local/orsik-mobile-bridge/state.db
@@ -82,7 +89,7 @@ as soon as one check is FAIL, otherwise 0; at the end `PREFLIGHT: PASS` or
 | `env_mode` | `bridge.env` exists, mode 600 |
 | `venv` | `$BRIDGE_HOME/venv/bin/orsik-mobile-bridge` executable |
 | `bind` | `BRIDGE_BIND` empty, `127.0.0.1` or `::1` |
-| `upstream` | `BRIDGE_UPSTREAM` (default `http://127.0.0.1:8899`) matches `^http://(127.x.x.x\|[::1]):port$` |
+| `upstream` | `BRIDGE_UPSTREAM` (default `http://127.0.0.1:8642`, the Hermes default port) matches `^http://(127.x.x.x\|[::1]):port$` |
 | `hermes_env` | `BRIDGE_HERMES_ENV` set, file 0600, with `API_SERVER_KEY=…` |
 | `approvals_mode` | `config.yaml` next to the Hermes env file sets `approvals: mode: manual`; if the file is missing or another mode is set there → WARN (core default `smart` sometimes approves without asking) |
 | `public_base_url` | empty → WARN (no deep link/QR); otherwise it must start with `https://` |
@@ -145,9 +152,19 @@ systemctl --user restart orsik-mobile-bridge.service
 
 ## 6. Update / Rollback / Backup / Restore / Uninstall
 
-- **Update:** `./install.sh --update [--systemd] /pfad/zum/source` rebuilds the venv
-  (`uv venv --clear`); `bridge.env` and the store are retained,
-  pairing/tokens survive. Then restart the bridge.
+- **Update:** back up the store (see below), switch the checkout to the new
+  release and rebuild the venv; `bridge.env` and the store are retained,
+  pairing/tokens survive:
+
+  ```sh
+  cd ~/OrsikRelay && git fetch --tags
+  git checkout "$(git describe --tags --abbrev=0 origin/main)"
+  bridge/install.sh --update --systemd
+  systemctl --user restart orsik-mobile-bridge.service
+  bridge/install.sh --check
+  ```
+
+  `--update` rebuilds the venv from scratch (`uv venv --clear`).
 - **Uninstall:** `./install.sh --uninstall` (stop/remove the unit) and
   `rm -rf $BRIDGE_HOME` (venv + store). Hermes and its models remain untouched.
 

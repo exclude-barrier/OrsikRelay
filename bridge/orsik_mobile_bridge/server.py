@@ -148,7 +148,7 @@ def _state_db_path(env: dict[str, str]) -> str:
     return os.path.join(home, "state.db")
 
 
-_UPSTREAM_ERROR = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8899"
+_UPSTREAM_ERROR = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8642"
 
 
 def _validate_upstream(upstream: str) -> str:
@@ -180,7 +180,7 @@ def _validate_upstream(upstream: str) -> str:
 
 def build_state_from_env(env: dict[str, str]) -> BridgeState:
     upstream = _validate_upstream(
-        env.get("BRIDGE_UPSTREAM", "http://127.0.0.1:8899"))
+        env.get("BRIDGE_UPSTREAM", "http://127.0.0.1:8642"))
     master_key = ""
     hermes_env = env.get("BRIDGE_HERMES_ENV", "")
     if hermes_env:
