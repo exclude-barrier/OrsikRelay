@@ -24,7 +24,7 @@ your private network.
 The user interface is available in English and German; choose the language
 under **⋮ → Settings → Language**.*
 
-> **Early alpha (`0.1.0-alpha.7`).** For technical testing on your own setup.
+> **Early alpha (`0.1.0-alpha.8`).** For technical testing on your own setup.
 > No Play Store build or binary release yet – [build from source](#building-from-source).
 > Not affiliated with or endorsed by Nous Research.
 
