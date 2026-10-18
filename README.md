@@ -93,6 +93,29 @@ apps.
 The app talks to a small **Orsik Mobile Bridge** that runs next to Hermes on
 the same server. Choose one way.
 
+#### Quickest: one command
+
+Run this as the user that runs Hermes (not as root):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/exclude-barrier/OrsikRelay/main/bridge/install-bridge.sh | bash
+```
+
+It checks Hermes (api_server on loopback, `approvals: mode: manual`), installs
+the latest release with hash-pinned dependencies, writes the bridge
+configuration, starts the bridge as a user service and prints the one command
+that needs root (`tailscale serve`) plus the command for a pairing code. It
+never changes Hermes itself, opens no port and prints no secrets. Once
+Tailscale Serve is set up, `… | bash -s -- --pair` also prints a pairing code.
+
+Prefer to read it first:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/exclude-barrier/OrsikRelay/main/bridge/install-bridge.sh
+less install-bridge.sh
+bash install-bridge.sh
+```
+
 #### Option A: let Hermes do it
 
 Send this message to your Hermes agent, for example via Telegram or the CLI.
@@ -192,6 +215,8 @@ stores anything.
 
 ### Updating
 
+- **Bridge, quickest:** run the install command from above again. It backs up
+  the device store, switches to the latest release and restarts the bridge.
 - **App:** install the new APK over the old one. It is signed with the same
   key, so your servers and pairing are kept. [Obtainium](https://github.com/ImranR98/Obtainium)
   can watch the GitHub releases and tell you about new versions.

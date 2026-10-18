@@ -23,6 +23,13 @@ As of: 2026-10-10. Target path: **fresh, unmodified official Hermes installation
 
 ## 2. Installation
 
+**Quick install / update:** as the user that runs Hermes,
+`curl -fsSL https://raw.githubusercontent.com/exclude-barrier/OrsikRelay/main/bridge/install-bridge.sh | bash`
+runs every step below (checks, clone of the latest release, `install.sh
+--systemd`, `bridge.env`, `install.sh --check`, service start) and prints the
+`tailscale serve` command and the pairing command; run again, it updates. The
+manual steps:
+
 Get the source of the latest release as the user that runs Hermes, then run
 the installer from it (without a path argument it installs the `bridge/`
 directory it lives in):
