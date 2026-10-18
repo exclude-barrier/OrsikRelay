@@ -19,10 +19,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.LocalActivity
 import androidx.core.view.WindowCompat
+import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.navigation.initialDestination
+import io.github.excludebarrier.orsikrelay.ui.settings.ApplyScreenProtection
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
 import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
@@ -75,6 +78,12 @@ class MainActivity : ComponentActivity() {
                 SharedPreferencesThemeSettingStore(applicationContext)
             }
             val themeController = rememberThemeModeController(themeStore)
+            val screenProtectionStore = remember {
+                SharedPreferencesScreenProtectionSettingStore(applicationContext)
+            }
+            val screenProtectionController =
+                rememberScreenProtectionController(screenProtectionStore)
+            ApplyScreenProtection(screenProtectionController)
             val darkTheme = themeController.mode.resolve(isSystemInDarkTheme())
             SystemBarAppearance(darkTheme)
             HermesTheme(darkTheme = darkTheme) {
@@ -83,6 +92,7 @@ class MainActivity : ComponentActivity() {
                         startDestination = initialDestination(),
                         sessionPageSource = sessionPageSourceForTests,
                         themeController = themeController,
+                        screenProtectionController = screenProtectionController,
                         pairingBootstrap = pairingBootstrap.value,
                         notificationBootstrap = notificationBootstrap.value
                     )

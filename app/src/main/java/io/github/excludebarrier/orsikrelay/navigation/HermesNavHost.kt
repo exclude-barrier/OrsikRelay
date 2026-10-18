@@ -23,7 +23,9 @@ import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.profile.ActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.RunApprovalCapabilityStore
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
+import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesLanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.di.AppDependenciesHolder
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
@@ -43,9 +45,13 @@ import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.AboutScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.ChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.LanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.ScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
 import kotlinx.coroutines.CancellationException
@@ -72,6 +78,8 @@ fun HermesNavHost(
     profileAdmin: ProfileAdmin? = null,
     themeController: ThemeModeController? = null,
     languageController: LanguageController? = null,
+    chatTextSizeController: ChatTextSizeController? = null,
+    screenProtectionController: ScreenProtectionController? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
     capabilityStore: RunApprovalCapabilityStore? = null,
@@ -98,6 +106,16 @@ fun HermesNavHost(
         store = languageStore,
         applySelection = { tag -> currentActivity?.let { AppLocale.applySelection(it, tag) } }
     )
+    val chatTextSizeStore = remember(applicationContext) {
+        SharedPreferencesChatTextSizeSettingStore(applicationContext)
+    }
+    val resolvedChatTextSizeController = chatTextSizeController
+        ?: rememberChatTextSizeController(chatTextSizeStore)
+    val screenProtectionStore = remember(applicationContext) {
+        SharedPreferencesScreenProtectionSettingStore(applicationContext)
+    }
+    val resolvedScreenProtectionController = screenProtectionController
+        ?: rememberScreenProtectionController(screenProtectionStore)
     // The graph (and with it the app-level live-run
     // state) is process-scoped, so an Activity/configuration recreation
     // re-attaches to the still-running turn instead of building a second,
@@ -352,6 +370,8 @@ fun HermesNavHost(
             SettingsScreen(
                 languageController = resolvedLanguageController,
                 themeController = settingsThemeController,
+                chatTextSizeController = resolvedChatTextSizeController,
+                screenProtectionController = resolvedScreenProtectionController,
                 onBack = {
                     if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
@@ -427,6 +447,7 @@ fun HermesNavHost(
                     ?: productionDependencies.value.runStatusRequester,
                 notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
                 attachmentSource = productionDependencies.value.chatAttachmentSource,
+                chatTextSizeController = resolvedChatTextSizeController,
                 profileId = activeProfileId.orEmpty(),
                 sessionId = decodeRouteArgument(encodedSessionId),
                 onBack = {

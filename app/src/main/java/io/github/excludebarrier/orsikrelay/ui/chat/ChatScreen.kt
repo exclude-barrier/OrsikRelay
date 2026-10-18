@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,11 +57,13 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
+import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationPermissionRequester
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeAction
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeCard
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
+import io.github.excludebarrier.orsikrelay.ui.settings.ChatTextSizeController
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import io.github.excludebarrier.orsikrelay.platform.attachment.ChatAttachmentThumbnails
@@ -108,11 +111,13 @@ fun ChatScreen(
     runStatusRequester: RunStatusRequester = NoOpRunStatusRequester,
     attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
     notificationPermissionStore: NotificationPermissionStore = NoOpNotificationPermissionStore,
+    chatTextSizeController: ChatTextSizeController? = null,
     profileId: String,
     sessionId: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val chatTextScale = (chatTextSizeController?.size ?: ChatTextSize.DEFAULT).scale
     // The tool-activity labels are resolved here (localized UI strings) and
     // handed to the view model, which needs them to build the generic local
     // tool rows — never a tool name or payload.
@@ -364,7 +369,11 @@ onClick = { viewModel.handleBack() }
                             .weight(1f)
                     ) {
                         items(timeline, key = { it.key }) { message ->
-                            MessageRow(message)
+                            CompositionLocalProvider(
+                                LocalChatTextScale provides chatTextScale
+                            ) {
+                                MessageRow(message)
+                            }
                         }
                     }
                 }
@@ -1263,6 +1272,7 @@ private fun MessageRow(message: TimelineRow) {
     val isUser = message.role == MessageRole.USER
     val isHistoryTool = message.role == MessageRole.TOOL && !message.localTool
     val isLiveTool = message.role == MessageRole.TOOL && message.localTool
+    val chatTextScale = LocalChatTextScale.current
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -1308,34 +1318,42 @@ private fun MessageRow(message: TimelineRow) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                else -> Box(
-                    modifier = Modifier
-                        .testTag("chatBubble:${message.key}")
-                        .clip(if (isUser) USER_BUBBLE_SHAPE else ASSISTANT_BUBBLE_SHAPE)
-                        .background(
-                            if (isUser) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerLow
-                            }
-                        )
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                ) {
-                    if (message.role == MessageRole.ASSISTANT) {
-                        // Assistant output renders as markdown; user, system
-                        // and tool lines stay plain text so markdown can never
-                        // surface user input or tool/approval detail.
-                        AssistantMarkdownMessage(content = message.content)
-                    } else {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (isUser) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            }
-                        )
+                else -> ChatTextScaledContent(chatTextScale) {
+                    Box(
+                        modifier = Modifier
+                            .testTag("chatBubble:${message.key}")
+                            .clip(if (isUser) USER_BUBBLE_SHAPE else ASSISTANT_BUBBLE_SHAPE)
+                            .background(
+                                if (isUser) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerLow
+                                }
+                            )
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        if (message.role == MessageRole.ASSISTANT) {
+                            // Assistant output renders as markdown; user, system
+                            // and tool lines stay plain text so markdown can never
+                            // surface user input or tool/approval detail.
+                            AssistantMarkdownMessage(
+                                content = message.content,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("chatMessageText:${message.key}")
+                            )
+                        } else {
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isUser) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                modifier = Modifier.testTag("chatMessageText:${message.key}")
+                            )
+                        }
                     }
                 }
             }

@@ -263,6 +263,8 @@ stores anything.
 | Attach an image | **Attach** in the composer (one image, ≤ 5 MiB) |
 | Change the app language | **⋮ → Settings → Language** (System / English / Deutsch) |
 | Light / dark mode | **⋮ → Settings → Appearance** (System / Light / Dark) |
+| Chat text size | **⋮ → Settings → Chat** |
+| Block screenshots | **⋮ → Settings → Privacy → Screen protection** |
 | App version and license | **⋮ → About the app** |
 
 On the server, `admin list-devices` and `admin revoke-device <device_id>` list
