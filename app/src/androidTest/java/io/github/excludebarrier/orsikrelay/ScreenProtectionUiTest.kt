@@ -11,6 +11,7 @@ import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.ScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
+import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.ui.settings.ApplyScreenProtection
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
@@ -85,6 +86,11 @@ class ScreenProtectionUiTest {
                     themeController = themeController,
                     chatTextSizeController = chatTextSizeController,
                     screenProtectionController = screenProtectionController,
+                    appLockController = AppLockController(
+                        initiallyEnabled = false,
+                        persist = {}
+                    ),
+                    appAuthenticator = null,
                     onBack = {}
                 )
             }

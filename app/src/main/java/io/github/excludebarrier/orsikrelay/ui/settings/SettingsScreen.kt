@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.language.SupportedLanguages
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
+import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
+import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 
@@ -60,6 +62,8 @@ fun SettingsScreen(
     themeController: ThemeModeController,
     chatTextSizeController: ChatTextSizeController,
     screenProtectionController: ScreenProtectionController,
+    appLockController: AppLockController,
+    appAuthenticator: AppAuthenticator?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     openNotificationSettings: (Context) -> Unit = { openAppNotificationSettings(it) }
@@ -165,6 +169,60 @@ fun SettingsScreen(
                 checked = screenProtection,
                 onCheckedChange = null,
                 modifier = Modifier.padding(start = 12.dp)
+            )
+        }
+
+        val appLockEnabled = appLockController.enabled
+        val canUseAppLock = appAuthenticator?.canAuthenticate() == true
+        var appLockAuthPending by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("settings_app_lock")
+                .toggleable(
+                    value = appLockEnabled,
+                    enabled = canUseAppLock && !appLockAuthPending,
+                    role = Role.Switch,
+                    onValueChange = { wantsEnabled ->
+                        val authenticator = appAuthenticator ?: return@toggleable
+                        appLockAuthPending = true
+                        authenticator.authenticate { success ->
+                            appLockAuthPending = false
+                            if (success) appLockController.setEnabled(wantsEnabled)
+                        }
+                    }
+                )
+                .padding(horizontal = 8.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.settings_app_lock_label),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    text = stringResource(R.string.settings_app_lock_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Switch(
+                checked = appLockEnabled,
+                onCheckedChange = null,
+                enabled = canUseAppLock && !appLockAuthPending,
+                modifier = Modifier.padding(start = 12.dp)
+            )
+        }
+        if (!canUseAppLock) {
+            Text(
+                text = stringResource(R.string.settings_app_lock_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(start = 8.dp, top = 4.dp)
+                    .testTag("settings_app_lock_unavailable")
             )
         }
     }

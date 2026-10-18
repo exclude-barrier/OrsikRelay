@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Hermes" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      AppCompat parent on purpose: androidx.biometric's legacy fingerprint
+      dialog (API 26-27) is an androidx.appcompat.app.AlertDialog and requires
+      the AppCompat theme attributes. Compose still owns every pixel inside
+      the activity; the XML theme only provides the window (and the dialog)
+      with the library's required attributes.
+    -->
+    <style name="Theme.Hermes" parent="Theme.AppCompat.Light.NoActionBar" />
 </resources>

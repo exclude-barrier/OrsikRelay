@@ -122,6 +122,7 @@ dependencies {
     implementation(libs.material.icons.core)
     implementation(libs.activity.compose)
     implementation(libs.navigation.compose)
+    implementation(libs.androidx.biometric)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     // Markdown rendering for assistant messages. Pure Compose, no WebView.

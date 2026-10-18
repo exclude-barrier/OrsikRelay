@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.fragment.app.FragmentActivity
 import io.github.excludebarrier.orsikrelay.BuildConfig
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
@@ -40,6 +41,10 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
+import io.github.excludebarrier.orsikrelay.security.applock.AndroidAppAuthenticator
+import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
+import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
+import io.github.excludebarrier.orsikrelay.security.applock.AppLockHolder
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
@@ -80,6 +85,8 @@ fun HermesNavHost(
     languageController: LanguageController? = null,
     chatTextSizeController: ChatTextSizeController? = null,
     screenProtectionController: ScreenProtectionController? = null,
+    appLockController: AppLockController? = null,
+    appAuthenticator: AppAuthenticator? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
     capabilityStore: RunApprovalCapabilityStore? = null,
@@ -116,6 +123,13 @@ fun HermesNavHost(
     }
     val resolvedScreenProtectionController = screenProtectionController
         ?: rememberScreenProtectionController(screenProtectionStore)
+    // The app-level lock state is process-scoped; production passes the same
+    // controller from MainActivity so the root gate and the settings switch
+    // can never diverge.
+    val resolvedAppLockController = appLockController
+        ?: AppLockHolder.get(applicationContext)
+    val resolvedAppAuthenticator = appAuthenticator
+        ?: (currentActivity as? FragmentActivity)?.let(::AndroidAppAuthenticator)
     // The graph (and with it the app-level live-run
     // state) is process-scoped, so an Activity/configuration recreation
     // re-attaches to the still-running turn instead of building a second,
@@ -372,6 +386,8 @@ fun HermesNavHost(
                 themeController = settingsThemeController,
                 chatTextSizeController = resolvedChatTextSizeController,
                 screenProtectionController = resolvedScreenProtectionController,
+                appLockController = resolvedAppLockController,
+                appAuthenticator = resolvedAppAuthenticator,
                 onBack = {
                     if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
