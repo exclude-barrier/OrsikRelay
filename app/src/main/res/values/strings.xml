@@ -76,6 +76,7 @@
     <string name="settings_version_label">Version</string>
     <string name="settings_license_label">License</string>
     <string name="settings_license_value" translatable="false">Apache License 2.0</string>
+    <string name="settings_source_label">Source code</string>
     <string name="session_fallback_title">Untitled session</string>
     <string name="new_session_title">New session</string>
     <string name="new_session_title_label">Title (optional)</string>
@@ -170,11 +171,9 @@
     <string name="profiles_delete_revoke_error_generic">The device could not be disconnected from the server.</string>
     <string name="profiles_delete_local_only">Remove on this device only</string>
     <string name="profiles_delete_local_only_warning">The access remains valid on the server until it is revoked there (admin list-devices, admin revoke-device &lt;device_id&gt;).</string>
-    <string name="approval_title">Approval requested</string>
-    <string name="approval_action_label">Action</string>
-    <string name="approval_action_value">Hermes run</string>
-    <string name="approval_reason_label">Note</string>
-    <string name="approval_safe_description">A potentially dangerous action requires your approval.</string>
+    <string name="approval_title">Approval needed</string>
+    <string name="approval_body_request">Hermes wants to run an action for this answer that needs your approval – for example a command on the server.</string>
+    <string name="approval_body_once">“Allow” applies to this one action only.</string>
     <string name="approval_allow">Allow</string>
     <string name="approval_deny">Deny</string>
     <string name="approval_in_flight">Sending decision…</string>

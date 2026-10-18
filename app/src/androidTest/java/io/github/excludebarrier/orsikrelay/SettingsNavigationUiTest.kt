@@ -78,6 +78,8 @@ class SettingsNavigationUiTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.settings_license_value))
             .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.settings_source_label))
+            .assertIsDisplayed()
 
         composeRule.onNodeWithText(context.getString(R.string.settings_back)).performClick()
 
