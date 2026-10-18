@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# Orsik Mobile Bridge quick install / update.
+#
+#   curl -fsSL https://raw.githubusercontent.com/exclude-barrier/OrsikRelay/main/bridge/install-bridge.sh | bash
+#   curl -fsSL …/install-bridge.sh | bash -s -- --pair   # also print a pairing code
+#
+# Run it as the user that runs Hermes, NOT as root. It
+#   - checks Hermes (api_server on loopback, API key file, approvals: manual),
+#   - clones (or updates) the latest release into ~/OrsikRelay,
+#   - installs the bridge with bridge/install.sh (hash-pinned dependencies),
+#   - writes ~/.local/orsik-mobile-bridge/bridge.env,
+#   - starts the systemd user service,
+#   - and prints the one root command for private HTTPS (tailscale serve).
+# It never changes Hermes itself, never opens a port, never prints a secret.
+# Running it again updates an existing install (backup of the device store first).
+#
+# Options: --pair        print a pairing code at the end
+#          --no-service  install and check only, do not touch systemd (tests)
+# Environment: HERMES_HOME (default ~/.hermes), ORSIK_DIR (default ~/OrsikRelay),
+#              ORSIK_REF (release tag to install, default: the latest tag),
+#              BRIDGE_PYTHON (default: 3.14 if available, else the newest 3.11+).
+set -euo pipefail
+
+REPO_URL="https://github.com/exclude-barrier/OrsikRelay.git"
+PAIR=0
+SERVICE=1
+for arg in "$@"; do
+  case "$arg" in
+    --pair) PAIR=1 ;;
+    --no-service) SERVICE=0 ;;
+    *) echo "install-bridge: unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+
+say() { printf '\n==> %s\n' "$*"; }
+die() { printf 'install-bridge: %s\n' "$*" >&2; exit 1; }
+
+if [ "$(id -u)" -eq 0 ]; then
+  die "do not run this as root; run it as the user that runs Hermes"
+fi
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+ORSIK_DIR="${ORSIK_DIR:-$HOME/OrsikRelay}"
+BRIDGE_HOME="${BRIDGE_HOME:-$HOME/.local/orsik-mobile-bridge}"
+ENV_FILE="$BRIDGE_HOME/bridge.env"
+UNIT=orsik-mobile-bridge.service
+export PATH="$HOME/.local/bin:$PATH"
+
+# --- 1. Prerequisites -------------------------------------------------------
+say "Checking prerequisites"
+for tool in git curl; do
+  command -v "$tool" >/dev/null || die "$tool is missing; install it first"
+done
+command -v uv >/dev/null || die "uv is missing; install it first, e.g.: sudo apt install pipx && pipx install uv"
+
+HERMES_ENV="$HERMES_HOME/.env"
+[ -f "$HERMES_ENV" ] || die "no Hermes env file at $HERMES_ENV (set HERMES_HOME)"
+grep -q '^API_SERVER_KEY=.' "$HERMES_ENV" || die "API_SERVER_KEY is not set in $HERMES_ENV (enable the Hermes api_server first)"
+PORT="$(sed -n 's/^API_SERVER_PORT=\([0-9][0-9]*\).*/\1/p' "$HERMES_ENV" | tail -n 1)"
+PORT="${PORT:-8642}"
+UPSTREAM="http://127.0.0.1:$PORT"
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$UPSTREAM/health" || true)"
+[ "$code" = 200 ] || die "the Hermes api_server does not answer on $UPSTREAM/health (got '$code')"
+echo "Hermes api_server: $UPSTREAM"
+
+CONFIG="$HERMES_HOME/config.yaml"
+if [ -f "$CONFIG" ] && awk '/^approvals:/{f=1;next} f&&/^[^ ]/{f=0} f&&/^ +mode: *['"'"'"]?manual/{ok=1} END{exit !ok}' "$CONFIG"; then
+  echo "Approvals: manual"
+else
+  die "set 'approvals: mode: manual' in $CONFIG first (otherwise Hermes may approve dangerous commands without asking)"
+fi
+
+if [ -z "${BRIDGE_PYTHON:-}" ]; then
+  for v in 3.14 3.13 3.12 3.11; do
+    if uv python find "$v" >/dev/null 2>&1; then BRIDGE_PYTHON="$v"; break; fi
+  done
+fi
+[ -n "${BRIDGE_PYTHON:-}" ] || die "no Python 3.11 or newer found (try: uv python install 3.14)"
+export BRIDGE_PYTHON
+echo "Python: $BRIDGE_PYTHON"
+
+if command -v loginctl >/dev/null && [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != yes ]; then
+  echo "Note: without lingering the bridge stops when you log out. Fix once with: sudo loginctl enable-linger $USER"
+fi
+
+# --- 2. Source of the release -----------------------------------------------
+say "Getting the release"
+if [ -d "$ORSIK_DIR/.git" ]; then
+  git -C "$ORSIK_DIR" fetch --quiet --tags origin
+  REF="${ORSIK_REF:-$(git -C "$ORSIK_DIR" describe --tags --abbrev=0 origin/main)}"
+else
+  git clone --quiet "$REPO_URL" "$ORSIK_DIR"
+  REF="${ORSIK_REF:-$(git -C "$ORSIK_DIR" describe --tags --abbrev=0)}"
+fi
+git -C "$ORSIK_DIR" -c advice.detachedHead=false checkout --quiet "$REF"
+echo "Release: $REF"
+
+# --- 3. Install or update -----------------------------------------------------
+UPDATE=()
+if [ -x "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" ]; then
+  say "Updating the existing install"
+  if [ -f "$ENV_FILE" ] && [ -f "$BRIDGE_HOME/state.db" ]; then
+    BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin backup \
+      "$BRIDGE_HOME/state.db.bak-$(date +%Y%m%d-%H%M%S)"
+  fi
+  UPDATE=(--update)
+else
+  say "Installing the bridge"
+fi
+SYSTEMD=()
+[ "$SERVICE" -eq 1 ] && SYSTEMD=(--systemd)
+bash "$ORSIK_DIR/bridge/install.sh" "${UPDATE[@]}" "${SYSTEMD[@]}"
+
+# --- 4. Configuration ---------------------------------------------------------
+say "Writing $ENV_FILE"
+set_env() {
+  local key="$1" value="$2"
+  if grep -q "^$key=" "$ENV_FILE"; then
+    sed -i "s|^$key=.*|$key=$value|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+  fi
+}
+set_env BRIDGE_BIND 127.0.0.1
+set_env BRIDGE_PORT 9842
+set_env BRIDGE_UPSTREAM "$UPSTREAM"
+set_env BRIDGE_HERMES_ENV "$HERMES_ENV"
+set_env BRIDGE_STATE_DB "$BRIDGE_HOME/state.db"
+PUBLIC_URL="$(sed -n 's/^BRIDGE_PUBLIC_BASE_URL=//p' "$ENV_FILE" | tail -n 1)"
+if [ -z "$PUBLIC_URL" ] && command -v tailscale >/dev/null; then
+  name="$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
+  [ -n "$name" ] && PUBLIC_URL="https://$name:8443"
+fi
+[ -n "$PUBLIC_URL" ] && set_env BRIDGE_PUBLIC_BASE_URL "$PUBLIC_URL"
+chmod 600 "$ENV_FILE"
+
+# --- 5. Check and start -------------------------------------------------------
+say "Checking the install"
+bash "$ORSIK_DIR/bridge/install.sh" --check
+if [ "$SERVICE" -eq 1 ]; then
+  systemctl --user daemon-reload
+  systemctl --user enable --quiet "$UNIT"
+  systemctl --user restart "$UNIT"
+  systemctl --user is-active --quiet "$UNIT" || die "the bridge service did not start; see: journalctl --user -u $UNIT"
+  echo "Service $UNIT is running on 127.0.0.1:9842"
+fi
+
+# --- 6. Next steps ------------------------------------------------------------
+say "Done"
+if [ -n "$PUBLIC_URL" ]; then
+  cat <<EOF
+Private HTTPS (once, needs root; stays inside your tailnet, no Funnel):
+  sudo tailscale serve --bg --https=8443 http://127.0.0.1:9842
+
+The app connects to: $PUBLIC_URL
+EOF
+else
+  cat <<EOF
+Expose 127.0.0.1:9842 privately over HTTPS (e.g. Tailscale Serve, see docs/network-deployment.md),
+then set BRIDGE_PUBLIC_BASE_URL in $ENV_FILE and run: systemctl --user restart $UNIT
+EOF
+fi
+PAIR_CMD="BRIDGE_ENV_FILE=$ENV_FILE $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code --base-url ${PUBLIC_URL:-<https-url>}"
+if [ "$PAIR" -eq 1 ] && [ -n "$PUBLIC_URL" ]; then
+  say "Pairing code (works once, for 5 minutes)"
+  BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin pairing-code --base-url "$PUBLIC_URL"
+else
+  echo
+  echo "Create a pairing code when the phone is ready (works once, for 5 minutes):"
+  echo "  $PAIR_CMD"
+fi
