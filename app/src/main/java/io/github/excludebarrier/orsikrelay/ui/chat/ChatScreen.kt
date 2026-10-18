@@ -1,6 +1,8 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -33,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,7 +57,6 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.platform.notification.NotificationPermissionRequester
-import io.github.excludebarrier.orsikrelay.ui.theme.brandSurface
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -1205,6 +1208,36 @@ private fun StatusText(text: String) {
     )
 }
 
+/** Width caps of the chat bubbles, relative to the content width. */
+private const val USER_BUBBLE_MAX_WIDTH_FRACTION = 0.85f
+private const val ASSISTANT_BUBBLE_MAX_WIDTH_FRACTION = 0.92f
+
+/** Gap between two timeline messages; split as half above and below. */
+private val MESSAGE_VERTICAL_GAP = 12.dp
+
+/** Tail corner on the sender side, rounded everywhere else. */
+private val USER_BUBBLE_SHAPE = RoundedCornerShape(
+    topStart = 18.dp,
+    topEnd = 18.dp,
+    bottomEnd = 4.dp,
+    bottomStart = 18.dp
+)
+
+private val ASSISTANT_BUBBLE_SHAPE = RoundedCornerShape(
+    topStart = 18.dp,
+    topEnd = 18.dp,
+    bottomStart = 4.dp,
+    bottomEnd = 18.dp
+)
+
+private val LIVE_TOOL_SHAPE = RoundedCornerShape(8.dp)
+
+/**
+ * User messages sit right-aligned in a brand-tinted bubble, Hermes and
+ * system messages left-aligned in a neutral bubble. Both wrap only up to
+ * their width cap, so short messages stay short. Live tool activity is a
+ * small inline chip; history tool rows keep rendering the safe label only.
+ */
 @Composable
 private fun MessageRow(message: TimelineRow) {
     val role = when (message.role) {
@@ -1221,49 +1254,83 @@ private fun MessageRow(message: TimelineRow) {
             } ?: stringResource(R.string.chat_tool_activity_history)
         }
     }
-    // User messages get the brand-tinted bubble; assistant/system/tool use a
-    // neutral outlined card. Both keep the role label and the message text.
     val isUser = message.role == MessageRole.USER
-    val bubbleBackground = if (isUser) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    Column(
+    val isHistoryTool = message.role == MessageRole.TOOL && !message.localTool
+    val isLiveTool = message.role == MessageRole.TOOL && message.localTool
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = MESSAGE_VERTICAL_GAP / 2)
             .testTag("chatTimelineRow:${message.key}")
     ) {
-        Text(
-            text = role,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
-        )
-        // SECURITY (history tool redaction): a history TOOL row renders ONLY
-        // its safe role label above — never a content bubble. The timeline
-        // already strips the untrusted `content` (see buildTimeline); this
-        // keeps the UI fail closed even if a future path ever carried
-        // verbatim tool data (commands, paths, output, payloads). Live
-        // (localTool) rows keep their existing app-generated status bubble.
-        if (message.role != MessageRole.TOOL || message.localTool) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .brandSurface(background = bubbleBackground, contentPadding = 14.dp)
-            ) {
-                if (message.role == MessageRole.ASSISTANT) {
-                    // Assistant output renders as markdown; user, system
-                    // and tool lines stay plain text so markdown can never
-                    // surface user input or tool/approval detail.
-                    AssistantMarkdownMessage(content = message.content)
-                } else {
+        val maxBubbleWidth = maxWidth * if (isUser) {
+            USER_BUBBLE_MAX_WIDTH_FRACTION
+        } else {
+            ASSISTANT_BUBBLE_MAX_WIDTH_FRACTION
+        }
+        Column(
+            modifier = Modifier
+                .align(if (isUser) Alignment.TopEnd else Alignment.TopStart)
+                .widthIn(max = maxBubbleWidth),
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+        ) {
+            Text(
+                text = role,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 4.dp)
+            )
+            // SECURITY (history tool redaction): a history TOOL row renders ONLY
+            // its safe role label above — never a content bubble. The timeline
+            // already strips the untrusted `content` (see buildTimeline); this
+            // keeps the UI fail closed even if a future path ever carried
+            // verbatim tool data (commands, paths, output, payloads). Live
+            // (localTool) rows keep their app-generated status, as a small
+            // inline chip instead of a full bubble.
+            when {
+                isHistoryTool -> Unit
+                isLiveTool -> Box(
+                    modifier = Modifier
+                        .testTag("chatBubble:${message.key}")
+                        .clip(LIVE_TOOL_SHAPE)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
                     Text(
                         text = message.content,
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                else -> Box(
+                    modifier = Modifier
+                        .testTag("chatBubble:${message.key}")
+                        .clip(if (isUser) USER_BUBBLE_SHAPE else ASSISTANT_BUBBLE_SHAPE)
+                        .background(
+                            if (isUser) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerLow
+                            }
+                        )
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    if (message.role == MessageRole.ASSISTANT) {
+                        // Assistant output renders as markdown; user, system
+                        // and tool lines stay plain text so markdown can never
+                        // surface user input or tool/approval detail.
+                        AssistantMarkdownMessage(content = message.content)
+                    } else {
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isUser) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+                    }
                 }
             }
         }

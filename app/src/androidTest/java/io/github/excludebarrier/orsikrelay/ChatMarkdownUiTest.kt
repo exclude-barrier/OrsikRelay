@@ -1,19 +1,28 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.TextUnit
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
+import io.github.excludebarrier.orsikrelay.ui.chat.markdown.TAG_CODE_COPY
+import io.github.excludebarrier.orsikrelay.ui.chat.markdown.TAG_CODE_HEADER
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import kotlin.math.abs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
@@ -55,6 +64,50 @@ class ChatMarkdownUiTest {
         waitForText("Titel")
         waitForText("fett")
         waitForText("kursiv")
+    }
+
+    @Test
+    fun h1RendersAtTheTitleLargeFontSize() {
+        var titleLargeSize: TextUnit? = null
+        composeRule.setContent {
+            HermesTheme {
+                titleLargeSize = MaterialTheme.typography.titleLarge.fontSize
+                AssistantMarkdownMessage("# Speicherstatus")
+            }
+        }
+        waitForText("Speicherstatus")
+
+        val node = composeRule
+            .onNodeWithText("Speicherstatus", useUnmergedTree = true)
+            .fetchSemanticsNode()
+        val action = node.config.getOrNull(SemanticsActions.GetTextLayoutResult)
+        assertTrue("no GetTextLayoutResult action on the rendered h1", action != null)
+        val layouts = ArrayList<TextLayoutResult>()
+        action!!.action?.invoke(layouts)
+        assertTrue("no TextLayoutResult for the rendered h1", layouts.isNotEmpty())
+        layouts.forEach { layout ->
+            assertEquals(titleLargeSize, layout.layoutInput.style.fontSize)
+        }
+    }
+
+    @Test
+    fun codeHeaderIs40DpHighAndCopyKeepsA48DpTouchTarget() {
+        renderMarkdown("```kotlin\nval a = 1\n```")
+        waitForText("KOTLIN")
+
+        val headerHeightDp = with(composeRule.density) {
+            composeRule.onNodeWithTag(TAG_CODE_HEADER).fetchSemanticsNode().boundsInRoot.height / density
+        }
+        assertTrue(
+            "visible code header must be 40 dp high, was $headerHeightDp dp",
+            abs(headerHeightDp - 40f) <= 1f
+        )
+
+        val copy = composeRule.onNodeWithTag(TAG_CODE_COPY).fetchSemanticsNode().touchBoundsInRoot
+        val copyWidthDp = with(composeRule.density) { copy.width / density }
+        val copyHeightDp = with(composeRule.density) { copy.height / density }
+        assertTrue("copy touch target width must be >= 48 dp, was $copyWidthDp dp", copyWidthDp >= 48f)
+        assertTrue("copy touch target height must be >= 48 dp, was $copyHeightDp dp", copyHeightDp >= 48f)
     }
 
     @Test

@@ -1,17 +1,25 @@
 package io.github.excludebarrier.orsikrelay.ui.chat.markdown
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.requiredSizeIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,10 +33,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,7 +106,19 @@ internal fun AssistantMarkdownMessage(
         Markdown(
             markdownState = markdownState,
             colors = markdownColor(),
-            typography = markdownTypography(),
+            // Assistant answers are read inside a chat bubble, not as an
+            // article: headings stay close to the body size instead of the
+            // display-scale Material defaults.
+            typography = markdownTypography(
+                h1 = MaterialTheme.typography.titleLarge,
+                h2 = MaterialTheme.typography.titleMedium,
+                h3 = MaterialTheme.typography.titleSmall,
+                h4 = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                h5 = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                h6 = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                text = MaterialTheme.typography.bodyLarge,
+                paragraph = MaterialTheme.typography.bodyLarge,
+            ),
             components = components,
             modifier = modifier,
         )
@@ -121,30 +143,41 @@ internal fun OrsikCodeBlock(
     val label = language?.takeIf { it.isNotBlank() }?.uppercase()
     val copied = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val headerShape = RoundedCornerShape(CODE_BLOCK_CORNER, CODE_BLOCK_CORNER, 0.dp, 0.dp)
+    val bodyShape = RoundedCornerShape(0.dp, 0.dp, CODE_BLOCK_CORNER, CODE_BLOCK_CORNER)
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                width = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(CODE_BLOCK_CORNER)
+            )
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .height(CODE_BLOCK_HEADER_HEIGHT)
+                .testTag(TAG_CODE_HEADER)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest, headerShape)
         ) {
             Text(
                 text = label ?: stringResource(R.string.chat_code_language_fallback),
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                 color = onCode.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 12.dp)
             )
             Row(
                 modifier = Modifier
-                    // Keep the copy action at the 48 dp minimum touch target
-                    // even though the visible label is small.
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 4.dp)
+                    // The touch target keeps the 48 dp minimum while the
+                    // visible 40 dp header stays compact: the clickable box
+                    // overhangs the header edge instead of growing it.
+                    .requiredSizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClickLabel = stringResource(R.string.chat_code_copy)) {
                         clipboard.setText(AnnotatedString(code))
@@ -154,9 +187,19 @@ internal fun OrsikCodeBlock(
                             copied.value = false
                         }
                     }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .testTag(TAG_CODE_COPY)
+                    .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (copied.value) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = onCode,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
                 Text(
                     text = stringResource(if (copied.value) R.string.chat_code_copied else R.string.chat_code_copy),
                     style = MaterialTheme.typography.labelSmall,
@@ -172,6 +215,8 @@ internal fun OrsikCodeBlock(
             text = code,
             style = codeStyle.copy(color = onCode, fontSize = 13.sp),
             modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer, bodyShape)
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             softWrap = false,
@@ -180,4 +225,9 @@ internal fun OrsikCodeBlock(
     }
 }
 
+internal const val TAG_CODE_HEADER = "chatCodeHeader"
+internal const val TAG_CODE_COPY = "chatCodeCopy"
+
+private val CODE_BLOCK_HEADER_HEIGHT = 40.dp
+private val CODE_BLOCK_CORNER = 10.dp
 private const val COPIED_FEEDBACK_MS = 1500L
