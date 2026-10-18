@@ -233,6 +233,12 @@ fun HermesNavHost(
         composable(routeOf(AppScreen.Onboarding)) {
             OnboardingRoute(
                 pairingBootstrap = pairingBootstrap,
+                // Only an onboarding opened FROM the server management
+                // screen has a destination to return to. The first start
+                // and the pairing deep link keep their header unchanged.
+                onBack = navController.previousBackStackEntry?.let {
+                    { navController.popBackStack() }
+                },
                 connect = { draft ->
                     val coordinator = connectionCoordinator
                         ?: productionDependencies.value.coordinator
@@ -289,9 +295,24 @@ fun HermesNavHost(
                         } catch (_: Exception) {
                             // Capability persist failed: stays fail-closed.
                         }
-                        activeProfileId = success.profileId
-                        navController.navigate(routeOf(AppScreen.Sessions)) {
-                            launchSingleTop = true
+                        // The persist work above resumes off the main
+                        // thread (e.g. under the Compose test dispatcher),
+                        // while popping the back stack updates the popped
+                        // entries' lifecycle and must run on the main
+                        // thread — same guard as [serverSelected].
+                        withContext(Dispatchers.Main) {
+                            activeProfileId = success.profileId
+                            // After a successful connection the back stack
+                            // must contain exactly ONE Sessions entry: the
+                            // onboarding entry, the server management entry
+                            // that opened it and every previous entry up to
+                            // (and including) the graph start are removed.
+                            // Back on the session list then leaves the app,
+                            // exactly as after a first start.
+                            navController.navigate(routeOf(AppScreen.Sessions)) {
+                                popUpTo(routeOf(initialScreen)) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
                     }
                 }
@@ -332,7 +353,7 @@ fun HermesNavHost(
                 languageController = resolvedLanguageController,
                 themeController = settingsThemeController,
                 onBack = {
-                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                    if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
                     }
                 }
@@ -342,7 +363,7 @@ fun HermesNavHost(
             AboutScreen(
                 versionName = BuildConfig.VERSION_NAME,
                 onBack = {
-                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                    if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
                     }
                 }
@@ -355,10 +376,10 @@ fun HermesNavHost(
                 activeProfileId = activeProfileId,
                 // Guard against popping the back stack empty, exactly like the
                 // Chat back handler below: a fast double tap on "Zurück" must
-                // never pop Sessions (the start destination) and leave the
-                // NavHost without a destination.
+                // never pop the root entry and leave the NavHost without a
+                // destination.
                 onBack = {
-                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                    if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
                     }
                 },
@@ -367,6 +388,9 @@ fun HermesNavHost(
                 },
                 onServerSelected = { profileId ->
                     navHostCoroutineScope.launch { serverSelected(profileId) }
+                },
+                onAddServer = {
+                    navController.navigate(routeOf(AppScreen.Onboarding))
                 },
                 // A confirmed, server-acknowledged disconnect
                 // removes the local profile connection; the navigation is
@@ -412,11 +436,12 @@ fun HermesNavHost(
                     // the tree changes) must never leave the NavHost without
                     // a destination — that renders an empty screen whose
                     // BackHandler is gone, so the next back closes the task.
-                    // `currentBackStack` is a restricted navigation API, so
-                    // the equivalent check compares the current destination
-                    // with the start destination (the only entry that must
-                    // never be popped).
-                    if (navController.currentDestination?.route != routeOf(initialScreen)) {
+                    // Only an entry with a predecessor is popped. Comparing
+                    // with the start destination is not enough: a successful
+                    // onboarding removes the start entry (popUpTo inclusive),
+                    // so the remaining root can be Sessions while the start
+                    // destination is Onboarding.
+                    if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
                     }
                 }

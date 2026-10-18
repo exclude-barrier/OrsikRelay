@@ -155,7 +155,10 @@
     <string name="profiles_error_generic">Die Server konnten nicht geladen werden.</string>
     <string name="profiles_empty">Keine Server gespeichert.</string>
     <string name="profiles_select_active">Als aktiven Server verwenden</string>
-    <string name="profiles_active">Aktiver Server</string>
+    <string name="profiles_chip_active">Aktiv</string>
+    <string name="profiles_chip_paired">Gekoppelt</string>
+    <string name="profiles_chip_api_key">API-Key</string>
+    <string name="profiles_actions">Server-Aktionen</string>
     <string name="profiles_delete_title">Server löschen?</string>
     <string name="profiles_delete_message">„%1$s“ wird dauerhaft entfernt, inklusive API-Key und gespeicherter Chat-Entwürfe.</string>
     <string name="profiles_delete_message_device">„%1$s“ wird zuerst auf dem Server getrennt und anschließend von diesem Gerät dauerhaft entfernt, inklusive gespeicherter Chat-Entwürfe.</string>

@@ -45,7 +45,11 @@ fun OnboardingRoute(
     onConnected: (ProfileConnectionOutcome.Success) -> Unit,
     // Product Gate: a pairing deep-link bootstrap (server URL + code) pre-fills
     // the pairing fields so the user never types a base URL or API key.
-    pairingBootstrap: PairingBootstrap? = null
+    pairingBootstrap: PairingBootstrap? = null,
+    // Non-null only when onboarding was pushed from the server management
+    // screen; the screen then shows a "Zurück" action that returns without
+    // saving anything.
+    onBack: (() -> Unit)? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     var connectionState by remember {
@@ -57,6 +61,7 @@ fun OnboardingRoute(
         initialBaseUrl = pairingBootstrap?.baseUrl.orEmpty(),
         initialPairingCode = pairingBootstrap?.pairingCode.orEmpty(),
         connectionState = connectionState,
+        onBack = onBack,
         onInputChanged = {
             if (connectionState is OnboardingConnectionState.Failure) {
                 connectionState = OnboardingConnectionState.Idle

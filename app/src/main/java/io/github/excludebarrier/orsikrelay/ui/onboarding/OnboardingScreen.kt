@@ -87,7 +87,11 @@ fun OnboardingScreen(
     // user never types a base URL or API key. Empty when no deep link was used.
     initialProfileName: String = "",
     initialBaseUrl: String = "",
-    initialPairingCode: String = ""
+    initialPairingCode: String = "",
+    // Set only when onboarding was opened from "Server verwalten": the
+    // header then offers "Zurück". The first start and the pairing deep
+    // link leave it null (no destination to return to, no visual change).
+    onBack: (() -> Unit)? = null
 ) {
     // Non-secret fields survive a rotation/recreation via the saved instance
     // state. The secrets (API key, one-time pairing code) deliberately stay in
@@ -181,6 +185,16 @@ fun OnboardingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top
     ) {
+        if (onBack != null) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.testTag("onboardingBack")
+                ) {
+                    Text(text = stringResource(R.string.settings_back))
+                }
+            }
+        }
         Text(
             text = stringResource(R.string.onboarding_title),
             style = MaterialTheme.typography.headlineMedium,

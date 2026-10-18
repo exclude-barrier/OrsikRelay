@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -53,7 +54,7 @@ class ProfileManagementNavigationUiTest {
 
         waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Alpha").assertExists()
-        composeRule.onNodeWithText("https://alpha.local").assertExists()
+        composeRule.onNodeWithText("alpha.local").assertExists()
         composeRule.onNodeWithText("Beta").assertExists()
 
         composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
@@ -96,7 +97,7 @@ class ProfileManagementNavigationUiTest {
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
 
-        composeRule.onNodeWithText("Alpha").performClick()
+        openDeleteDialog(PROFILE_A_ID)
         waitForText(context.getString(R.string.profiles_delete_title))
         // Pre-deletion loads (Sessions + Chat) legitimately queried the
         // active profile; only post-deletion loads must not.
@@ -126,7 +127,7 @@ class ProfileManagementNavigationUiTest {
         waitForText(context.getString(R.string.sessions_title))
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
-        composeRule.onNodeWithText("Beta").performClick()
+        openDeleteDialog("profile-b")
         waitForText(context.getString(R.string.profiles_delete_title))
         composeRule.onNodeWithText(context.getString(R.string.new_session_cancel)).performClick()
 
@@ -158,7 +159,7 @@ class ProfileManagementNavigationUiTest {
         waitForText(context.getString(R.string.sessions_title))
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
-        composeRule.onNodeWithText("Alpha").performClick()
+        openDeleteDialog(PROFILE_A_ID)
         waitForText(context.getString(R.string.profiles_delete_title))
         composeRule.onNodeWithText(context.getString(R.string.profiles_delete_confirm)).performClick()
 
@@ -185,6 +186,11 @@ class ProfileManagementNavigationUiTest {
                 )
             }
         }
+    }
+
+    private fun openDeleteDialog(profileId: String) {
+        composeRule.onNodeWithTag("serverActions:$profileId").performClick()
+        composeRule.onNodeWithTag("serverDelete:$profileId").performClick()
     }
 
     private fun openProfilesFromOverflowMenu() {

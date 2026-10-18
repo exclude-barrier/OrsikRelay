@@ -156,7 +156,10 @@
     <string name="profiles_error_generic">The servers could not be loaded.</string>
     <string name="profiles_empty">No servers saved.</string>
     <string name="profiles_select_active">Use as active server</string>
-    <string name="profiles_active">Active server</string>
+    <string name="profiles_chip_active">Active</string>
+    <string name="profiles_chip_paired">Paired</string>
+    <string name="profiles_chip_api_key">API key</string>
+    <string name="profiles_actions">Server actions</string>
     <string name="profiles_delete_title">Delete server?</string>
     <string name="profiles_delete_message">“%1$s” will be permanently removed, including its API key and saved chat drafts.</string>
     <string name="profiles_delete_message_device">“%1$s” will be disconnected from the server first and then permanently removed from this device, including its saved chat drafts.</string>
