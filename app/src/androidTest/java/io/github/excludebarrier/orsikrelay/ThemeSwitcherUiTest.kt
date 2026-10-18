@@ -10,10 +10,15 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.excludebarrier.orsikrelay.data.settings.ChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.ScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
+import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
@@ -151,6 +156,8 @@ private fun SettingsHarness(
 ) {
     val themeController = rememberThemeModeController(themeStore)
     val languageController = rememberLanguageController(languageStore) { }
+    val chatTextSizeController = rememberChatTextSizeController(FakeChatTextSizeStore())
+    val screenProtectionController = rememberScreenProtectionController(FakeScreenProtectionStore())
     val dark = if (themeController.mode == ThemeMode.System) {
         isSystemInDarkTheme()
     } else {
@@ -160,8 +167,22 @@ private fun SettingsHarness(
         SettingsScreen(
             languageController = languageController,
             themeController = themeController,
+            chatTextSizeController = chatTextSizeController,
+            screenProtectionController = screenProtectionController,
             onBack = {}
         )
         content()
     }
+}
+
+private class FakeChatTextSizeStore : ChatTextSizeSettingStore {
+    override fun read(): ChatTextSize = ChatTextSize.Normal
+
+    override fun write(size: ChatTextSize) = Unit
+}
+
+private class FakeScreenProtectionStore : ScreenProtectionSettingStore {
+    override fun read(): Boolean = false
+
+    override fun write(enabled: Boolean) = Unit
 }

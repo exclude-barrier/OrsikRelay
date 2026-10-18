@@ -97,21 +97,21 @@ class LanguageSwitchUiTest {
     @Test
     fun germanEnglishAndSystemAreAppliedToTheRunningApp() {
         openSettings()
-        composeRule.onNodeWithTag("settings_language_de").performClick()
+        selectLanguage("settings_language_de")
         awaitSettingsIn("de")
         composeRule.onNodeWithText(localizedString("de", R.string.settings_back)).performClick()
         waitForText(localizedString("de", R.string.sessions_refresh))
         assertEquals("de", SharedPreferencesLanguageSettingStore(context).read())
 
         openSettings()
-        composeRule.onNodeWithTag("settings_language_en").performClick()
+        selectLanguage("settings_language_en")
         awaitSettingsIn("en")
         composeRule.onNodeWithText(localizedString("en", R.string.settings_back)).performClick()
         waitForText(localizedString("en", R.string.sessions_refresh))
         assertEquals("en", SharedPreferencesLanguageSettingStore(context).read())
 
         openSettings()
-        composeRule.onNodeWithTag("settings_language_system").performClick()
+        selectLanguage("settings_language_system")
         awaitSettingsIn("en")
         composeRule.onNodeWithText(localizedString("en", R.string.settings_back)).performClick()
         waitForText(localizedString("en", R.string.sessions_refresh))
@@ -147,6 +147,15 @@ class LanguageSwitchUiTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    private fun selectLanguage(itemTag: String) {
+        composeRule.onNodeWithTag("settings_language_field").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(itemTag).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(itemTag).performClick()
+        composeRule.waitForIdle()
     }
 
     private fun currentLanguageTag(): String {
