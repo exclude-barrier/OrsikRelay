@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -128,6 +129,68 @@ class NewSessionDialogUiTest {
         composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).performClick()
         waitForDialogGone()
         assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun invalidTitleShowsTheSpecificMessageInsteadOfTheGenericOne() {
+        val calls = AtomicInteger()
+        setDialog(
+            creator { _, _ ->
+                if (calls.incrementAndGet() == 1) {
+                    SessionCreateResult.Failure(SessionCreateError.InvalidTitle)
+                } else {
+                    SessionCreateResult.Success(CREATED_ID, null)
+                }
+            }
+        )
+
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule
+                .onAllNodesWithText(context.getString(R.string.new_session_error_invalid_title))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.new_session_error_generic))
+            .assertCountEquals(0)
+        assertEquals(1, calls.get())
+
+        composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).performClick()
+        waitForDialogGone()
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun titleInputIsLimitedToOneHundredCharactersWithALiveCounter() {
+        val titles = mutableListOf<String?>()
+        setDialog(
+            creator { _, title ->
+                titles += title
+                SessionCreateResult.Success(CREATED_ID, title)
+            }
+        )
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.new_session_title_counter, 0, 100))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.new_session_title_label))
+            .performTextInput("x".repeat(120))
+        // The IME commit reaches the field asynchronously on the Android
+        // host; poll the merged field/counter semantics instead of assuming
+        // it has already been applied.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule
+                .onAllNodesWithText(context.getString(R.string.new_session_title_counter, 100, 100))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(context.getString(R.string.new_session_create)).performClick()
+        waitForDialogGone()
+
+        assertEquals(listOf("x".repeat(100)), titles)
     }
 
     @Test

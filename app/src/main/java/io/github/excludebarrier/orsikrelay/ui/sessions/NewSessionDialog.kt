@@ -33,12 +33,17 @@ import kotlinx.coroutines.withContext
  *
  * - The title is optional; the raw text is passed to [creator], the
  *   repository sanitizes it (trim, control characters, length limit).
+ *   The input itself accepts at most [MAX_TITLE_CHARACTERS] characters
+ *   (Hermes `SessionDB.MAX_TITLE_LENGTH = 100`) and shows the live
+ *   `n/100` counter as supporting text.
  * - "Abbrechen" closes the dialog and sends nothing.
  * - "Erstellen" submits exactly once per tap: a second tap while a
  *   request is in flight is ignored; after a failure the retry is
  *   manual only (no automatic retry).
- * - A failure shows a generic German message without server, response,
- *   title, key or exception details.
+ * - A failure shows a closed, localized message without server,
+ *   response, title, key or exception details. An already-used or
+ *   over-long title (`SessionCreateError.InvalidTitle`) gets its own,
+ *   actionable message.
  * - On success [onCreated] receives the server-generated session ID;
  *   the parent closes the dialog and navigates.
  *
@@ -96,9 +101,18 @@ fun NewSessionDialog(
                 } else {
                     OutlinedTextField(
                         value = titleInput,
-                        onValueChange = { titleInput = it },
+                        onValueChange = { titleInput = it.take(MAX_TITLE_CHARACTERS) },
                         label = {
                             Text(text = stringResource(R.string.new_session_title_label))
+                        },
+                        supportingText = {
+                            Text(
+                                text = stringResource(
+                                    R.string.new_session_title_counter,
+                                    titleInput.length,
+                                    MAX_TITLE_CHARACTERS
+                                )
+                            )
                         },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -109,6 +123,8 @@ fun NewSessionDialog(
                             text = when (failure) {
                                 SessionCreateError.MissingProfile ->
                                     stringResource(R.string.error_session_profile)
+                                SessionCreateError.InvalidTitle ->
+                                    stringResource(R.string.new_session_error_invalid_title)
                                 else ->
                                     stringResource(R.string.new_session_error_generic)
                             },
@@ -142,3 +158,9 @@ fun NewSessionDialog(
         }
     )
 }
+
+/**
+ * Hermes rejects titles longer than `SessionDB.MAX_TITLE_LENGTH = 100`
+ * characters, so the dialog never lets the input grow beyond that.
+ */
+internal const val MAX_TITLE_CHARACTERS = 100

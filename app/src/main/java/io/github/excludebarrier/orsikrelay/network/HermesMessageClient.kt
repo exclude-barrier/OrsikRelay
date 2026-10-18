@@ -36,7 +36,9 @@ import org.json.JSONObject
  * - the bearer key is only ever materialized inside
  *   [SecretValue.useRaw] and placed in the `Authorization` header;
  * - redirects and connection retries are disabled;
- * - the response body is bounded;
+ * - the response body is bounded (8 MiB: real Telegram sessions with
+ *   tool output exceed 512 KiB, so this is the transport ceiling, not a
+ *   content allowance);
  * - every failure maps to a closed [MessageHistoryError] set; no
  *   response body, exception text, URL, key or message content ever
  *   appears in a result, error or log.
@@ -46,7 +48,12 @@ import org.json.JSONObject
  *   non-negative fractions are accepted and safely floored to whole
  *   seconds for the UI;
  * - pagination numbers (`limit`, `offset`, `returned`) must be exact
- *   non-negative integers;
+ *   non-negative integers and `order` must be the echoed `latest`;
+ * - the read pages back from the newest messages (`order=latest`), so a
+ *   long session yields its current state instead of its beginning.
+ *   Hermes `get_messages(..., latest=True)` selects the newest rows and
+ *   reverses them back into chronological insertion order, so the page
+ *   is kept exactly as the server sends it;
  * - `display_kind == "hidden"` entries are dropped before the domain
  *   page is built; duplicate visible message IDs are rejected.
  */
@@ -87,7 +94,7 @@ class HermesMessageClient(
             .addPathSegment(MESSAGES_SEGMENT)
             .addQueryParameter(LIMIT_FIELD, DEFAULT_LIMIT.toString())
             .addQueryParameter(OFFSET_FIELD, ZERO.toString())
-            .addQueryParameter(ORDER_FIELD, ORDER_OLDEST)
+            .addQueryParameter(ORDER_FIELD, ORDER_LATEST)
             .build()
         val request = apiKey.useRaw { rawKey ->
             Request.Builder()
@@ -164,9 +171,10 @@ class HermesMessageClient(
      * Strict contract check of `GET /api/sessions/{id}/messages`:
      * `object == "list"`, non-empty string `session_id`, `data` is a JSON
      * array, pagination `limit`/`offset`/`returned` are non-negative
-     * integers and `order` is a non-empty string. Every message entry has
+     * integers and `order` is the echoed `latest`. Every message entry has
      * a positive integral `id`, a known role, a string `content`
-     * and optional typed fields. Server order is preserved.
+     * and optional typed fields. Server order is preserved (Hermes already
+     * returns a `latest` page chronologically).
      */
     private fun parsePage(text: String): List<HermesChatMessage> {
         val root: JSONObject = try {
@@ -211,7 +219,7 @@ class HermesMessageClient(
             ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
         strictNonNegativeInt(pagination, LIMIT_FIELD)
         strictNonNegativeInt(pagination, OFFSET_FIELD)
-        if (strictString(pagination, ORDER_FIELD) != ORDER_OLDEST) {
+        if (strictString(pagination, ORDER_FIELD) != ORDER_LATEST) {
             throw PageFailure(MessageHistoryError.IncompatibleApi)
         }
         val returned = strictNonNegativeInt(pagination, RETURNED_FIELD)
@@ -305,7 +313,12 @@ class HermesMessageClient(
     private class PageFailure(val reason: MessageHistoryError) : Exception()
 
     private companion object {
-        const val MAX_RESPONSE_BYTES = 512 * 1024
+        /**
+         * Telegram sessions with tool output exceed 512 KiB (a real one
+         * delivered 776 233 bytes); 8 MiB keeps the read bounded while no
+         * longer discarding a legitimate history page.
+         */
+        const val MAX_RESPONSE_BYTES = 8 * 1024 * 1024
         const val MAX_API_KEY_CHARACTERS = 4096
         const val BUFFER_SIZE = 8 * 1024
         const val DEFAULT_LIMIT = 200
@@ -316,7 +329,7 @@ class HermesMessageClient(
         const val LIMIT_FIELD = "limit"
         const val OFFSET_FIELD = "offset"
         const val ORDER_FIELD = "order"
-        const val ORDER_OLDEST = "oldest"
+        const val ORDER_LATEST = "latest"
         const val RETURNED_FIELD = "returned"
         const val AUTHORIZATION_HEADER = "Authorization"
         const val BEARER_PREFIX = "Bearer "
