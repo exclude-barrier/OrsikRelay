@@ -120,7 +120,7 @@ class ReadmeScreenshotsTest {
                 profileId = PROFILE_ID
             )
         }
-        waitForText("Backup prüfen")
+        waitForText("Check backup")
         capture("sessions")
     }
 
@@ -132,7 +132,7 @@ class ReadmeScreenshotsTest {
             OnboardingScreen(
                 onValidDraft = { },
                 onValidPairing = { _, _, _ -> },
-                initialProfileName = "Heimserver",
+                initialProfileName = "Home server",
                 initialBaseUrl = "https://hermes.example.ts.net:8443",
                 initialPairingCode = PAIRING_CODE
             )
@@ -211,6 +211,10 @@ class ReadmeScreenshotsTest {
         composeRule.setContent {
             // HermesTheme must wrap HermesAppSurface (as in production
             // MainActivity), so the app surface reads the themed background.
+            // SystemBarAppearance gives the status bar the theme's icon
+            // colour, as MainActivity does (dark icons on a dark bar
+            // otherwise).
+            SystemBarAppearance(dark)
             HermesTheme(darkTheme = dark) {
                 HermesAppSurface {
                     content()
@@ -226,8 +230,11 @@ class ReadmeScreenshotsTest {
 
     private fun capture(name: String) {
         composeRule.waitForIdle()
-        // One extra idle round-trip so the surface is fully composited before
-        // the frame grab.
+        // Advance one explicit frame and do two more idle round-trips so the
+        // surface is fully composited before the frame grab (a single idle
+        // pass sometimes captured a still blank window).
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
         composeRule.waitForIdle()
         val screen = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
             ?: throw AssertionError("takeScreenshot() returned null for '$name'")
@@ -302,11 +309,11 @@ class ReadmeScreenshotsTest {
     private fun sessionFixtures(): List<HermesSession> {
         val now = System.currentTimeMillis() / 1_000
         return listOf(
-            HermesSession("fixture-backup", "Backup prüfen", null, now - 300, 12, pinned = false),
-            HermesSession("fixture-plan", "Wochenplanung", null, now - 7_200, 34, pinned = true),
-            HermesSession("fixture-docker", "Docker-Updates", null, now - 86_400, 8, pinned = false),
-            HermesSession("fixture-rezept", "Rezept für Sonntag", null, now - 3 * 86_400, 21, pinned = false),
-            HermesSession("fixture-wartung", "Server-Wartung", null, now - 7 * 86_400, 5, pinned = false)
+            HermesSession("fixture-backup", "Check backup", "cli", now - 300, 12, pinned = false),
+            HermesSession("fixture-plan", "Weekly planning", "telegram", now - 7_200, 34, pinned = true),
+            HermesSession("fixture-docker", "Docker updates", "cli", now - 86_400, 8, pinned = false),
+            HermesSession("fixture-rezept", "Sunday recipe", "telegram", now - 3 * 86_400, 21, pinned = false),
+            HermesSession("fixture-wartung", "Nightly maintenance", "cron", now - 7 * 86_400, 5, pinned = false)
         )
     }
 
@@ -365,25 +372,25 @@ class ReadmeScreenshotsTest {
         const val PROFILE_ID = "fixture-profile-id"
         const val SESSION_ID = "fixture-session-id"
 
-        const val USER_QUESTION = "Wie viel Speicher ist auf dem Server noch frei?"
-        const val ASSISTANT_HEADING = "Alles im grünen Bereich"
+        const val USER_QUESTION = "How much disk space is left on the server?"
+        const val ASSISTANT_HEADING = "All good"
         const val ASSISTANT_ANSWER = (
-            "**Speicherplatz: Alles im grünen Bereich**\n\n" +
-                "Die wichtigsten Werte auf einen Blick:\n\n" +
-                "- Festplatte: 12 % belegt\n" +
-                "- Arbeitsspeicher: 3,1 GB frei\n" +
-                "- Systemlast: gering\n\n" +
-                "```\n" +
-                "Dateisystem   Größe  Belegt  Frei\n" +
-                "/dev/vda1       50G    6,2G    44G\n" +
-                "tmpfs          3,9G      0G   3,9G\n" +
+            "**Disk space: All good**\n\n" +
+                "The key figures at a glance:\n\n" +
+                "- Disk: 12 % used\n" +
+                "- Memory: 3.1 GB free\n" +
+                "- System load: low\n\n" +
+                "```bash\n" +
+                "Filesystem   Size  Used  Avail\n" +
+                "/dev/vda1     50G  6.2G    44G\n" +
+                "tmpfs        3.9G     0   3.9G\n" +
                 "```"
         )
 
         // Synthetic pairing code from the closed pairing alphabet (24 chars).
         const val PAIRING_CODE = "AB12CD34EF56GH78JK9MNPQR"
 
-        const val APPROVAL_PROMPT = "Führe den Sicherheits-Check aus"
+        const val APPROVAL_PROMPT = "Run the security check"
         val APPROVAL_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.approval_title) }
         const val APPROVAL_RUN_ID = "run_0123456789abcdef0123456789abcdef"
         val APPROVAL_REQUEST = ApprovalRequest(
