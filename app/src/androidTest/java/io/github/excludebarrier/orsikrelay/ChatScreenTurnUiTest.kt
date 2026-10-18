@@ -345,6 +345,89 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
+    fun authoritativeFailureBeforeStartKeepsTheDraftAndExplainsThatItWasNotSent() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule
+            .onNodeWithText(context.getString(R.string.chat_input_label))
+            .performTextInput("Nicht gesendet")
+        ImeClickSettle.settleAfterTyping(composeRule)
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+
+        // A provably rejected initial POST (non-2xx HTTP) has no confirmed
+        // run: the turn settles and the failure card is shown. The draft was
+        // never cleared (only `RunStarted` clears it), so the card says so.
+        source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Http))
+        source.complete()
+        waitForFlowCompletion(source)
+
+        waitForText(context.getString(R.string.error_connection_http))
+        composeRule.onNodeWithText(context.getString(R.string.chat_turn_failure_draft_kept))
+            .assertIsDisplayed()
+        assertTrue(
+            "no confirmed run: no history refresh action",
+            composeRule
+                .onAllNodesWithText(context.getString(R.string.chat_refresh_history))
+                .fetchSemanticsNodes().isEmpty()
+        )
+        assertEquals("Nicht gesendet", draftText())
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsEnabled()
+    }
+
+    @Test
+    fun threeRecoverableSteersCarryTheirCounterAndStaySeparate() {
+        val steerer = FakeRunSteerRequester()
+        val source = FakeTurnSource()
+        steerer.release(RunSteerResult.NotAccepting(RUN_ID))
+        setScreen(history(emptyList()), source, runSteerRequester = steerer)
+
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Drei-Items")
+        ImeClickSettle.settleAfterTyping(composeRule)
+        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
+
+        composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steuer-1")
+        ImeClickSettle.settleAfterTyping(composeRule)
+        composeRule.onNodeWithTag("chatSteerSend").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("chatSteerSendAsNewMessage:0")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("chatSteerInput").performTextInput("Steuer-2")
+        ImeClickSettle.settleAfterTyping(composeRule)
+        composeRule.onNodeWithTag("chatSteerSend").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("chatSteerSendAsNewMessage:1")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        source.enqueue(ChatTurnEvent.TurnCompleted(pendingSteer = "Steuer-3"))
+        source.complete()
+        waitForFlowCompletion(source)
+        composeRule.waitUntil(timeoutMillis = 5_000) { recoveryItemCount() == 3 }
+
+        // Every card of a multi-item recovery carries its 1-based counter.
+        composeRule
+            .onNodeWithText(context.getString(R.string.chat_steer_recovery_title_counter, 1, 3))
+            .assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.chat_steer_recovery_title_counter, 2, 3))
+            .assertExists()
+        composeRule
+            .onNodeWithText(context.getString(R.string.chat_steer_recovery_title_counter, 3, 3))
+            .assertExists()
+        assertTrue(recoveryItemTextPresent("Steuer-1"))
+        assertTrue(recoveryItemTextPresent("Steuer-2"))
+        assertTrue(recoveryItemTextPresent("Steuer-3"))
+        assertEquals("nie automatisch gesendet", 1, source.calls.get())
+    }
+
+    @Test
     fun submitScrollsLongHistoryToTheNewLiveMessage() {
         val source = FakeTurnSource()
         val longHistory = (1L..40L).map { id ->
@@ -1481,6 +1564,18 @@ class ChatScreenTurnUiTest {
         }
         assertTrue("steer input must be empty after 409", steerDraftText().isNullOrBlank())
 
+        // Exactly one preserved item: the title carries NO counter.
+        composeRule.onNodeWithText(context.getString(R.string.chat_steer_recovery_title))
+            .assertIsDisplayed()
+        assertTrue(
+            "a single recovery item must not render an index counter",
+            composeRule
+                .onAllNodesWithText(
+                    context.getString(R.string.chat_steer_recovery_title_counter, 1, 1)
+                )
+                .fetchSemanticsNodes().isEmpty()
+        )
+
         // The explicit action moves the text into the ordinary composer —
         // without sending it.
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
@@ -1789,6 +1884,8 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("Mein laufender Entwurf")
         assertEquals("Mein laufender Entwurf", draftText())
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.chat_steer_recovery_clear_draft_hint))
+            .assertIsDisplayed()
 
         // Clicking the (disabled) action changes nothing: the draft stays,
         // the recovery text is preserved, the block stays visible.
@@ -1803,6 +1900,12 @@ class ChatScreenTurnUiTest {
         // exactly the precondition the action requires.
         composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextClearance()
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").assertIsEnabled()
+        assertTrue(
+            "the clear-draft hint must disappear once the action is enabled",
+            composeRule
+                .onAllNodesWithText(context.getString(R.string.chat_steer_recovery_clear_draft_hint))
+                .fetchSemanticsNodes().isEmpty()
+        )
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0").performClick()
         assertEquals("Rettet mich", draftText())
         assertTrue(
@@ -1846,6 +1949,11 @@ class ChatScreenTurnUiTest {
         assertEquals("zwei separate Items", 2, recoveryItemCount())
         assertTrue("das erste Item bleibt erhalten", recoveryItemTextPresent("Steuer-A"))
         assertTrue("das zweite Item bleibt erhalten", recoveryItemTextPresent("Steuer-B"))
+        // More than one preserved item: every card title carries its counter.
+        composeRule.onNodeWithText(context.getString(R.string.chat_steer_recovery_title_counter, 1, 2))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chat_steer_recovery_title_counter, 2, 2))
+            .assertIsDisplayed()
         // A merged string would have produced exactly one line
         // "Steuer-A\nSteuer-B" — that must not exist.
         assertTrue(
@@ -2057,13 +2165,14 @@ class ChatScreenTurnUiTest {
     private fun recoveryItemTextPresent(text: String): Boolean {
         // `SemanticsProperties.Text` holds a List<AnnotatedString>; read the
         // actual annotated text of each item node rather than toString() on
-        // the list.
+        // the list. The card renders the preserved item in typographic quotes.
+        val expected = context.getString(R.string.chat_steer_recovery_quote, text)
         return composeRule
             .onAllNodesWithTag("chatSteerRecoveryText")
             .fetchSemanticsNodes()
             .any { node ->
                 node.config[SemanticsProperties.Text]
-                    ?.any { it.text == text }
+                    ?.any { it.text == expected }
                     ?: false
             }
     }

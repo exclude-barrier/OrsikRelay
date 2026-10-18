@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionOutcome
@@ -46,7 +47,9 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
+import io.github.excludebarrier.orsikrelay.ui.chat.SteerRecoveryBlock
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_SEND
+import io.github.excludebarrier.orsikrelay.ui.chat.TurnFailureBlock
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
@@ -214,6 +217,65 @@ class AccessibilityLargeFontUiTest {
     fun composerSendIsReachableAndSizedAtNormalFont() {
         renderChat(NORMAL_FONT_SCALE)
         assertComposerSend()
+    }
+
+    @Test
+    fun chatNoticeCardGrowsInsteadOfClippingAtLargeFont() {
+        val title = resources().getString(R.string.error_connection_network)
+        val hint = resources().getString(R.string.sessions_error_hint_unreachable)
+        val secondary = resources().getString(R.string.chat_turn_failure_refresh_hint)
+        renderAt(LARGE_FONT_SCALE) {
+            TurnFailureBlock(
+                error = ChatStreamError.Network,
+                showRefreshHistory = true,
+                onRefreshHistory = {}
+            )
+        }
+
+        // Every text line wraps instead of being ellipsized; the card grows
+        // with the content.
+        assertLabelNotTruncated(title)
+        assertLabelNotTruncated(hint)
+        assertLabelNotTruncated(secondary)
+        assertLabelNotTruncated(REFRESH_HISTORY_LABEL)
+
+        // The card action keeps the platform touch target even at 2.0.
+        assertTouchTargetAtLeast48Dp(
+            composeRule.onNodeWithText(REFRESH_HISTORY_LABEL),
+            "chat notice action"
+        )
+    }
+
+    private fun resources() =
+        InstrumentationRegistry.getInstrumentation().targetContext.resources
+
+    @Test
+    fun chatSteerNoticeGrowsInsteadOfClippingAtLargeFont() {
+        val title = resources().getString(R.string.chat_steer_recovery_title_counter, 1, 3)
+        val steerText = "Eine längere Kurskorrektur, die auch bei großer Schrift vollständig lesbar bleiben muss"
+        val quoted = resources().getString(R.string.chat_steer_recovery_quote, steerText)
+        val action = resources().getString(R.string.chat_steer_send_as_new_message)
+        renderAt(LARGE_FONT_SCALE) {
+            SteerRecoveryBlock(
+                index = 0,
+                total = 3,
+                text = steerText,
+                actionLabel = action,
+                clearDraftHint = resources().getString(R.string.chat_steer_recovery_clear_draft_hint),
+                enabled = true,
+                onSendAsNewMessage = {},
+                testTag = "chatSteerRecovery:0",
+                actionTestTag = "chatSteerSendAsNewMessage:0"
+            )
+        }
+
+        assertLabelNotTruncated(title)
+        assertLabelNotTruncated(quoted)
+        assertLabelNotTruncated(action)
+        assertTouchTargetAtLeast48Dp(
+            composeRule.onNodeWithText(action),
+            "chat steer notice action"
+        )
     }
 
     private fun renderChat(fontScale: Float) {
@@ -393,6 +455,7 @@ class AccessibilityLargeFontUiTest {
         val ONBOARDING_SUBMIT_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.onboarding_submit) }
         val REFRESH_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sessions_refresh) }
         val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
+        val REFRESH_HISTORY_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_refresh_history) }
         const val PROBE_LABEL = "Fixture-Probe-Label"
         const val CHAT_MESSAGE = "Fixture-Antwort"
         val SESSION_TITLES = listOf("Fixture Alpha", "Fixture Beta", "Fixture Gamma")

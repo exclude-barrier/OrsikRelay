@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
@@ -150,6 +151,40 @@ class ChatScreenUiTest {
         composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).performClick()
         waitForText("Nach Retry")
         assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun historyFailureShowsHintAndKeepsRetryAtTheBottomWithOneLoadPerTap() {
+        val calls = AtomicInteger()
+        setScreen(MessageHistorySource { _, _ ->
+            calls.incrementAndGet()
+            MessageHistoryResult.Failure(MessageHistoryError.Network)
+        })
+
+        waitForText(context.getString(R.string.error_chat_generic))
+        composeRule.onNodeWithText(context.getString(R.string.sessions_error_hint_unreachable))
+            .assertIsDisplayed()
+
+        // The retry action is full-width at the bottom of the content area,
+        // not directly under the message: its center is in the lower half of
+        // the screen.
+        val retry = composeRule.onNodeWithText(context.getString(R.string.sessions_retry))
+        val rootHeight = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.height
+        val retryCenterY = retry.fetchSemanticsNode().boundsInRoot.center.y
+        assertTrue(
+            "retry must sit in the lower half of the screen, center was $retryCenterY of $rootHeight",
+            retryCenterY > rootHeight / 2f
+        )
+
+        retry.performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { calls.get() == 2 }
+        composeRule.waitForIdle()
+        assertEquals("exactly one history load per tap", 2, calls.get())
+
+        retry.performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { calls.get() == 3 }
+        composeRule.waitForIdle()
+        assertEquals("exactly one history load per tap", 3, calls.get())
     }
 
     @Test

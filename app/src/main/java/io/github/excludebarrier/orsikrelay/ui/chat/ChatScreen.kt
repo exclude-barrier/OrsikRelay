@@ -1,7 +1,6 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -120,7 +119,7 @@ fun ChatScreen(
     val steerInputLabel = stringResource(R.string.chat_steer_input_label)
     val steerQueuedLabel = stringResource(R.string.chat_steer_queued)
     val steerErrorLabel = stringResource(R.string.error_run_steer_generic)
-    val steerRecoveryLabel = stringResource(R.string.chat_steer_recovery_note)
+    val steerClearDraftHintLabel = stringResource(R.string.chat_steer_recovery_clear_draft_hint)
     val steerSendAsNewMessageLabel = stringResource(R.string.chat_steer_send_as_new_message)
     val attachmentAddLabel = stringResource(R.string.chat_attachment_add)
     val attachmentRemoveLabel = stringResource(R.string.chat_attachment_remove)
@@ -257,9 +256,9 @@ onClick = { viewModel.handleBack() }
             is MessageHistoryState.Failed -> Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .weight(1f)
+                    .padding(top = 24.dp, bottom = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = when (current.error) {
@@ -271,9 +270,39 @@ onClick = { viewModel.handleBack() }
                     },
                     textAlign = TextAlign.Center
                 )
+                val hint = when (current.error) {
+                    MessageHistoryError.MissingProfile ->
+                        stringResource(R.string.sessions_error_hint_missing_profile)
+                    MessageHistoryError.SessionNotFound ->
+                        stringResource(R.string.chat_history_error_session_not_found)
+                    MessageHistoryError.Network,
+                    MessageHistoryError.Timeout ->
+                        stringResource(R.string.sessions_error_hint_unreachable)
+                    MessageHistoryError.Tls ->
+                        stringResource(R.string.sessions_error_hint_tls)
+                    MessageHistoryError.InvalidCredentials ->
+                        stringResource(R.string.sessions_error_hint_credentials)
+                    MessageHistoryError.RateLimited ->
+                        stringResource(R.string.sessions_error_hint_rate_limited)
+                    MessageHistoryError.IncompatibleApi ->
+                        stringResource(R.string.sessions_error_hint_incompatible_api)
+                    else -> null
+                }
+                if (hint != null) {
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 Button(
                     onClick = { viewModel.loadHistory() },
-                    modifier = Modifier.padding(top = 16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                 ) {
                     Text(stringResource(R.string.sessions_retry))
                 }
@@ -391,9 +420,11 @@ onClick = { viewModel.handleBack() }
                 if (state.steerRecovery.isNotEmpty()) {
                     state.steerRecovery.forEachIndexed { index, text ->
                         SteerRecoveryBlock(
-                            note = "$steerRecoveryLabel ${index + 1}/${state.steerRecovery.size}",
+                            index = index,
+                            total = state.steerRecovery.size,
                             text = text,
                             actionLabel = steerSendAsNewMessageLabel,
+                            clearDraftHint = steerClearDraftHintLabel,
                             enabled = state.draft.isBlank(),
                             onSendAsNewMessage = { viewModel.sendRecoveryAsNewMessage(index) },
                             testTag = "chatSteerRecovery:$index",
@@ -514,54 +545,69 @@ onClick = { viewModel.handleBack() }
 }
 
 @Composable
-private fun TurnFailureBlock(
+internal fun TurnFailureBlock(
     error: ChatStreamError,
     showRefreshHistory: Boolean,
     onRefreshHistory: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = when (error) {
-                ChatStreamError.InvalidCredentials ->
-                    stringResource(R.string.error_connection_invalid_credentials)
-                ChatStreamError.SessionNotFound ->
-                    stringResource(R.string.error_chat_not_found)
-                ChatStreamError.RateLimited ->
-                    stringResource(R.string.error_connection_rate_limited)
-                ChatStreamError.Tls ->
-                    stringResource(R.string.error_connection_tls)
-                ChatStreamError.Timeout ->
-                    stringResource(R.string.error_connection_timeout)
-                ChatStreamError.Network ->
-                    stringResource(R.string.error_connection_network)
-                ChatStreamError.IncompatibleApi ->
-                    stringResource(R.string.error_connection_incompatible_api)
-                ChatStreamError.Http,
-                ChatStreamError.ServerError,
-                ChatStreamError.ServerUnavailable,
-                ChatStreamError.InvalidInput,
-                ChatStreamError.Conflict,
-                ChatStreamError.ResumeUnavailable,
-                ChatStreamError.ResumeGap ->
-                    stringResource(R.string.error_connection_http)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
-        if (showRefreshHistory) {
-            Button(
-                onClick = onRefreshHistory,
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
-                Text(stringResource(R.string.chat_refresh_history))
-            }
-        }
+    val hint = when (error) {
+        ChatStreamError.Network,
+        ChatStreamError.Timeout ->
+            stringResource(R.string.sessions_error_hint_unreachable)
+        ChatStreamError.Tls ->
+            stringResource(R.string.sessions_error_hint_tls)
+        ChatStreamError.InvalidCredentials ->
+            stringResource(R.string.sessions_error_hint_credentials)
+        ChatStreamError.RateLimited ->
+            stringResource(R.string.sessions_error_hint_rate_limited)
+        ChatStreamError.IncompatibleApi ->
+            stringResource(R.string.sessions_error_hint_incompatible_api)
+        else -> null
     }
+    ChatNotice(
+        tone = ChatNoticeTone.Error,
+        title = when (error) {
+            ChatStreamError.InvalidCredentials ->
+                stringResource(R.string.error_connection_invalid_credentials)
+            ChatStreamError.SessionNotFound ->
+                stringResource(R.string.error_chat_not_found)
+            ChatStreamError.RateLimited ->
+                stringResource(R.string.error_connection_rate_limited)
+            ChatStreamError.Tls ->
+                stringResource(R.string.error_connection_tls)
+            ChatStreamError.Timeout ->
+                stringResource(R.string.error_connection_timeout)
+            ChatStreamError.Network ->
+                stringResource(R.string.error_connection_network)
+            ChatStreamError.IncompatibleApi ->
+                stringResource(R.string.error_connection_incompatible_api)
+            ChatStreamError.Http,
+            ChatStreamError.ServerError,
+            ChatStreamError.ServerUnavailable,
+            ChatStreamError.InvalidInput,
+            ChatStreamError.Conflict,
+            ChatStreamError.ResumeUnavailable,
+            ChatStreamError.ResumeGap ->
+                stringResource(R.string.error_connection_http)
+        },
+        text = hint,
+        secondaryText = if (showRefreshHistory) {
+            stringResource(R.string.chat_turn_failure_refresh_hint)
+        } else {
+            stringResource(R.string.chat_turn_failure_draft_kept)
+        },
+        actions = if (showRefreshHistory) {
+            listOf(
+                ChatNoticeAction(
+                    label = stringResource(R.string.chat_refresh_history),
+                    onClick = onRefreshHistory
+                )
+            )
+        } else {
+            emptyList()
+        },
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
 }
 
 /**
@@ -591,47 +637,41 @@ private fun ConflictBlock() {
  * states the limitation instead of simulating a release.
  */
 @Composable
-private fun RunUncertainBlock(
+internal fun RunUncertainBlock(
     inFlight: Boolean,
     canReconcile: Boolean,
     stillActive: Boolean,
     unavailable: Boolean,
     onReconcile: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .testTag(TAG_RUN_UNCERTAIN),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = when {
-                stillActive -> stringResource(R.string.chat_run_uncertain_still_active)
-                unavailable -> stringResource(R.string.chat_run_uncertain_unavailable)
-                else -> stringResource(R.string.chat_run_uncertain)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
-        if (canReconcile) {
-            Button(
-                onClick = onReconcile,
-                enabled = !inFlight,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .testTag(TAG_RUN_RECONCILE)
-            ) {
-                Text(
-                    if (inFlight) {
+    ChatNotice(
+        tone = ChatNoticeTone.Error,
+        title = stringResource(R.string.chat_run_uncertain_title),
+        text = when {
+            stillActive -> stringResource(R.string.chat_run_uncertain_still_active)
+            unavailable -> stringResource(R.string.chat_run_uncertain_unavailable)
+            else -> stringResource(R.string.chat_run_uncertain)
+        },
+        actions = if (canReconcile) {
+            listOf(
+                ChatNoticeAction(
+                    label = if (inFlight) {
                         stringResource(R.string.chat_run_uncertain_checking)
                     } else {
                         stringResource(R.string.chat_run_uncertain_check)
-                    }
+                    },
+                    onClick = onReconcile,
+                    enabled = !inFlight,
+                    testTag = TAG_RUN_RECONCILE
                 )
-            }
-        }
-    }
+            )
+        } else {
+            emptyList()
+        },
+        modifier = Modifier
+            .padding(vertical = 8.dp)
+            .testTag(TAG_RUN_UNCERTAIN)
+    )
 }
 
 /**
@@ -744,52 +784,48 @@ private fun SteerControl(
 }
 
 /**
- * One ordered block for a single recoverable steer. [note] is
- * the generic recoverable note with an `index/total` counter; [text] is the
- * exact preserved item text. The single [actionLabel] action moves exactly
- * THIS one item into the ordinary composer; it never sends it and is disabled
- * — and a no-op in the view model — while [enabled] is false (i.e. the
- * ordinary composer is nonblank), so it can never overwrite the user's
- * in-progress message.
+ * One ordered block for a single recoverable steer. The title carries the
+ * `index/total` counter only when more than one item is preserved; [text] is
+ * the exact preserved item, rendered in quotes. The single [actionLabel]
+ * action moves exactly THIS one item into the ordinary composer; it never
+ * sends it and is disabled - and a no-op in the view model - while [enabled]
+ * is false (i.e. the ordinary composer is nonblank), so it can never overwrite
+ * the user's in-progress message. While disabled, [clearDraftHint] explains
+ * how to enable it again.
  */
 @Composable
-private fun SteerRecoveryBlock(
-    note: String,
+internal fun SteerRecoveryBlock(
+    index: Int,
+    total: Int,
     text: String,
     actionLabel: String,
+    clearDraftHint: String,
     enabled: Boolean,
     onSendAsNewMessage: () -> Unit,
     testTag: String,
     actionTestTag: String,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag(testTag),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = note,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("chatSteerRecoveryText")
-        )
-        Button(
-            onClick = onSendAsNewMessage,
-            enabled = enabled,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .testTag(actionTestTag)
-        ) {
-            Text(actionLabel)
-        }
-    }
+    ChatNotice(
+        tone = ChatNoticeTone.Info,
+        title = if (total > 1) {
+            stringResource(R.string.chat_steer_recovery_title_counter, index + 1, total)
+        } else {
+            stringResource(R.string.chat_steer_recovery_title)
+        },
+        text = stringResource(R.string.chat_steer_recovery_quote, text),
+        textTestTag = "chatSteerRecoveryText",
+        secondaryText = if (enabled) null else clearDraftHint,
+        actions = listOf(
+            ChatNoticeAction(
+                label = actionLabel,
+                onClick = onSendAsNewMessage,
+                enabled = enabled,
+                testTag = actionTestTag
+            )
+        ),
+        modifier = modifier.testTag(testTag)
+    )
 }
 
 @Composable
@@ -842,7 +878,7 @@ internal fun ComposerBar(
             // over the attachment error (it is the reason the send was
             // rejected); both can never be shown as two lines.
             val compactStatusLabel = when {
-                uncertainNotice -> stringResource(R.string.chat_run_uncertain)
+                uncertainNotice -> stringResource(R.string.chat_run_uncertain_title)
                 conflictNotice -> stringResource(R.string.chat_run_conflict)
                 else -> attachmentErrorLabel
             }
