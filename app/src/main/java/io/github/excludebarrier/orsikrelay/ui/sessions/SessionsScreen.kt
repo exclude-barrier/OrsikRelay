@@ -15,10 +15,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -27,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,15 +40,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,6 +84,13 @@ import java.util.Locale
  * when `has_more` is true. A load in flight blocks every further load, so
  * double taps never start a parallel second request. No automatic retry.
  *
+ * The search field under the header filters the already loaded sessions
+ * locally by title ([SessionSearch]); it never issues a request. The query
+ * survives recreation, refresh and loading more, is not persisted, and is
+ * cleared only by the clear button. While a non-blank query is active and
+ * the server has more pages, a hint explains that only loaded sessions are
+ * searched and load-more stays reachable, also with zero hits.
+ *
  * The header's overflow menu links to server management, settings and the
  * about screen; the appearance switcher lives in settings now.
  *
@@ -99,11 +114,14 @@ fun SessionsScreen(
 ) {
     val configuration = LocalConfiguration.current
     val locale = remember(configuration) { configuration.locales[0] }
+    val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
     var state by remember { mutableStateOf<SessionListState>(SessionListState.Loading) }
     var loadInFlight by remember { mutableStateOf(false) }
     var showNewSessionDialog by remember { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var hadSessions by rememberSaveable { mutableStateOf(false) }
     val canCreateSession = !profileId.isBlank() && creator != null
 
     fun loadPage(offset: Int, append: Boolean) {
@@ -232,6 +250,52 @@ fun SessionsScreen(
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
+        // Searching only makes sense with sessions to search: the field is
+        // hidden on an error, for an empty list and before the first page,
+        // but stays during a refresh (no layout jump) and while a query is
+        // active, so it can always be cleared.
+        (state as? SessionListState.Ready)?.let { hadSessions = it.sessions.isNotEmpty() }
+        val searchable = searchQuery.isNotEmpty() ||
+            (hadSessions && state !is SessionListState.Failed)
+        if (searchable) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .testTag("sessionsSearchField"),
+                placeholder = { Text(text = stringResource(R.string.sessions_search_placeholder)) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null
+                    )
+                },
+                trailingIcon = if (searchQuery.isNotEmpty()) {
+                    {
+                        IconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("sessionsClearSearch")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = stringResource(R.string.sessions_search_clear)
+                            )
+                        }
+                    }
+                } else {
+                    null
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = { focusManager.clearFocus() }
+                )
+            )
+        }
         when (val current = state) {
             is SessionListState.Loading -> {
                 Text(
@@ -285,76 +349,106 @@ fun SessionsScreen(
             }
 
             is SessionListState.Ready -> {
-                if (current.sessions.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.sessions_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 24.dp)
+                val now = remember(current.sessions) { clock.instant() }
+                val searching = searchQuery.isNotBlank()
+                val filteredSessions = remember(current.sessions, searchQuery, locale) {
+                    SessionSearch.filter(current.sessions, searchQuery, locale)
+                }
+                val sections = remember(filteredSessions, now) {
+                    SessionGrouping.groupSessions(
+                        sessions = filteredSessions,
+                        now = now,
+                        zone = clock.zone
                     )
-                } else {
-                    val now = remember(current.sessions) { clock.instant() }
-                    val sections = remember(current.sessions, now) {
-                        SessionGrouping.groupSessions(
-                            sessions = current.sessions,
-                            now = now,
-                            zone = clock.zone
-                        )
-                    }
-                    LazyColumn(
+                }
+                if (searching && current.hasMore) {
+                    Text(
+                        text = stringResource(R.string.sessions_search_only_loaded_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
-                        // Bottom padding clears the floating 56dp FAB
-                        // (56 + 16 margin) so the last session or the
-                        // "load more" button is never hidden underneath.
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp)
-                    ) {
-                        sections.forEach { section ->
-                            item(key = "section-${section.group.name}") {
-                                SessionGroupHeader(section.group)
-                            }
-                            itemsIndexed(
-                                items = section.sessions,
-                                key = { _, session -> "session-${session.id}" }
-                            ) { index, session ->
-                                Column {
-                                    if (index > 0) {
-                                        HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                    }
-                                    SessionRow(
-                                        session = session,
-                                        locale = locale,
-                                        zone = clock.zone,
-                                        showTimeOnly = SessionGrouping.dayGroupOf(
-                                            session.lastActiveEpochSeconds,
-                                            now,
-                                            clock.zone
-                                        ).let {
-                                            it == SessionGroup.Today || it == SessionGroup.Yesterday
-                                        },
-                                        onClick = {
-                                            onSessionSelected(session.id, session.title)
+                            .padding(bottom = 8.dp)
+                            .testTag("sessionsSearchLoadMoreHint")
+                    )
+                }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    // Bottom padding clears the floating 56dp FAB
+                    // (56 + 16 margin) so the last session or the
+                    // "load more" button is never hidden underneath.
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp)
+                ) {
+                    if (filteredSessions.isEmpty()) {
+                        item(key = "empty") {
+                            Text(
+                                text = if (searching) {
+                                    stringResource(
+                                        R.string.sessions_search_no_results,
+                                        SessionSearch.displayQuery(searchQuery)
+                                    )
+                                } else {
+                                    stringResource(R.string.sessions_empty)
+                                },
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 24.dp)
+                                    .testTag(
+                                        if (searching) {
+                                            "sessionsSearchNoResults"
+                                        } else {
+                                            "sessionsEmpty"
                                         }
                                     )
+                            )
+                        }
+                    }
+                    sections.forEach { section ->
+                        item(key = "section-${section.group.name}") {
+                            SessionGroupHeader(section.group)
+                        }
+                        itemsIndexed(
+                            items = section.sessions,
+                            key = { _, session -> "session-${session.id}" }
+                        ) { index, session ->
+                            Column {
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant
+                                    )
                                 }
+                                SessionRow(
+                                    session = session,
+                                    locale = locale,
+                                    zone = clock.zone,
+                                    showTimeOnly = SessionGrouping.dayGroupOf(
+                                        session.lastActiveEpochSeconds,
+                                        now,
+                                        clock.zone
+                                    ).let {
+                                        it == SessionGroup.Today || it == SessionGroup.Yesterday
+                                    },
+                                    onClick = {
+                                        onSessionSelected(session.id, session.title)
+                                    }
+                                )
                             }
                         }
-                        if (current.hasMore) {
-                            item(key = "load-more") {
-                                val offset = current.sessions.size
-                                Button(
-                                    onClick = { loadPage(offset = offset, append = true) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(8.dp)
-                                ) {
-                                    Text(text = stringResource(R.string.sessions_load_more))
-                                }
+                    }
+                    if (current.hasMore && (searching || current.sessions.isNotEmpty())) {
+                        item(key = "load-more") {
+                            val offset = current.sessions.size
+                            Button(
+                                onClick = { loadPage(offset = offset, append = true) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                            ) {
+                                Text(text = stringResource(R.string.sessions_load_more))
                             }
                         }
                     }
