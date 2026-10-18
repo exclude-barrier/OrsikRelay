@@ -61,11 +61,14 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
-      - name: Compile Kotlin (no build cache)
+      - name: Compile Kotlin (no build or configuration cache)
         if: matrix.build-mode == 'manual'
+        # CodeQL extracts Kotlin by tracing the compiler, so this job stays on
+        # the plain path: no task output from the build cache, no reused
+        # configuration.
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon --no-build-cache \
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
             :app:compileDebugKotlin :app:compileDebugUnitTestKotlin :app:compileDebugAndroidTestKotlin
 
       - name: Analyze
