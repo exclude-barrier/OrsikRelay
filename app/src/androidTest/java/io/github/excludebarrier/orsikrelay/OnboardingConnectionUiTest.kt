@@ -91,7 +91,7 @@ class OnboardingConnectionUiTest {
         setRoute(coordinator)
 
         submitValidForm()
-        waitForText(context.getString(R.string.error_connection_invalid_credentials))
+        waitForText(context.getString(R.string.onboarding_error_invalid_credentials_title))
 
         // The form is scrollable and submitValidForm() scrolled to the submit
         // button, so the title may be scrolled out of view; scroll it back in
@@ -116,7 +116,7 @@ class OnboardingConnectionUiTest {
         setRoute(coordinator)
 
         submitValidForm()
-        waitForText(context.getString(R.string.error_connection_persistence))
+        waitForText(context.getString(R.string.onboarding_error_persistence_title))
 
         // The open soft keyboard may pan the whole window, making a display
         // check geometry-dependent; the title exists only on the onboarding

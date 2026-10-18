@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.ui.chat.RunUncertainBlock
@@ -49,6 +51,12 @@ class ChatNoticeUiTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.sessions_error_hint_unreachable))
             .assertIsDisplayed()
+        assertEquals(
+            "notice title and text must use the same type size",
+            layoutOf(context.getString(R.string.error_connection_network)).layoutInput.style.fontSize,
+            layoutOf(context.getString(R.string.sessions_error_hint_unreachable))
+                .layoutInput.style.fontSize
+        )
         composeRule.onNodeWithText(context.getString(R.string.chat_turn_failure_refresh_hint))
             .assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.chat_refresh_history))
@@ -280,6 +288,16 @@ class ChatNoticeUiTest {
             .assertIsDisplayed()
         composeRule.onNodeWithTag("chatSteerSendAsNewMessage:0")
             .assertIsNotEnabled()
+    }
+
+    private fun layoutOf(text: String): TextLayoutResult {
+        val layouts = ArrayList<TextLayoutResult>()
+        composeRule.onNodeWithText(text)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(layouts)
+        return layouts.single()
     }
 
     private fun render(content: @Composable () -> Unit) {
