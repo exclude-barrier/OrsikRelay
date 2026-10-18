@@ -14,22 +14,48 @@ import java.util.Locale
 object SessionListFormatter {
 
     /**
-     * Locally formatted last-activity timestamp.
+     * Locally formatted time only, used for the Today and Yesterday groups.
      *
      * The pattern comes from the platform localization data for [locale]
-     * (medium date, short time), so English and German produce their own
-     * date order and separators. The zone stays the device default.
+     * (short time), in [zone].
      *
      * @return `null` for missing or invalid timestamps; the row then
-     * simply omits the line.
+     * simply omits that part.
      */
-    fun formatLastActive(epochSeconds: Long?, locale: Locale): String? {
+    fun formatLastActiveTime(
+        epochSeconds: Long?,
+        locale: Locale,
+        zone: ZoneId
+    ): String? {
         if (epochSeconds == null || epochSeconds < 0) return null
         return try {
             DateTimeFormatter
-                .ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+                .ofLocalizedTime(FormatStyle.SHORT)
                 .withLocale(locale)
-                .withZone(ZoneId.systemDefault())
+                .withZone(zone)
+                .format(Instant.ofEpochSecond(epochSeconds))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Locally formatted medium date, used for every group except Today and
+     * Yesterday.
+     *
+     * @return `null` for missing or invalid timestamps.
+     */
+    fun formatLastActiveDate(
+        epochSeconds: Long?,
+        locale: Locale,
+        zone: ZoneId
+    ): String? {
+        if (epochSeconds == null || epochSeconds < 0) return null
+        return try {
+            DateTimeFormatter
+                .ofLocalizedDate(FormatStyle.MEDIUM)
+                .withLocale(locale)
+                .withZone(zone)
                 .format(Instant.ofEpochSecond(epochSeconds))
         } catch (_: Exception) {
             null

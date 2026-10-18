@@ -178,7 +178,19 @@ class AccessibilityLargeFontUiTest {
         val entry = composeRule.onNode(hasText(title) and hasClickAction())
         entry.assertIsDisplayed()
         assertTouchTargetAtLeast48Dp(entry, "session entry")
-        assertLabelNotTruncated(title)
+        val meta = sessionMetaFor(title)
+        composeRule.onNodeWithText(meta, useUnmergedTree = true).assertIsDisplayed()
+        assertLabelNotTruncated(meta)
+    }
+
+    private fun sessionMetaFor(title: String): String {
+        val count = SESSION_TITLES.indexOf(title) + 1
+        return InstrumentationRegistry.getInstrumentation().targetContext.resources
+            .getQuantityString(
+                R.plurals.session_message_count,
+                count,
+                count.toString()
+            )
     }
 
     private fun assertRefreshControl() {
