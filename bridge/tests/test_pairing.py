@@ -37,7 +37,7 @@ class RenderAsciiQrTest(unittest.TestCase):
         with mock.patch.object(pairing.shutil, "which", return_value=None):
             self.assertIsNone(pairing.render_ascii_qr(self.TEXT))
 
-    def test_uses_ansiutf8_with_quiet_zone(self):
+    def test_uses_ansiutf8_with_quiet_zone_and_stdin(self):
         completed = mock.Mock(stdout="\x1b[40;37;1m▀▄█\x1b[0m\n".encode())
         with mock.patch.object(pairing.shutil, "which", return_value="/usr/bin/qrencode"), \
                 mock.patch.object(pairing.subprocess, "run", return_value=completed) as run:
@@ -45,9 +45,18 @@ class RenderAsciiQrTest(unittest.TestCase):
         argv = run.call_args.args[0]
         self.assertEqual(
             argv,
-            ["/usr/bin/qrencode", "-t", "ANSIUTF8", "-o", "-", "-m", "2", self.TEXT],
+            ["/usr/bin/qrencode", "-t", "ANSIUTF8", "-o", "-", "-m", "2"],
         )
-        self.assertEqual(run.call_args.kwargs, {"capture_output": True, "check": True, "timeout": 10})
+        self.assertNotIn(self.TEXT, argv)
+        self.assertEqual(
+            run.call_args.kwargs,
+            {
+                "input": self.TEXT.encode("utf-8"),
+                "capture_output": True,
+                "check": True,
+                "timeout": 10,
+            },
+        )
 
     def test_renderer_failure_returns_none(self):
         failures = (

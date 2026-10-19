@@ -130,12 +130,21 @@ bash "$ORSIK_DIR/bridge/install.sh" "${UPDATE[@]}" "${SYSTEMD[@]}"
 # --- 4. Configuration ---------------------------------------------------------
 say "Writing $ENV_FILE"
 set_env() {
-  local key="$1" value="$2"
-  if grep -q "^$key=" "$ENV_FILE"; then
-    sed -i "s|^$key=.*|$key=$value|" "$ENV_FILE"
-  else
-    printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
-  fi
+  local key="$1" value="$2" tmp
+  case "$value" in
+    *$'\n'*) die "$key must not contain a newline" ;;
+  esac
+  # Write the line with awk instead of sed: the value is data (may contain
+  # &, | or backslashes) and must never be interpreted as a sed expression.
+  tmp="$(mktemp "$ENV_FILE.XXXXXX")"
+  KEY="$key" VALUE="$value" awk '
+    BEGIN { key = ENVIRON["KEY"]; value = ENVIRON["VALUE"] }
+    index($0, key "=") == 1 { print key "=" value; found = 1; next }
+    { print }
+    END { if (!found) print key "=" value }
+  ' "$ENV_FILE" >"$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$ENV_FILE"
 }
 set_env BRIDGE_BIND 127.0.0.1
 set_env BRIDGE_PORT 9842

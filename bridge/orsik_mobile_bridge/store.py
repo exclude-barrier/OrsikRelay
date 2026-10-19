@@ -49,13 +49,17 @@ def _sha256_hex(value: str) -> str:
 
 
 def _harden_file(path: str) -> None:
-    # Harden the main DB and its SQLite sidecars (WAL/SHM) — all hold only
-    # hashes, but must never be group/world readable.
-    for candidate in (path, path + "-wal", path + "-shm"):
+    # Harden the main DB and its SQLite sidecars (WAL/SHM/journal) — all hold
+    # only hashes, but must never be group/world readable. A failed chmod is
+    # fail-closed: the store refuses to open rather than run with loose modes.
+    for candidate in (path, path + "-wal", path + "-shm", path + "-journal"):
         try:
             os.chmod(candidate, 0o600)
-        except OSError:
-            pass
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise StoreUnavailable(
+                "could not restrict permissions on the device store") from exc
 
 
 def _migration_v0_to_v1(conn: sqlite3.Connection) -> None:

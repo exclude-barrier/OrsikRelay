@@ -80,6 +80,38 @@ def redact_echo(frame: Frame) -> Frame:
     return _rebuild(frame, redacted)
 
 
+_UNUSED_FIELDS = {
+    # The whole turn transcript (tool output included) rides on the terminal
+    # frame; alone it can exceed the relay bound and fail a finished turn.
+    "run.completed": ("messages", "usage", "runtime"),
+    "run.cancelled": ("messages", "usage", "runtime"),
+    "run.failed": ("messages", "usage", "runtime"),
+    "assistant.completed": ("runtime",),
+    # Tool previews and arguments hold commands, paths and output.
+    "tool.started": ("preview", "args"),
+    "tool.completed": ("preview", "args"),
+    "tool.failed": ("preview", "args"),
+    # Reasoning text (tool_name "_thinking") and mid-turn commentary.
+    "tool.progress": ("delta",),
+    "assistant.commentary": ("text",),
+}
+"""Payload fields a Mobile-v1 client never reads, per event."""
+
+
+def strip_unused(frame: Frame) -> Frame:
+    """Drop :data:`_UNUSED_FIELDS` from a frame before it is relayed.
+
+    The phone shows tool activity without commands, arguments or output and
+    never needs the transcript, so these fields are not sent at all. Frames
+    without such a field are returned byte-identical.
+    """
+    fields = _UNUSED_FIELDS.get(frame.event or "")
+    payload = frame.json
+    if not fields or not isinstance(payload, dict) or not any(key in payload for key in fields):
+        return frame
+    return _rebuild(frame, {key: value for key, value in payload.items() if key not in fields})
+
+
 APPROVAL_EVENT = "approval.request"
 """Event the bridge narrows to the Mobile-v1 approval shape."""
 

@@ -22,7 +22,7 @@ permission allowlist `{chat, runs, approvals}`.
 
 | Threat | Measure |
 |---|---|
-| Master key leak to device/log | key only server-side; never in body/response; closed errors |
+| Master key leak to device/log | key only server-side; never in body/response; closed errors; buffered (non-SSE) upstream bodies have the exact master key replaced with `[redacted]` |
 | Master key exfiltration through misconfigured `BRIDGE_UPSTREAM` | target is checked at startup: only loopback HTTP **IP** with explicit port (no hostname, no path/query/fragment, no userinfo); otherwise startup aborts without repeating the value |
 | Approval escalation (`session`/`always`) | local validation allows only `once`/`deny`; invalid → `400`, **no** upstream POST |
 | Redirect credential hop | `allow_redirects=False`; `3xx` → `502`, `Location` discarded |
@@ -30,8 +30,12 @@ permission allowlist `{chat, runs, approvals}`.
 | Query injection | query allowlist per route; otherwise `403` |
 | Body overflow | limit `10_000_000`; oversize → `413`; malformed JSON → `400` |
 | Brute-force pairing | rate limit; hard code/device caps; single-use atomic |
-| Token/code theft at rest | SHA-256 hashes only; DB 0600/0700; never logged |
-| Persistent credential compromised | individual revocation durable across restarts |
+| Token/code theft at rest | SHA-256 hashes only; DB 0600/0700, sidecars and `-journal` too; process umask `0077`; a failed chmod aborts the start instead of being ignored; never logged |
+| Insecure secret file | `BRIDGE_HERMES_ENV` / `BRIDGE_ENV_FILE` must be regular files owned by the bridge user with no group/other bits (`0600`); checked before reading, otherwise startup aborts with the path and the `chmod 600` hint (never the content) |
+| Pairing code in process list | the `orsik://pair` payload goes to `qrencode` on stdin, never in argv |
+| Unauthenticated request body | `/health` rejects any body (`Content-Length > 0` or `Transfer-Encoding`) with `400 body_not_allowed`; it is never read or forwarded |
+| Persistent credential compromised | individual revocation durable across restarts; an open run stream re-checks its token every 15 s and ends with `: bridge_revoked` once the device is revoked (from the phone or `admin revoke-device`) |
+| Tool output/commands on the phone | the relay drops fields the app never reads: the turn transcript (`messages`), `usage` and `runtime` on `run.*`, `preview`/`args` on `tool.*`, the reasoning text (`delta`) on `tool.progress` and the text of `assistant.commentary`; this also keeps the terminal frame within the relay bound |
 | Restoring an old store state | backup/restore operator-side only (file system permission); a restore restores the authorization state at the backup time — devices revoked afterwards are valid again (check `admin list-devices`, revoke affected devices again); pre-migration backup automatic, no down-migrate |
 | Store failure | fail-closed (`503 store_unavailable`), never fail-open |
 | Blocking store access | store calls run serially in a dedicated DB thread and never block the aiohttp event loop |
@@ -39,7 +43,7 @@ permission allowlist `{chat, runs, approvals}`.
 | Run loss/duplicate on disconnect | server-side stream takeover + `after_seq` replay; no second POST |
 | Fabricated run completion | never invented events; not reconstructible → `409`/`404` |
 | Memory exhaustion through upstream/runs | frame ≤ 1 MiB **after** redaction (otherwise `502 upstream_frame_too_large` or abort comment, no `done`; image echo see §3.1); error body ≤ 64 KiB; backlog per run 1000 frames/4 MiB; subscriber queue 256/2 MiB, max. 4 per run (drop instead of block); max. 16 active runs (`503 bridge_busy` before the upstream POST); terminal runs ≤ 64 MiB |
-| Public API port | bind only `127.0.0.1`; TLS external; no funnel |
+| Public API port | bind only a literal loopback IP (`127.0.0.1` or `::1`); `localhost` and any non-loopback value are refused; TLS external; no funnel |
 | TLS bypass | bridge does not terminate TLS; app enforces HTTPS + system trust |
 
 ## 3.1 Image Echo in `run.started`
@@ -64,8 +68,8 @@ re-serializes upstream content instead of passing it through byte-identically.
 behavior as before (`502 upstream_frame_too_large` before the first frame, otherwise
 abort comment `: bridge_upstream_frame_too_large`, never an invented `done`).
 `sse.MAX_FRAME_BYTES` and all buffer/queue limits in `runhub.py` remain
-unchanged. The raw proxied `GET /v1/runs/{run_id}/events` does not go through the
-SSEDecoder and has no frame limit; the defect does not apply there.
+unchanged. The core's raw `GET /v1/runs/{run_id}/events` is not proxied: runs are
+followed only through the filtered session stream.
 
 ## 4. Single-Owner Delegation (Residual Risk)
 
@@ -115,11 +119,14 @@ Hermes home behind the bridge sets `approvals.mode: manual` (see
 
 **Auditability.** Every state-changing device request creates an
 audit line (logger `orsik_mobile_bridge.audit`):
-`audit action=<chat|approval|stop|steer> device=<device_id> run=/session=<id>
-[choice=<once|deny|rejected>] [status=<http>]`. Rejected choices are recorded as
+`audit action=<chat|approval|stop|steer|session_create|pair|revoke>
+device=<device_id|-> [run=/session=<id>] [choice=<once|deny|rejected>]
+[status=<http>]`. Rejected choices are recorded as
 `rejected` (raw value = client input, never logged); tokens,
-master key and message content never appear. The line is created as soon as
-the upstream status is determined, i.e. before the response to the device.
+master key and message content never appear. Pairing failures and
+unauthenticated revoke attempts use `device=-`. The line is created as soon as
+the upstream status (or the local rejection) is determined, i.e. before the
+response to the device.
 
 §4 continues to apply unchanged: Every paired device can send approvals/stop/steer for
 **any** run of the owner (no per-device isolation); the audit makes
@@ -138,7 +145,10 @@ reads the run status and session history of device A (`200`) and answers its
 
 ## 6. Secrets Handling
 
-- `API_SERVER_KEY` read only from a 0600 env, only in the upstream header.
+- `API_SERVER_KEY` read only from a `0600` regular env file owned by the bridge
+  user; `BRIDGE_HERMES_ENV` and `BRIDGE_ENV_FILE` are checked before reading and
+  an insecure file aborts the start.
 - Pairing codes/tokens: one-time output, hash at rest only, never in logs,
-  error bodies, URLs (except the `orsik://pair` link) or reports.
+  error bodies, URLs (except the `orsik://pair` link) or reports. The deep link
+  is handed to `qrencode` via stdin, not argv.
 - No credentials in Git; `bridge.env`, `state.db` are excluded.

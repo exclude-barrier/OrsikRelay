@@ -73,7 +73,7 @@ URL unchanged.
 | GET | `/api/sessions/{id}/messages` | device token |
 | POST | `/api/sessions/{id}/chat/stream` | device token (server-side takeover) |
 | GET | `/api/sessions/{id}/runs/{run_id}/stream?after_seq=N` | device token (re-attach/replay) |
-| GET | `/v1/runs/{run_id}` `/events` | device token |
+| GET | `/v1/runs/{run_id}` | device token |
 | POST | `/v1/runs/{run_id}/stop` `/steer` | device token |
 
 Anything else returns `403 endpoint_out_of_scope`.

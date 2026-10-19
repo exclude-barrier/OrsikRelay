@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 INSTALL_SH = Path(__file__).resolve().parent.parent / "install.sh"
+INSTALL_BRIDGE_SH = Path(__file__).resolve().parent.parent / "install-bridge.sh"
 
 HAVE_BASH = shutil.which("bash") is not None
 HAVE_CURL = shutil.which("curl") is not None
@@ -248,6 +249,69 @@ class InstallCheckTest(unittest.TestCase):
         before = self.snapshot()
         self.run_check()
         self.assertEqual(before, self.snapshot())
+
+
+class SystemdUnitSourceTest(unittest.TestCase):
+    def test_unit_sets_restrictive_umask(self):
+        self.assertIn("\nUMask=0077\n", INSTALL_SH.read_text())
+
+
+def _bash_function(name: str) -> str:
+    text = INSTALL_BRIDGE_SH.read_text()
+    start = text.index(f"{name}() {{")
+    end = text.index("\n}\n", start) + 3
+    return text[start:end]
+
+
+@unittest.skipUnless(HAVE_BASH, "bash is required")
+class SetEnvTest(unittest.TestCase):
+    """``set_env`` writes values as data, never as a sed expression."""
+
+    def _run(self, env_file: Path, value: str):
+        script = (
+            "set -euo pipefail\n"
+            "die() { printf '%s\\n' \"$*\" >&2; exit 1; }\n"
+            "ENV_FILE=\"$TEST_ENV\"\n"
+            + _bash_function("set_env")
+            + "\nset_env BRIDGE_HERMES_ENV \"$TEST_VALUE\"\n"
+        )
+        env = dict(os.environ, TEST_ENV=str(env_file), TEST_VALUE=value)
+        return subprocess.run(
+            ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30)
+
+    def test_special_characters_are_written_literally(self):
+        with tempfile.TemporaryDirectory() as d:
+            env_file = Path(d) / "bridge.env"
+            env_file.write_text("BRIDGE_HERMES_ENV=/old\n")
+            env_file.chmod(0o600)
+            value = r"/srv/a&b|c\d /x"
+            result = self._run(env_file, value)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(env_file.read_text(), f"BRIDGE_HERMES_ENV={value}\n")
+            self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
+
+    def test_missing_key_is_appended(self):
+        with tempfile.TemporaryDirectory() as d:
+            env_file = Path(d) / "bridge.env"
+            env_file.write_text("BRIDGE_BIND=127.0.0.1\n")
+            env_file.chmod(0o600)
+            result = self._run(env_file, "https://example.invalid")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                env_file.read_text(),
+                "BRIDGE_BIND=127.0.0.1\nBRIDGE_HERMES_ENV=https://example.invalid\n",
+            )
+
+    def test_newline_value_is_refused_and_file_untouched(self):
+        with tempfile.TemporaryDirectory() as d:
+            env_file = Path(d) / "bridge.env"
+            original = "BRIDGE_HERMES_ENV=/old\n"
+            env_file.write_text(original)
+            env_file.chmod(0o600)
+            result = self._run(env_file, "/a\nBRIDGE_BIND=0.0.0.0")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not contain a newline", result.stderr)
+            self.assertEqual(env_file.read_text(), original)
 
 
 @unittest.skipUnless(HAVE_BASH and HAVE_UV, "bash and uv are required")
