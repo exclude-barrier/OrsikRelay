@@ -139,6 +139,8 @@
     <string name="chat_title">Chat</string>
     <string name="chat_back">Zurück</string>
     <string name="chat_loading">Nachrichten werden geladen…</string>
+    <string name="chat_turn_working">Hermes arbeitet…</string>
+    <string name="chat_turn_thinking">Hermes denkt nach…</string>
     <string name="chat_stream_reconnecting">Verbinde neu …</string>
     <string name="chat_run_conflict">In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst.</string>
     <string name="chat_run_uncertain">Die Verbindung wurde unterbrochen. Es wird nichts erneut gesendet.</string>

@@ -454,6 +454,9 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                                 MessageRow(message)
                             }
                         }
+                        state.turnActivity?.let { activity ->
+                            item(key = "turn_activity") { TurnActivityRow(activity) }
+                        }
                     }
                 }
                 val failure = state.turnFailure
@@ -685,6 +688,33 @@ internal fun ChatHeader(
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         modifier = Modifier.padding(top = if (compact) 0.dp else 4.dp)
     )
+}
+
+/**
+ * Last timeline row while a turn runs without visible progress, so a long
+ * tool call or reasoning phase never looks like a stalled chat.
+ */
+@Composable
+private fun TurnActivityRow(activity: TurnActivity) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        Text(
+            text = stringResource(
+                when (activity) {
+                    TurnActivity.Working -> R.string.chat_turn_working
+                    TurnActivity.Thinking -> R.string.chat_turn_thinking
+                }
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
 }
 
 /**

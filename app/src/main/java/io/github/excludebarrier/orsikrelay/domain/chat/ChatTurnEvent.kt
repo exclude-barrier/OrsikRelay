@@ -29,6 +29,13 @@ sealed interface ChatTurnEvent {
     /** The authoritative final assistant text of this turn. */
     data class AssistantCompleted(val finalText: String) : ChatTurnEvent
 
+    /**
+     * The model started ([active] = `true`) or finished ([active] = `false`)
+     * reasoning. Status only: the reasoning text never crosses the network
+     * boundary.
+     */
+    data class Reasoning(val active: Boolean) : ChatTurnEvent
+
     /** Tool activity with an optional safe identifier only; never args, previews or output. */
     data class ToolActivity(val toolName: String? = null) : ChatTurnEvent
 

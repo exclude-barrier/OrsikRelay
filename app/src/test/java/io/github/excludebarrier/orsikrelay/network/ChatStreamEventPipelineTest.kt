@@ -203,15 +203,23 @@ class ChatStreamEventPipelineTest {
     }
 
     @Test
-    fun toolProgressAndReasoningEventsAreSilentlyIgnored() {
+    fun reasoningBecomesContentFreeStatusAndToolProgressIsIgnored() {
         feedRunStarted()
         pipeline.process(messageStartedFrame(2, MSG_ID))
 
-        listOf("tool.progress", "reasoning.started", "reasoning.delta", "reasoning.completed")
-            .forEachIndexed { index, name ->
-                val events = pipeline.process(frame(name, 3 + index.toLong()))
-                assertTrue(events.isEmpty())
-            }
+        assertTrue(pipeline.process(frame("tool.progress", 3)).isEmpty())
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.Reasoning(active = true)),
+            pipeline.process(frame("reasoning.started", 4))
+        )
+        val delta = pipeline.process(
+            ParsedSseFrame("reasoning.delta", baseFrame(5).put("text", "secret-thought").toString())
+        )
+        assertTrue(delta.isEmpty())
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.Reasoning(active = false)),
+            pipeline.process(frame("reasoning.completed", 6))
+        )
     }
 
     @Test
@@ -918,10 +926,15 @@ class ChatStreamEventPipelineTest {
         )
         assertEquals(listOf<ChatTurnEvent>(ChatTurnEvent.ToolActivity()), pipeline.process(tool))
 
+        val expected = listOf(
+            emptyList(),
+            listOf(ChatTurnEvent.Reasoning(active = true)),
+            emptyList(),
+            listOf<ChatTurnEvent>(ChatTurnEvent.Reasoning(active = false))
+        )
         listOf("tool.progress", "reasoning.started", "reasoning.delta", "reasoning.completed")
             .forEachIndexed { index, name ->
-                val events = pipeline.process(frame(name, 4 + index.toLong()))
-                assertTrue(events.isEmpty())
+                assertEquals(expected[index], pipeline.process(frame(name, 4 + index.toLong())))
             }
 
         assertEquals(
