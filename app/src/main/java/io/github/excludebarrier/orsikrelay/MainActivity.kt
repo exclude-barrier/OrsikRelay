@@ -90,7 +90,7 @@ class MainActivity : FragmentActivity() {
         // savedInstanceState and still consumes the intent.
         if (savedInstanceState == null) {
             pairingBootstrap.value = PairingDeepLink.parse(intent?.data?.toString().orEmpty())
-            notificationBootstrap.value = NotificationSessionIntent.parse(intent)
+            notificationBootstrap.value = NotificationSessionIntent.parse(intent, NotificationSessionIntent.tapToken(this))
         }
         setContent {
             val themeStore = remember {
@@ -160,7 +160,7 @@ class MainActivity : FragmentActivity() {
         // recreation does not see a stale intent (singleTop delivery).
         setIntent(intent)
         pairingBootstrap.value = PairingDeepLink.parse(intent.data?.toString().orEmpty())
-        notificationBootstrap.value = NotificationSessionIntent.parse(intent)
+        notificationBootstrap.value = NotificationSessionIntent.parse(intent, NotificationSessionIntent.tapToken(this))
     }
 
     companion object {
