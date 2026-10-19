@@ -51,13 +51,15 @@ class OnboardingModeUiTest {
     @Test
     fun segmentsHaveEqualHeightAndSelectedSemanticsAtNormalFont() {
         setOnboarding(fontScale = 1.0f)
-        assertSegments()
+        assertSegments(labelOnOneLine = true)
     }
 
     @Test
     fun segmentsHaveEqualHeightAndSelectedSemanticsAtLargeFont() {
+        // At 130 % on a narrow phone the label may wrap; the segments must
+        // still be equally high and reachable.
         setOnboarding(fontScale = 1.3f)
-        assertSegments()
+        assertSegments(labelOnOneLine = false)
     }
 
     @Test
@@ -182,7 +184,7 @@ class OnboardingModeUiTest {
         )
     }
 
-    private fun assertSegments() {
+    private fun assertSegments(labelOnOneLine: Boolean) {
         val pairing = composeRule.onNodeWithTag("onboardingModePairing")
         val apiKey = composeRule.onNodeWithTag("onboardingModeApiKey")
         val pairingBounds = pairing.fetchSemanticsNode().boundsInRoot
@@ -204,18 +206,20 @@ class OnboardingModeUiTest {
             apiKeyBounds.height >= minTouchTarget
         )
 
-        val pairingLabel = composeRule.onNode(
-            hasText(context.getString(R.string.onboarding_mode_pairing)) and
-                hasAnyAncestor(hasTestTag("onboardingModePairing")),
-            useUnmergedTree = true
-        ).fetchSemanticsNode()
-        val layouts = ArrayList<TextLayoutResult>()
-        pairingLabel.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
-        assertEquals(
-            "the pairing segment label must stay on one line",
-            1,
-            layouts.single().lineCount
-        )
+        if (labelOnOneLine) {
+            val pairingLabel = composeRule.onNode(
+                hasText(context.getString(R.string.onboarding_mode_pairing)) and
+                    hasAnyAncestor(hasTestTag("onboardingModePairing")),
+                useUnmergedTree = true
+            ).fetchSemanticsNode()
+            val layouts = ArrayList<TextLayoutResult>()
+            pairingLabel.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            assertEquals(
+                "the pairing segment label must stay on one line",
+                1,
+                layouts.single().lineCount
+            )
+        }
 
         assertEquals(
             true,
