@@ -35,6 +35,22 @@ done
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'install-bridge: %s\n' "$*" >&2; exit 1; }
 
+# Package command for 'qrencode' on this distribution (hint only; never run).
+qr_install_command() {
+  local id="" like=""
+  if [ -r /etc/os-release ]; then
+    id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+    like="$(. /etc/os-release && printf '%s' "${ID_LIKE:-}")"
+  fi
+  case " $id $like " in
+    *debian*|*ubuntu*) printf '%s' "sudo apt install qrencode" ;;
+    *fedora*|*rhel*) printf '%s' "sudo dnf install qrencode" ;;
+    *arch*) printf '%s' "sudo pacman -S qrencode" ;;
+    *suse*) printf '%s' "sudo zypper install qrencode" ;;
+    *) printf '%s' "install qrencode with your distribution's package manager" ;;
+  esac
+}
+
 if [ "$(id -u)" -eq 0 ]; then
   die "do not run this as root; run it as the user that runs Hermes"
 fi
@@ -160,10 +176,19 @@ Expose 127.0.0.1:9842 privately over HTTPS (e.g. Tailscale Serve, see docs/netwo
 then set BRIDGE_PUBLIC_BASE_URL in $ENV_FILE and run: systemctl --user restart $UNIT
 EOF
 fi
+if ! command -v qrencode >/dev/null 2>&1; then
+  echo
+  echo "No 'qrencode' found: the pairing command prints the deep link but no QR code."
+  echo "Install it with: $(qr_install_command)"
+fi
 PAIR_CMD="BRIDGE_ENV_FILE=$ENV_FILE $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code --base-url ${PUBLIC_URL:-<https-url>}"
 if [ "$PAIR" -eq 1 ] && [ -n "$PUBLIC_URL" ]; then
   say "Pairing code (works once, for 5 minutes)"
   BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin pairing-code --base-url "$PUBLIC_URL"
+elif [ "$PAIR" -eq 1 ]; then
+  echo
+  echo "No public HTTPS URL is known yet, so no pairing link or QR was printed."
+  echo "Set BRIDGE_PUBLIC_BASE_URL in $ENV_FILE, then run this script again with --pair."
 else
   echo
   echo "Create a pairing code when the phone is ready (works once, for 5 minutes):"

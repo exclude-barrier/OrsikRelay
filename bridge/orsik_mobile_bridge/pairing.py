@@ -34,17 +34,21 @@ def format_code(code: str) -> str:
 
 
 def render_ascii_qr(text: str) -> str | None:
-    """Render ``text`` as an ASCII QR block, or None if no renderer is present.
+    """Render ``text`` as a QR block for the terminal, or None without a renderer.
 
     Uses the system ``qrencode`` when available; this is a display convenience
     only — the bridge never depends on it for correctness.
+
+    ``ANSIUTF8`` carries explicit black/white ANSI colors, so the code keeps
+    the dark-on-light polarity a scanner expects in both dark and light
+    terminal themes. ``-m 2`` keeps a two-module quiet zone around it.
     """
     exe = shutil.which("qrencode")
     if not exe:
         return None
     try:
         result = subprocess.run(
-            [exe, "-t", "UTF8", "-o", "-", "-m", "1", text],
+            [exe, "-t", "ANSIUTF8", "-o", "-", "-m", "2", text],
             capture_output=True, check=True, timeout=10,
         )
         return result.stdout.decode("utf-8", "replace")

@@ -125,6 +125,10 @@ BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
 ... admin revoke-device <device_id>
 ```
 
+In the app tap **Scan QR code** and point the camera at the QR in the terminal,
+or type the URL and code. The QR appears when `qrencode` is installed on the
+machine that runs the command (e.g. `sudo apt install qrencode`).
+
 Security properties: 24 characters, single-use, TTL 300 s, server-bound,
 only SHA-256 hash at rest; **no** master key and **no** device key in the link.
 
