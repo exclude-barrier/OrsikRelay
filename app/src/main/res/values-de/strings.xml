@@ -251,4 +251,6 @@
     <string name="notification_permission_body">Orsik Relay kann dich lokal informieren, wenn ein Lauf abgeschlossen ist oder Hermes auf deine Freigabe wartet. Ohne die Berechtigung funktioniert die App vollständig, es erscheinen nur keine Benachrichtigungen.</string>
     <string name="notification_permission_allow">Erlauben</string>
     <string name="notification_permission_not_now">Jetzt nicht</string>
+    <string name="chat_load_older">Ältere Nachrichten laden</string>
+    <string name="chat_load_older_failed">Ältere Nachrichten konnten nicht geladen werden.</string>
 </resources>

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
@@ -22,6 +23,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_LOAD_OLDER
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
@@ -205,6 +207,65 @@ class ChatScreenUiTest {
         waitForText(context.getString(R.string.chat_empty))
         composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back)).performClick()
         assertTrue(invoked.get())
+    }
+
+    @Test
+    fun loadOlderPrependsThePreviousPageAndHidesWhenNothingIsLeft() {
+        val requestedOffset = AtomicInteger(-1)
+        setScreen(object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    MessagePage(
+                        listOf(
+                            message(3, MessageRole.USER, "Neuere Frage"),
+                            message(4, MessageRole.ASSISTANT, "Neuere Antwort")
+                        ),
+                        limit = 2,
+                        returned = 2
+                    )
+                )
+
+            override fun loadOlderHistory(profileId: String, sessionId: String, offset: Int) =
+                MessageHistoryResult.Success(
+                    MessagePage(
+                        listOf(message(1, MessageRole.USER, "Älteste Frage")),
+                        limit = 2,
+                        returned = 1
+                    )
+                ).also { requestedOffset.set(offset) }
+        })
+
+        waitForText("Neuere Antwort")
+        composeRule.onNodeWithText(context.getString(R.string.chat_load_older)).performClick()
+        waitForText("Älteste Frage")
+
+        assertEquals(2, requestedOffset.get())
+        composeRule.onNodeWithTag(TAG_LOAD_OLDER).assertDoesNotExist()
+        composeRule.onNodeWithText("Neuere Antwort").assertExists()
+    }
+
+    @Test
+    fun aFailedOlderLoadKeepsTheHistoryAndOffersTheButtonAgain() {
+        setScreen(object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    MessagePage(
+                        listOf(message(5, MessageRole.ASSISTANT, "Sichtbare Antwort")),
+                        limit = 1,
+                        returned = 1
+                    )
+                )
+
+            override fun loadOlderHistory(profileId: String, sessionId: String, offset: Int) =
+                MessageHistoryResult.Failure(MessageHistoryError.Network)
+        })
+
+        waitForText("Sichtbare Antwort")
+        composeRule.onNodeWithText(context.getString(R.string.chat_load_older)).performClick()
+        waitForText(context.getString(R.string.chat_load_older_failed))
+
+        composeRule.onNodeWithText("Sichtbare Antwort").assertExists()
+        composeRule.onNodeWithText(context.getString(R.string.chat_load_older)).assertExists()
     }
 
     private fun setScreen(
