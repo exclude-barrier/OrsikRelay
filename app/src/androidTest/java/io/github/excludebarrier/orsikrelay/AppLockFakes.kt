@@ -9,7 +9,8 @@ import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
  */
 internal class FakeAppAuthenticator(
     var available: Boolean = true,
-    private val autoResult: Boolean? = null
+    private val autoResult: Boolean? = null,
+    private val lockMissing: Boolean = !available
 ) : AppAuthenticator {
 
     private var calls = 0
@@ -19,6 +20,8 @@ internal class FakeAppAuthenticator(
         get() = calls
 
     override fun canAuthenticate(): Boolean = available
+
+    override fun deviceLockMissing(): Boolean = lockMissing
 
     override fun authenticate(onResult: (Boolean) -> Unit) {
         calls++

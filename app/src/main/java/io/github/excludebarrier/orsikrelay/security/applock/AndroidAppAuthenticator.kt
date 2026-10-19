@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.security.applock
 
+import android.app.KeyguardManager
 import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators
@@ -34,6 +35,9 @@ class AndroidAppAuthenticator(
     override fun canAuthenticate(): Boolean =
         biometricManager.canAuthenticate(allowedAuthenticators()) ==
             BiometricManager.BIOMETRIC_SUCCESS
+
+    override fun deviceLockMissing(): Boolean =
+        activity.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == false
 
     override fun authenticate(onResult: (Boolean) -> Unit) {
         val prompt = BiometricPrompt(

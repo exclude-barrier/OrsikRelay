@@ -165,6 +165,23 @@ class AppLockUiTest {
         composeRule.onNodeWithTag("app_lock_device_lock_missing").assertDoesNotExist()
     }
 
+    @Test
+    fun aBrieflyUnavailableSensorKeepsTheLockInsteadOfTurningItOff() {
+        val persisted = mutableListOf<Boolean>()
+        val controller = AppLockController(initiallyEnabled = true, persist = { persisted += it })
+        // The device has a screen lock, but canAuthenticate fails for now
+        // (e.g. the sensor is busy right after boot).
+        val authenticator = FakeAppAuthenticator(available = false, lockMissing = false)
+
+        setApp(controller, authenticator)
+
+        composeRule.onNodeWithTag("app_lock_unlock").assertIsDisplayed()
+        composeRule.onNodeWithTag("app_lock_device_lock_missing").assertDoesNotExist()
+        assertTrue(controller.locked)
+        assertTrue(controller.enabled)
+        assertEquals("the app lock is never switched off", emptyList<Boolean>(), persisted)
+    }
+
     private fun lockedController(): AppLockController =
         AppLockController(initiallyEnabled = true, persist = {})
 
