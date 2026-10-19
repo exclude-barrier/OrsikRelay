@@ -48,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -679,6 +680,9 @@ internal fun ChatHeader(
             }
         },
         windowInsets = WindowInsets(0, 0, 0, 0),
+        // The screen background shows through, so the bar does not sit as a
+        // grey box inside the padded column.
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         modifier = Modifier.padding(top = if (compact) 0.dp else 4.dp)
     )
 }
