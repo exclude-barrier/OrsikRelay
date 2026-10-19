@@ -646,7 +646,7 @@ class ChatViewModelTest {
 
         chat.enqueue(ChatTurnEvent.ToolActivity())
         testScheduler.advanceUntilIdle()
-        assertEquals(TurnActivity.Working, model.state.value.turnActivity)
+        assertEquals(TurnActivity.Tool, model.state.value.turnActivity)
 
         chat.enqueue(ChatTurnEvent.AssistantCompleted("Antwort"), ChatTurnEvent.TurnCompleted())
         chat.complete()

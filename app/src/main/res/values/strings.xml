@@ -153,6 +153,7 @@
     <string name="chat_run_uncertain_still_active">The run is still active on the server. No new message was sent.</string>
     <string name="chat_run_uncertain_unavailable">The run status could not be checked. Try again.</string>
     <string name="chat_empty">This session does not contain any messages yet.</string>
+    <string name="chat_empty_hint">Write Hermes a message to start.</string>
     <string name="chat_role_user">You</string>
     <string name="chat_role_assistant">Hermes</string>
     <string name="chat_role_system">System</string>

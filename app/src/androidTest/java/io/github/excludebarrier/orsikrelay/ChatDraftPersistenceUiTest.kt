@@ -500,10 +500,11 @@ class ChatDraftPersistenceUiTest {
             "the screen must have cleared the stored state on the successful handoff",
             repo.wasCleared(PROFILE, SESSION)
         )
-        assertEquals(
+        // During the still-bound run an empty draft row is not shown at all
+        // (the run row replaces it); a resurrected text would bring it back.
+        assertTrue(
             "the composer must stay blank after the delayed same-key load",
-            "",
-            draftText()
+            draftText().isNullOrEmpty()
         )
 
         source.enqueue(ChatTurnEvent.TurnCompleted())

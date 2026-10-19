@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -106,10 +108,16 @@ import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.produceState
 import androidx.compose.foundation.Image
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 
@@ -436,7 +444,27 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                             .weight(1f)
                     ) {
                 if (timeline.isEmpty()) {
-                    StatusText(stringResource(R.string.chat_empty))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(horizontal = 24.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.chat_empty),
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = stringResource(R.string.chat_empty_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 } else {
                     LazyColumn(
                         state = timelineListState,
@@ -519,26 +547,18 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 // Stop control and steer control:
                 // visible only for an active turn whose server-confirmed,
                 // non-blank run ID is bound.
+                // The stop and steer actions themselves live in the composer
+                // row (see [RunComposerRow]); only their closed status lines
+                // stay above it.
                 if (state.controlsVisible) {
-                    StopControl(
-                        label = if (state.stopInFlight) stoppingLabel else stopLabel,
-                        enabled = !state.stopInFlight,
+                    RunStatusLines(
                         showStopError = state.stopFailed && !state.stopInFlight,
                         stopErrorLabel = stopErrorLabel,
-                        onStop = { viewModel.stop() },
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    SteerControl(
-                        draft = state.steerDraft,
-                        onDraftChange = { viewModel.onSteerDraftChange(it) },
-                        inFlight = state.steerInFlight,
-                        queued = state.steerQueued,
-                        failed = state.steerFailed,
-                        steerLabel = steerLabel,
-                        inputLabel = steerInputLabel,
+                        steerInFlight = state.steerInFlight,
+                        steerQueued = state.steerQueued,
+                        steerFailed = state.steerFailed,
                         queuedLabel = steerQueuedLabel,
                         errorLabel = steerErrorLabel,
-                        onSteer = { viewModel.steer() },
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
@@ -578,6 +598,18 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     },
                     onRemoveAttachment = { viewModel.removeAttachment() },
                     compact = compactComposer,
+                    runControls = if (state.controlsVisible) {
+                        RunComposerControls(
+                            steerDraft = state.steerDraft,
+                            onSteerDraftChange = { viewModel.onSteerDraftChange(it) },
+                            steerInFlight = state.steerInFlight,
+                            onSteer = { viewModel.steer() },
+                            stopInFlight = state.stopInFlight,
+                            onStop = { viewModel.stop() }
+                        )
+                    } else {
+                        null
+                    },
                     conflictNotice = state.startConflict,
                     uncertainNotice = state.turnUncertain,
                     // In the compact regime the timeline (and with it the stop,
@@ -717,18 +749,22 @@ private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-        Text(
-            text = stringResource(
-                when (activity) {
-                    TurnActivity.Working -> R.string.chat_turn_working
-                    TurnActivity.Thinking -> R.string.chat_turn_thinking
-                }
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp)
-        )
+        PulsingDots()
+        // Next to a running tool chip the chip already says what happens;
+        // the row then only adds the elapsed time.
+        val label = when (activity) {
+            TurnActivity.Working -> stringResource(R.string.chat_turn_working)
+            TurnActivity.Thinking -> stringResource(R.string.chat_turn_thinking)
+            TurnActivity.Tool -> null
+        }
+        if (label != null) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 10.dp)
+            )
+        }
         Text(
             text = if (elapsedSeconds < 60) {
                 stringResource(R.string.chat_turn_elapsed_seconds, elapsedSeconds)
@@ -741,8 +777,33 @@ private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 6.dp)
+            modifier = Modifier.padding(start = if (label != null) 6.dp else 10.dp)
         )
+    }
+}
+
+/** Three dots that fade in turn, the usual "is typing" signal. */
+@Composable
+private fun PulsingDots() {
+    val transition = rememberInfiniteTransition(label = "turnActivityDots")
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(3) { index ->
+            val alpha by transition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 600, delayMillis = index * 200),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "turnActivityDot$index"
+            )
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .graphicsLayer { this.alpha = alpha }
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+            )
+        }
     }
 }
 
@@ -908,18 +969,19 @@ internal fun RunUncertainBlock(
 }
 
 /**
- * The run-stop control. [label] is the "Stop" label or, while a
- * stop request is in flight, the "stopping" label; [enabled] is false while
- * the request is in flight. [showStopError] renders the one closed, generic
- * stop failure message (no dynamic server detail, no run ID).
+ * The closed status lines of the stop and steer actions: the generic stop
+ * failure, and "steering", "queued" or the generic steer failure. No dynamic
+ * server detail and no run ID is ever rendered.
  */
 @Composable
-private fun StopControl(
-    label: String,
-    enabled: Boolean,
+private fun RunStatusLines(
     showStopError: Boolean,
     stopErrorLabel: String,
-    onStop: () -> Unit,
+    steerInFlight: Boolean,
+    steerQueued: Boolean,
+    steerFailed: Boolean,
+    queuedLabel: String,
+    errorLabel: String,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -934,77 +996,21 @@ private fun StopControl(
                 textAlign = TextAlign.Center
             )
         }
-        OutlinedButton(
-            onClick = onStop,
-            enabled = enabled,
-            modifier = Modifier.testTag(TAG_RUN_STOP)
-        ) {
-            Text(label)
-        }
-    }
-}
-
-/**
- * The run-steer control. A distinct input plus its own "steer"
- * action, only rendered for an active turn with a bound, non-blank run ID.
- * [inFlight] disables input and action; [queued] renders the acknowledgement;
- * [failed] renders the one closed, generic failure message and keeps the text
- * in [draft] for a deliberate manual retry.
- */
-@Composable
-private fun SteerControl(
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    inFlight: Boolean,
-    queued: Boolean,
-    failed: Boolean,
-    steerLabel: String,
-    inputLabel: String,
-    queuedLabel: String,
-    errorLabel: String,
-    onSteer: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                label = { Text(inputLabel) },
-                enabled = !inFlight,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp)
-                    .testTag("chatSteerInput")
-            )
-            OutlinedButton(
-                onClick = onSteer,
-                enabled = !inFlight,
-                modifier = Modifier.testTag("chatSteerSend")
-            ) {
-                Text(steerLabel)
-            }
-        }
-        if (inFlight) {
+        if (steerInFlight) {
             Text(
                 text = stringResource(R.string.chat_steering),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.testTag("chatSteeringStatus")
             )
-        } else if (queued) {
+        } else if (steerQueued) {
             Text(
                 text = queuedLabel,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.testTag("chatSteerQueuedStatus")
             )
-        } else if (failed) {
+        } else if (steerFailed) {
             Text(
                 text = errorLabel,
                 style = MaterialTheme.typography.bodyMedium,
@@ -1015,6 +1021,20 @@ private fun SteerControl(
         }
     }
 }
+
+/**
+ * Stop and steer of a running, server-confirmed turn. While it is set, the
+ * normal composer row turns into the steer input with a steer action and a
+ * round stop action, so a run needs no extra rows above the composer.
+ */
+internal class RunComposerControls(
+    val steerDraft: String,
+    val onSteerDraftChange: (String) -> Unit,
+    val steerInFlight: Boolean,
+    val onSteer: () -> Unit,
+    val stopInFlight: Boolean,
+    val onStop: () -> Unit
+)
 
 /**
  * One ordered block for a single recoverable steer. The title carries the
@@ -1078,6 +1098,7 @@ internal fun ComposerBar(
     onPickAttachment: () -> Unit,
     onRemoveAttachment: () -> Unit,
     compact: Boolean = false,
+    runControls: RunComposerControls? = null,
     conflictNotice: Boolean = false,
     uncertainNotice: Boolean = false,
     compactRunControls: (@Composable RowScope.() -> Unit)? = null
@@ -1216,39 +1237,48 @@ internal fun ComposerBar(
         // the pill-shaped message field in the middle, and a round filled
         // send action on the right. Every action keeps at least a 48 dp touch
         // target; the labels remain available as content descriptions.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = onPickAttachment,
-                enabled = !turnActive && !attachmentBusy,
-                modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = attachmentAddLabel
+        // While a run is bound, the run row below replaces it; the disabled
+        // draft row stays only when it holds text (e.g. a recovered steer
+        // moved into the composer), so that text never disappears.
+        if (runControls == null || draft.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onPickAttachment,
+                    enabled = !turnActive && !attachmentBusy,
+                    modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = attachmentAddLabel
+                    )
+                }
+                ChatInputField(
+                    draft = draft,
+                    onDraftChange = onDraftChange,
+                    enabled = !turnActive,
+                    maxLines = Int.MAX_VALUE,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                        .testTag(TAG_COMPOSER_FIELD)
                 )
+                FilledIconButton(
+                    onClick = onSend,
+                    enabled = sendEnabled,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .size(COMPOSER_ACTION_SIZE)
+                        .testTag(TAG_COMPOSER_SEND)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = stringResource(R.string.chat_send)
+                    )
+                }
             }
-            ChatInputField(
-                draft = draft,
-                onDraftChange = onDraftChange,
-                enabled = !turnActive,
-                maxLines = Int.MAX_VALUE,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-            )
-            FilledIconButton(
-                onClick = onSend,
-                enabled = sendEnabled,
-                shape = CircleShape,
-                modifier = Modifier
-                    .size(COMPOSER_ACTION_SIZE)
-                    .testTag(TAG_COMPOSER_SEND)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = stringResource(R.string.chat_send)
-                )
-            }
+        }
+        if (runControls != null) {
+            RunComposerRow(runControls)
         }
     }
 }
@@ -1264,12 +1294,13 @@ private fun ChatInputField(
     onDraftChange: (String) -> Unit,
     enabled: Boolean,
     maxLines: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    label: String = stringResource(R.string.chat_input_label)
 ) {
     TextField(
         value = draft,
         onValueChange = onDraftChange,
-        label = { Text(stringResource(R.string.chat_input_label)) },
+        label = { Text(label) },
         enabled = enabled,
         maxLines = maxLines,
         shape = RoundedCornerShape(COMPOSER_INPUT_CORNER),
@@ -1281,8 +1312,62 @@ private fun ChatInputField(
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        modifier = modifier.testTag(TAG_COMPOSER_FIELD)
+        modifier = modifier
     )
+}
+
+/**
+ * The composer row of a running turn: the steer input in the pill field, a
+ * steer action and the round stop action. Stop stays visible and enabled
+ * until a stop request is in flight; it then shows a spinner.
+ */
+@Composable
+private fun RunComposerRow(controls: RunComposerControls) {
+    val stopLabel = stringResource(
+        if (controls.stopInFlight) R.string.chat_stopping else R.string.chat_stop
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ChatInputField(
+            draft = controls.steerDraft,
+            onDraftChange = controls.onSteerDraftChange,
+            enabled = !controls.steerInFlight,
+            maxLines = Int.MAX_VALUE,
+            label = stringResource(R.string.chat_steer_input_label),
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 4.dp)
+                .testTag("chatSteerInput")
+        )
+        IconButton(
+            onClick = controls.onSteer,
+            enabled = !controls.steerInFlight,
+            modifier = Modifier.testTag("chatSteerSend")
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Send,
+                contentDescription = stringResource(R.string.chat_steer)
+            )
+        }
+        FilledIconButton(
+            onClick = controls.onStop,
+            enabled = !controls.stopInFlight,
+            shape = CircleShape,
+            modifier = Modifier
+                .size(COMPOSER_ACTION_SIZE)
+                .semantics { contentDescription = stopLabel }
+                .testTag(TAG_RUN_STOP)
+        ) {
+            if (controls.stopInFlight) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .background(LocalContentColor.current, RoundedCornerShape(2.dp))
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -1398,6 +1483,7 @@ private fun CompactComposerRow(
                     .weight(1f)
                     .heightIn(min = COMPACT_FIELD_HEIGHT)
                     .padding(horizontal = 8.dp)
+                    .testTag(TAG_COMPOSER_FIELD)
             )
             FilledIconButton(
                 onClick = onSend,
