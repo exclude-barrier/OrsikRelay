@@ -256,6 +256,8 @@ _REDACTED = b"[redacted]"
 # Bound of a buffered (non-SSE) upstream body. Twice the app's own bound for
 # the largest JSON answer (message history, 8 MiB).
 _MAX_BUFFERED_BODY_BYTES = 16 * 1024 * 1024
+# Raw history pages before their inline images are dropped.
+_MAX_HISTORY_BODY_BYTES = 64 * 1024 * 1024
 
 
 def _redact_master_key(state: BridgeState, payload: bytes) -> bytes:
@@ -716,6 +718,15 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
     elif request.method == "POST" and "run_id" in match.params and action in _AUDITED_RUN_ACTIONS:
         run_id = match.params["run_id"]
         on_status = lambda status: _audit(action, record, run=run_id, status=status)  # noqa: E731
+    if request.method == "GET" and match.upstream_path.endswith("/messages"):
+        # History pages carry the inline images of earlier turns; they are
+        # dropped here (see core.strip_history_images), so the raw page may
+        # be far larger than what reaches the phone.
+        return await _proxy(
+            request, state, match.upstream_path,
+            transform=core.strip_history_images,
+            max_buffered_bytes=_MAX_HISTORY_BODY_BYTES,
+        )
     return await _proxy(request, state, match.upstream_path, on_status=on_status)
 
 
@@ -725,6 +736,8 @@ async def _proxy(
     upstream_path: str,
     body_override: bytes | None = None,
     on_status: Callable[[int], None] | None = None,
+    transform: Callable[[bytes], bytes] | None = None,
+    max_buffered_bytes: int = 0,
 ) -> web.StreamResponse:
     """Forward one request upstream and relay the response.
 
@@ -788,7 +801,10 @@ async def _proxy(
             else:
                 # Buffered path: a reflected Authorization header must not reach
                 # the device. SSE stays a chunk-wise relay (see module docstring).
-                payload = await _read_bounded_body(upstream, _MAX_BUFFERED_BODY_BYTES)
+                payload = await _read_bounded_body(
+                    upstream, max_buffered_bytes or _MAX_BUFFERED_BODY_BYTES)
+                if payload is not None and transform is not None and upstream.status == 200:
+                    payload = transform(payload)
                 if payload is not None:
                     # Above the bound nothing is written (a truncated answer the
                     # client rejects); never an unredacted body.

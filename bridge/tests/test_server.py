@@ -49,7 +49,7 @@ def _upstream_app():
         return web.json_response({"object": "hermes.session", "session": {"id": "s1"}}, status=201)
 
     async def messages(_):
-        return web.json_response({"data": []})
+        return web.json_response(UPSTREAM.get("messages_page", {"data": []}))
 
     async def chat(request):
         UPSTREAM["chat_posts"] = int(UPSTREAM.get("chat_posts", 0)) + 1
@@ -131,6 +131,36 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 400)
         self.assertEqual((await resp.json())["error"]["code"], "body_not_allowed")
         self.assertEqual(int(UPSTREAM.get("health_gets", 0)), before)
+
+    async def test_history_page_drops_inline_image_data(self):
+        image = "data:image/png;base64," + "Q" * (20 * 1024 * 1024)
+        UPSTREAM["messages_page"] = {
+            "object": "list", "session_id": "s1",
+            "data": [
+                {"id": 1, "role": "user", "content": [
+                    {"type": "text", "text": "Was ist das?"},
+                    {"type": "image_url", "image_url": {"url": image}},
+                ]},
+                {"id": 2, "role": "assistant", "content": "Ein Baum."},
+            ],
+            "pagination": {"limit": 200, "offset": 0, "order": "latest", "returned": 2},
+        }
+        try:
+            token = (await self._pair())["device_key"]
+            resp = await self.client.get(
+                "/api/sessions/s1/messages", headers=self._bearer(token))
+            self.assertEqual(resp.status, 200)
+            body = await resp.read()
+        finally:
+            UPSTREAM.pop("messages_page", None)
+        self.assertLess(len(body), 4096)
+        page = json.loads(body)
+        self.assertEqual(
+            page["data"][0]["content"],
+            [{"type": "text", "text": "Was ist das?"}, {"type": "image_url"}],
+        )
+        self.assertEqual(page["data"][1]["content"], "Ein Baum.")
+        self.assertEqual(page["pagination"]["returned"], 2)
 
     async def test_capabilities_requires_device_token(self):
         self.assertEqual((await self.client.get("/v1/capabilities")).status, 401)

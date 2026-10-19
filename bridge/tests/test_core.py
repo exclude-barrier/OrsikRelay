@@ -272,3 +272,9 @@ class StoreCapTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StripHistoryImagesTest(unittest.TestCase):
+    def test_non_json_and_unchanged_pages_are_byte_identical(self):
+        for body in (b"not json", b"[]", b'{"data": "x"}', b'{"data":[{"content":"plain"}]}'):
+            self.assertIs(core.strip_history_images(body), body)

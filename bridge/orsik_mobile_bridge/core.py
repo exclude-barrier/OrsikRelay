@@ -12,6 +12,8 @@ device token in plaintext after minting.
 
 from __future__ import annotations
 
+import json
+
 import hashlib
 import secrets
 import time
@@ -394,3 +396,36 @@ def build_credential(record: DeviceRecord, token: str, issued_at: float) -> dict
         "permissions": list(record.permissions),
         "issued_at": issued_at,
     }
+
+
+_HISTORY_IMAGE_PART_TYPES = frozenset({"image", "image_url", "input_image"})
+
+
+def strip_history_images(body: bytes) -> bytes:
+    """Drop inline image data from a ``GET /api/sessions/{id}/messages`` page.
+
+    Hermes keeps a turn with an image as its multimodal part list, base64
+    image included, so a page with a few images would exceed every client
+    bound. The app only counts image parts; the parts stay (without data) so
+    the count is preserved. A body that is not the expected JSON shape is
+    returned unchanged.
+    """
+    try:
+        page = json.loads(body)
+    except ValueError:
+        return body
+    data = page.get("data") if isinstance(page, dict) else None
+    if not isinstance(data, list):
+        return body
+    changed = False
+    for message in data:
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for index, part in enumerate(content):
+            if isinstance(part, dict) and part.get("type") in _HISTORY_IMAGE_PART_TYPES:
+                content[index] = {"type": part["type"]}
+                changed = True
+    if not changed:
+        return body
+    return json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")

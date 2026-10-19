@@ -35,6 +35,7 @@ permission allowlist `{chat, runs, approvals}`.
 | Pairing code in process list | the `orsik://pair` payload goes to `qrencode` on stdin, never in argv |
 | Unauthenticated request body | `/health` rejects any body (`Content-Length > 0` or `Transfer-Encoding`) with `400 body_not_allowed`; it is never read or forwarded |
 | Persistent credential compromised | individual revocation durable across restarts; an open run stream re-checks its token every 15 s and ends with `: bridge_revoked` once the device is revoked (from the phone or `admin revoke-device`) |
+| Oversized history pages | `GET /api/sessions/{id}/messages` pages (≤ 64 MiB upstream) have the inline image data of earlier turns removed; the image parts stay without data so the app can count them. Other buffered bodies ≤ 16 MiB |
 | Tool output/commands on the phone | the relay drops fields the app never reads: the turn transcript (`messages`), `usage` and `runtime` on `run.*`, `preview`/`args` on `tool.*`, the reasoning text (`delta`) on `tool.progress` and the text of `assistant.commentary`; this also keeps the terminal frame within the relay bound |
 | Restoring an old store state | backup/restore operator-side only (file system permission); a restore restores the authorization state at the backup time — devices revoked afterwards are valid again (check `admin list-devices`, revoke affected devices again); pre-migration backup automatic, no down-migrate |
 | Store failure | fail-closed (`503 store_unavailable`), never fail-open |
