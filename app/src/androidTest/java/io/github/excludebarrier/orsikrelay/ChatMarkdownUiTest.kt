@@ -1,9 +1,13 @@
 package io.github.excludebarrier.orsikrelay
 
+import android.content.ClipDescription
+import android.os.Build
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.NativeClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.semantics.SemanticsActions
@@ -13,7 +17,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.TextUnit
 import androidx.test.platform.app.InstrumentationRegistry
@@ -142,11 +145,11 @@ class ChatMarkdownUiTest {
 
     @Test
     fun copyButtonCopiesExactCodeWithoutFence() {
-        val clipboard = RecordingClipboardManager()
+        val clipboard = RecordingClipboard()
         val code = "val x = 1\nprintln(x)"
         composeRule.setContent {
             HermesTheme {
-                CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                CompositionLocalProvider(LocalClipboard provides clipboard) {
                     AssistantMarkdownMessage("```kotlin\n$code\n```")
                 }
             }
@@ -156,8 +159,13 @@ class ChatMarkdownUiTest {
 
         // The clipboard must receive exactly the code body, not the fence or
         // the language tag.
-        composeRule.waitUntil(timeoutMillis = 5_000) { clipboard.lastText != null }
-        assertEquals(code, clipboard.lastText.toString())
+        composeRule.waitUntil(timeoutMillis = 5_000) { clipboard.last != null }
+        val clip = checkNotNull(clipboard.last).clipData
+        assertEquals(code, clip.getItemAt(0).text.toString())
+        // Code can hold secrets: Android 13+ must not preview it.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            assertTrue(clip.description.extras.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE))
+        }
 
         // Discreet copy feedback, not a toast.
         waitForText(context.getString(R.string.chat_code_copied))
@@ -241,11 +249,13 @@ class ChatMarkdownUiTest {
      * A [ClipboardManager] that records the last text set by the renderer so
      * the copy test can assert on the exact copied content.
      */
-    private class RecordingClipboardManager : ClipboardManager {
-        var lastText: AnnotatedString? = null
-        override fun setText(text: AnnotatedString) {
-            lastText = text
+    private class RecordingClipboard : Clipboard {
+        var last: ClipEntry? = null
+        override val nativeClipboard: NativeClipboard
+            get() = throw UnsupportedOperationException("not used by the copy action")
+        override suspend fun getClipEntry(): ClipEntry? = last
+        override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+            last = clipEntry
         }
-        override fun getText(): AnnotatedString? = lastText
     }
 }

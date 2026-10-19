@@ -1,5 +1,9 @@
 package io.github.excludebarrier.orsikrelay.ui.chat.markdown
 
+import android.content.ClipData
+import android.content.ClipDescription
+import android.os.Build
+import android.os.PersistableBundle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,12 +34,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -138,7 +142,7 @@ internal fun OrsikCodeBlock(
     codeStyle: TextStyle,
     modifier: Modifier = Modifier,
 ) {
-    @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val onCode = MaterialTheme.colorScheme.onSurfaceVariant
     val label = language?.takeIf { it.isNotBlank() }?.uppercase()
     val copied = remember { mutableStateOf(false) }
@@ -180,9 +184,9 @@ internal fun OrsikCodeBlock(
                     .requiredSizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClickLabel = stringResource(R.string.chat_code_copy)) {
-                        clipboard.setText(AnnotatedString(code))
                         copied.value = true
                         scope.launch {
+                            clipboard.setClipEntry(ClipEntry(sensitiveClip(code)))
                             delay(COPIED_FEEDBACK_MS)
                             copied.value = false
                         }
@@ -231,3 +235,19 @@ internal const val TAG_CODE_COPY = "chatCodeCopy"
 private val CODE_BLOCK_HEADER_HEIGHT = 40.dp
 private val CODE_BLOCK_CORNER = 10.dp
 private const val COPIED_FEEDBACK_MS = 1500L
+
+/**
+ * Code from an answer can hold tokens, keys or paths, so the copy is marked
+ * sensitive: Android 13+ then hides its content in the clipboard preview
+ * ("Add sensitive content to the clipboard",
+ * https://developer.android.com/develop/ui/views/touch-and-input/copy-paste).
+ */
+private fun sensitiveClip(code: String): ClipData =
+    ClipData.newPlainText(null, code).apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
+    }
+
