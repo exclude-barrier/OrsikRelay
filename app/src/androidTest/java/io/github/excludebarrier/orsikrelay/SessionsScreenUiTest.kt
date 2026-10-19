@@ -3,7 +3,6 @@ package io.github.excludebarrier.orsikrelay
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
@@ -12,6 +11,7 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onChildren
@@ -31,6 +31,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
+import io.github.excludebarrier.orsikrelay.ui.sessions.SessionListFormatter
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.time.Clock
@@ -92,13 +93,15 @@ class SessionsScreenUiTest {
         composeRule.onNodeWithText(context.getString(R.string.sessions_group_pinned))
             .assertIsDisplayed()
         composeRule.onNodeWithText("Erste Fixture-Session")
-            .assertContentDescriptionContains(context.getString(R.string.session_source_terminal))
+            .assert(hasText(context.getString(R.string.session_source_terminal), substring = true))
+        val messageCount = context.resources.getQuantityString(
+            R.plurals.session_message_count,
+            7,
+            "7"
+        )
         composeRule.onNodeWithText(
-            context.resources.getQuantityString(
-                R.plurals.session_message_count,
-                7,
-                "7"
-            )
+            "${context.getString(R.string.session_source_terminal)} · $messageCount",
+            useUnmergedTree = true
         ).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.session_fallback_title)).assertIsDisplayed()
     }
@@ -204,14 +207,67 @@ class SessionsScreenUiTest {
         waitForText("Telegram-Session")
         val row = composeRule.onNode(hasText("Telegram-Session") and hasClickAction())
         row.assertIsDisplayed()
-        row.assertHeightIsAtLeast(56.dp)
-        row.assertContentDescriptionContains(context.getString(R.string.session_source_telegram))
+        row.assertHeightIsAtLeast(64.dp)
+        val sourceLabel = context.getString(R.string.session_source_telegram)
+        val messageCount = context.resources.getQuantityString(
+            R.plurals.session_message_count,
+            12,
+            "12"
+        )
+        val lastActive = checkNotNull(
+            SessionListFormatter.formatLastActiveTime(
+                epoch("2026-10-18T10:00:00Z"),
+                context.resources.configuration.locales[0],
+                ZoneOffset.UTC
+            )
+        )
+        composeRule.onNodeWithText(
+            "$sourceLabel · $messageCount · $lastActive",
+            useUnmergedTree = true
+        ).assertIsDisplayed()
+        composeRule.onAllNodesWithContentDescription(sourceLabel, useUnmergedTree = true)
+            .assertCountEquals(0)
         composeRule.onAllNodes(hasText("Telegram-Session") and hasClickAction())
             .assertCountEquals(1)
 
         row.performClick()
         assertEquals(1, opened)
         assertEquals("fixture-row", openedId)
+    }
+
+    @Test
+    fun unknownSourceUsesRawNameAndMissingSourceHasNoPrefix() {
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                success(
+                    listOf(
+                        session(
+                            id = "fixture-other",
+                            title = "Matrix-Session",
+                            source = "matrix",
+                            messageCount = 5
+                        ),
+                        session(
+                            id = "fixture-missing",
+                            title = "Session ohne Quelle",
+                            messageCount = 5
+                        )
+                    ),
+                    false
+                )
+            }
+        )
+
+        waitForText("Matrix-Session")
+        val messageCount = context.resources.getQuantityString(
+            R.plurals.session_message_count,
+            5,
+            "5"
+        )
+        composeRule.onNodeWithText("matrix · $messageCount", useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(messageCount, useUnmergedTree = true)
+            .assertIsDisplayed()
     }
 
     @Test

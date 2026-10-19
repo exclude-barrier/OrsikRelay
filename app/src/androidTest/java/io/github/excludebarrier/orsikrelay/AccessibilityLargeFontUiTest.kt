@@ -191,12 +191,13 @@ class AccessibilityLargeFontUiTest {
 
     private fun sessionMetaFor(title: String): String {
         val count = SESSION_TITLES.indexOf(title) + 1
-        return InstrumentationRegistry.getInstrumentation().targetContext.resources
-            .getQuantityString(
-                R.plurals.session_message_count,
-                count,
-                count.toString()
-            )
+        val resources = InstrumentationRegistry.getInstrumentation().targetContext.resources
+        val messageCount = resources.getQuantityString(
+            R.plurals.session_message_count,
+            count,
+            count.toString()
+        )
+        return "${resources.getString(R.string.session_source_terminal)} · $messageCount"
     }
 
     private fun assertRefreshControl() {
