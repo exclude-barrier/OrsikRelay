@@ -148,7 +148,8 @@ internal data class ChatUiState(
 
     /**
      * What the last timeline row says while a turn runs without visible
-     * progress: [TurnActivity.Thinking] while the model reasons, otherwise
+     * progress: [TurnActivity.Thinking] while the model reasons,
+     * [TurnActivity.Tool] right after a live tool chip, otherwise
      * [TurnActivity.Working] until assistant text streams in. `null` while
      * text streams, an approval waits, the stream re-attaches, the outcome
      * is unknown, or no turn is active.
@@ -158,6 +159,8 @@ internal data class ChatUiState(
             !turnActive || turnUncertain || reconnecting || pendingApproval != null -> null
             thinking -> TurnActivity.Thinking
             localLines.lastOrNull()?.role == MessageRole.ASSISTANT -> null
+            localLines.lastOrNull()?.let { it.role == MessageRole.TOOL && it.localTool } == true ->
+                TurnActivity.Tool
             else -> TurnActivity.Working
         }
 
@@ -196,4 +199,4 @@ internal data class ChatUiState(
 }
 
 /** Progress shown at the end of the timeline, see [ChatUiState.turnActivity]. */
-internal enum class TurnActivity { Working, Thinking }
+internal enum class TurnActivity { Working, Thinking, Tool }

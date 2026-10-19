@@ -152,6 +152,7 @@
     <string name="chat_run_uncertain_still_active">Der Lauf läuft auf dem Server noch. Keine neue Nachricht gesendet.</string>
     <string name="chat_run_uncertain_unavailable">Der Status des Laufs konnte nicht geprüft werden. Bitte erneut versuchen.</string>
     <string name="chat_empty">Diese Session enthält noch keine Nachrichten.</string>
+    <string name="chat_empty_hint">Schreib Hermes eine Nachricht, um zu beginnen.</string>
     <string name="chat_role_user">Du</string>
     <string name="chat_role_assistant">Hermes</string>
     <string name="chat_role_system">System</string>
