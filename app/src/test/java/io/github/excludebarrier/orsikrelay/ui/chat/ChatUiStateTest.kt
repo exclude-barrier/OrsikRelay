@@ -2,7 +2,9 @@ package io.github.excludebarrier.orsikrelay.ui.chat
 
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -96,6 +98,24 @@ class ChatUiStateTest {
         assertEquals(2, rows.size)
         assertEquals("Tool aktiv: terminal", rows[1].content)
         assertTrue(rows[1].localTool)
+    }
+
+    @Test
+    fun turnActivityIsHiddenWhileApprovalReconnectOrUncertaintyIsShown() {
+        val running = ChatUiState(turnActive = true, thinking = true)
+        assertEquals(TurnActivity.Thinking, running.turnActivity)
+        assertNull(running.copy(reconnecting = true).turnActivity)
+        assertNull(running.copy(turnUncertain = true).turnActivity)
+        assertNull(
+            running.copy(
+                pendingApproval = ApprovalRequest(
+                    runId = "run_" + "a".repeat(32),
+                    requestId = "b".repeat(32),
+                    description = ApprovalRequest.SAFE_DESCRIPTION
+                )
+            ).turnActivity
+        )
+        assertNull(running.copy(turnActive = false).turnActivity)
     }
 
     private fun toolMessage(id: Long, content: String, toolName: String?) =

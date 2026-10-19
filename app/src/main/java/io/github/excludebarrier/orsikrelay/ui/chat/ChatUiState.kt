@@ -108,6 +108,8 @@ internal data class ChatUiState(
     val turnActive: Boolean = false,
     /** The active turn's stream is being re-attached to the run. */
     val reconnecting: Boolean = false,
+    /** The model of the active turn is reasoning (status only, no text). */
+    val thinking: Boolean = false,
     /**
      * The active turn's server-side outcome is UNKNOWN (the transport or
      * the reliable event processing failed while the server run may still be
@@ -145,6 +147,21 @@ internal data class ChatUiState(
         get() = turnActive && boundRunId?.isNotBlank() == true && !turnUncertain
 
     /**
+     * What the last timeline row says while a turn runs without visible
+     * progress: [TurnActivity.Thinking] while the model reasons, otherwise
+     * [TurnActivity.Working] until assistant text streams in. `null` while
+     * text streams, an approval waits, the stream re-attaches, the outcome
+     * is unknown, or no turn is active.
+     */
+    val turnActivity: TurnActivity?
+        get() = when {
+            !turnActive || turnUncertain || reconnecting || pendingApproval != null -> null
+            thinking -> TurnActivity.Thinking
+            localLines.lastOrNull()?.role == MessageRole.ASSISTANT -> null
+            else -> TurnActivity.Working
+        }
+
+    /**
      * The run outcome is unknown and a server-confirmed run ID is bound,
      * so a manual status reconciliation is possible and safe.
      */
@@ -177,3 +194,6 @@ internal data class ChatUiState(
         const val ATTACHMENT_GATE_DATA_URL = "data:image/png;base64,AA=="
     }
 }
+
+/** Progress shown at the end of the timeline, see [ChatUiState.turnActivity]. */
+internal enum class TurnActivity { Working, Thinking }

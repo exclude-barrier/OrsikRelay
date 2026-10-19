@@ -764,6 +764,7 @@ internal class ChatViewModel(
                 turnFailure = null,
                 startConflict = false,
                 reconnecting = false,
+                thinking = false,
                 // A new turn starts with a fresh reconciliation state: no leftover
                 // uncertainty or reconciliation result of the finished run.
                 turnUncertain = false,
@@ -924,10 +925,14 @@ internal class ChatViewModel(
                 // Do not render an empty bubble: a tool may run
                 // before the first assistant token.
             }
+            is ChatTurnEvent.Reasoning -> {
+                _state.update { s -> s.copy(thinking = event.active) }
+            }
             is ChatTurnEvent.AssistantDelta -> {
                 _state.update { s ->
                     val last = s.localLines.lastOrNull()
                     s.copy(
+                        thinking = false,
                         localLines = if (last?.role == MessageRole.ASSISTANT) {
                             appendToLastAssistantLine(s.localLines, event.text)
                         } else {
@@ -988,6 +993,7 @@ replaceLastAssistantLine(s.localLines, event.finalText)
                 // (those exist only for server history lines).
                 _state.update { s ->
                     s.copy(
+                        thinking = false,
                         localLines = s.localLines + TimelineRow(
                             key = nextLocalKey(),
                             role = MessageRole.TOOL,

@@ -588,6 +588,10 @@ class RunSessionController(
                 it.copy(reconnecting = true)
             }
 
+            is ChatTurnEvent.Reasoning -> updateActiveRun(sessionId, turnToken) {
+                it.copy(reconnecting = false)
+            }
+
             is ChatTurnEvent.ApprovalRequested -> {
                 updateActiveRun(sessionId, turnToken) {
                     it.copy(pendingApproval = event.request, reconnecting = false)

@@ -417,16 +417,21 @@ class ChatStreamEventPipeline(
             REASONING_STARTED,
             REASONING_DELTA,
             REASONING_COMPLETED -> {
-                // Silently ignored by design, but only inside the
-                // assistant message window of the confirmed order:
-                // after `message.started` and before
+                // Allowed only inside the assistant message window of the
+                // confirmed order: after `message.started` and before
                 // `assistant.completed`. Outside that window they
                 // contradict the stream order and are rejected closed
-                // instead of silently dropped.
+                // instead of silently dropped. Reasoning start and end
+                // become a content-free status; the reasoning text and
+                // tool progress are dropped.
                 if (!messageStarted || assistantCompleted || runCompleted || sawError) {
                     throw protocol()
                 }
-                return emptyList()
+                return when (name) {
+                    REASONING_STARTED -> listOf(ChatTurnEvent.Reasoning(active = true))
+                    REASONING_COMPLETED -> listOf(ChatTurnEvent.Reasoning(active = false))
+                    else -> emptyList()
+                }
             }
             else -> {
                 // Unknown event: rejected closed.

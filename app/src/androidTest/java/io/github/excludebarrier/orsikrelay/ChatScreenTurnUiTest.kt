@@ -243,6 +243,46 @@ class ChatScreenTurnUiTest {
     }
 
     @Test
+    fun turnActivityShowsWorkingThenThinkingAndHidesForStreamedText() {
+        val source = FakeTurnSource()
+        setScreen(history(emptyList()), source)
+        val working = context.getString(R.string.chat_turn_working)
+        val thinking = context.getString(R.string.chat_turn_thinking)
+
+        waitForText(context.getString(R.string.chat_empty))
+        composeRule
+            .onNodeWithText(context.getString(R.string.chat_input_label))
+            .performTextInput("Denkaufgabe")
+        ImeClickSettle.settleAfterTyping(composeRule)
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
+        waitForText(working)
+        composeRule.onNodeWithText(working).assertIsDisplayed()
+
+        source.enqueue(
+            ChatTurnEvent.RunStarted("run_synthetic"),
+            ChatTurnEvent.AssistantStarted,
+            ChatTurnEvent.Reasoning(active = true)
+        )
+        waitForText(thinking)
+        composeRule.onNodeWithText(thinking).assertIsDisplayed()
+
+        source.enqueue(ChatTurnEvent.AssistantDelta("Erste Zeile"))
+        waitForText("Erste Zeile")
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(thinking).fetchSemanticsNodes().isEmpty() &&
+                composeRule.onAllNodesWithText(working).fetchSemanticsNodes().isEmpty()
+        }
+
+        source.enqueue(
+            ChatTurnEvent.AssistantCompleted("Erste Zeile"),
+            ChatTurnEvent.TurnCompleted()
+        )
+        source.complete()
+        waitForFlowCompletion(source)
+        assertTrue(composeRule.onAllNodesWithText(working).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun uncertainFailureBeforeStartKeepsDraftBlocksTheComposerAndOffersNoRecovery() {
         val source = FakeTurnSource()
         setScreen(history(emptyList()), source)

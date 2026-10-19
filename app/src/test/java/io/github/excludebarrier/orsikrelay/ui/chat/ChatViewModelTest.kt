@@ -622,6 +622,39 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun turnActivityFollowsReasoningToolsAndStreamedText() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("denk nach")
+        model.send()
+        testScheduler.advanceUntilIdle()
+        assertEquals(TurnActivity.Working, model.state.value.turnActivity)
+
+        chat.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.AssistantStarted,
+            ChatTurnEvent.Reasoning(active = true)
+        )
+        testScheduler.advanceUntilIdle()
+        assertEquals(TurnActivity.Thinking, model.state.value.turnActivity)
+
+        chat.enqueue(ChatTurnEvent.Reasoning(active = false))
+        testScheduler.advanceUntilIdle()
+        assertEquals(TurnActivity.Working, model.state.value.turnActivity)
+
+        chat.enqueue(ChatTurnEvent.AssistantDelta("Antwort"))
+        testScheduler.advanceUntilIdle()
+        assertNull("streamed text is the visible progress", model.state.value.turnActivity)
+
+        chat.enqueue(ChatTurnEvent.ToolActivity())
+        testScheduler.advanceUntilIdle()
+        assertEquals(TurnActivity.Working, model.state.value.turnActivity)
+
+        chat.enqueue(ChatTurnEvent.AssistantCompleted("Antwort"), ChatTurnEvent.TurnCompleted())
+        chat.complete()
+        testScheduler.advanceUntilIdle()
+        assertNull(model.state.value.turnActivity)
+    }
+
+    @Test
     fun streamEndingWithoutTerminalEventBecomesUncertainAndKeepsOwnership() = withModel { model, chat, _, _, _ ->
         model.onDraftChange("hi")
         model.send()
