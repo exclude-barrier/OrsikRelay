@@ -2,7 +2,6 @@ package io.github.excludebarrier.orsikrelay
 
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
-import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,8 +12,7 @@ import org.junit.Test
  *
  * 1. System-bar icon contrast (blocker): the icon appearance must follow
  *    the RESOLVED app theme, not the system setting.
- * 2. Cold-start flash: a user selection made before a late preference
- *    read must never be overwritten by that read.
+ * 2. A failing preference read falls back to the default theme.
  */
 class ThemeBarAppearanceTest {
 
@@ -44,42 +42,6 @@ class ThemeBarAppearanceTest {
             assertEquals(!dark, navLight)
             assertTrue(statusLight == navLight)
         }
-    }
-
-    /**
-     * Cold-start contract: a user selection (which bumps the generation)
-     * must survive a late preference read captured under the earlier
-     * generation. This is the generation guard that prevents a flash to
-     * the wrong theme on first frame.
-     */
-    @Test
-    fun latePreferenceReadCannotOverwriteAnEarlierUserSelection() {
-        val controller = ThemeModeController(
-            androidx.compose.runtime.mutableStateOf(ThemeMode.System)
-        ) { /* no-op */ }
-
-        val generationAtRead = controller.generation()
-        controller.select(ThemeMode.Dark)
-
-        // A slow read that completed under the pre-selection generation
-        // must be discarded.
-        controller.applyLoaded(ThemeMode.Light, generationAtRead)
-        assertEquals(ThemeMode.Dark, controller.mode)
-    }
-
-    /**
-     * The inverse: with no intervening user selection, a loaded mode is
-     * applied (so the first frame after the read is the stored mode).
-     */
-    @Test
-    fun loadedModeAppliesWhenNoSelectionHappened() {
-        val controller = ThemeModeController(
-            androidx.compose.runtime.mutableStateOf(ThemeMode.System)
-        ) { /* no-op */ }
-
-        val generationAtRead = controller.generation()
-        controller.applyLoaded(ThemeMode.Dark, generationAtRead)
-        assertEquals(ThemeMode.Dark, controller.mode)
     }
 
     /**

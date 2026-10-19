@@ -1,9 +1,7 @@
 package io.github.excludebarrier.orsikrelay.platform.notification
 
-import io.github.excludebarrier.orsikrelay.domain.notification.AppForegroundState
-
 /**
- * Production [AppForegroundState] for the single-activity app. It tracks
+ * Foreground state of the single-activity app. It tracks
  * the started-activity count: >0 means the app is in the foreground (visible),
  * 0 means it is in the background (home button / app switch) but the process
  * is still alive.
@@ -14,11 +12,11 @@ import io.github.excludebarrier.orsikrelay.domain.notification.AppForegroundStat
  * reachable here because once the process is gone, no code in this object runs
  * (a documented limitation, see the policy KDoc).
  */
-object AppForegroundTracker : AppForegroundState {
+object AppForegroundTracker {
     @Volatile
     private var startedActivities = 0
 
-    override val isForeground: Boolean
+    val isForeground: Boolean
         get() = startedActivities > 0
 
     fun activityStarted() {

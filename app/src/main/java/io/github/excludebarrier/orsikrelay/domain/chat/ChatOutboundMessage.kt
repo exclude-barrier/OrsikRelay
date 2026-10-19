@@ -64,8 +64,5 @@ data class ChatOutboundMessage(
             if (mime !in ChatAttachmentRules.SUPPORTED_MIME_TYPES) return false
             return value.length > comma + 1
         }
-
-        /** Convenience: the text-only body used before attachment support. */
-        fun textOnly(text: String): ChatOutboundMessage? = create(text, emptyList())
     }
 }

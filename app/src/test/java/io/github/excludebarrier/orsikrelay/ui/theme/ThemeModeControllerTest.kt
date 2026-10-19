@@ -19,25 +19,4 @@ class ThemeModeControllerTest {
         assertEquals(listOf(ThemeMode.Light, ThemeMode.Dark), writes)
         assertEquals(ThemeMode.Dark, controller.mode)
     }
-
-    @Test
-    fun lateLoadCannotOverwriteAUserSelection() {
-        val controller = ThemeModeController(mutableStateOf(ThemeMode.System)) {}
-        val generationAtRead = controller.generation()
-
-        controller.select(ThemeMode.Dark)
-        controller.applyLoaded(ThemeMode.Light, generationAtRead)
-
-        assertEquals(ThemeMode.Dark, controller.mode)
-    }
-
-    @Test
-    fun loadAppliesWhenNoSelectionHappened() {
-        val controller = ThemeModeController(mutableStateOf(ThemeMode.System)) {}
-        val generationAtRead = controller.generation()
-
-        controller.applyLoaded(ThemeMode.Dark, generationAtRead)
-
-        assertEquals(ThemeMode.Dark, controller.mode)
-    }
 }

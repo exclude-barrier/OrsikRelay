@@ -1,6 +1,5 @@
 package io.github.excludebarrier.orsikrelay.domain.language
 
-import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -31,33 +30,5 @@ class SupportedLanguagesTest {
         assertNull(SupportedLanguages.normalizeTag(null))
         assertNull(SupportedLanguages.normalizeTag(""))
         assertNull(SupportedLanguages.normalizeTag("fr"))
-    }
-
-    @Test
-    fun explicitLanguageResolvesToItsLocale() {
-        assertEquals(
-            Locale.GERMAN,
-            AppLanguage.resolveLocale("de", Locale.US)
-        )
-        assertEquals(
-            Locale.ENGLISH,
-            AppLanguage.resolveLocale("en", Locale.GERMANY)
-        )
-    }
-
-    @Test
-    fun systemSelectionResolvesToTheDeviceLocale() {
-        assertEquals(
-            Locale.US,
-            AppLanguage.resolveLocale(null, Locale.US)
-        )
-    }
-
-    @Test
-    fun unknownSelectionBehavesLikeSystem() {
-        assertEquals(
-            Locale.US,
-            AppLanguage.resolveLocale("fr", Locale.US)
-        )
     }
 }

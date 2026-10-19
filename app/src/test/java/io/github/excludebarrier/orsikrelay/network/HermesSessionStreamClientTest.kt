@@ -343,7 +343,7 @@ class HermesSessionStreamClientTest {
             baseUrl = baseUrl(),
             apiKey = SecretValue(FIXTURE_KEY),
             sessionId = SESSION_ID,
-            message = checkNotNull(ChatOutboundMessage.textOnly("hallo")),
+            message = checkNotNull(ChatOutboundMessage.create("hallo")),
             interactiveApprovals = false,
             listener = listener
         )
