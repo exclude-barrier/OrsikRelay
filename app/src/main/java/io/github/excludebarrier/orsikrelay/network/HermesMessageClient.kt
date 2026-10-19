@@ -54,6 +54,13 @@ import org.json.JSONObject
  *   Hermes `get_messages(..., latest=True)` selects the newest rows and
  *   reverses them back into chronological insertion order, so the page
  *   is kept exactly as the server sends it;
+ * - [offset] is the number of raw server rows to skip at the newest end,
+ *   so `offset = 200` returns the page just before the newest 200 rows.
+ *   It must be non-negative; `0` keeps the previous behaviour (the newest
+ *   page). The offset is echoed in the query in both cases;
+ * - `pagination.limit` and `.returned` are kept on the domain
+ *   page. `returned` counts the raw server rows of the page (including
+ *   hidden entries), which is what the next offset advances by;
  * - `display_kind == "hidden"` entries are dropped before the domain
  *   page is built; duplicate visible message IDs are rejected.
  */
@@ -70,9 +77,13 @@ class HermesMessageClient(
     override fun fetch(
         baseUrl: String,
         apiKey: SecretValue,
-        sessionId: String
+        sessionId: String,
+        offset: Int
     ): MessageHistoryResult {
         if (!sessionId.trim().isNotEmpty()) {
+            return MessageHistoryResult.Failure(MessageHistoryError.InvalidInput)
+        }
+        if (offset < 0) {
             return MessageHistoryResult.Failure(MessageHistoryError.InvalidInput)
         }
         val keyIsSafe = apiKey.useRaw { rawKey ->
@@ -93,7 +104,7 @@ class HermesMessageClient(
             .addPathSegment(sessionId)
             .addPathSegment(MESSAGES_SEGMENT)
             .addQueryParameter(LIMIT_FIELD, DEFAULT_LIMIT.toString())
-            .addQueryParameter(OFFSET_FIELD, ZERO.toString())
+            .addQueryParameter(OFFSET_FIELD, offset.toString())
             .addQueryParameter(ORDER_FIELD, ORDER_LATEST)
             .build()
         val request = apiKey.useRaw { rawKey ->
@@ -109,7 +120,7 @@ class HermesMessageClient(
                 requireSuccessful(response)
                 parsePage(readBoundedUtf8(response.body))
             }
-            MessageHistoryResult.Success(MessagePage(page))
+            MessageHistoryResult.Success(page)
         } catch (error: PageFailure) {
             MessageHistoryResult.Failure(error.reason)
         } catch (_: SocketTimeoutException) {
@@ -176,7 +187,7 @@ class HermesMessageClient(
      * and optional typed fields. Server order is preserved (Hermes already
      * returns a `latest` page chronologically).
      */
-    private fun parsePage(text: String): List<HermesChatMessage> {
+    private fun parsePage(text: String): MessagePage {
         val root: JSONObject = try {
             JSONObject(text)
         } catch (_: Exception) {
@@ -188,7 +199,7 @@ class HermesMessageClient(
         strictNonBlankString(root, SESSION_ID_FIELD)
         val data = root.opt(DATA_FIELD) as? JSONArray
             ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
-        parsePagination(root, data.length())
+        val pagination = parsePagination(root, data.length())
 
         val messages = ArrayList<HermesChatMessage>(data.length())
         val seenVisibleIds = HashSet<Long>(data.length())
@@ -211,13 +222,17 @@ class HermesMessageClient(
                 toolName = optionalNonBlankString(item, TOOL_NAME_FIELD)
             )
         }
-        return messages
+        return MessagePage(
+            messages = messages,
+            limit = pagination.limit,
+            returned = pagination.returned
+        )
     }
 
-    private fun parsePagination(root: JSONObject, dataLength: Int) {
+    private fun parsePagination(root: JSONObject, dataLength: Int): PaginationMeta {
         val pagination = root.opt(PAGINATION_FIELD) as? JSONObject
             ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
-        strictNonNegativeInt(pagination, LIMIT_FIELD)
+        val limit = strictNonNegativeInt(pagination, LIMIT_FIELD)
         strictNonNegativeInt(pagination, OFFSET_FIELD)
         if (strictString(pagination, ORDER_FIELD) != ORDER_LATEST) {
             throw PageFailure(MessageHistoryError.IncompatibleApi)
@@ -226,7 +241,20 @@ class HermesMessageClient(
         if (returned != dataLength.toLong()) {
             throw PageFailure(MessageHistoryError.IncompatibleApi)
         }
+        return PaginationMeta(
+            limit = limit.toBoundedInt(),
+            returned = returned.toBoundedInt()
+        )
     }
+
+    private fun Long.toBoundedInt(): Int =
+        takeIf { it <= Int.MAX_VALUE }?.toInt()
+            ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
+
+    private data class PaginationMeta(
+        val limit: Int,
+        val returned: Int
+    )
 
     private fun strictString(json: JSONObject, key: String): String =
         json.opt(key) as? String
@@ -322,7 +350,6 @@ class HermesMessageClient(
         const val MAX_API_KEY_CHARACTERS = 4096
         const val BUFFER_SIZE = 8 * 1024
         const val DEFAULT_LIMIT = 200
-        const val ZERO = 0
         const val API_SEGMENT = "api"
         const val SESSIONS_SEGMENT = "sessions"
         const val MESSAGES_SEGMENT = "messages"

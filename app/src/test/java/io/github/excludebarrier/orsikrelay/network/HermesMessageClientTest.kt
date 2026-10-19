@@ -85,6 +85,76 @@ class HermesMessageClientTest {
     }
 
     @Test
+    fun olderRequestSendsTheOffsetAndParsesPaginationMetadata() {
+        val body = base()
+            .put(
+                "data",
+                JSONArray()
+                    .put(message(101, "user", "Älter eins"))
+                    .put(message(102, "assistant", "Älter zwei"))
+            )
+            .put("pagination", pagination(200, 200, 2))
+        server.enqueue(jsonResponse(body))
+
+        val result = fetch(offset = 200) as MessageHistoryResult.Success
+        val page = result.page
+
+        assertEquals("200", server.takeRequest().requestUrl!!.queryParameter("offset"))
+        assertEquals(listOf(101L, 102L), page.messages.map { it.id })
+        assertEquals(200, page.limit)
+        assertEquals(2, page.returned)
+        assertFalse(page.hasMoreOnServer)
+    }
+
+    @Test
+    fun hiddenRowsStayInTheReturnedCountUsedForTheNextOffset() {
+        val body = base()
+            .put(
+                "data",
+                JSONArray()
+                    .put(message(101, "user", "Sichtbar"))
+                    .put(message(102, "assistant", "Verborgen").put("display_kind", "hidden"))
+            )
+            .put("pagination", pagination(2, 200, 2))
+        server.enqueue(jsonResponse(body))
+
+        val page = (fetch(offset = 200) as MessageHistoryResult.Success).page
+
+        assertEquals(listOf(101L), page.messages.map { it.id })
+        assertEquals(2, page.returned)
+        assertEquals(2, page.limit)
+        assertTrue(page.hasMoreOnServer)
+    }
+
+    @Test
+    fun fullReturnedPageReportsThatAnOlderPageMayExist() {
+        val data = JSONArray().apply {
+            for (id in 1L..200L) put(message(id, "user", "Nachricht $id"))
+        }
+        server.enqueue(
+            jsonResponse(
+                base()
+                    .put("data", data)
+                    .put("pagination", pagination(200, 0, 200))
+            )
+        )
+
+        val page = (fetch() as MessageHistoryResult.Success).page
+
+        assertEquals(200, page.returned)
+        assertTrue(page.hasMoreOnServer)
+    }
+
+    @Test
+    fun negativeOffsetIsRejectedWithoutARequest() {
+        assertFailure(
+            client.fetch(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, -1),
+            MessageHistoryError.InvalidInput
+        )
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun sessionIdIsEncodedAsExactlyOnePathSegment() {
         server.enqueue(jsonResponse(validPage()))
 
@@ -416,20 +486,20 @@ class HermesMessageClientTest {
             .build()
         server.enqueue(jsonResponse(validPage()).setBodyDelay(500, TimeUnit.MILLISECONDS))
         assertFailure(
-            HermesMessageClient(timeoutClient).fetch(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID),
+            HermesMessageClient(timeoutClient).fetch(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, 0),
             MessageHistoryError.Timeout
         )
 
         val untrusted = HermesMessageClient(OkHttpClient.Builder().build())
         assertFailure(
-            untrusted.fetch(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID),
+            untrusted.fetch(baseUrl(), SecretValue(FIXTURE_KEY), SESSION_ID, 0),
             MessageHistoryError.Tls
         )
 
         val stopped = MockWebServer().apply { start() }
         val unavailable = stopped.url("/").toString().replace("http://", "https://")
         stopped.shutdown()
-        val networkResult = client.fetch(unavailable, SecretValue(FIXTURE_KEY), SESSION_ID)
+        val networkResult = client.fetch(unavailable, SecretValue(FIXTURE_KEY), SESSION_ID, 0)
         assertTrue(networkResult is MessageHistoryResult.Failure)
         assertTrue(
             (networkResult as MessageHistoryResult.Failure).error in
@@ -454,15 +524,18 @@ class HermesMessageClientTest {
 
         invalidCalls.forEach { (url, key, sessionId) ->
             assertFailure(
-                client.fetch(url, key, sessionId),
+                client.fetch(url, key, sessionId, 0),
                 MessageHistoryError.InvalidInput
             )
         }
         assertEquals(0, server.requestCount)
     }
 
-    private fun fetch(sessionId: String = SESSION_ID): MessageHistoryResult =
-        client.fetch(baseUrl(), SecretValue(FIXTURE_KEY), sessionId)
+    private fun fetch(
+        sessionId: String = SESSION_ID,
+        offset: Int = 0
+    ): MessageHistoryResult =
+        client.fetch(baseUrl(), SecretValue(FIXTURE_KEY), sessionId, offset)
 
     private fun baseUrl(): String = server.url("/").toString().trimEnd('/')
 

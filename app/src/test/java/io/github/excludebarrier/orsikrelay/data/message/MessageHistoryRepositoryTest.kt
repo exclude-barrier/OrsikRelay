@@ -24,11 +24,12 @@ class MessageHistoryRepositoryTest {
             mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
         )
         var fetchCalls = 0
-        val fetcher = MessageFetcher { baseUrl, key, sessionId ->
+        val fetcher = MessageFetcher { baseUrl, key, sessionId, offset ->
             fetchCalls += 1
             assertEquals(BASE_URL, baseUrl)
             assertEquals(FIXTURE_KEY, key.useRaw { it })
             assertEquals(SESSION_ID, sessionId)
+            assertEquals(0, offset)
             MessageHistoryResult.Success(MessagePage(emptyList()))
         }
         val repository = repository(metadata, credentials, fetcher)
@@ -40,6 +41,49 @@ class MessageHistoryRepositoryTest {
         assertEquals(listOf(PROFILE_ID), credentials.getCalls)
         assertEquals(1, fetchCalls)
         assertFalse(result.toString().contains(FIXTURE_KEY))
+    }
+
+    @Test
+    fun olderHistoryDelegatesTheExactOffsetAndPreservesTheResult() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        var fetchedOffset = -1
+        val olderPage = MessagePage(
+            messages = emptyList(),
+            limit = 200,
+            returned = 3
+        )
+        val fetcher = MessageFetcher { baseUrl, key, sessionId, offset ->
+            assertEquals(BASE_URL, baseUrl)
+            assertEquals(FIXTURE_KEY, key.useRaw { it })
+            assertEquals(SESSION_ID, sessionId)
+            fetchedOffset = offset
+            MessageHistoryResult.Success(olderPage)
+        }
+
+        val result = repository(metadata, credentials, fetcher)
+            .loadOlderHistory(PROFILE_ID, SESSION_ID, 200)
+
+        assertEquals(200, fetchedOffset)
+        assertEquals(MessageHistoryResult.Success(olderPage), result)
+    }
+
+    @Test
+    fun olderFailureIsPreservedWithoutReadingAnotherProfile() {
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val expected = MessageHistoryResult.Failure(MessageHistoryError.RateLimited)
+
+        val result = repository(metadata, credentials) { _, _, _, _ -> expected }
+            .loadOlderHistory(PROFILE_ID, SESSION_ID, 0)
+
+        assertEquals(expected, result)
+        assertEquals(listOf(PROFILE_ID), metadata.getCalls)
+        assertEquals(listOf(PROFILE_ID), credentials.getCalls)
     }
 
     @Test
@@ -75,7 +119,7 @@ class MessageHistoryRepositoryTest {
         val metadata = FakeMetadataStore()
         val credentials = FakeCredentialStore()
         var fetchCalls = 0
-        val repository = repository(metadata, credentials) { _, _, _ ->
+        val repository = repository(metadata, credentials) { _, _, _, _ ->
             fetchCalls += 1
             MessageHistoryResult.Success(MessagePage(emptyList()))
         }
@@ -92,7 +136,7 @@ class MessageHistoryRepositoryTest {
         val metadata = FakeMetadataStore(mutableListOf(profile()))
         val credentials = FakeCredentialStore()
         var fetchCalls = 0
-        val repository = repository(metadata, credentials) { _, _, _ ->
+        val repository = repository(metadata, credentials) { _, _, _, _ ->
             fetchCalls += 1
             MessageHistoryResult.Success(MessagePage(emptyList()))
         }
@@ -122,11 +166,11 @@ class MessageHistoryRepositoryTest {
         )
         val authFailure = MessageHistoryResult.Failure(MessageHistoryError.InvalidCredentials)
 
-        val preserved = repository(metadata, credentials) { _, _, _ -> authFailure }
+        val preserved = repository(metadata, credentials) { _, _, _, _ -> authFailure }
             .loadHistory(PROFILE_ID, SESSION_ID)
         assertEquals(authFailure, preserved)
 
-        val thrown = repository(metadata, credentials) { _, _, _ ->
+        val thrown = repository(metadata, credentials) { _, _, _, _ ->
             throw IllegalStateException("synthetic-sensitive-detail")
         }.loadHistory(PROFILE_ID, SESSION_ID)
         assertFailure(thrown, MessageHistoryError.Network)
@@ -136,7 +180,7 @@ class MessageHistoryRepositoryTest {
     private fun repository(
         metadata: FakeMetadataStore,
         credentials: FakeCredentialStore,
-        fetcher: MessageFetcher = MessageFetcher { _, _, _ ->
+        fetcher: MessageFetcher = MessageFetcher { _, _, _, _ ->
             MessageHistoryResult.Success(MessagePage(emptyList()))
         }
     ): MessageHistoryRepository {

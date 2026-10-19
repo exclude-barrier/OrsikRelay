@@ -6,6 +6,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
+import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 
@@ -69,6 +70,21 @@ internal fun buildTimeline(
 internal data class ChatUiState(
     val history: MessageHistoryState = MessageHistoryState.Loading,
     val loadInFlight: Boolean = false,
+    /**
+     * An older history page may exist and a user-triggered
+     * [ChatViewModel.loadOlderMessages] is allowed. Cleared once the
+     * server page is short, consists only of duplicates, or the history
+     * is reloaded.
+     */
+    val canLoadOlder: Boolean = false,
+    /** Exactly one older-page read is in flight. */
+    val loadingOlder: Boolean = false,
+    /**
+     * Closed failure of the LAST older-page read. Deliberately separate
+     * from the main history/turn failure so the already visible history
+     * stays intact and the user can retry explicitly.
+     */
+    val olderLoadError: MessageHistoryError? = null,
     val draft: String = "",
     /**
      * The attachment the user picked but has not sent yet, or `null`.
