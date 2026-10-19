@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.settings.ChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.MaterialYouSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.ScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
@@ -23,6 +25,7 @@ import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.openAppNotificationSettings
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
@@ -49,6 +52,7 @@ class SettingsScreenUiTest {
     private val themeStore = FakeThemeStore()
     private val chatTextSizeStore = FakeChatTextSizeStore()
     private val screenProtectionStore = FakeScreenProtectionStore()
+    private val materialYouStore = FakeMaterialYouStore()
 
     private class FakeLanguageStore : LanguageSettingStore {
         var value: String? = null
@@ -85,6 +89,18 @@ class SettingsScreenUiTest {
     }
 
     private class FakeScreenProtectionStore : ScreenProtectionSettingStore {
+        var value: Boolean = false
+        var writes = 0
+
+        override fun read(): Boolean = value
+
+        override fun write(enabled: Boolean) {
+            writes++
+            value = enabled
+        }
+    }
+
+    private class FakeMaterialYouStore : MaterialYouSettingStore {
         var value: Boolean = false
         var writes = 0
 
@@ -231,11 +247,39 @@ class SettingsScreenUiTest {
     }
 
     @Test
-    fun backInvokesTheNavigationCallback() {
+    fun appearanceSegmentsPersistTheSelectedMode() {
+        setSettings()
+
+        composeRule.onNodeWithTag("settings_theme_Dark").performScrollTo().performClick()
+
+        assertEquals(ThemeMode.Dark, themeStore.value)
+    }
+
+    @Test
+    fun materialYouSwitchIsVisibleFromApi31AndPersists() {
+        setSettings(sdkInt = 31)
+
+        composeRule.onNodeWithTag("settings_material_you").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_material_you").performClick()
+
+        assertTrue(materialYouStore.value)
+        assertEquals(1, materialYouStore.writes)
+    }
+
+    @Test
+    fun materialYouSwitchIsHiddenBelowApi31() {
+        setSettings(sdkInt = 30)
+
+        composeRule.onNodeWithTag("settings_material_you").assertDoesNotExist()
+    }
+
+    @Test
+    fun backIconInvokesTheNavigationCallback() {
         var back = false
         setSettings(onBack = { back = true })
 
-        composeRule.onNodeWithText(context.getString(R.string.settings_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back))
+            .performClick()
 
         assertTrue(back)
     }
@@ -257,6 +301,7 @@ class SettingsScreenUiTest {
 
     private fun setSettings(
         onBack: () -> Unit = {},
+        sdkInt: Int = 31,
         openNotificationSettings: ((Context) -> Unit)? = null
     ) {
         val opener: (Context) -> Unit = openNotificationSettings
@@ -267,6 +312,7 @@ class SettingsScreenUiTest {
             val chatTextSizeController = rememberChatTextSizeController(chatTextSizeStore)
             val screenProtectionController =
                 rememberScreenProtectionController(screenProtectionStore)
+            val materialYouController = rememberMaterialYouController(materialYouStore)
             HermesTheme {
                 SettingsScreen(
                     languageController = languageController,
@@ -277,8 +323,10 @@ class SettingsScreenUiTest {
                         initiallyEnabled = false,
                         persist = {}
                     ),
+                    materialYouController = materialYouController,
                     appAuthenticator = null,
                     onBack = onBack,
+                    sdkInt = sdkInt,
                     openNotificationSettings = opener
                 )
             }

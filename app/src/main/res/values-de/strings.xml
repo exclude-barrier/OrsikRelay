@@ -122,6 +122,9 @@
     <string name="settings_version_label">Version</string>
     <string name="settings_license_label">Lizenz</string>
     <string name="settings_source_label">Quellcode</string>
+    <string name="settings_notifications_row_label">Android-Einstellungen</string>
+    <string name="settings_material_you_label">Farben vom Hintergrundbild</string>
+    <string name="settings_material_you_description">Die Farben deines Hintergrundbilds für die App übernehmen.</string>
     <string name="session_fallback_title">Unbenannte Session</string>
     <string name="new_session_title">Neue Session</string>
     <string name="new_session_title_label">Titel (optional)</string>

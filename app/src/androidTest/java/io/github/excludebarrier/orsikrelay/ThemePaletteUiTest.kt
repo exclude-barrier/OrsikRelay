@@ -1,15 +1,21 @@
 package io.github.excludebarrier.orsikrelay
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -65,6 +71,43 @@ class ThemePaletteUiTest {
             Color(0xFFFFFFFF)
         }
         assertEquals(expectedBackground, capture.background)
+    }
+
+    /**
+     * Material You must not lose the warning semantics of the approval
+     * dialog: its "Allow" button is painted with the scheme's `error`
+     * colour, so a dynamic scheme still has to keep `error` visibly distinct
+     * from `primary` and readable with `onError`.
+     */
+    @Test
+    fun dynamicThemeUsesTheWallpaperSchemeAndKeepsErrorAsAWarning() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val expectedLight = dynamicLightColorScheme(context)
+        val expectedDark = dynamicDarkColorScheme(context)
+
+        var capturedPrimary: Color? = null
+        var capturedError: Color? = null
+        composeRule.setContent {
+            HermesTheme(darkTheme = false, dynamicColor = true) {
+                capturedPrimary = MaterialTheme.colorScheme.primary
+                capturedError = MaterialTheme.colorScheme.error
+            }
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(expectedLight.primary, capturedPrimary)
+        assertEquals(expectedLight.error, capturedError)
+        for ((label, scheme) in listOf(
+            "dynamic light" to expectedLight,
+            "dynamic dark" to expectedDark
+        )) {
+            assertNotEquals(label, scheme.primary, scheme.error)
+            assertTrue(
+                "$label error/onError ${contrast(scheme.error, scheme.onError)}:1 < 4.5",
+                contrast(scheme.error, scheme.onError) >= 4.5
+            )
+        }
     }
 
     /**

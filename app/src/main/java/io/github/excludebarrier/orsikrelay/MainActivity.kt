@@ -20,6 +20,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import io.github.excludebarrier.orsikrelay.data.settings.AppLockSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesMaterialYouSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
@@ -31,6 +32,7 @@ import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.security.applock.AppLockHolder
 import io.github.excludebarrier.orsikrelay.ui.lock.AppLockGate
 import io.github.excludebarrier.orsikrelay.ui.settings.ApplyScreenProtection
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
@@ -100,6 +102,10 @@ class MainActivity : FragmentActivity() {
             val screenProtectionController =
                 rememberScreenProtectionController(screenProtectionStore)
             ApplyScreenProtection(screenProtectionController)
+            val materialYouStore = remember {
+                SharedPreferencesMaterialYouSettingStore(applicationContext)
+            }
+            val materialYouController = rememberMaterialYouController(materialYouStore)
             val darkTheme = themeController.mode.resolve(isSystemInDarkTheme())
             SystemBarAppearance(darkTheme)
             val activity = LocalActivity.current
@@ -109,7 +115,10 @@ class MainActivity : FragmentActivity() {
                 appAuthenticatorForTests
                     ?: (activity as? FragmentActivity)?.let(::AndroidAppAuthenticator)
             }
-            HermesTheme(darkTheme = darkTheme) {
+            HermesTheme(
+                darkTheme = darkTheme,
+                dynamicColor = materialYouController.enabled
+            ) {
                 HermesAppSurface {
                     AppLockGate(
                         controller = appLockController,
@@ -120,6 +129,7 @@ class MainActivity : FragmentActivity() {
                             sessionPageSource = sessionPageSourceForTests,
                             themeController = themeController,
                             screenProtectionController = screenProtectionController,
+                            materialYouController = materialYouController,
                             appLockController = appLockController,
                             appAuthenticator = appAuthenticator,
                             pairingBootstrap = pairingBootstrap.value,

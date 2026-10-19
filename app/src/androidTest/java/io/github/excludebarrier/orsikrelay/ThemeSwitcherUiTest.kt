@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.settings.ChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.MaterialYouSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.ScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
@@ -19,6 +20,7 @@ import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
@@ -30,8 +32,8 @@ import org.junit.Test
 /**
  * UI contract for the persistent appearance switcher in the settings screen.
  *
- * The three modes are radio options in the Appearance section. The currently
- * selected mode is applied to the whole settings screen through
+ * The three modes are a single-choice segmented control in the Appearance
+ * section. The currently selected mode is applied to the whole settings screen through
  * [HermesTheme]; picking an option updates the palette immediately and
  * persists the choice through the injected [ThemeSettingStore].
  */
@@ -159,6 +161,7 @@ private fun SettingsHarness(
     val languageController = rememberLanguageController(languageStore) { }
     val chatTextSizeController = rememberChatTextSizeController(FakeChatTextSizeStore())
     val screenProtectionController = rememberScreenProtectionController(FakeScreenProtectionStore())
+    val materialYouController = rememberMaterialYouController(FakeMaterialYouStore())
     val dark = if (themeController.mode == ThemeMode.System) {
         isSystemInDarkTheme()
     } else {
@@ -170,6 +173,7 @@ private fun SettingsHarness(
             themeController = themeController,
             chatTextSizeController = chatTextSizeController,
             screenProtectionController = screenProtectionController,
+            materialYouController = materialYouController,
             appLockController = AppLockController(initiallyEnabled = false, persist = {}),
             appAuthenticator = null,
             onBack = {}
@@ -185,6 +189,12 @@ private class FakeChatTextSizeStore : ChatTextSizeSettingStore {
 }
 
 private class FakeScreenProtectionStore : ScreenProtectionSettingStore {
+    override fun read(): Boolean = false
+
+    override fun write(enabled: Boolean) = Unit
+}
+
+private class FakeMaterialYouStore : MaterialYouSettingStore {
     override fun read(): Boolean = false
 
     override fun write(enabled: Boolean) = Unit

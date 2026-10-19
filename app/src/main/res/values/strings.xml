@@ -123,6 +123,9 @@
     <string name="settings_license_label">License</string>
     <string name="settings_license_value" translatable="false">Apache License 2.0</string>
     <string name="settings_source_label">Source code</string>
+    <string name="settings_notifications_row_label">Android settings</string>
+    <string name="settings_material_you_label">Colors from wallpaper</string>
+    <string name="settings_material_you_description">Use your wallpaper\'s colors for the app.</string>
     <string name="session_fallback_title">Untitled session</string>
     <string name="new_session_title">New session</string>
     <string name="new_session_title_label">Title (optional)</string>

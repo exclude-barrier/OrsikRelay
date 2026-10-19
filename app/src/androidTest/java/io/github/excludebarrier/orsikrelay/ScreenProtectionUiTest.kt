@@ -8,6 +8,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import io.github.excludebarrier.orsikrelay.data.settings.ChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.MaterialYouSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.ScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
@@ -16,6 +17,7 @@ import io.github.excludebarrier.orsikrelay.ui.settings.ApplyScreenProtection
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
@@ -79,6 +81,7 @@ class ScreenProtectionUiTest {
             val chatTextSizeController = rememberChatTextSizeController(EmptyChatTextSizeStore)
             val screenProtectionController =
                 rememberScreenProtectionController(screenProtectionStore)
+            val materialYouController = rememberMaterialYouController(EmptyMaterialYouStore)
             ApplyScreenProtection(screenProtectionController)
             HermesTheme {
                 SettingsScreen(
@@ -86,6 +89,7 @@ class ScreenProtectionUiTest {
                     themeController = themeController,
                     chatTextSizeController = chatTextSizeController,
                     screenProtectionController = screenProtectionController,
+                    materialYouController = materialYouController,
                     appLockController = AppLockController(
                         initiallyEnabled = false,
                         persist = {}
@@ -111,5 +115,10 @@ class ScreenProtectionUiTest {
     private object EmptyChatTextSizeStore : ChatTextSizeSettingStore {
         override fun read(): ChatTextSize = ChatTextSize.Normal
         override fun write(size: ChatTextSize) = Unit
+    }
+
+    private object EmptyMaterialYouStore : MaterialYouSettingStore {
+        override fun read(): Boolean = false
+        override fun write(enabled: Boolean) = Unit
     }
 }
