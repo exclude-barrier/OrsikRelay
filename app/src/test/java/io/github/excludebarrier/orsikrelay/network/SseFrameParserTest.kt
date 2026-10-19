@@ -408,4 +408,13 @@ class SseFrameParserTest {
             assertTrue(expected.message.isNullOrBlank())
         }
     }
+
+    @Test
+    fun defaultBoundsAcceptAFinalAnswerFrameAboveTheOldLineLimit() {
+        // A long final `assistant.completed` answer arrives on one data line;
+        // the default bound matches the bridge relay bound (1 MiB).
+        val longLine = "a".repeat(300 * 1024)
+        val frames = SseFrameParser().feed("event: assistant.completed\ndata: $longLine\n\n")
+        assertEquals(1, frames.size)
+    }
 }

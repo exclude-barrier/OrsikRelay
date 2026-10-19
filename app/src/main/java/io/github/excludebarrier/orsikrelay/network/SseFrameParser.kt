@@ -44,8 +44,10 @@ package io.github.excludebarrier.orsikrelay.network
  * stream. It is not thread-safe: feed it from a single reader thread.
  */
 class SseFrameParser(
-    private val maxLineBytes: Int = 64 * 1024,
-    private val maxFrameBytes: Int = 256 * 1024,
+    // Same bound as the bridge relay (MAX_FRAME_BYTES, 1 MiB): a final
+    // `assistant.completed` frame carries the whole answer on one line.
+    private val maxLineBytes: Int = 1024 * 1024,
+    private val maxFrameBytes: Int = 1024 * 1024,
     private val terminalEventName: String? = null
 ) {
     private val line = StringBuilder()

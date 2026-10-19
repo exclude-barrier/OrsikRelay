@@ -787,7 +787,9 @@ class HermesSessionStreamClient(
     // `internal` so the production default configuration can be
     // verified directly from the unit tests without reflection.
     internal companion object {
-        const val MAX_STREAM_BYTES = 8L * 1024 * 1024
+        // A long agent turn (many tool calls, long answers) easily streams
+        // several MiB; frames themselves are bounded by the parser.
+        const val MAX_STREAM_BYTES = 64L * 1024 * 1024
         const val MAX_API_KEY_CHARACTERS = 4096
         const val MAX_SESSION_ID_LENGTH = 256
         const val MAX_AFTER_SEQ = 0x7FFFFFFF

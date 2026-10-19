@@ -414,6 +414,7 @@ class ChatStreamEventPipeline(
                 return listOf(ChatTurnEvent.TurnFailed(ChatStreamError.ServerError))
             }
             TOOL_PROGRESS,
+            ASSISTANT_COMMENTARY,
             REASONING_STARTED,
             REASONING_DELTA,
             REASONING_COMPLETED -> {
@@ -421,13 +422,21 @@ class ChatStreamEventPipeline(
                 // confirmed order: after `message.started` and before
                 // `assistant.completed`. Outside that window they
                 // contradict the stream order and are rejected closed
-                // instead of silently dropped. Reasoning start and end
-                // become a content-free status; the reasoning text and
-                // tool progress are dropped.
+                // instead of silently dropped. Reasoning becomes a
+                // content-free status: Hermes reports it as `tool.progress`
+                // with the pseudo tool `_thinking` (`reasoning.*` is kept
+                // for other servers). The reasoning text, other tool
+                // progress and mid-turn `assistant.commentary` are dropped.
                 if (!messageStarted || assistantCompleted || runCompleted || sawError) {
                     throw protocol()
                 }
                 return when (name) {
+                    TOOL_PROGRESS ->
+                        if (payload.opt(TOOL_NAME_FIELD) == THINKING_TOOL_NAME) {
+                            listOf(ChatTurnEvent.Reasoning(active = true))
+                        } else {
+                            emptyList()
+                        }
                     REASONING_STARTED -> listOf(ChatTurnEvent.Reasoning(active = true))
                     REASONING_COMPLETED -> listOf(ChatTurnEvent.Reasoning(active = false))
                     else -> emptyList()
@@ -620,12 +629,14 @@ class ChatStreamEventPipeline(
         const val APPROVAL_ONCE = "once"
         const val APPROVAL_DENY = "deny"
         const val TOOL_NAME_FIELD = "tool_name"
+        const val THINKING_TOOL_NAME = "_thinking"
         const val ROLE_ASSISTANT = "assistant"
 
         const val RUN_STARTED = "run.started"
         const val MESSAGE_STARTED = "message.started"
         const val ASSISTANT_DELTA = "assistant.delta"
         const val ASSISTANT_COMPLETED = "assistant.completed"
+        const val ASSISTANT_COMMENTARY = "assistant.commentary"
         const val TOOL_STARTED = "tool.started"
         const val TOOL_COMPLETED = "tool.completed"
         const val TOOL_FAILED = "tool.failed"

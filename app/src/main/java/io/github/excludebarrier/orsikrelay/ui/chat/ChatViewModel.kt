@@ -949,6 +949,7 @@ internal class ChatViewModel(
                 _state.update { s ->
                     val last = s.localLines.lastOrNull()
                     s.copy(
+                        thinking = false,
                         localLines = if (last?.role == MessageRole.ASSISTANT) {
 replaceLastAssistantLine(s.localLines, event.finalText)
                         } else {
