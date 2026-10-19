@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -436,6 +437,15 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                             .weight(1f)
                             .testTag(TAG_TIMELINE)
                     ) {
+                        if (state.canLoadOlder || state.loadingOlder) {
+                            item(key = "load_older") {
+                                LoadOlderRow(
+                                    loading = state.loadingOlder,
+                                    failed = state.olderLoadError != null,
+                                    onLoadOlder = { viewModel.loadOlderMessages() }
+                                )
+                            }
+                        }
                         items(timeline, key = { it.key }) { message ->
                             CompositionLocalProvider(
                                 LocalChatTextScale provides chatTextScale
@@ -671,6 +681,37 @@ internal fun ChatHeader(
         windowInsets = WindowInsets(0, 0, 0, 0),
         modifier = Modifier.padding(top = if (compact) 0.dp else 4.dp)
     )
+}
+
+/**
+ * First timeline row while the server has older history: a button that loads
+ * the previous page, a spinner while it loads, and a short note above the
+ * button when the last attempt failed (the visible history stays).
+ */
+@Composable
+private fun LoadOlderRow(loading: Boolean, failed: Boolean, onLoadOlder: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .testTag(TAG_LOAD_OLDER),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (loading) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        } else {
+            if (failed) {
+                Text(
+                    text = stringResource(R.string.chat_load_older_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            TextButton(onClick = onLoadOlder) {
+                Text(text = stringResource(R.string.chat_load_older))
+            }
+        }
+    }
 }
 
 @Composable
@@ -1386,6 +1427,8 @@ internal val FOLLOW_TAIL_THRESHOLD = 48.dp
 private const val TAIL_SCROLL_EPSILON_PX = 1
 
 internal const val TAG_TIMELINE = "chat_timeline"
+
+internal const val TAG_LOAD_OLDER = "chat_load_older"
 
 /**
  * True when the final timeline row is visible and its end lies within

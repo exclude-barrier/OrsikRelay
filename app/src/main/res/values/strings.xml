@@ -252,4 +252,6 @@
     <string name="notification_permission_body">Orsik Relay can inform you locally when a run completes or Hermes is waiting for your approval. Without this permission, the app works fully, but no notifications will appear.</string>
     <string name="notification_permission_allow">Allow</string>
     <string name="notification_permission_not_now">Not now</string>
+    <string name="chat_load_older">Load older messages</string>
+    <string name="chat_load_older_failed">Older messages could not be loaded.</string>
 </resources>
