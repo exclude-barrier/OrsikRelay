@@ -30,6 +30,7 @@ import io.github.excludebarrier.orsikrelay.security.applock.AndroidAppAuthentica
 import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
 import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.security.applock.AppLockHolder
+import io.github.excludebarrier.orsikrelay.ui.crash.CrashReportPrompt
 import io.github.excludebarrier.orsikrelay.ui.lock.AppLockGate
 import io.github.excludebarrier.orsikrelay.ui.settings.ApplyScreenProtection
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
@@ -135,6 +136,7 @@ class MainActivity : FragmentActivity() {
                             pairingBootstrap = pairingBootstrap.value,
                             notificationBootstrap = notificationBootstrap.value
                         )
+                        CrashReportPrompt()
                     }
                 }
             }

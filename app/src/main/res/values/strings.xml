@@ -248,4 +248,11 @@
     <string name="notification_permission_not_now">Not now</string>
     <string name="chat_load_older">Load older messages</string>
     <string name="chat_load_older_failed">Older messages could not be loaded.</string>
+    <string name="crash_dialog_title">Orsik Relay crashed</string>
+    <string name="crash_dialog_text">The app crashed last time. You can report it so the bug can be fixed. The report contains only the app and Android version, the device model and the code locations: no chats, addresses or keys. You see it before anything is sent.</string>
+    <string name="crash_dialog_report">Report on GitHub</string>
+    <string name="crash_dialog_share">Share</string>
+    <string name="crash_dialog_discard">Discard</string>
+    <string name="crash_share_title">Share crash report</string>
+    <string name="settings_report_bug_label">Report a bug</string>
 </resources>
