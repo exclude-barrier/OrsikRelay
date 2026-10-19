@@ -32,7 +32,7 @@ class AppLockMainActivityUiTest {
     @Test
     fun coldStartLocksAndASuccessfulAuthenticationRemovesTheGate() {
         composeRule.onNodeWithTag("app_lock_screen").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.app_lock_locked))
+        composeRule.onNodeWithText(context.getString(R.string.app_lock_locked_title))
             .assertIsDisplayed()
         assertNoNavHostContent()
 
@@ -46,7 +46,7 @@ class AppLockMainActivityUiTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("app_lock_screen").fetchSemanticsNodes().isEmpty()
         }
-        composeRule.onNodeWithText(context.getString(R.string.app_lock_locked))
+        composeRule.onNodeWithText(context.getString(R.string.app_lock_locked_title))
             .assertDoesNotExist()
     }
 

@@ -44,7 +44,7 @@ class AppLockUiTest {
         setApp(controller, authenticator)
 
         composeRule.onNodeWithTag("app_lock_screen").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.app_lock_locked))
+        composeRule.onNodeWithText(context.getString(R.string.app_lock_locked_title))
             .assertIsDisplayed()
         assertEquals(
             0,

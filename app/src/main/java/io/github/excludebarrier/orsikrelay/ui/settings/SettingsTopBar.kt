@@ -16,23 +16,25 @@ import androidx.compose.ui.res.stringResource
 import io.github.excludebarrier.orsikrelay.R
 
 /**
- * Shared header for the settings and about screens: a title and a back arrow
- * whose [contentDescription][R.string.settings_back] replaces the old text
- * button. Keeping one composable makes both screens look identical.
+ * Shared header for settings, about, server management and the add-server
+ * onboarding: a title and a back arrow whose
+ * [contentDescription][R.string.settings_back] replaces the old text button.
+ * Keeping one composable makes all screens look identical.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsTopBar(
     title: String,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backButtonTestTag: String = "settings_back"
 ) {
     TopAppBar(
         title = { Text(text = title) },
         navigationIcon = {
             IconButton(
                 onClick = onBack,
-                modifier = Modifier.testTag("settings_back")
+                modifier = Modifier.testTag(backButtonTestTag)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,

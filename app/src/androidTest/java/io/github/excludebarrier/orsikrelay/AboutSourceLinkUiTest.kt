@@ -71,6 +71,20 @@ class AboutSourceLinkUiTest {
 
         composeRule.onNodeWithText(context.getString(R.string.settings_report_bug_label))
             .assertIsDisplayed()
+        val row = composeRule.onNodeWithTag("about_report_bug").fetchSemanticsNode()
+        assertEquals(
+            "the report row must expose button semantics",
+            Role.Button,
+            row.config[SemanticsProperties.Role]
+        )
+        val bounds = composeRule.onNodeWithTag("about_report_bug").getBoundsInRoot()
+        val minHeightPx = with(composeRule.density) { 48.dp.toPx() }
+        with(composeRule.density) {
+            assertTrue(
+                "the report row must offer at least 48 dp of click height",
+                (bounds.bottom - bounds.top).toPx() >= minHeightPx
+            )
+        }
         composeRule.onNodeWithTag("about_report_bug").performClick()
 
         val url = opened.single()
