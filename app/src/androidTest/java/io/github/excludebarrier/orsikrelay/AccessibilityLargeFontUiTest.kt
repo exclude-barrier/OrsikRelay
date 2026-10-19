@@ -16,8 +16,10 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.TextLayoutResult
@@ -198,10 +200,16 @@ class AccessibilityLargeFontUiTest {
     }
 
     private fun assertRefreshControl() {
-        val refresh = composeRule.onNode(hasText(REFRESH_LABEL) and hasClickAction())
+        composeRule.onNodeWithContentDescription(
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getString(R.string.sessions_more_options)
+        ).performClick()
+        val refresh = composeRule.onNodeWithTag("sessions_menu_refresh")
         refresh.assertIsDisplayed()
         assertTouchTargetAtLeast48Dp(refresh, "sessions refresh")
         assertLabelNotTruncated(REFRESH_LABEL)
+        refresh.performClick()
+        composeRule.waitForIdle()
     }
 
     // ------------------------------------------------------------------
