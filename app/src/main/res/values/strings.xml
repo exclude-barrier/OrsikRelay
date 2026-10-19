@@ -142,6 +142,8 @@
     <string name="chat_loading">Loading messages…</string>
     <string name="chat_turn_working">Hermes is working…</string>
     <string name="chat_turn_thinking">Hermes is thinking…</string>
+    <string name="chat_turn_elapsed_seconds">%1$d s</string>
+    <string name="chat_turn_elapsed_minutes">%1$d:%2$02d min</string>
     <string name="chat_stream_reconnecting">Reconnecting…</string>
     <string name="chat_run_conflict">Another session is already responding. End that run first.</string>
     <string name="chat_run_uncertain">The connection was interrupted. Nothing is sent again.</string>

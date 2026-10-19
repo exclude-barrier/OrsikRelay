@@ -257,6 +257,11 @@ class ChatScreenTurnUiTest {
         composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
         waitForText(working)
         composeRule.onNodeWithText(working).assertIsDisplayed()
+        // The elapsed time since sending stands next to the status.
+        assertTrue(
+            composeRule.onAllNodesWithText(" s", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        )
 
         source.enqueue(
             ChatTurnEvent.RunStarted("run_synthetic"),
