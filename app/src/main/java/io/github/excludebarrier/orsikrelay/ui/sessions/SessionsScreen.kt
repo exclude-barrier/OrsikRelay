@@ -31,7 +31,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -81,8 +80,9 @@ import java.util.Locale
  * States:
  * - initial [SessionListState.Loading];
  * - success: server-ordered list grouped into pinned, today, yesterday,
- *   the last seven days and older, with compact rows (title, source icon,
- *   message count and last activity). Empty groups are omitted;
+ *   the last seven days and older, with compact rows (title, source icon and
+ *   readable source name, message count and last activity) and no dividers;
+ *   empty groups are omitted;
  * - empty: only when the server really delivered an empty `data` list;
  * - failure: a localized generic text, an actionable hint where the
  *   failure allows one, and a manual retry.
@@ -459,29 +459,22 @@ fun SessionsScreen(
                                 itemsIndexed(
                                     items = section.sessions,
                                     key = { _, session -> "session-${session.id}" }
-                                ) { index, session ->
-                                    Column {
-                                        if (index > 0) {
-                                            HorizontalDivider(
-                                                color = MaterialTheme.colorScheme.outlineVariant
-                                            )
+                                ) { _, session ->
+                                    SessionRow(
+                                        session = session,
+                                        locale = locale,
+                                        zone = clock.zone,
+                                        showTimeOnly = SessionGrouping.dayGroupOf(
+                                            session.lastActiveEpochSeconds,
+                                            now,
+                                            clock.zone
+                                        ).let {
+                                            it == SessionGroup.Today || it == SessionGroup.Yesterday
+                                        },
+                                        onClick = {
+                                            onSessionSelected(session.id, session.title)
                                         }
-                                        SessionRow(
-                                            session = session,
-                                            locale = locale,
-                                            zone = clock.zone,
-                                            showTimeOnly = SessionGrouping.dayGroupOf(
-                                                session.lastActiveEpochSeconds,
-                                                now,
-                                                clock.zone
-                                            ).let {
-                                                it == SessionGroup.Today || it == SessionGroup.Yesterday
-                                            },
-                                            onClick = {
-                                                onSessionSelected(session.id, session.title)
-                                            }
-                                        )
-                                    }
+                                    )
                                 }
                             }
                             if (current.hasMore && (searching || current.sessions.isNotEmpty())) {
@@ -585,20 +578,20 @@ private fun SessionRow(
             SessionListFormatter.formatMessageCount(count, locale).orEmpty()
         )
     }
-    val meta = buildMetaLine(messageCount, lastActive)
+    val meta = buildMetaLine(sourceName, messageCount, lastActive)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = 64.dp)
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (sourceIcon != null) {
             Icon(
                 imageVector = sourceIcon,
-                contentDescription = sourceName,
+                contentDescription = null,
                 modifier = Modifier.size(24.dp)
             )
         } else {
@@ -664,8 +657,12 @@ private fun sessionErrorHint(error: SessionListError): String? = when (error) {
     SessionListError.Http -> null
 }
 
-private fun buildMetaLine(messageCount: String?, lastActive: String?): String? {
-    val parts = listOfNotNull(messageCount, lastActive)
+private fun buildMetaLine(
+    sourceName: String?,
+    messageCount: String?,
+    lastActive: String?
+): String? {
+    val parts = listOfNotNull(sourceName, messageCount, lastActive)
     return parts.joinToString(separator = " · ")
 }
 
