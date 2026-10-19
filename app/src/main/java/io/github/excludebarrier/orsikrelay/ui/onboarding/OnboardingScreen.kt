@@ -1,10 +1,11 @@
 package io.github.excludebarrier.orsikrelay.ui.onboarding
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,17 +13,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +32,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.password
@@ -59,6 +63,8 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileFormValidator
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeCard
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
+import io.github.excludebarrier.orsikrelay.ui.pairing.PairingQrScannerScreen
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Onboarding form.
@@ -93,7 +99,11 @@ fun OnboardingScreen(
     // Set only when onboarding was opened from "Server verwalten": the
     // header then offers "Zurück". The first start and the pairing deep
     // link leave it null (no destination to return to, no visual change).
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    // False on devices without a camera: the QR scan action is then hidden.
+    cameraAvailable: Boolean = true,
+    // Test seam for the QR scan source; null means the real camera scanner.
+    scanFrames: Flow<String>? = null
 ) {
     // Non-secret fields survive a rotation/recreation via the saved instance
     // state. The secrets (API key, one-time pairing code) deliberately stay in
@@ -109,6 +119,7 @@ fun OnboardingScreen(
     }
     var pairingCodeError by remember { mutableStateOf(false) }
     var showModeInfo by rememberSaveable { mutableStateOf(false) }
+    var showScanner by rememberSaveable { mutableStateOf(false) }
 
     // Re-tap support: a deep link delivered after first composition (onNewIntent)
     // updates the pre-filled fields. Only non-empty values override, so a
@@ -179,6 +190,23 @@ fun OnboardingScreen(
         }
     }
 
+    if (showScanner) {
+        PairingQrScannerScreen(
+            onScanned = { bootstrap ->
+                // Pre-fill exactly what the shared deep-link parser accepted.
+                // The server name stays untouched and nothing connects until
+                // the user presses "Connect".
+                baseUrl = bootstrap.baseUrl
+                pairingCode = bootstrap.pairingCode
+                clearFieldErrors()
+                showScanner = false
+            },
+            onClose = { showScanner = false },
+            scanFrames = scanFrames
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -210,182 +238,222 @@ fun OnboardingScreen(
             modifier = Modifier.padding(top = 8.dp)
         )
 
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(top = 24.dp)
         ) {
-            // Equal segment heights at every font scale: the row adopts the
-            // tallest intrinsic height (and at least a 48 dp touch target),
-            // and each segment fills it.
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .height(IntrinsicSize.Min)
-            ) {
-                SegmentedButton(
-                    selected = mode == OnboardingMode.Pairing,
-                    onClick = { switchMode(OnboardingMode.Pairing) },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Equal segment heights at every font scale: the row adopts
+                // the tallest intrinsic height (and at least a 48 dp touch
+                // target), and each segment fills it. The pairing label is
+                // deliberately just "Pairing code" so it stays on one line;
+                // the recommendation moved to a badge below the segment.
+                SingleChoiceSegmentedButtonRow(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .testTag("onboardingModePairing"),
-                    icon = {}
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .height(IntrinsicSize.Min)
                 ) {
-                    Text(
-                        text = stringResource(R.string.onboarding_mode_pairing) +
-                            " (" + stringResource(R.string.onboarding_mode_pairing_recommended) + ")",
-                        textAlign = TextAlign.Center,
-                        fontWeight = if (mode == OnboardingMode.Pairing) {
-                            FontWeight.SemiBold
-                        } else {
-                            FontWeight.Normal
-                        }
-                    )
+                    SegmentedButton(
+                        selected = mode == OnboardingMode.Pairing,
+                        onClick = { switchMode(OnboardingMode.Pairing) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .testTag("onboardingModePairing"),
+                        icon = {}
+                    ) {
+                        Text(
+                            text = stringResource(R.string.onboarding_mode_pairing),
+                            textAlign = TextAlign.Center,
+                            fontWeight = if (mode == OnboardingMode.Pairing) {
+                                FontWeight.SemiBold
+                            } else {
+                                FontWeight.Normal
+                            }
+                        )
+                    }
+                    SegmentedButton(
+                        selected = mode == OnboardingMode.ApiKey,
+                        onClick = { switchMode(OnboardingMode.ApiKey) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .testTag("onboardingModeApiKey"),
+                        icon = {}
+                    ) {
+                        Text(
+                            text = stringResource(R.string.onboarding_mode_api_key),
+                            textAlign = TextAlign.Center,
+                            fontWeight = if (mode == OnboardingMode.ApiKey) {
+                                FontWeight.SemiBold
+                            } else {
+                                FontWeight.Normal
+                            }
+                        )
+                    }
                 }
-                SegmentedButton(
-                    selected = mode == OnboardingMode.ApiKey,
-                    onClick = { switchMode(OnboardingMode.ApiKey) },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                IconButton(
+                    onClick = { showModeInfo = true },
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .testTag("onboardingModeApiKey"),
-                    icon = {}
+                        .padding(start = 8.dp)
+                        .size(48.dp)
+                        .testTag("onboardingModeInfo")
                 ) {
-                    Text(
-                        text = stringResource(R.string.onboarding_mode_api_key),
-                        textAlign = TextAlign.Center,
-                        fontWeight = if (mode == OnboardingMode.ApiKey) {
-                            FontWeight.SemiBold
-                        } else {
-                            FontWeight.Normal
-                        }
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = stringResource(R.string.onboarding_mode_info_content_description)
                     )
                 }
             }
-            IconButton(
-                onClick = { showModeInfo = true },
+            // Small badge under the pairing segment. Two equal weight cells
+            // mirror the two segments; the trailing spacer matches the info
+            // button, so the badge centre stays under the left segment.
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (mode == OnboardingMode.Pairing) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = stringResource(R.string.onboarding_mode_pairing_recommended),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .testTag("onboardingModePairingRecommended")
+                            )
+                        }
+                    }
+                }
+                Box(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(56.dp))
+            }
+        }
+
+        if (mode == OnboardingMode.Pairing && cameraAvailable) {
+            FilledTonalButton(
+                onClick = { showScanner = true },
+                enabled = !isConnecting,
                 modifier = Modifier
-                    .padding(start = 8.dp)
-                    .size(48.dp)
-                    .testTag("onboardingModeInfo")
+                    .fillMaxWidth()
+                    .padding(top = 24.dp)
+                    .testTag("onboardingScanQr")
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = stringResource(R.string.onboarding_mode_info_content_description)
+                    painter = painterResource(R.drawable.ic_qr_code_scanner),
+                    contentDescription = null
+                )
+                Text(
+                    text = stringResource(R.string.onboarding_scan_qr),
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
         }
 
-        Card(
+        // Fields sit freely (no bordered card) with a uniform 16 dp rhythm.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .padding(top = 16.dp)
         ) {
-            Column(
+            OutlinedTextField(
+                value = profileName,
+                onValueChange = {
+                    profileName = it
+                    clearFieldErrors()
+                },
+                label = { Text(text = stringResource(R.string.onboarding_profile_name_label)) },
+                supportingText = validationError?.profileNameError
+                    ?.let { code -> { Text(text = stringResource(profileNameErrorMessage(code))) } },
+                isError = validationError?.profileNameError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                enabled = !isConnecting,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                OutlinedTextField(
-                    value = profileName,
-                    onValueChange = {
-                        profileName = it
-                        clearFieldErrors()
-                    },
-                    label = { Text(text = stringResource(R.string.onboarding_profile_name_label)) },
-                    supportingText = validationError?.profileNameError
-                        ?.let { code -> { Text(text = stringResource(profileNameErrorMessage(code))) } },
-                    isError = validationError?.profileNameError != null,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                    enabled = !isConnecting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("onboardingProfileName")
-                )
+                    .testTag("onboardingProfileName")
+            )
 
+            OutlinedTextField(
+                value = baseUrl,
+                onValueChange = {
+                    baseUrl = it
+                    clearFieldErrors()
+                },
+                label = { Text(text = stringResource(R.string.onboarding_base_url_label)) },
+                supportingText = validationError?.baseUrlError
+                    ?.let { code -> { Text(text = stringResource(baseUrlErrorMessage(code))) } },
+                isError = validationError?.baseUrlError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                enabled = !isConnecting,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+                    .testTag("onboardingBaseUrl")
+            )
+
+            if (mode == OnboardingMode.Pairing) {
+                // The pairing code is a single-use
+                // secret. It is rendered with password semantics and
+                // validated locally; the API-key field is not present
+                // in this mode at all.
                 OutlinedTextField(
-                    value = baseUrl,
+                    value = pairingCode,
                     onValueChange = {
-                        baseUrl = it
+                        pairingCode = it
                         clearFieldErrors()
                     },
-                    label = { Text(text = stringResource(R.string.onboarding_base_url_label)) },
-                    supportingText = validationError?.baseUrlError
-                        ?.let { code -> { Text(text = stringResource(baseUrlErrorMessage(code))) } },
-                    isError = validationError?.baseUrlError != null,
+                    label = { Text(text = stringResource(R.string.onboarding_pairing_code_label)) },
+                    supportingText = {
+                        if (pairingCodeError) {
+                            Text(text = stringResource(R.string.error_pairing_code_local_invalid))
+                        }
+                    },
+                    isError = pairingCodeError,
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     enabled = !isConnecting,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp)
-                        .testTag("onboardingBaseUrl")
+                        .semantics {
+                            semanticsTestTag = "onboardingPairingCode"
+                            contentDescription = pairingCodeLabel
+                            password()
+                        }
                 )
-
-                if (mode == OnboardingMode.Pairing) {
-                    // The pairing code is a single-use
-                    // secret. It is rendered with password semantics and
-                    // validated locally; the API-key field is not present
-                    // in this mode at all.
-                    OutlinedTextField(
-                        value = pairingCode,
-                        onValueChange = {
-                            pairingCode = it
-                            clearFieldErrors()
-                        },
-                        label = { Text(text = stringResource(R.string.onboarding_pairing_code_label)) },
-                        supportingText = {
-                            if (pairingCodeError) {
-                                Text(text = stringResource(R.string.error_pairing_code_local_invalid))
-                            }
-                        },
-                        isError = pairingCodeError,
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        enabled = !isConnecting,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp)
-                            .semantics {
-                                semanticsTestTag = "onboardingPairingCode"
-                                contentDescription = pairingCodeLabel
-                                password()
-                            }
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = apiKey,
-                        onValueChange = {
-                            apiKey = it
-                            clearFieldErrors()
-                        },
-                        label = { Text(text = apiKeyLabel) },
-                        supportingText = validationError?.apiKeyError
-                            ?.let { code -> { Text(text = stringResource(apiKeyErrorMessage(code))) } },
-                        isError = validationError?.apiKeyError != null,
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        enabled = !isConnecting,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp)
-                            .semantics {
-                                semanticsTestTag = "onboardingApiKey"
-                                contentDescription = apiKeyLabel
-                                password()
-                            }
-                    )
-                }
+            } else {
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = {
+                        apiKey = it
+                        clearFieldErrors()
+                    },
+                    label = { Text(text = apiKeyLabel) },
+                    supportingText = validationError?.apiKeyError
+                        ?.let { code -> { Text(text = stringResource(apiKeyErrorMessage(code))) } },
+                    isError = validationError?.apiKeyError != null,
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    enabled = !isConnecting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                        .semantics {
+                            semanticsTestTag = "onboardingApiKey"
+                            contentDescription = apiKeyLabel
+                            password()
+                        }
+                )
             }
         }
 

@@ -120,6 +120,13 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.material.icons.core)
+    // QR pairing scanner: CameraX preview/analysis plus the pure ZXing
+    // decoder. No Google Play services / ML Kit, so the app stays usable
+    // without GMS.
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
     implementation(libs.activity.compose)
     implementation(libs.navigation.compose)
     implementation(libs.androidx.biometric)

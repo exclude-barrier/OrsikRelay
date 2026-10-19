@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- QR pairing scanner. The camera is optional: without one (or without
+         the runtime permission) the rest of the app is fully functional. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- Local run/approval notifications. Requested contextually at
          runtime (Android 13+); the app is fully functional without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

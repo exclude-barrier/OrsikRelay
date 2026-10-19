@@ -2,8 +2,9 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -66,13 +67,15 @@ class OnboardingPairingUiTest {
     fun pairingModeIsTheVisibleDefaultAndHidesTheApiKeyField() {
         setContent { DevicePairingOutcome.Failure(DevicePairingFailure.InvalidInput) }
 
-        // The recommendation hint is visible, the pairing-code field is
+        // The recommendation badge is visible, the pairing-code field is
         // present with password semantics, and the API-key field does not
         // exist in this mode at all.
-        composeRule.onNodeWithText(
-            context.getString(R.string.onboarding_mode_pairing) +
-                " (" + context.getString(R.string.onboarding_mode_pairing_recommended) + ")"
-        ).assertIsDisplayed()
+        composeRule.onNodeWithTag("onboardingModePairing")
+            .assertTextContains(context.getString(R.string.onboarding_mode_pairing))
+        composeRule.onNodeWithTag("onboardingModePairingRecommended")
+            .assertTextContains(
+                context.getString(R.string.onboarding_mode_pairing_recommended)
+            )
         assertPasswordField()
         composeRule.onNodeWithTag("onboardingApiKey").assertDoesNotExist()
     }

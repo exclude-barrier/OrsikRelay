@@ -6,6 +6,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -27,9 +30,10 @@ import org.junit.runner.RunWith
 /**
  * The onboarding mode selector and the mode explanation dialog.
  *
- * - Both segments are exactly the same height (never the wrapped
- *   "Pairing code (recommended)" label making the left segment taller)
- *   and offer a 48 dp touch target, at font scale 1.0 and 1.3.
+ * - Both segments are exactly the same height and offer a 48 dp touch
+ *   target, at font scale 1.0 and 1.3.
+ * - The pairing segment label stays on one line; its recommendation is a
+ *   separate badge below the segment instead of inline text.
  * - The selected state is exposed through semantics and reinforced by
  *   the segment colour and a semibold label, not colour alone.
  * - The selected segment renders no check mark: its label stays centred
@@ -64,10 +68,33 @@ class OnboardingModeUiTest {
             segmentTag = "onboardingModeApiKey"
         )
         assertCenteredLabel(
-            context.getString(R.string.onboarding_mode_pairing) +
-                " (" + context.getString(R.string.onboarding_mode_pairing_recommended) + ")",
+            context.getString(R.string.onboarding_mode_pairing),
             segmentTag = "onboardingModePairing"
         )
+    }
+
+    @Test
+    fun theRecommendedBadgeSitsBelowThePairingSegment() {
+        setOnboarding(fontScale = 1.0f)
+
+        val pairing = composeRule.onNodeWithTag("onboardingModePairing")
+            .fetchSemanticsNode().boundsInRoot
+        val badge = composeRule.onNodeWithTag("onboardingModePairingRecommended")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the recommended badge must sit below the pairing segment",
+            badge.top >= pairing.bottom
+        )
+        val maxOffset = with(composeRule.density) { 8.dp.toPx() }
+        assertTrue(
+            "the recommended badge centre ${badge.center.x} must be under the " +
+                "pairing segment centre ${pairing.center.x}",
+            kotlin.math.abs(badge.center.x - pairing.center.x) <= maxOffset
+        )
+        composeRule.onNodeWithTag("onboardingModePairingRecommended")
+            .assertTextContains(
+                context.getString(R.string.onboarding_mode_pairing_recommended)
+            )
     }
 
     @Test
@@ -128,8 +155,11 @@ class OnboardingModeUiTest {
      * icon. Wrapped lines share one centre.
      */
     private fun assertCenteredLabel(label: String, segmentTag: String) {
-        val node = composeRule.onNodeWithText(label, useUnmergedTree = true)
-            .fetchSemanticsNode()
+        val textNode = composeRule.onNode(
+            hasText(label) and hasAnyAncestor(hasTestTag(segmentTag)),
+            useUnmergedTree = true
+        )
+        val node = textNode.fetchSemanticsNode()
         val segment = composeRule.onNodeWithTag(segmentTag).fetchSemanticsNode().boundsInRoot
         val offsetDp = with(composeRule.density) {
             kotlin.math.abs(node.boundsInRoot.center.x - segment.center.x).toDp().value
@@ -172,6 +202,19 @@ class OnboardingModeUiTest {
         assertTrue(
             "API-key segment height ${apiKeyBounds.height}px below 48 dp",
             apiKeyBounds.height >= minTouchTarget
+        )
+
+        val pairingLabel = composeRule.onNode(
+            hasText(context.getString(R.string.onboarding_mode_pairing)) and
+                hasAnyAncestor(hasTestTag("onboardingModePairing")),
+            useUnmergedTree = true
+        ).fetchSemanticsNode()
+        val layouts = ArrayList<TextLayoutResult>()
+        pairingLabel.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        assertEquals(
+            "the pairing segment label must stay on one line",
+            1,
+            layouts.single().lineCount
         )
 
         assertEquals(

@@ -1,11 +1,13 @@
 package io.github.excludebarrier.orsikrelay.ui.onboarding
 
+import android.content.pm.PackageManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionOutcome
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairError
@@ -52,6 +54,10 @@ fun OnboardingRoute(
     onBack: (() -> Unit)? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val cameraAvailable = remember(context) {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
     var connectionState by remember {
         mutableStateOf<OnboardingConnectionState>(OnboardingConnectionState.Idle)
     }
@@ -62,6 +68,7 @@ fun OnboardingRoute(
         initialPairingCode = pairingBootstrap?.pairingCode.orEmpty(),
         connectionState = connectionState,
         onBack = onBack,
+        cameraAvailable = cameraAvailable,
         onInputChanged = {
             if (connectionState is OnboardingConnectionState.Failure) {
                 connectionState = OnboardingConnectionState.Idle
