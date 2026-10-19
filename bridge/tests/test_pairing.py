@@ -3,6 +3,7 @@
 import contextlib
 import io
 import os
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -27,6 +28,38 @@ class PairingUriTest(unittest.TestCase):
 
     def test_format_code_groups_of_four(self):
         self.assertEqual(pairing.format_code("ABCD2345EFGH6789JKMN2345"), "ABCD-2345-EFGH-6789-JKMN-2345")
+
+
+class RenderAsciiQrTest(unittest.TestCase):
+    TEXT = "orsik://pair?server=https%3A%2F%2Fcf.example.ts.net&code=ABCD2345EFGH6789JKMN2345"
+
+    def test_missing_renderer_returns_none(self):
+        with mock.patch.object(pairing.shutil, "which", return_value=None):
+            self.assertIsNone(pairing.render_ascii_qr(self.TEXT))
+
+    def test_uses_ansiutf8_with_quiet_zone(self):
+        completed = mock.Mock(stdout="\x1b[40;37;1m▀▄█\x1b[0m\n".encode())
+        with mock.patch.object(pairing.shutil, "which", return_value="/usr/bin/qrencode"), \
+                mock.patch.object(pairing.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(pairing.render_ascii_qr(self.TEXT), "\x1b[40;37;1m▀▄█\x1b[0m\n")
+        argv = run.call_args.args[0]
+        self.assertEqual(
+            argv,
+            ["/usr/bin/qrencode", "-t", "ANSIUTF8", "-o", "-", "-m", "2", self.TEXT],
+        )
+        self.assertEqual(run.call_args.kwargs, {"capture_output": True, "check": True, "timeout": 10})
+
+    def test_renderer_failure_returns_none(self):
+        failures = (
+            OSError("no qrencode"),
+            subprocess.TimeoutExpired(cmd="qrencode", timeout=10),
+            subprocess.CalledProcessError(1, "qrencode"),
+        )
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__), \
+                    mock.patch.object(pairing.shutil, "which", return_value="/usr/bin/qrencode"), \
+                    mock.patch.object(pairing.subprocess, "run", side_effect=failure):
+                self.assertIsNone(pairing.render_ascii_qr(self.TEXT))
 
 
 class AdminCliTest(unittest.TestCase):

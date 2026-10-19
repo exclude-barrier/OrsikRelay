@@ -203,11 +203,12 @@ without asking. More options (systemd, other networks, backup):
 
 ### 3. Pair the app
 
-Open the `orsik://pair` link or scan the QR code on the phone, or tap **Add
-server**, enter a name, the HTTPS URL and the pairing code, and tap
-**Connect**. The phone must be in the same private network (Tailscale on).
-The app checks the connection and the exact capability contract before it
-stores anything.
+In the app tap **Scan QR code** and point the camera at the QR in the
+terminal, or type the HTTPS URL and the pairing code, then tap **Connect**.
+The QR appears when `qrencode` is installed on the server (e.g.
+`sudo apt install qrencode`). The phone must be in the same private network
+(Tailscale on). The app checks the connection and the exact capability
+contract before it stores anything.
 
 <p align="center">
   <img src="docs/images/onboarding.png" width="28%" alt="Adding a server with a pairing code">
