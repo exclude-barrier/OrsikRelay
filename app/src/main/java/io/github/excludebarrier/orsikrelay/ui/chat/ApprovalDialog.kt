@@ -22,12 +22,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -155,6 +157,7 @@ fun ApprovalDialog(
         // No outside-tap confirmation: the dialog is non-dismissable.
         onDismissRequest = {}
     ) {
+        ObscuredTouchGuard()
         // BasicAlertDialog draws no container of its own: without this
         // surface the dialog text would sit transparently over the chat.
         Surface(
@@ -261,3 +264,19 @@ private enum class ApprovalOutcome {
 private const val TAG_SURFACE = "approval_surface"
 private const val TAG_DENY = "approval_deny"
 private const val TAG_ALLOW = "approval_allow"
+
+/**
+ * Tapjacking guard for the window it is composed in: touches that arrive
+ * while another app's window covers it are dropped, so an overlay cannot
+ * trick the user into "Allow". Android 12+ blocks most such touches anyway;
+ * this also covers Android 8-11.
+ */
+@Composable
+internal fun ObscuredTouchGuard() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val previous = view.filterTouchesWhenObscured
+        view.filterTouchesWhenObscured = true
+        onDispose { view.filterTouchesWhenObscured = previous }
+    }
+}
