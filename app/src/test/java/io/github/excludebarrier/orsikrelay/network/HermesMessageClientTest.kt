@@ -301,6 +301,49 @@ class HermesMessageClientTest {
     }
 
     @Test
+    fun multimodalUserContentKeepsTheTextAndCountsImagesWithoutTheirData() {
+        // Hermes stores a turn with an image as the part list it received.
+        val parts = JSONArray()
+            .put(JSONObject().put("type", "text").put("text", "Was ist das?"))
+            .put(
+                JSONObject().put("type", "image_url")
+                    .put("image_url", JSONObject().put("url", "data:image/png;base64,SECRETPIXELS"))
+            )
+            .put(JSONObject().put("type", "refusal"))
+        val entry = JSONObject()
+            .put("id", 1)
+            .put("session_id", "synthetic-id")
+            .put("role", "user")
+            .put("content", parts)
+        server.enqueue(jsonResponse(pageWithMessage(entry)))
+
+        val result = fetch()
+
+        assertTrue(result is MessageHistoryResult.Success)
+        val message = (result as MessageHistoryResult.Success).page.messages.single()
+        assertEquals("Was ist das?", message.content)
+        assertEquals(1, message.imageCount)
+        assertFalse(result.toString().contains("SECRETPIXELS"))
+    }
+
+    @Test
+    fun imageOnlyContentHasEmptyTextAndNonListContentStaysInvalid() {
+        val imageOnly = JSONObject()
+            .put("id", 1)
+            .put("session_id", "synthetic-id")
+            .put("role", "user")
+            .put("content", JSONArray().put(JSONObject().put("type", "input_image")))
+        server.enqueue(jsonResponse(pageWithMessage(imageOnly)))
+        val message = ((fetch() as MessageHistoryResult.Success).page.messages.single())
+        assertEquals("", message.content)
+        assertEquals(1, message.imageCount)
+
+        val numeric = message(1, "user", "x").put("content", 7)
+        server.enqueue(jsonResponse(pageWithMessage(numeric)))
+        assertFailure(fetch(), MessageHistoryError.IncompatibleApi)
+    }
+
+    @Test
     fun rootAndPaginationFieldsAreValidatedStrictly() {
         val oneEntry = JSONArray().put(message(1, "user", "x"))
         val invalidBodies = listOf(
@@ -347,7 +390,8 @@ class HermesMessageClientTest {
             JSONObject().put("id", 1).put("role", "user"),
             JSONObject().put("id", 1).put("role", "user").put("content", JSONObject.NULL),
             JSONObject().put("id", 1).put("role", "user").put("content", 4),
-            JSONObject().put("id", 1).put("role", "user").put("content", JSONArray()),
+            // A part list (even an empty one) is valid multimodal content; see
+            // multimodalUserContentKeepsTheTextAndCountsImagesWithoutTheirData.
             JSONObject().put("id", 1).put("role", "user").put("content", JSONObject()),
             message(1, "tool", "x").put("tool_name", 4),
             message(1, "user", "x").put("timestamp", -1),

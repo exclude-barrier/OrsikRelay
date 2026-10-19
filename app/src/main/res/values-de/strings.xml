@@ -255,4 +255,8 @@
     <string name="crash_dialog_discard">Verwerfen</string>
     <string name="crash_share_title">Absturzbericht teilen</string>
     <string name="settings_report_bug_label">Fehler melden</string>
+    <plurals name="chat_message_images">
+        <item quantity="one">🖼 %1$d Bild</item>
+        <item quantity="other">🖼 %1$d Bilder</item>
+    </plurals>
 </resources>

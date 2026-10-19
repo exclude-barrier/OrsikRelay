@@ -214,12 +214,14 @@ class HermesMessageClient(
             if (!seenVisibleIds.add(id)) {
                 throw PageFailure(MessageHistoryError.IncompatibleApi)
             }
+            val content = parseContent(item.opt(CONTENT_FIELD))
             messages += HermesChatMessage(
                 id = id,
                 role = strictRole(item, ROLE_FIELD),
-                content = strictString(item, CONTENT_FIELD),
+                content = content.text,
                 timestampSeconds = optionalRealSeconds(item, TIMESTAMP_FIELD),
-                toolName = optionalNonBlankString(item, TOOL_NAME_FIELD)
+                toolName = optionalNonBlankString(item, TOOL_NAME_FIELD),
+                imageCount = content.imageCount
             )
         }
         return MessagePage(
@@ -227,6 +229,35 @@ class HermesMessageClient(
             limit = pagination.limit,
             returned = pagination.returned
         )
+    }
+
+    private class ParsedContent(val text: String, val imageCount: Int)
+
+    /**
+     * A message's `content` is a string, or - for a turn with an image - the
+     * multimodal part list Hermes stores (`text` / `image_url` parts). Text
+     * parts are joined; image parts are only counted, their data is dropped.
+     * Unknown part types are ignored like the server does.
+     */
+    private fun parseContent(value: Any?): ParsedContent {
+        if (value is String) return ParsedContent(value, 0)
+        val parts = value as? JSONArray
+            ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
+        val texts = ArrayList<String>(parts.length())
+        var images = 0
+        for (index in 0 until parts.length()) {
+            val part = parts.opt(index)
+            if (part is String) {
+                texts += part
+                continue
+            }
+            val obj = part as? JSONObject ?: continue
+            when (obj.opt(PART_TYPE_FIELD)) {
+                in TEXT_PART_TYPES -> (obj.opt(PART_TEXT_FIELD) as? String)?.let { texts += it }
+                in IMAGE_PART_TYPES -> images += 1
+            }
+        }
+        return ParsedContent(texts.filter { it.isNotEmpty() }.joinToString("\n\n"), images)
     }
 
     private fun parsePagination(root: JSONObject, dataLength: Int): PaginationMeta {
@@ -368,6 +399,10 @@ class HermesMessageClient(
         const val ID_FIELD = "id"
         const val ROLE_FIELD = "role"
         const val CONTENT_FIELD = "content"
+        const val PART_TYPE_FIELD = "type"
+        const val PART_TEXT_FIELD = "text"
+        val TEXT_PART_TYPES = setOf("text", "input_text")
+        val IMAGE_PART_TYPES = setOf("image", "image_url", "input_image")
         const val TIMESTAMP_FIELD = "timestamp"
         const val TOOL_NAME_FIELD = "tool_name"
         const val DISPLAY_KIND_FIELD = "display_kind"

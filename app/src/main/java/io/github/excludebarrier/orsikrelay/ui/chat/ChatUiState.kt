@@ -21,7 +21,8 @@ internal data class TimelineRow(
     val role: MessageRole,
     val content: String,
     val toolName: String? = null,
-    val localTool: Boolean = false
+    val localTool: Boolean = false,
+    val imageCount: Int = 0
 )
 
 /**
@@ -49,7 +50,8 @@ internal fun buildTimeline(
             } else {
                 message.content
             },
-            toolName = message.toolName
+            toolName = message.toolName,
+            imageCount = message.imageCount
         )
     } + local
 
