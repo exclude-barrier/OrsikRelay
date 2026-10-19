@@ -497,7 +497,7 @@ class HermesSessionStreamClientTest {
         // Timing decision: the established SSE stream must stay
         // long-lived (no global call timeout), but every connect and
         // write of a broken (re-)attach attempt must be bounded.
-        val defaults = HermesSessionStreamClient.newDefaultStreamClient()
+        val defaults = HermesSessionStreamClient.defaultSessionStreamHttpClient()
         assertTrue("connect timeout must be finite", defaults.connectTimeoutMillis > 0)
         assertTrue("write timeout must be finite", defaults.writeTimeoutMillis > 0)
         assertTrue("read timeout must be finite", defaults.readTimeoutMillis > 0)
@@ -1143,7 +1143,7 @@ class HermesSessionStreamClientTest {
             "read timeout must stay within a sane upper bound",
             HermesSessionStreamClient.STREAM_READ_TIMEOUT_SECONDS <= MAX_REASONABLE_READ_TIMEOUT_SECONDS
         )
-        val defaults = HermesSessionStreamClient.newDefaultStreamClient()
+        val defaults = HermesSessionStreamClient.defaultSessionStreamHttpClient()
         // readTimeoutMillis is Int; convert the Long constant explicitly
         // so JUnit compares (Int, Int), not (Long, Int).
         assertEquals(

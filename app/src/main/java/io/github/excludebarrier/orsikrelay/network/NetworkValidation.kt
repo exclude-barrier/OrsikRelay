@@ -38,10 +38,6 @@ internal fun isSafeServerString(
 ): Boolean = value.length <= maxLength && value.none { it.code < 0x20 || it.code == 0x7F }
 
 /**
- * Strict UTF-8 decode. Returns `null` for malformed or unmappable input
- * instead of silently substituting U+FFFD, so callers can fail closed.
- */
-/**
  * Extracts `error.code` from the closed server error envelope
  * `{"error":{"message","type","code"}}`. Returns `null` for any other shape,
  * so callers can map only the documented code and fail closed otherwise.
@@ -56,6 +52,10 @@ internal fun extractErrorCode(text: String): String? {
     return error.opt("code") as? String
 }
 
+/**
+ * Strict UTF-8 decode. Returns `null` for malformed or unmappable input
+ * instead of silently substituting U+FFFD, so callers can fail closed.
+ */
 internal fun decodeUtf8Strict(bytes: ByteArray): String? = try {
     Charsets.UTF_8.newDecoder()
         .onMalformedInput(CodingErrorAction.REPORT)

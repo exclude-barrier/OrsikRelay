@@ -5,18 +5,15 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopTransport
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.ResponseBody
 import org.json.JSONObject
 
 /**
@@ -56,7 +53,7 @@ import org.json.JSONObject
  *   or log.
  */
 class HermesRunStopClient(
-    okHttpClient: OkHttpClient = defaultRunStopHttpClient()
+    okHttpClient: OkHttpClient = HermesHttp.defaultClient()
 ) : RunStopTransport {
 
     private val client = okHttpClient.newBuilder()
@@ -72,16 +69,10 @@ class HermesRunStopClient(
     ): RunStopResult {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
             ?: return RunStopResult.Failure(RunStopError.InvalidInput)
-        if (!isSafeRunId(runId)) {
+        if (!isSafeOpaqueId(runId)) {
             return RunStopResult.Failure(RunStopError.InvalidInput)
         }
-        val keyIsSafe = apiKey.useRaw { rawKey ->
-            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
-                rawKey.none { character ->
-                    character.isWhitespace() || character.isISOControl()
-                }
-        }
-        if (!keyIsSafe) {
+        if (!isSafeApiKey(apiKey)) {
             return RunStopResult.Failure(RunStopError.InvalidInput)
         }
 
@@ -108,8 +99,15 @@ class HermesRunStopClient(
         return try {
             client.newCall(request).execute().use { response ->
                 requireSuccess(response)
-                requireJsonContentType(response)
-                parseStopAnswer(readBoundedUtf8(response.body), runId)
+                requireJsonContentType(response) {
+                    throw StopFailure(RunStopError.IncompatibleApi)
+                }
+                parseStopAnswer(
+                    readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                        throw StopFailure(RunStopError.IncompatibleApi)
+                    },
+                    runId
+                )
             }
         } catch (error: StopFailure) {
             RunStopResult.Failure(error.reason)
@@ -135,19 +133,6 @@ class HermesRunStopClient(
             CONFLICT_CODE -> throw StopFailure(RunStopError.Conflict)
             RATE_LIMITED_CODE -> throw StopFailure(RunStopError.RateLimited)
             else -> throw StopFailure(RunStopError.Http)
-        }
-    }
-
-    /**
-     * Only a JSON media type is accepted (parameters such as a charset
-     * are allowed); anything else is a closed protocol violation.
-     */
-    private fun requireJsonContentType(response: Response) {
-        val type = response.header(CONTENT_TYPE_HEADER)
-            ?.substringBefore(';')
-            ?.trim()
-        if (!JSON_MEDIA_TYPE.equals(type, ignoreCase = true)) {
-            throw StopFailure(RunStopError.IncompatibleApi)
         }
     }
 
@@ -179,44 +164,6 @@ class HermesRunStopClient(
         }
     }
 
-    private fun readBoundedUtf8(body: ResponseBody?): String {
-        if (body == null || body.contentLength() > MAX_RESPONSE_BYTES) {
-            throw StopFailure(RunStopError.IncompatibleApi)
-        }
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER_SIZE)
-        body.byteStream().use { input ->
-            var total = 0
-            while (true) {
-                val remaining = MAX_RESPONSE_BYTES + 1 - total
-                if (remaining <= 0) {
-                    throw StopFailure(RunStopError.IncompatibleApi)
-                }
-                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                total += read
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw StopFailure(RunStopError.IncompatibleApi)
-                }
-            }
-        }
-        val bytes = output.toByteArray()
-        val text = try {
-            decodeUtf8Strict(bytes)
-        } finally {
-            bytes.fill(0)
-            buffer.fill(0)
-        }
-        return text ?: throw StopFailure(RunStopError.IncompatibleApi)
-    }
-
-    private fun isSafeRunId(runId: String): Boolean {
-        if (runId.isBlank()) return false
-        if (runId.length > MAX_RUN_ID_LENGTH) return false
-        return runId.none { it.isISOControl() }
-    }
-
     private class StopFailure(val reason: RunStopError) : Exception()
 
     /**
@@ -226,16 +173,11 @@ class HermesRunStopClient(
      */
     internal companion object {
         const val MAX_RESPONSE_BYTES = 512 * 1024
-        const val MAX_API_KEY_CHARACTERS = 4096
-        const val MAX_RUN_ID_LENGTH = 256
-        const val BUFFER_SIZE = 8 * 1024
         const val V1_SEGMENT = "v1"
         const val RUNS_SEGMENT = "runs"
         const val STOP_SEGMENT = "stop"
         const val AUTHORIZATION_HEADER = "Authorization"
         const val BEARER_PREFIX = "Bearer "
-        const val CONTENT_TYPE_HEADER = "Content-Type"
-        const val JSON_MEDIA_TYPE = "application/json"
         const val EMPTY_BODY = "{}"
         const val RUN_ID_FIELD = "run_id"
         const val STATUS_FIELD = "status"
@@ -250,15 +192,5 @@ class HermesRunStopClient(
         const val NOT_FOUND_CODE = 404
         const val CONFLICT_CODE = 409
         const val RATE_LIMITED_CODE = 429
-
-        fun defaultRunStopHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
     }
 }

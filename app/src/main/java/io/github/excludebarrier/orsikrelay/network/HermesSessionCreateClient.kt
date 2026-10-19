@@ -5,20 +5,16 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateFetcher
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.ResponseBody
 import org.json.JSONObject
 
 /**
@@ -52,7 +48,7 @@ import org.json.JSONObject
  * prompt data are never read, logged or propagated.
  */
 class HermesSessionCreateClient(
-    okHttpClient: OkHttpClient = defaultSessionCreateHttpClient()
+    okHttpClient: OkHttpClient = HermesHttp.defaultClient()
 ) : SessionCreateFetcher {
 
     private val client = okHttpClient.newBuilder()
@@ -68,13 +64,7 @@ class HermesSessionCreateClient(
     ): SessionCreateResult {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
             ?: return SessionCreateResult.Failure(SessionCreateError.InvalidInput)
-        val keyIsSafe = apiKey.useRaw { rawKey ->
-            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
-                rawKey.none { character ->
-                    character.isWhitespace() || character.isISOControl()
-                }
-        }
-        if (!keyIsSafe) {
+        if (!isSafeApiKey(apiKey)) {
             return SessionCreateResult.Failure(SessionCreateError.InvalidInput)
         }
         val trimmedTitle = title?.trim()?.takeIf { it.isNotEmpty() }
@@ -109,7 +99,11 @@ class HermesSessionCreateClient(
         return try {
             val created = client.newCall(request).execute().use { response ->
                 requireCreated(response)
-                parseCreated(readBoundedUtf8(response.body))
+                parseCreated(
+                    readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                        throw CreateFailure(SessionCreateError.IncompatibleApi)
+                    }
+                )
             }
             SessionCreateResult.Success(created.first, created.second)
         } catch (error: CreateFailure) {
@@ -137,38 +131,6 @@ class HermesSessionCreateClient(
             RATE_LIMITED_CODE -> throw CreateFailure(SessionCreateError.RateLimited)
             else -> throw CreateFailure(SessionCreateError.Http)
         }
-    }
-
-    private fun readBoundedUtf8(body: ResponseBody?): String {
-        if (body == null || body.contentLength() > MAX_RESPONSE_BYTES) {
-            throw CreateFailure(SessionCreateError.IncompatibleApi)
-        }
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER_SIZE)
-        body.byteStream().use { input ->
-            var total = 0
-            while (true) {
-                val remaining = MAX_RESPONSE_BYTES + 1 - total
-                if (remaining <= 0) {
-                    throw CreateFailure(SessionCreateError.IncompatibleApi)
-                }
-                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                total += read
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw CreateFailure(SessionCreateError.IncompatibleApi)
-                }
-            }
-        }
-        val bytes = output.toByteArray()
-        val text = try {
-            decodeUtf8Strict(bytes)
-        } finally {
-            bytes.fill(0)
-            buffer.fill(0)
-        }
-        return text ?: throw CreateFailure(SessionCreateError.IncompatibleApi)
     }
 
     /**
@@ -216,8 +178,6 @@ class HermesSessionCreateClient(
 
     private companion object {
         const val MAX_RESPONSE_BYTES = 512 * 1024
-        const val MAX_API_KEY_CHARACTERS = 4096
-        const val BUFFER_SIZE = 8 * 1024
         const val API_SEGMENT = "api"
         const val SESSIONS_SEGMENT = "sessions"
         const val AUTHORIZATION_HEADER = "Authorization"
@@ -237,15 +197,5 @@ class HermesSessionCreateClient(
         const val BAD_REQUEST_CODE = 400
         const val CONFLICT_CODE = 409
         const val RATE_LIMITED_CODE = 429
-
-        fun defaultSessionCreateHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
     }
 }
