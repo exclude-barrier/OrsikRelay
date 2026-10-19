@@ -56,7 +56,7 @@ class SettingsNavigationUiTest {
         composeRule.onNodeWithText(context.getString(R.string.settings_license_label))
             .assertDoesNotExist()
 
-        composeRule.onNodeWithText(context.getString(R.string.settings_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back)).performClick()
 
         waitForText(context.getString(R.string.sessions_title))
         composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().let {
@@ -85,7 +85,7 @@ class SettingsNavigationUiTest {
         composeRule.onNodeWithText(context.getString(R.string.settings_source_label))
             .assertIsDisplayed()
 
-        composeRule.onNodeWithText(context.getString(R.string.settings_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back)).performClick()
 
         waitForText(context.getString(R.string.sessions_title))
         composeRule.onAllNodesWithTag("about_screen").fetchSemanticsNodes().let {

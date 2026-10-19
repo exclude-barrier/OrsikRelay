@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.settings.ChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.MaterialYouSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.ScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
@@ -19,6 +20,7 @@ import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
@@ -131,12 +133,14 @@ class AppLockSettingsUiTest {
             val chatTextSizeController = rememberChatTextSizeController(EmptyChatTextSizeStore)
             val screenProtectionController =
                 rememberScreenProtectionController(EmptyScreenProtectionStore)
+            val materialYouController = rememberMaterialYouController(EmptyMaterialYouStore)
             HermesTheme {
                 SettingsScreen(
                     languageController = languageController,
                     themeController = themeController,
                     chatTextSizeController = chatTextSizeController,
                     screenProtectionController = screenProtectionController,
+                    materialYouController = materialYouController,
                     appLockController = appLockController,
                     appAuthenticator = appAuthenticator,
                     onBack = {}
@@ -162,6 +166,11 @@ class AppLockSettingsUiTest {
     }
 
     private object EmptyScreenProtectionStore : ScreenProtectionSettingStore {
+        override fun read(): Boolean = false
+        override fun write(enabled: Boolean) = Unit
+    }
+
+    private object EmptyMaterialYouStore : MaterialYouSettingStore {
         override fun read(): Boolean = false
         override fun write(enabled: Boolean) = Unit
     }

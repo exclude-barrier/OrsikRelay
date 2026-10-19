@@ -1,13 +1,17 @@
 package io.github.excludebarrier.orsikrelay.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 /**
@@ -102,14 +106,31 @@ private val HermesShapes = Shapes(
  * default) the system light/dark setting is followed. Keeping the override
  * optional means a persistent theme switcher can later pass a stored value
  * here without touching any call site.
+ *
+ * [dynamicColor] opts into Material You: the scheme is then derived from the
+ * user's wallpaper on Android 12+. The explicit brand palette — including its
+ * tuned `surfaceContainer*` neutral ramp — stays in effect when the switch is
+ * off or the platform is older than API 31.
  */
 @Composable
 fun HermesTheme(
     darkTheme: Boolean? = null,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val resolvedDark = darkTheme ?: isSystemInDarkTheme()
-    val colorScheme = if (resolvedDark) DarkColors else LightColors
+    val context = LocalContext.current
+    val colorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (resolvedDark) {
+            dynamicDarkColorScheme(context)
+        } else {
+            dynamicLightColorScheme(context)
+        }
+    } else if (resolvedDark) {
+        DarkColors
+    } else {
+        LightColors
+    }
     MaterialTheme(
         colorScheme = colorScheme,
         shapes = HermesShapes,

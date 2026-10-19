@@ -27,6 +27,7 @@ import io.github.excludebarrier.orsikrelay.data.profile.RunApprovalCapabilitySto
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesLanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesMaterialYouSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.di.AppDependenciesHolder
@@ -53,10 +54,12 @@ import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.AboutScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.ChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.LanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.MaterialYouController
 import io.github.excludebarrier.orsikrelay.ui.settings.ScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
 import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
@@ -86,6 +89,7 @@ fun HermesNavHost(
     languageController: LanguageController? = null,
     chatTextSizeController: ChatTextSizeController? = null,
     screenProtectionController: ScreenProtectionController? = null,
+    materialYouController: MaterialYouController? = null,
     appLockController: AppLockController? = null,
     appAuthenticator: AppAuthenticator? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
@@ -124,6 +128,11 @@ fun HermesNavHost(
     }
     val resolvedScreenProtectionController = screenProtectionController
         ?: rememberScreenProtectionController(screenProtectionStore)
+    val materialYouStore = remember(applicationContext) {
+        SharedPreferencesMaterialYouSettingStore(applicationContext)
+    }
+    val resolvedMaterialYouController = materialYouController
+        ?: rememberMaterialYouController(materialYouStore)
     // The app-level lock state is process-scoped; production passes the same
     // controller from MainActivity so the root gate and the settings switch
     // can never diverge.
@@ -398,6 +407,7 @@ fun HermesNavHost(
                 themeController = settingsThemeController,
                 chatTextSizeController = resolvedChatTextSizeController,
                 screenProtectionController = resolvedScreenProtectionController,
+                materialYouController = resolvedMaterialYouController,
                 appLockController = resolvedAppLockController,
                 appAuthenticator = resolvedAppAuthenticator,
                 onBack = {
