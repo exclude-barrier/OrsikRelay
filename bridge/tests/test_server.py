@@ -141,7 +141,10 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
                     {"type": "text", "text": "Was ist das?"},
                     {"type": "image_url", "image_url": {"url": image}},
                 ]},
-                {"id": 2, "role": "assistant", "content": "Ein Baum."},
+                {"id": 2, "role": "assistant", "content": "Ein Baum.",
+                 "reasoning": "secret-thought",
+                 "tool_calls": [{"function": {"arguments": "rm -rf /x"}}]},
+                {"id": 3, "role": "tool", "tool_name": "terminal", "content": "secret-output"},
             ],
             "pagination": {"limit": 200, "offset": 0, "order": "latest", "returned": 2},
         }
@@ -160,6 +163,9 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             [{"type": "text", "text": "Was ist das?"}, {"type": "image_url"}],
         )
         self.assertEqual(page["data"][1]["content"], "Ein Baum.")
+        self.assertEqual(page["data"][2], {"id": 3, "role": "tool", "tool_name": "terminal", "content": ""})
+        for secret in (b"secret-thought", b"rm -rf", b"secret-output"):
+            self.assertNotIn(secret, body)
         self.assertEqual(page["pagination"]["returned"], 2)
 
     async def test_capabilities_requires_device_token(self):

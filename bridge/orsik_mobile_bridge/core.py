@@ -399,16 +399,22 @@ def build_credential(record: DeviceRecord, token: str, issued_at: float) -> dict
 
 
 _HISTORY_IMAGE_PART_TYPES = frozenset({"image", "image_url", "input_image"})
+# Never read by the app: model scratch text and the raw tool-call arguments.
+_HISTORY_UNUSED_FIELDS = ("tool_calls", "reasoning", "reasoning_content")
 
 
 def strip_history_images(body: bytes) -> bytes:
-    """Drop inline image data from a ``GET /api/sessions/{id}/messages`` page.
+    """Slim a ``GET /api/sessions/{id}/messages`` page to what the app reads.
 
-    Hermes keeps a turn with an image as its multimodal part list, base64
-    image included, so a page with a few images would exceed every client
-    bound. The app only counts image parts; the parts stay (without data) so
-    the count is preserved. A body that is not the expected JSON shape is
-    returned unchanged.
+    - Inline image data is dropped: Hermes keeps a turn with an image as its
+      multimodal part list, base64 included, so a page with a few images
+      would exceed every client bound. The image parts stay (without data)
+      so the app can count them.
+    - Tool messages lose their ``content`` (tool output, commands, paths);
+      the app renders only the tool name for them.
+    - ``tool_calls`` and reasoning fields are removed.
+
+    A body that is not the expected JSON shape is returned unchanged.
     """
     try:
         page = json.loads(body)
@@ -419,7 +425,16 @@ def strip_history_images(body: bytes) -> bytes:
         return body
     changed = False
     for message in data:
-        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(message, dict):
+            continue
+        for key in _HISTORY_UNUSED_FIELDS:
+            if key in message:
+                del message[key]
+                changed = True
+        if message.get("role") == "tool" and message.get("content"):
+            message["content"] = ""
+            changed = True
+        content = message.get("content")
         if not isinstance(content, list):
             continue
         for index, part in enumerate(content):
