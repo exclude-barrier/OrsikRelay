@@ -141,7 +141,8 @@ class ActiveServerSelectionUiTest {
         waitForText(context.getString(R.string.profiles_title))
         // Alpha is still the active, marked server; nothing was selected.
         assertExactlyOneActiveMarker()
-        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back))
+            .performClick()
         waitForText("Session Alpha")
 
         // Still on Sessions, still under Alpha; no switch happened.

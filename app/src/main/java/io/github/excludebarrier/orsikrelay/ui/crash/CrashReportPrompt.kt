@@ -2,8 +2,10 @@ package io.github.excludebarrier.orsikrelay.ui.crash
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -13,10 +15,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.crash.CrashReport
@@ -81,14 +85,18 @@ internal fun CrashReportDialog(
         title = { Text(stringResource(R.string.crash_dialog_title)) },
         text = { Text(stringResource(R.string.crash_dialog_text)) },
         confirmButton = {
-            TextButton(onClick = onReport) { Text(stringResource(R.string.crash_dialog_report)) }
-        },
-        dismissButton = {
-            Row {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 TextButton(onClick = onDiscard) { Text(stringResource(R.string.crash_dialog_discard)) }
                 TextButton(onClick = onShare) { Text(stringResource(R.string.crash_dialog_share)) }
+                FilledTonalButton(onClick = onReport) {
+                    Text(stringResource(R.string.crash_dialog_report))
+                }
             }
-        }
+        },
+        dismissButton = null
     )
 }
 

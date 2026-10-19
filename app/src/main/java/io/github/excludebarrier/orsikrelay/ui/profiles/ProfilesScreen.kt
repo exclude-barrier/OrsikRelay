@@ -30,6 +30,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +54,7 @@ import io.github.excludebarrier.orsikrelay.domain.device.DeviceDisconnectResult
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
+import io.github.excludebarrier.orsikrelay.ui.settings.SettingsTopBar
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -293,119 +295,116 @@ fun ProfilesScreen(
         removeFailure = RemoveFailure.None
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.profiles_title),
-                style = MaterialTheme.typography.headlineMedium
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            SettingsTopBar(
+                title = stringResource(R.string.profiles_title),
+                onBack = onBack
             )
-            Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = onBack) {
-                Text(text = stringResource(R.string.chat_back))
-            }
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        Box(
+    ) { innerPadding ->
+        Column(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
         ) {
-            when (val current = profiles) {
-                null -> if (loadFailed) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = stringResource(R.string.profiles_error_generic),
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { loadProfiles() },
-                            modifier = Modifier.testTag("profiles_retry")
+            Spacer(modifier = Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                when (val current = profiles) {
+                    null -> if (loadFailed) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(text = stringResource(R.string.sessions_retry))
+                            Text(
+                                text = stringResource(R.string.profiles_error_generic),
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = { loadProfiles() },
+                                modifier = Modifier.testTag("profiles_retry")
+                            ) {
+                                Text(text = stringResource(R.string.sessions_retry))
+                            }
                         }
-                    }
-                } else {
-                    Text(
-                        text = stringResource(R.string.profiles_loading),
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 24.dp)
-                    )
-                }
-
-                else -> {
-                    if (current.isEmpty()) {
+                    } else {
                         Text(
-                            text = stringResource(R.string.profiles_empty),
+                            text = stringResource(R.string.profiles_loading),
                             style = MaterialTheme.typography.bodyLarge,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 24.dp)
                         )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 8.dp)
-                        ) {
-                            itemsIndexed(current, key = { _, profile -> profile.id }) { index, profile ->
-                                Column {
-                                    if (index > 0) {
-                                        HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.outlineVariant
+                    }
+
+                    else -> {
+                        if (current.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.profiles_empty),
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 24.dp)
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 8.dp)
+                            ) {
+                                itemsIndexed(current, key = { _, profile -> profile.id }) { index, profile ->
+                                    Column {
+                                        if (index > 0) {
+                                            HorizontalDivider(
+                                                color = MaterialTheme.colorScheme.outlineVariant
+                                            )
+                                        }
+                                        ProfileRow(
+                                            profile = profile,
+                                            isActive = profile.id == activeProfileId,
+                                            isSelecting = selecting != null,
+                                            credentialKind = credentialKinds[profile.id],
+                                            onClick = {
+                                                if (profile.id != activeProfileId) {
+                                                    confirmSelect(profile)
+                                                }
+                                            },
+                                            onUseAsActive = { confirmSelect(profile) },
+                                            onDelete = { requestDelete(profile) }
                                         )
                                     }
-                                    ProfileRow(
-                                        profile = profile,
-                                        isActive = profile.id == activeProfileId,
-                                        isSelecting = selecting != null,
-                                        credentialKind = credentialKinds[profile.id],
-                                        onClick = {
-                                            if (profile.id != activeProfileId) {
-                                                confirmSelect(profile)
-                                            }
-                                        },
-                                        onUseAsActive = { confirmSelect(profile) },
-                                        onDelete = { requestDelete(profile) }
-                                    )
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-        // Same bottom placement as the composer: the list takes the
-        // remaining height and this action stays at the bottom edge. The
-        // activity root already applies the safe-drawing insets, so no
-        // navigation-bar inset is added here.
-        Button(
-            onClick = onAddServer,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp)
-                .testTag("addServerButton")
-        ) {
-            Text(text = stringResource(R.string.onboarding_title))
+            // Same bottom placement as the composer: the list takes the
+            // remaining height and this action stays at the bottom edge. The
+            // activity root already applies the safe-drawing insets, so no
+            // navigation-bar inset is added here.
+            Button(
+                onClick = onAddServer,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+                    .testTag("addServerButton")
+            ) {
+                Text(text = stringResource(R.string.onboarding_title))
+            }
         }
     }
 

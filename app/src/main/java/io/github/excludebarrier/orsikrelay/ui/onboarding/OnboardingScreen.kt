@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,6 +64,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeCard
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
 import io.github.excludebarrier.orsikrelay.ui.pairing.PairingQrScannerScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.SettingsTopBar
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -207,287 +208,293 @@ fun OnboardingScreen(
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
-    ) {
+    Column(modifier = modifier.fillMaxSize()) {
         if (onBack != null) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                TextButton(
-                    onClick = onBack,
-                    modifier = Modifier.testTag("onboardingBack")
-                ) {
-                    Text(text = stringResource(R.string.settings_back))
-                }
-            }
+            SettingsTopBar(
+                title = stringResource(R.string.onboarding_title),
+                onBack = onBack,
+                backButtonTestTag = "onboardingBack"
+            )
         }
-        Text(
-            text = stringResource(R.string.onboarding_title),
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center
-        )
-        Text(
-            text = stringResource(R.string.onboarding_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-
         Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .padding(top = 24.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    horizontal = 24.dp,
+                    vertical = if (onBack != null) 16.dp else 32.dp
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Equal segment heights at every font scale: the row adopts
-                // the tallest intrinsic height (and at least a 48 dp touch
-                // target), and each segment fills it. The pairing label is
-                // deliberately just "Pairing code" so it stays on one line;
-                // the recommendation moved to a badge below the segment.
-                SingleChoiceSegmentedButtonRow(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .height(IntrinsicSize.Min)
-                ) {
-                    SegmentedButton(
-                        selected = mode == OnboardingMode.Pairing,
-                        onClick = { switchMode(OnboardingMode.Pairing) },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .testTag("onboardingModePairing"),
-                        icon = {}
-                    ) {
-                        Text(
-                            text = stringResource(R.string.onboarding_mode_pairing),
-                            textAlign = TextAlign.Center,
-                            fontWeight = if (mode == OnboardingMode.Pairing) {
-                                FontWeight.SemiBold
-                            } else {
-                                FontWeight.Normal
-                            }
-                        )
-                    }
-                    SegmentedButton(
-                        selected = mode == OnboardingMode.ApiKey,
-                        onClick = { switchMode(OnboardingMode.ApiKey) },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .testTag("onboardingModeApiKey"),
-                        icon = {}
-                    ) {
-                        Text(
-                            text = stringResource(R.string.onboarding_mode_api_key),
-                            textAlign = TextAlign.Center,
-                            fontWeight = if (mode == OnboardingMode.ApiKey) {
-                                FontWeight.SemiBold
-                            } else {
-                                FontWeight.Normal
-                            }
-                        )
-                    }
-                }
-                IconButton(
-                    onClick = { showModeInfo = true },
-                    modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(48.dp)
-                        .testTag("onboardingModeInfo")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Info,
-                        contentDescription = stringResource(R.string.onboarding_mode_info_content_description)
-                    )
-                }
+            if (onBack == null) {
+                Text(
+                    text = stringResource(R.string.onboarding_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    textAlign = TextAlign.Center
+                )
             }
-            // Small badge under the pairing segment. Two equal weight cells
-            // mirror the two segments; the trailing spacer matches the info
-            // button, so the badge centre stays under the left segment.
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (mode == OnboardingMode.Pairing) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            shape = CircleShape
+            Text(
+                text = stringResource(R.string.onboarding_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Equal segment heights at every font scale: the row adopts
+                    // the tallest intrinsic height (and at least a 48 dp touch
+                    // target), and each segment fills it. The pairing label is
+                    // deliberately just "Pairing code" so it stays on one line;
+                    // the recommendation moved to a badge below the segment.
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .height(IntrinsicSize.Min)
+                    ) {
+                        SegmentedButton(
+                            selected = mode == OnboardingMode.Pairing,
+                            onClick = { switchMode(OnboardingMode.Pairing) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .testTag("onboardingModePairing"),
+                            icon = {}
                         ) {
                             Text(
-                                text = stringResource(R.string.onboarding_mode_pairing_recommended),
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                                    .testTag("onboardingModePairingRecommended")
+                                text = stringResource(R.string.onboarding_mode_pairing),
+                                textAlign = TextAlign.Center,
+                                fontWeight = if (mode == OnboardingMode.Pairing) {
+                                    FontWeight.SemiBold
+                                } else {
+                                    FontWeight.Normal
+                                }
+                            )
+                        }
+                        SegmentedButton(
+                            selected = mode == OnboardingMode.ApiKey,
+                            onClick = { switchMode(OnboardingMode.ApiKey) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .testTag("onboardingModeApiKey"),
+                            icon = {}
+                        ) {
+                            Text(
+                                text = stringResource(R.string.onboarding_mode_api_key),
+                                textAlign = TextAlign.Center,
+                                fontWeight = if (mode == OnboardingMode.ApiKey) {
+                                    FontWeight.SemiBold
+                                } else {
+                                    FontWeight.Normal
+                                }
                             )
                         }
                     }
+                    IconButton(
+                        onClick = { showModeInfo = true },
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(48.dp)
+                            .testTag("onboardingModeInfo")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = stringResource(R.string.onboarding_mode_info_content_description),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Box(modifier = Modifier.weight(1f))
-                Spacer(modifier = Modifier.width(56.dp))
+                // Small badge under the pairing segment. Two equal weight cells
+                // mirror the two segments; the trailing spacer matches the info
+                // button, so the badge centre stays under the left segment.
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (mode == OnboardingMode.Pairing) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                shape = CircleShape
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.onboarding_mode_pairing_recommended),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        .testTag("onboardingModePairingRecommended")
+                                )
+                            }
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(56.dp))
+                }
             }
-        }
 
-        if (mode == OnboardingMode.Pairing && cameraAvailable) {
-            FilledTonalButton(
-                onClick = { showScanner = true },
+            if (mode == OnboardingMode.Pairing && cameraAvailable) {
+                FilledTonalButton(
+                    onClick = { showScanner = true },
+                    enabled = !isConnecting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp)
+                        .testTag("onboardingScanQr")
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_qr_code_scanner),
+                        contentDescription = null
+                    )
+                    Text(
+                        text = stringResource(R.string.onboarding_scan_qr),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
+
+            // Fields sit freely (no bordered card) with a uniform 16 dp rhythm.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+            ) {
+                OutlinedTextField(
+                    value = profileName,
+                    onValueChange = {
+                        profileName = it
+                        clearFieldErrors()
+                    },
+                    label = { Text(text = stringResource(R.string.onboarding_profile_name_label)) },
+                    supportingText = validationError?.profileNameError
+                        ?.let { code -> { Text(text = stringResource(profileNameErrorMessage(code))) } },
+                    isError = validationError?.profileNameError != null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    enabled = !isConnecting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("onboardingProfileName")
+                )
+
+                OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = {
+                        baseUrl = it
+                        clearFieldErrors()
+                    },
+                    label = { Text(text = stringResource(R.string.onboarding_base_url_label)) },
+                    supportingText = validationError?.baseUrlError
+                        ?.let { code -> { Text(text = stringResource(baseUrlErrorMessage(code))) } },
+                    isError = validationError?.baseUrlError != null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    enabled = !isConnecting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                        .testTag("onboardingBaseUrl")
+                )
+
+                if (mode == OnboardingMode.Pairing) {
+                    // The pairing code is a single-use
+                    // secret. It is rendered with password semantics and
+                    // validated locally; the API-key field is not present
+                    // in this mode at all.
+                    OutlinedTextField(
+                        value = pairingCode,
+                        onValueChange = {
+                            pairingCode = it
+                            clearFieldErrors()
+                        },
+                        label = { Text(text = stringResource(R.string.onboarding_pairing_code_label)) },
+                        supportingText = {
+                            if (pairingCodeError) {
+                                Text(text = stringResource(R.string.error_pairing_code_local_invalid))
+                            }
+                        },
+                        isError = pairingCodeError,
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        enabled = !isConnecting,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp)
+                            .semantics {
+                                semanticsTestTag = "onboardingPairingCode"
+                                contentDescription = pairingCodeLabel
+                                password()
+                            }
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = {
+                            apiKey = it
+                            clearFieldErrors()
+                        },
+                        label = { Text(text = apiKeyLabel) },
+                        supportingText = validationError?.apiKeyError
+                            ?.let { code -> { Text(text = stringResource(apiKeyErrorMessage(code))) } },
+                        isError = validationError?.apiKeyError != null,
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        enabled = !isConnecting,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp)
+                            .semantics {
+                                semanticsTestTag = "onboardingApiKey"
+                                contentDescription = apiKeyLabel
+                                password()
+                            }
+                    )
+                }
+            }
+
+            if (connectionState is OnboardingConnectionState.Failure) {
+                val (title, text) = onboardingFailureCopy(connectionState.reason)
+                NoticeCard(
+                    tone = NoticeTone.Error,
+                    title = stringResource(title),
+                    text = stringResource(text),
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .testTag("onboardingConnectionError")
+                )
+            }
+
+            Button(
+                onClick = { submit() },
                 enabled = !isConnecting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 24.dp)
-                    .testTag("onboardingScanQr")
+                    .testTag("onboardingSubmitButton")
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_qr_code_scanner),
-                    contentDescription = null
-                )
-                Text(
-                    text = stringResource(R.string.onboarding_scan_qr),
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-        }
-
-        // Fields sit freely (no bordered card) with a uniform 16 dp rhythm.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp)
-        ) {
-            OutlinedTextField(
-                value = profileName,
-                onValueChange = {
-                    profileName = it
-                    clearFieldErrors()
-                },
-                label = { Text(text = stringResource(R.string.onboarding_profile_name_label)) },
-                supportingText = validationError?.profileNameError
-                    ?.let { code -> { Text(text = stringResource(profileNameErrorMessage(code))) } },
-                isError = validationError?.profileNameError != null,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                enabled = !isConnecting,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("onboardingProfileName")
-            )
-
-            OutlinedTextField(
-                value = baseUrl,
-                onValueChange = {
-                    baseUrl = it
-                    clearFieldErrors()
-                },
-                label = { Text(text = stringResource(R.string.onboarding_base_url_label)) },
-                supportingText = validationError?.baseUrlError
-                    ?.let { code -> { Text(text = stringResource(baseUrlErrorMessage(code))) } },
-                isError = validationError?.baseUrlError != null,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                enabled = !isConnecting,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp)
-                    .testTag("onboardingBaseUrl")
-            )
-
-            if (mode == OnboardingMode.Pairing) {
-                // The pairing code is a single-use
-                // secret. It is rendered with password semantics and
-                // validated locally; the API-key field is not present
-                // in this mode at all.
-                OutlinedTextField(
-                    value = pairingCode,
-                    onValueChange = {
-                        pairingCode = it
-                        clearFieldErrors()
-                    },
-                    label = { Text(text = stringResource(R.string.onboarding_pairing_code_label)) },
-                    supportingText = {
-                        if (pairingCodeError) {
-                            Text(text = stringResource(R.string.error_pairing_code_local_invalid))
-                        }
-                    },
-                    isError = pairingCodeError,
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    enabled = !isConnecting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp)
-                        .semantics {
-                            semanticsTestTag = "onboardingPairingCode"
-                            contentDescription = pairingCodeLabel
-                            password()
-                        }
-                )
-            } else {
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = {
-                        apiKey = it
-                        clearFieldErrors()
-                    },
-                    label = { Text(text = apiKeyLabel) },
-                    supportingText = validationError?.apiKeyError
-                        ?.let { code -> { Text(text = stringResource(apiKeyErrorMessage(code))) } },
-                    isError = validationError?.apiKeyError != null,
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    enabled = !isConnecting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp)
-                        .semantics {
-                            semanticsTestTag = "onboardingApiKey"
-                            contentDescription = apiKeyLabel
-                            password()
-                        }
-                )
-            }
-        }
-
-        if (connectionState is OnboardingConnectionState.Failure) {
-            val (title, text) = onboardingFailureCopy(connectionState.reason)
-            NoticeCard(
-                tone = NoticeTone.Error,
-                title = stringResource(title),
-                text = stringResource(text),
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .testTag("onboardingConnectionError")
-            )
-        }
-
-        Button(
-            onClick = { submit() },
-            enabled = !isConnecting,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 24.dp)
-                .testTag("onboardingSubmitButton")
-        ) {
-            if (isConnecting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp
-                )
-                Text(
-                    text = stringResource(R.string.onboarding_connecting),
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            } else {
-                Text(text = stringResource(R.string.onboarding_submit))
+                if (isConnecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Text(
+                        text = stringResource(R.string.onboarding_connecting),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                } else {
+                    Text(text = stringResource(R.string.onboarding_submit))
+                }
             }
         }
     }

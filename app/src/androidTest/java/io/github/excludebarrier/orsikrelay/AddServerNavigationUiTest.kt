@@ -170,7 +170,7 @@ class AddServerNavigationUiTest {
         waitForText(context.getString(R.string.profiles_title))
         // Both taps are delivered in the same UI frame, before any
         // recomposition: exactly what a fast double tap does.
-        val backClick = composeRule.onNodeWithText(context.getString(R.string.chat_back))
+        val backClick = composeRule.onNodeWithTag("settings_back")
             .fetchSemanticsNode().config[SemanticsActions.OnClick].action
         composeRule.runOnUiThread {
             backClick?.invoke()

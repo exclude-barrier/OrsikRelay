@@ -60,7 +60,8 @@ class ProfileManagementNavigationUiTest {
         composeRule.onNodeWithText("alpha.local").assertExists()
         composeRule.onNodeWithText("Beta").assertExists()
 
-        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back))
+            .performClick()
         waitForText(context.getString(R.string.sessions_title))
     }
 

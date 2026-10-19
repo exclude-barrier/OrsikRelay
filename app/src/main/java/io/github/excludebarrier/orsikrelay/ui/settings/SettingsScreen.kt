@@ -444,7 +444,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -457,9 +457,9 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun SettingsRow(
+internal fun SettingsRow(
     modifier: Modifier = Modifier,
-    leadingIcon: @Composable () -> Unit,
+    leadingIcon: (@Composable () -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -470,16 +470,20 @@ private fun SettingsRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier.size(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            leadingIcon()
+        if (leadingIcon != null) {
+            Box(
+                modifier = Modifier.size(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                leadingIcon()
+            }
         }
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 16.dp),
+                .then(
+                    if (leadingIcon != null) Modifier.padding(start = 16.dp) else Modifier
+                ),
             content = content
         )
         trailing()
@@ -487,7 +491,7 @@ private fun SettingsRow(
 }
 
 @Composable
-private fun SettingsDivider() {
+internal fun SettingsDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(start = 56.dp),
         color = MaterialTheme.colorScheme.outlineVariant

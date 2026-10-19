@@ -5,7 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,9 +64,10 @@ fun AppLockGate(
 }
 
 /**
- * The lock screen itself: app name, a closed lock message and one unlock
- * action. The authentication prompt is requested exactly once when the screen
- * appears; after a cancellation the button remains and can request it again.
+ * The lock screen itself: a large closed-lock symbol, a short locked title
+ * and one unlock action. The authentication prompt is requested exactly once
+ * when the screen appears; after a cancellation the button remains and can
+ * request it again.
  */
 @Composable
 fun AppLockScreen(
@@ -92,16 +97,17 @@ fun AppLockScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center
+        Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(48.dp)
         )
         Text(
-            text = stringResource(R.string.app_lock_locked),
-            style = MaterialTheme.typography.bodyLarge,
+            text = stringResource(R.string.app_lock_locked_title),
+            style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp)
+            modifier = Modifier.padding(top = 16.dp)
         )
         Button(
             onClick = { requestUnlock() },
@@ -129,10 +135,11 @@ private fun AppLockDeviceLockMissingScreen(onContinue: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center
+        Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(48.dp)
         )
         Text(
             text = stringResource(R.string.app_lock_device_lock_missing),

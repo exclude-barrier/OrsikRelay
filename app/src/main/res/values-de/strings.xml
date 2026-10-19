@@ -114,11 +114,11 @@
     <string name="settings_app_lock_label">App-Sperre</string>
     <string name="settings_app_lock_description">Beim Öffnen und nach 30 Sekunden im Hintergrund mit Fingerabdruck, Gesicht oder Geräte-PIN entsperren.</string>
     <string name="settings_app_lock_unavailable">Richte zuerst eine Displaysperre auf dem Gerät ein.</string>
-    <string name="app_lock_locked">Orsik Relay ist gesperrt</string>
     <string name="app_lock_unlock">Entsperren</string>
     <string name="app_lock_device_lock_missing">Auf dem Gerät ist keine Displaysperre mehr eingerichtet. Die App-Sperre wurde deshalb ausgeschaltet.</string>
     <string name="app_lock_continue">Weiter</string>
     <string name="app_lock_prompt_title">Orsik Relay entsperren</string>
+    <string name="app_lock_locked_title">Gesperrt</string>
     <string name="settings_about_section">Über die App</string>
     <string name="settings_version_label">Version</string>
     <string name="settings_license_label">Lizenz</string>
@@ -249,8 +249,8 @@
     <string name="chat_load_older">Ältere Nachrichten laden</string>
     <string name="chat_load_older_failed">Ältere Nachrichten konnten nicht geladen werden.</string>
     <string name="crash_dialog_title">Orsik Relay ist abgestürzt</string>
-    <string name="crash_dialog_text">Die App ist beim letzten Mal abgestürzt. Du kannst den Fehler melden, damit er behoben werden kann. Der Bericht enthält nur App- und Android-Version, Gerätemodell und die Stellen im Code: keine Chats, Adressen oder Schlüssel. Du siehst ihn, bevor etwas gesendet wird.</string>
-    <string name="crash_dialog_report">Auf GitHub melden</string>
+    <string name="crash_dialog_text">Die App ist beim letzten Mal abgestürzt. Der Bericht enthält nur Versionen, Gerätemodell und Code-Stellen – keine Chats, Adressen oder Schlüssel.</string>
+    <string name="crash_dialog_report">Melden</string>
     <string name="crash_dialog_share">Teilen</string>
     <string name="crash_dialog_discard">Verwerfen</string>
     <string name="crash_share_title">Absturzbericht teilen</string>
