@@ -1,8 +1,11 @@
 package io.github.excludebarrier.orsikrelay
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasSetTextAction
@@ -27,6 +30,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_CHAT_TITLE
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -147,7 +151,7 @@ class ChatTurnNavigationUiTest {
             .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Synthese 1")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
         assertTrue(turnSource.opened.await(3, TimeUnit.SECONDS))
         assertEquals(PROFILE_ID, turnSource.profileId.get())
         assertEquals(sessionId, turnSource.sessionId.get())
@@ -157,7 +161,7 @@ class ChatTurnNavigationUiTest {
         // the stream — the run belongs to the app-wide RunSessionController
         // and continues in the background; the navigation simply returns to
         // the session list.
-        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back)).performClick()
         waitForText("Turn-Session")
         assertFalse(
             "the running stream must survive the back navigation",
@@ -224,7 +228,7 @@ class ChatTurnNavigationUiTest {
         composeRule.onNodeWithText("SystemBack-Session").performClick()
         // We are now on the chat screen. The title appears before the (empty)
         // history has loaded; wait until the composer accepts input.
-        waitForText(context.getString(R.string.chat_title))
+        composeRule.onNodeWithTag(TAG_CHAT_TITLE).assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodes(hasSetTextAction() and hasText(context.getString(R.string.chat_input_label)) and isEnabled())
                 .fetchSemanticsNodes().isNotEmpty()
@@ -235,7 +239,7 @@ class ChatTurnNavigationUiTest {
         // event and never completes on its own).
         composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput("System back")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
         assertTrue(
             "stream was not started before the system back",
             turnSource.opened.await(3, TimeUnit.SECONDS)
@@ -317,7 +321,7 @@ class ChatTurnNavigationUiTest {
 
         waitForText("DoubleBack-Session")
         composeRule.onNodeWithText("DoubleBack-Session").performClick()
-        waitForText(context.getString(R.string.chat_title))
+        composeRule.onNodeWithTag(TAG_CHAT_TITLE).assertIsDisplayed()
 
         // No turn is active: both backs go straight to onBack().
         composeRule.runOnIdle {

@@ -168,15 +168,15 @@ class LiveBridgeChatE2ETest {
         // from ChatScreen.kt: `chat_input_label` and `chat_send`).
         composeRule.onNodeWithText(COMPOSER_LABEL).performTextInput(sentMessage)
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(SEND_LABEL).assertIsEnabled()
-        composeRule.onNodeWithText(SEND_LABEL).performClick()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).performClick()
 
         // 4. Bounded wait (no Thread.sleep) for the TERMINAL run state: an
         // assistant row exists AND the composer is ready again. The assistant
         // CONTENT is never asserted.
         waitForTerminalRun()
         composeRule.onNodeWithText(COMPOSER_LABEL).assertIsEnabled()
-        composeRule.onNodeWithText(SEND_LABEL).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).assertIsNotEnabled()
         assertTrue("an assistant message must be rendered", assistantRowPresent())
 
         // 5. Exactly one user message with the sent text - no duplicate POST.
@@ -192,7 +192,7 @@ class LiveBridgeChatE2ETest {
         assertTrue("an assistant message must be rendered", assistantRowPresent())
         // Send-ready with an empty draft: no automatic second send happened.
         composeRule.onNodeWithText(COMPOSER_LABEL).assertIsEnabled()
-        composeRule.onNodeWithText(SEND_LABEL).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).assertIsNotEnabled()
 
         // 7. The same transcript read through the production path.
         val sessionId = findSessionCarryingSentMessage(profileId)

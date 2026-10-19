@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -85,13 +86,19 @@ class ChatScreenUiTest {
         })
 
         waitForText("Fixture-Antwort")
+        // The user and assistant sender labels are no longer visible, but they
+        // remain the per-message accessibility label.
         listOf(
-            context.getString(R.string.chat_role_user),
-            context.getString(R.string.chat_role_assistant),
-            context.getString(R.string.chat_role_system),
-            context.getString(R.string.chat_role_tool_named, "fixture_tool")
-        ).forEach {
-            composeRule.onNodeWithText(it).assertIsDisplayed()
+            context.getString(R.string.chat_role_user) to true,
+            context.getString(R.string.chat_role_assistant) to true,
+            context.getString(R.string.chat_role_system) to false,
+            context.getString(R.string.chat_role_tool_named, "fixture_tool") to false
+        ).forEach { (label, isContentDescription) ->
+            if (isContentDescription) {
+                composeRule.onNodeWithContentDescription(label).assertExists()
+            } else {
+                composeRule.onNodeWithText(label).assertIsDisplayed()
+            }
         }
         // Non-tool content is rendered verbatim…
         listOf("Fixture-Frage", "Fixture-Antwort", "Fixture-System").forEach {
@@ -196,7 +203,7 @@ class ChatScreenUiTest {
         )
 
         waitForText(context.getString(R.string.chat_empty))
-        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back)).performClick()
         assertTrue(invoked.get())
     }
 

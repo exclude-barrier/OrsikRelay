@@ -121,8 +121,8 @@ class LiveBridgeApprovalE2ETest {
             "`rm -rf /tmp/or06-ui-${UUID.randomUUID()}` aus und antworte danach nur mit: fertig"
         composeRule.onNodeWithText(COMPOSER_LABEL).performTextInput(message)
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(SEND_LABEL).assertIsEnabled()
-        composeRule.onNodeWithText(SEND_LABEL).performClick()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).performClick()
 
         // The production dialog, identified by its own title and fixed text.
         val title = context.getString(R.string.approval_title)

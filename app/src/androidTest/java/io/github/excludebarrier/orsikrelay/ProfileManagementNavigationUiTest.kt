@@ -2,6 +2,8 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -19,6 +21,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_CHAT_TITLE
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.assertEquals
@@ -90,9 +93,9 @@ class ProfileManagementNavigationUiTest {
 
         waitForText("Session Alpha")
         composeRule.onNodeWithText("Session Alpha").performClick()
-        waitForText(context.getString(R.string.chat_title))
+        composeRule.onNodeWithTag(TAG_CHAT_TITLE).assertIsDisplayed()
 
-        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back)).performClick()
         waitForText("Session Alpha")
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
@@ -107,7 +110,7 @@ class ProfileManagementNavigationUiTest {
         waitForText(context.getString(R.string.error_session_profile))
         // The safe state: no chat entry is alive any more.
         assertTrue(
-            composeRule.onAllNodesWithText(context.getString(R.string.chat_title)).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag(TAG_CHAT_TITLE).fetchSemanticsNodes().isEmpty()
         )
         assertEquals(1, admin.deletedCount)
         // Only Alpha (the active profile) was deleted; Beta survives.

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
@@ -74,7 +75,7 @@ class ChatBubbleUiTest {
     }
 
     @Test
-    fun hermesBubbleSitsAtTheLeftEdgeAndStaysWithin92Percent() {
+    fun hermesAnswerUsesTheFullWidthWithoutABubble() {
         setScreen(
             listOf(
                 message(1, MessageRole.USER, "Kurze Frage"),
@@ -84,17 +85,24 @@ class ChatBubbleUiTest {
         waitForText(LONG_ASSISTANT)
 
         val row = bounds("chatTimelineRow:server:2")
-        val bubble = bounds("chatBubble:server:2")
+        val body = bounds("chatAssistantBody:server:2")
+        // No assistant bubble exists any more: the body is plain content on
+        // the surface, spanning the full content width.
+        composeRule.onAllNodesWithTag("chatBubble:server:2").assertCountEquals(0)
         assertTrue(
-            "Hermes bubble left edge must sit on the content edge, gap was ${bubble.left - row.left} px",
-            abs(bubble.left - row.left) <= 1f
+            "Hermes body left edge must sit on the content edge, gap was ${body.left - row.left} px",
+            abs(body.left - row.left) <= 1f
         )
         assertTrue(
-            "Hermes bubble width ${bubble.width} px exceeds 92 % of ${row.width} px",
-            bubble.width <= row.width * 0.92f + 1f
+            "Hermes body width ${body.width} px must match the row width ${row.width} px",
+            abs(body.width - row.width) <= 1f
         )
-        composeRule.onNodeWithText(context.getString(R.string.chat_role_assistant))
-            .assertIsDisplayed()
+        // The visible sender label is gone, but the accessibility label stays.
+        composeRule.onAllNodesWithText(context.getString(R.string.chat_role_assistant))
+            .assertCountEquals(0)
+        composeRule.onNodeWithContentDescription(
+            context.getString(R.string.chat_role_assistant)
+        ).assertExists()
     }
 
     @Test
@@ -140,10 +148,10 @@ class ChatBubbleUiTest {
             userBubble.width <= userRow.width * 0.85f + 1f
         )
         val hermesRow = bounds("chatTimelineRow:server:2")
-        val hermesBubble = bounds("chatBubble:server:2")
+        val hermesBody = bounds("chatAssistantBody:server:2")
         assertTrue(
-            "Hermes bubble width ${hermesBubble.width} px exceeds 92 % of ${hermesRow.width} px",
-            hermesBubble.width <= hermesRow.width * 0.92f + 1f
+            "Hermes body width ${hermesBody.width} px must match the row width ${hermesRow.width} px",
+            abs(hermesBody.width - hermesRow.width) <= 1f
         )
     }
 

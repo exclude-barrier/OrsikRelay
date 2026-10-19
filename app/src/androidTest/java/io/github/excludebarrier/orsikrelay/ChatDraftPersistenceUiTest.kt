@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -94,7 +95,7 @@ class ChatDraftPersistenceUiTest {
         setScreen(drafts)
 
         waitForComposerText("Wiederhergestellter Entwurf")
-        composeRule.onNodeWithText(context().getString(R.string.chat_send)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).assertIsEnabled()
     }
 
     @Test
@@ -225,7 +226,7 @@ class ChatDraftPersistenceUiTest {
 
         waitForEmpty()
         composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Wird gesendet")
-        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // The server-confirmed handoff clears the composer AND the stored
@@ -248,7 +249,7 @@ class ChatDraftPersistenceUiTest {
 
         waitForEmpty()
         composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Bleibt erhalten")
-        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // Uncertain run: the initial POST failed with NO confirmed run ID, but it
@@ -262,8 +263,8 @@ class ChatDraftPersistenceUiTest {
 
         assertEquals("Bleibt erhalten", draftText())
         assertEquals("Bleibt erhalten", drafts.stored(PROFILE, SESSION))
-        composeRule.onNodeWithText(context().getString(R.string.chat_send)).assertIsDisplayed()
-        composeRule.onNodeWithText(context().getString(R.string.chat_send)).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).assertIsNotEnabled()
         composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).assertIsNotEnabled()
         assertTrue(
             "the honest uncertain notice must be shown, never a stopped run",
@@ -312,7 +313,7 @@ class ChatDraftPersistenceUiTest {
         }
         waitForEmpty()
         composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Ordinary message")
-        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -479,7 +480,7 @@ class ChatDraftPersistenceUiTest {
         waitForEmpty()
 
         composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Wird gesendet")
-        composeRule.onNodeWithText(context().getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).performClick()
         assertTrue(source.opened.await(3, TimeUnit.SECONDS))
 
         // The successful send handoff clears composer + stored state, with

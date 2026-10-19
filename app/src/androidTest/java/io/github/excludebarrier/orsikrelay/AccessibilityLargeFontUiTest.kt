@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
@@ -324,7 +325,9 @@ class AccessibilityLargeFontUiTest {
         val send = composeRule.onNodeWithTag(TAG_COMPOSER_SEND)
         send.assertIsDisplayed()
         assertTouchTargetAtLeast48Dp(send, "composer send")
-        assertLabelNotTruncated(SEND_LABEL)
+        // The send action is an icon button; its accessible label is carried
+        // by the content description and cannot be ellipsized.
+        send.assertContentDescriptionEquals(SEND_LABEL)
     }
 
     // ------------------------------------------------------------------
