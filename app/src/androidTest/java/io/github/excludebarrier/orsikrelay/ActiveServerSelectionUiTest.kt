@@ -25,6 +25,8 @@ import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_CHAT_TITLE
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -47,11 +49,21 @@ import org.junit.Test
  *
  * All fakes are synthetic; no network request and no credential read is made.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ActiveServerSelectionUiTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
+    // The startup effect resolves the profile on `Dispatchers.IO` and then
+    // writes `resolvedStart` / `activeProfileId`. With the default
+    // UnconfinedTestDispatcher that post-I/O continuation resumes on the IO
+    // worker, so the first NavHost composition registers its lifecycle
+    // observer off the main thread ("Method addObserver must be called on the
+    // main thread"). A confined StandardTestDispatcher queues the
+    // continuation on the test scheduler, which waitForIdle/waitUntil pump
+    // from the main thread (same convention as
+    // ActiveServerSelectionRestartUiTest).
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComponentActivity>(StandardTestDispatcher())
 
     private val admin = FakeProfileAdmin(
         listOf(
