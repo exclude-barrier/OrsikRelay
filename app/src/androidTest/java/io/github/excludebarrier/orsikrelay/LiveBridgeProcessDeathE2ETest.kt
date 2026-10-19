@@ -92,8 +92,8 @@ class LiveBridgeProcessDeathE2ETest {
 
         composeRule.onNodeWithText(COMPOSER_LABEL).performTextInput(message(title))
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(SEND_LABEL).assertIsEnabled()
-        composeRule.onNodeWithText(SEND_LABEL).performClick()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).performClick()
 
         // The server-confirmed run id is bound and durably leased.
         var runId: String? = null

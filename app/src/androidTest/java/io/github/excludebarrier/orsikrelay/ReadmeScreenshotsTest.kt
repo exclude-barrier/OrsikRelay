@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.platform.app.InstrumentationRegistry
@@ -188,7 +189,7 @@ class ReadmeScreenshotsTest {
         waitForText(ASSISTANT_HEADING, substring = true)
         composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).performTextInput(APPROVAL_PROMPT)
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
         assertTrue("the synthetic turn must start", source.opened.await(3, TimeUnit.SECONDS))
         source.enqueue(
             ChatTurnEvent.RunStarted(APPROVAL_RUN_ID),

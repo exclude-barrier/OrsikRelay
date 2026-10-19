@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
@@ -17,19 +18,35 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -44,9 +61,12 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -83,7 +103,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.produceState
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.Image
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
@@ -121,6 +140,11 @@ fun ChatScreen(
     chatTextSizeController: ChatTextSizeController? = null,
     profileId: String,
     sessionId: String,
+    // Session title and server name are presentation-only metadata. The
+    // navigation host forwards the title it already received from the
+    // session list; when neither is available (notification tap, process
+    // recreation) the header falls back to the generic chat title.
+    sessionTitle: String? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -246,27 +270,12 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
                 .padding(horizontal = 16.dp)
         ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    top = if (compactComposer) 2.dp else 12.dp,
-                    bottom = if (compactComposer) 2.dp else 8.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(
-onClick = { viewModel.handleBack() }
-            ) {
-                Text(stringResource(R.string.chat_back))
-            }
-            Text(
-                text = stringResource(R.string.chat_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+        ChatHeader(
+            title = sessionTitle?.takeIf { it.isNotBlank() }
+                ?: stringResource(R.string.chat_title),
+            onBack = { viewModel.handleBack() },
+            compact = compactComposer
+        )
 
         when (val current = state.history) {
             MessageHistoryState.Loading -> StatusText(stringResource(R.string.chat_loading))
@@ -618,6 +627,49 @@ onClick = { viewModel.handleBack() }
         requester = runApprovalRequester,
         onDismiss = { viewModel.dismissApproval() },
         onFinished = { viewModel.finishApproval() }
+    )
+}
+
+/**
+ * The chat header: a Material 3 [TopAppBar] with the back navigation icon,
+ * the session title (single line, ellipsized) and - only when the caller can
+ * supply it - the server name as a small second line.
+ *
+ * The app root already applies the safe-drawing insets, so the bar must not
+ * add the status-bar inset a second time: its [WindowInsets] are zeroed. The
+ * title and subtitle share the title slot; two short lines fit the standard
+ * 64 dp bar.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ChatHeader(
+    title: String,
+    onBack: () -> Unit,
+    compact: Boolean
+) {
+    TopAppBar(
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(TAG_CHAT_TITLE)
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.chat_back)
+                )
+            }
+        },
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = Modifier.padding(top = if (compact) 0.dp else 4.dp)
     )
 }
 
@@ -1056,34 +1108,77 @@ internal fun ComposerBar(
                 }
             }
         }
+        // One rounded, filled input bar: the attachment action on the left,
+        // the pill-shaped message field in the middle, and a round filled
+        // send action on the right. Every action keeps at least a 48 dp touch
+        // target; the labels remain available as content descriptions.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(
+            IconButton(
                 onClick = onPickAttachment,
                 enabled = !turnActive && !attachmentBusy,
                 modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
             ) {
-                Text(attachmentAddLabel)
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = attachmentAddLabel
+                )
             }
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                label = { Text(stringResource(R.string.chat_input_label)) },
+            ChatInputField(
+                draft = draft,
+                onDraftChange = onDraftChange,
                 enabled = !turnActive,
                 maxLines = Int.MAX_VALUE,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(end = 8.dp)
-                    .testTag(TAG_COMPOSER_FIELD)
+                    .padding(horizontal = 8.dp)
             )
-            Button(
+            FilledIconButton(
                 onClick = onSend,
                 enabled = sendEnabled,
-                modifier = Modifier.testTag(TAG_COMPOSER_SEND)
+                shape = CircleShape,
+                modifier = Modifier
+                    .size(COMPOSER_ACTION_SIZE)
+                    .testTag(TAG_COMPOSER_SEND)
             ) {
-                Text(stringResource(R.string.chat_send))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = stringResource(R.string.chat_send)
+                )
             }
         }
     }
+}
+
+/**
+ * The filled, borderless message field. The shape is a pill and the Material
+ * text-field indicator is transparent, so the field has no outline in light or
+ * dark mode; [maxLines] is supplied by the normal or compact composer.
+ */
+@Composable
+private fun ChatInputField(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    enabled: Boolean,
+    maxLines: Int,
+    modifier: Modifier = Modifier
+) {
+    TextField(
+        value = draft,
+        onValueChange = onDraftChange,
+        label = { Text(stringResource(R.string.chat_input_label)) },
+        enabled = enabled,
+        maxLines = maxLines,
+        shape = RoundedCornerShape(COMPOSER_INPUT_CORNER),
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = modifier.testTag(TAG_COMPOSER_FIELD)
+    )
 }
 
 /**
@@ -1172,18 +1267,20 @@ private fun CompactComposerRow(
             // staged the picker has nothing to do and its width belongs to the
             // draft field.
             if (attachment == null && !attachmentBusy) {
-                TextButton(
+                IconButton(
                     onClick = onPickAttachment,
                     enabled = !turnActive,
                     modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
                 ) {
-                    Text(attachmentAddLabel)
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = attachmentAddLabel
+                    )
                 }
             }
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                label = { Text(stringResource(R.string.chat_input_label)) },
+            ChatInputField(
+                draft = draft,
+                onDraftChange = onDraftChange,
                 enabled = !turnActive,
                 // Bounded lines, NATURAL height: the row must keep a
                 // deterministic budget, but a fixed height clipped the text as
@@ -1196,15 +1293,20 @@ private fun CompactComposerRow(
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = COMPACT_FIELD_HEIGHT)
-                    .padding(end = 8.dp)
-                    .testTag(TAG_COMPOSER_FIELD)
+                    .padding(horizontal = 8.dp)
             )
-            Button(
+            FilledIconButton(
                 onClick = onSend,
                 enabled = sendEnabled,
-                modifier = Modifier.testTag(TAG_COMPOSER_SEND)
+                shape = CircleShape,
+                modifier = Modifier
+                    .size(COMPOSER_ACTION_SIZE)
+                    .testTag(TAG_COMPOSER_SEND)
             ) {
-                Text(stringResource(R.string.chat_send))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = stringResource(R.string.chat_send)
+                )
             }
         }
     }
@@ -1262,6 +1364,12 @@ internal val COMPACT_FIELD_HEIGHT = 56.dp
 /** Thumbnail edge in the compact composer row. */
 internal val COMPACT_THUMBNAIL_SIZE = 24.dp
 
+/** Touch target and visual size of the round send action. */
+private val COMPOSER_ACTION_SIZE = 48.dp
+
+/** Corner radius of the pill-shaped message field. */
+private val COMPOSER_INPUT_CORNER = 28.dp
+
 /**
  * Maximum distance from the end of the timeline that still counts as
  * "parked at the tail" for tail-follow. A few pixels of scroll slack (for
@@ -1317,6 +1425,7 @@ private suspend fun LazyListState.scrollToTail() {
     }
 }
 
+internal const val TAG_CHAT_TITLE = "chat_header_title"
 internal const val TAG_RUN_STOP = "composer_run_stop"
 internal const val TAG_COMPOSER_BAR = "composer_bar"
 internal const val TAG_RUN_CONFLICT = "chat_run_conflict"
@@ -1337,9 +1446,8 @@ private fun StatusText(text: String) {
     )
 }
 
-/** Width caps of the chat bubbles, relative to the content width. */
+/** Width caps of the user bubbles, relative to the content width. */
 private const val USER_BUBBLE_MAX_WIDTH_FRACTION = 0.85f
-private const val ASSISTANT_BUBBLE_MAX_WIDTH_FRACTION = 0.92f
 
 /** Gap between two timeline messages; split as half above and below. */
 private val MESSAGE_VERTICAL_GAP = 12.dp
@@ -1352,20 +1460,20 @@ private val USER_BUBBLE_SHAPE = RoundedCornerShape(
     bottomStart = 18.dp
 )
 
-private val ASSISTANT_BUBBLE_SHAPE = RoundedCornerShape(
+private val NEUTRAL_BUBBLE_SHAPE = RoundedCornerShape(
     topStart = 18.dp,
     topEnd = 18.dp,
     bottomStart = 4.dp,
     bottomEnd = 18.dp
 )
 
-private val LIVE_TOOL_SHAPE = RoundedCornerShape(8.dp)
-
 /**
- * User messages sit right-aligned in a brand-tinted bubble, Hermes and
- * system messages left-aligned in a neutral bubble. Both wrap only up to
- * their width cap, so short messages stay short. Live tool activity is a
- * small inline chip; history tool rows keep rendering the safe label only.
+ * User messages sit right-aligned in a brand-tinted bubble; Hermes answers
+ * are full-width plain content without a bubble or sender label. System
+ * messages keep their neutral bubble and label, tool activity is a compact
+ * chip. The visual "You"/"Hermes" labels are gone, but each user and
+ * assistant row keeps them as its accessibility label ("You: …" /
+ * "Hermes: …").
  */
 @Composable
 private fun MessageRow(message: TimelineRow) {
@@ -1384,6 +1492,7 @@ private fun MessageRow(message: TimelineRow) {
         }
     }
     val isUser = message.role == MessageRole.USER
+    val isAssistant = message.role == MessageRole.ASSISTANT
     val isHistoryTool = message.role == MessageRole.TOOL && !message.localTool
     val isLiveTool = message.role == MessageRole.TOOL && message.localTool
     val chatTextScale = LocalChatTextScale.current
@@ -1393,50 +1502,73 @@ private fun MessageRow(message: TimelineRow) {
             .padding(vertical = MESSAGE_VERTICAL_GAP / 2)
             .testTag("chatTimelineRow:${message.key}")
     ) {
-        val maxBubbleWidth = maxWidth * if (isUser) {
-            USER_BUBBLE_MAX_WIDTH_FRACTION
-        } else {
-            ASSISTANT_BUBBLE_MAX_WIDTH_FRACTION
+        if (isUser || isAssistant) {
+            // The sender ("You"/"Hermes") is no longer shown, but a screen
+            // reader still announces it once, right before the message text
+            // (a 1 dp node: TalkBack skips nodes without size).
+            Box(
+                modifier = Modifier
+                    .size(1.dp)
+                    .semantics { contentDescription = role }
+            )
         }
         Column(
-            modifier = Modifier
-                .align(if (isUser) Alignment.TopEnd else Alignment.TopStart)
-                .widthIn(max = maxBubbleWidth),
+            modifier = if (isUser) {
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .widthIn(max = maxWidth * USER_BUBBLE_MAX_WIDTH_FRACTION)
+            } else {
+                Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+            },
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
-            Text(
-                text = role,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 4.dp)
-            )
-            // SECURITY (history tool redaction): a history TOOL row renders ONLY
-            // its safe role label above — never a content bubble. The timeline
-            // already strips the untrusted `content` (see buildTimeline); this
-            // keeps the UI fail closed even if a future path ever carried
-            // verbatim tool data (commands, paths, output, payloads). Live
-            // (localTool) rows keep their app-generated status, as a small
-            // inline chip instead of a full bubble.
+            // Only the system role keeps a visible sender label; user and
+            // assistant roles exist only in the accessibility semantics.
+            if (message.role == MessageRole.SYSTEM) {
+                Text(
+                    text = role,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 4.dp)
+                )
+            }
+            // SECURITY (history tool redaction): a history TOOL row renders
+            // ONLY its safe chip label — never the untrusted `content`. The
+            // timeline already strips it (see buildTimeline); this keeps the
+            // UI fail closed even if a future path ever carried verbatim tool
+            // data (commands, paths, output, payloads).
             when {
-                isHistoryTool -> Unit
-                isLiveTool -> Box(
-                    modifier = Modifier
-                        .testTag("chatBubble:${message.key}")
-                        .clip(LIVE_TOOL_SHAPE)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                isHistoryTool -> ToolActivityChip(
+                    label = role,
+                    modifier = Modifier.testTag("chatToolChip:${message.key}")
+                )
+                isLiveTool -> ToolActivityChip(
+                    label = message.content,
+                    modifier = Modifier.testTag("chatToolChip:${message.key}")
+                )
+                isAssistant -> ChatTextScaledContent(chatTextScale) {
+                    // Full content width, normal padding, no background and no
+                    // bubble: the Markdown body reads like a document.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("chatAssistantBody:${message.key}")
+                    ) {
+                        AssistantMarkdownMessage(
+                            content = message.content,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("chatMessageText:${message.key}")
+                        )
+                    }
                 }
                 else -> ChatTextScaledContent(chatTextScale) {
                     Box(
                         modifier = Modifier
                             .testTag("chatBubble:${message.key}")
-                            .clip(if (isUser) USER_BUBBLE_SHAPE else ASSISTANT_BUBBLE_SHAPE)
+                            .clip(if (isUser) USER_BUBBLE_SHAPE else NEUTRAL_BUBBLE_SHAPE)
                             .background(
                                 if (isUser) {
                                     MaterialTheme.colorScheme.primaryContainer
@@ -1446,32 +1578,55 @@ private fun MessageRow(message: TimelineRow) {
                             )
                             .padding(horizontal = 14.dp, vertical = 12.dp)
                     ) {
-                        if (message.role == MessageRole.ASSISTANT) {
-                            // Assistant output renders as markdown; user, system
-                            // and tool lines stay plain text so markdown can never
-                            // surface user input or tool/approval detail.
-                            AssistantMarkdownMessage(
-                                content = message.content,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("chatMessageText:${message.key}")
-                            )
-                        } else {
-                            Text(
-                                text = message.content,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (isUser) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
-                                modifier = Modifier.testTag("chatMessageText:${message.key}")
-                            )
-                        }
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isUser) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            modifier = Modifier.testTag("chatMessageText:${message.key}")
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+/** Compact, static tool-activity chip with the tool icon and its safe label. */
+@Composable
+internal fun ToolActivityChip(
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+    ) {
+        ToolChipContent(label = label)
+    }
+}
+
+@Composable
+private fun ToolChipContent(label: String) {
+    Row(
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Build,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge
+        )
     }
 }
 

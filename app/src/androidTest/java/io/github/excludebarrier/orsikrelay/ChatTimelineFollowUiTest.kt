@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -233,7 +234,7 @@ class ChatTimelineFollowUiTest {
             .onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Streaming")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
         assertTrue("the stream was not started", source.opened.await(3, TimeUnit.SECONDS))
         waitForText("Streaming")
     }

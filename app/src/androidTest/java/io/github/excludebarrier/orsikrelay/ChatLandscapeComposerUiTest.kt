@@ -7,6 +7,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -511,14 +512,32 @@ class ChatLandscapeComposerUiTest {
 
         // The compact chip shows the name and the remove action; the size line
         // and the picker (a turn carries at most one image) are dropped there.
-        val labels = mutableListOf(INPUT_LABEL)
-        if (ChatAttachmentDraftHolder.get(PROFILE_ID, SESSION_ID) != null) {
-            labels += listOf(ATTACHMENT_NAME, REMOVE_LABEL, SEND_LABEL)
-        } else {
-            labels += listOf(SEND_LABEL, ADD_LABEL)
+        val textLabels = mutableListOf(INPUT_LABEL)
+        val withAttachment = ChatAttachmentDraftHolder.get(PROFILE_ID, SESSION_ID) != null
+        if (withAttachment) {
+            textLabels += listOf(ATTACHMENT_NAME, REMOVE_LABEL)
         }
-        labels.forEach { label ->
+        textLabels.forEach { label ->
             val bounds = composeRule.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
+            assertTrue(
+                "$label must keep a positive height, was ${bounds.height}",
+                bounds.height > 0f
+            )
+            assertTrue(
+                "$label bottom ${bounds.bottom} must stay above the keyboard top ${keyboardTop()}",
+                bounds.bottom <= keyboardTop()
+            )
+        }
+        // The picker and send actions are icon buttons: their visible bound is
+        // the button itself, and their label lives in the content description.
+        val actionTags = if (withAttachment) {
+            listOf(SEND_LABEL to TAG_COMPOSER_SEND)
+        } else {
+            listOf(SEND_LABEL to TAG_COMPOSER_SEND, ADD_LABEL to TAG_ATTACHMENT_ADD)
+        }
+        actionTags.forEach { (label, tag) ->
+            composeRule.onNodeWithTag(tag).assertContentDescriptionEquals(label)
+            val bounds = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
             assertTrue(
                 "$label must keep a positive height, was ${bounds.height}",
                 bounds.height > 0f

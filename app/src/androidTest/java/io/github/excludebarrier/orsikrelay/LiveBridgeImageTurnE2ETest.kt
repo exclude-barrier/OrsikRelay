@@ -99,8 +99,8 @@ class LiveBridgeImageTurnE2ETest {
 
         composeRule.onNodeWithText(COMPOSER_LABEL).performTextInput(QUESTION)
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(SEND_LABEL).assertIsEnabled()
-        composeRule.onNodeWithText(SEND_LABEL).performClick()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).performClick()
 
         composeRule.waitUntil(timeoutMillis = RUN_TIMEOUT_MS) {
             (composerFieldEnabled() && !tagPresent(TAG_RUN_STOP)) || tagPresent(TAG_RUN_UNCERTAIN)

@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -142,6 +143,13 @@ fun HermesNavHost(
     var resolvedStart by remember(startDestination) { mutableStateOf<AppScreen?>(null) }
     var activeProfileId by remember { mutableStateOf<String?>(null) }
     var pendingCreatedSessionId by remember { mutableStateOf<String?>(null) }
+    // The session list already knows the title of the tapped session. Keep it
+    // here so the chat header can show it without a second list/history read;
+    // a notification tap or a direct chat route starts with the generic
+    // fallback instead. The ID pins the title to its session, so a restored
+    // chat destination can never display another session's title.
+    var activeSessionTitleSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeSessionTitle by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Safe return after a profile deletion: the Profiles
     // destination is only reachable from Sessions, so popping everything
@@ -245,6 +253,8 @@ fun HermesNavHost(
         val (profileId, sessionId) = bootstrap
         withContext(Dispatchers.Main) {
             activeProfileId = profileId
+            activeSessionTitleSessionId = null
+            activeSessionTitle = null
             navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
                 launchSingleTop = true
             }
@@ -357,7 +367,9 @@ fun HermesNavHost(
                 profileId = activeProfileId.orEmpty(),
                 creator = sessionCreator
                     ?: productionDependencies.value.sessionCreator,
-                onSessionSelected = { sessionId, _ ->
+                onSessionSelected = { sessionId, title ->
+                    activeSessionTitleSessionId = sessionId
+                    activeSessionTitle = title
                     navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
                         launchSingleTop = true
                     }
@@ -446,6 +458,7 @@ fun HermesNavHost(
             arguments = listOf(navArgument(CHAT_ARGUMENT) { type = NavType.StringType })
         ) { entry ->
             val encodedSessionId = entry.arguments?.getString(CHAT_ARGUMENT).orEmpty()
+            val decodedSessionId = decodeRouteArgument(encodedSessionId)
             ChatScreen(
                 historySource = messageHistorySource
                     ?: productionDependencies.value.messageHistorySource,
@@ -465,7 +478,9 @@ fun HermesNavHost(
                 attachmentSource = productionDependencies.value.chatAttachmentSource,
                 chatTextSizeController = resolvedChatTextSizeController,
                 profileId = activeProfileId.orEmpty(),
-                sessionId = decodeRouteArgument(encodedSessionId),
+                sessionId = decodedSessionId,
+                sessionTitle = activeSessionTitle
+                    .takeIf { activeSessionTitleSessionId == decodedSessionId },
                 onBack = {
                     // Guard against popping the back stack empty: a double
                     // back event (fast double-tap on "Zurück" or a spurious

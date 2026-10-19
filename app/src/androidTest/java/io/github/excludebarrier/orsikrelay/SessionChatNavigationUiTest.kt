@@ -3,6 +3,7 @@ package io.github.excludebarrier.orsikrelay
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -95,7 +96,7 @@ class SessionChatNavigationUiTest {
         assertEquals(PROFILE_ID, receivedProfile.get())
         assertEquals(sessionId, receivedSession.get())
 
-        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back)).performClick()
         waitForText("Fixture-Session")
     }
 

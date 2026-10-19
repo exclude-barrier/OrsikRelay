@@ -2,7 +2,9 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -20,6 +22,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_CHAT_TITLE
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.assertEquals
@@ -68,8 +71,8 @@ class ActiveServerSelectionUiTest {
 
         // Open a chat under Alpha so a Chat destination exists on the stack.
         composeRule.onNodeWithText("Session Alpha").performClick()
-        waitForText(context.getString(R.string.chat_title))
-        composeRule.onNodeWithText(context.getString(R.string.chat_back)).performClick()
+        composeRule.onNodeWithTag(TAG_CHAT_TITLE).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back)).performClick()
         waitForText("Session Alpha")
 
         // Go to the management screen: the ACTIVE server (Alpha) is marked
@@ -92,7 +95,7 @@ class ActiveServerSelectionUiTest {
         waitForText("Session Beta")
         composeRule.onNodeWithText("Session Alpha").assertDoesNotExist()
         assertTrue(
-            composeRule.onAllNodesWithText(context.getString(R.string.chat_title)).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag(TAG_CHAT_TITLE).fetchSemanticsNodes().isEmpty()
         )
 
         // Re-open the management screen: the marker has MOVED to the chosen
@@ -132,7 +135,7 @@ class ActiveServerSelectionUiTest {
         // Still on Sessions, still under Alpha; no switch happened.
         composeRule.onNodeWithText("Session Beta").assertDoesNotExist()
         assertTrue(
-            composeRule.onAllNodesWithText(context.getString(R.string.chat_title)).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag(TAG_CHAT_TITLE).fetchSemanticsNodes().isEmpty()
         )
         // No new server was queried: the switch never started.
         assertTrue(profileIdsQueried.all { it == ALPHA_ID })

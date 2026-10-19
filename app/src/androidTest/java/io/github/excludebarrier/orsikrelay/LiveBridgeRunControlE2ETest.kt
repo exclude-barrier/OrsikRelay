@@ -309,8 +309,8 @@ class LiveBridgeRunControlE2ETest {
     private fun typeAndSend(text: String) {
         composeRule.onNodeWithText(COMPOSER_LABEL).performTextInput(text)
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(SEND_LABEL).assertIsEnabled()
-        composeRule.onNodeWithText(SEND_LABEL).performClick()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(SEND_LABEL).performClick()
     }
 
     /** The composer is send-ready again and no run control is visible. */

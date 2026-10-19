@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -94,7 +95,7 @@ class ChatComposerBottomUiTest {
         composeRule.onNodeWithText(context.getString(R.string.chat_input_label))
             .performTextInput("Fehlerfall")
         ImeClickSettle.settleAfterTyping(composeRule)
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
         assertTrue("the turn must reach the streaming source", source.opened.await(3, TimeUnit.SECONDS))
 
         // A server-authoritative terminal failure with a confirmed run leaves

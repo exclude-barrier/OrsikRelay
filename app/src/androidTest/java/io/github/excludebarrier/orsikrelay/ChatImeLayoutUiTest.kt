@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -203,7 +204,7 @@ class ChatImeLayoutUiTest {
         // is tolerated instead of failing on a stale semantics snapshot.
         composeRule.onNodeWithText(context.getString(R.string.chat_title)).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.chat_input_label)).assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).assertIsDisplayed()
     }
 
     @CaptureOnly

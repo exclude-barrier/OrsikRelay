@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -203,10 +205,10 @@ class ChatAttachmentChipUiTest {
         setScreen()
 
         waitForEmptySession()
-        // The picker button exists, is displayed and carries a non-empty
-        // accessible label.
+        // The picker is now an icon button: its accessible label is the
+        // content description instead of a visible Text child.
         composeRule.onNodeWithTag(TAG_ADD).assertIsDisplayed()
-        assertEquals(ADD_LABEL, labelTextOf(TAG_ADD))
+        composeRule.onNodeWithTag(TAG_ADD).assertContentDescriptionEquals(ADD_LABEL)
         // The remove button is visible for the chip and labeled.
         composeRule.onNodeWithTag(TAG_REMOVE).assertIsDisplayed()
         assertEquals(REMOVE_LABEL, labelTextOf(TAG_REMOVE))
@@ -243,7 +245,7 @@ class ChatAttachmentChipUiTest {
         // send gate (text + attachment) enables the action.
         composeRule.onNodeWithTag(TAG_REMOVE).assertIsDisplayed()
         composeRule.onNodeWithText("holiday.png").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).assertIsEnabled()
         assertEquals("Zeile eins\nZeile zwei\nZeile drei", draftText())
     }
 
@@ -312,8 +314,8 @@ class ChatAttachmentChipUiTest {
 
         waitForEmptySession()
         // An attachment-only turn enables the send action.
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsEnabled()
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
 
         // The closed TooLarge outcome maps to the too-large error label...
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -343,8 +345,8 @@ class ChatAttachmentChipUiTest {
 
         waitForEmptySession()
         // An attachment-only turn enables the send action.
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsEnabled()
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).performClick()
         assertTrue(chat.opened.await(3, TimeUnit.SECONDS))
 
         // Uncertain run: no confirmed run ID, but the initial POST may still have
@@ -359,7 +361,7 @@ class ChatAttachmentChipUiTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_REMOVE).assertIsDisplayed()
         composeRule.onNodeWithText("holiday.png").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.chat_send)).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_send)).assertIsNotEnabled()
         assertEquals("no second POST", 1, chat.calls.get())
     }
 

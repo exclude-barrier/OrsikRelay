@@ -52,7 +52,9 @@ class ChatTextSizeUiTest {
         val normalUserScale = fontScaleOf(USER_TEXT)
         val normalHeadingScale = fontScaleOf(MARKDOWN_HEADING)
         val normalBodyScale = fontScaleOf(MARKDOWN_BODY)
-        val normalLabelScale = fontScaleOf(context.getString(R.string.chat_role_user))
+        // The sender labels are no longer visible; the header is the remaining
+        // non-message text that must keep the system font scale.
+        val normalHeaderScale = fontScaleOf(context.getString(R.string.chat_title))
         val normalComposerHeight = boundsHeight(TAG_COMPOSER_BAR)
 
         sizeState.value = ChatTextSize.Large
@@ -64,13 +66,13 @@ class ChatTextSizeUiTest {
         val largeUserScale = fontScaleOf(USER_TEXT)
         val largeHeadingScale = fontScaleOf(MARKDOWN_HEADING)
         val largeBodyScale = fontScaleOf(MARKDOWN_BODY)
-        val largeLabelScale = fontScaleOf(context.getString(R.string.chat_role_user))
+        val largeHeaderScale = fontScaleOf(context.getString(R.string.chat_title))
         val largeComposerHeight = boundsHeight(TAG_COMPOSER_BAR)
 
         assertScale(normalUserScale, largeUserScale)
         assertScale(normalHeadingScale, largeHeadingScale)
         assertScale(normalBodyScale, largeBodyScale)
-        assertEquals(normalLabelScale, largeLabelScale, 0.001f)
+        assertEquals(normalHeaderScale, largeHeaderScale, 0.001f)
         assertEquals(normalComposerHeight, largeComposerHeight, 1f)
     }
 
