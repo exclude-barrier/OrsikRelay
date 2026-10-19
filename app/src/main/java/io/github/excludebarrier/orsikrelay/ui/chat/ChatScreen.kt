@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -57,6 +58,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -95,6 +97,7 @@ import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
 import io.github.excludebarrier.orsikrelay.ui.settings.ChatTextSizeController
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import io.github.excludebarrier.orsikrelay.platform.attachment.ChatAttachmentThumbnails
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft
@@ -205,6 +208,10 @@ fun ChatScreen(
     }
 
     val state by viewModel.state.collectAsState()
+    // Start of the active turn on the monotonic clock, for the elapsed time
+    // of the activity row. Survives a configuration change; a re-opened
+    // screen counts from when it attached to the running turn.
+    val turnStartedAt = rememberSaveable(state.turnActive) { SystemClock.elapsedRealtime() }
 
     val context = LocalContext.current
     // The Android system photo picker - no storage permission, no custom
@@ -455,7 +462,9 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                             }
                         }
                         state.turnActivity?.let { activity ->
-                            item(key = "turn_activity") { TurnActivityRow(activity) }
+                            item(key = "turn_activity") {
+                                TurnActivityRow(activity, turnStartedAt)
+                            }
                         }
                     }
                 }
@@ -695,7 +704,13 @@ internal fun ChatHeader(
  * tool call or reasoning phase never looks like a stalled chat.
  */
 @Composable
-private fun TurnActivityRow(activity: TurnActivity) {
+private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
+    val elapsedSeconds by produceState(0L, startedAt) {
+        while (true) {
+            value = (SystemClock.elapsedRealtime() - startedAt) / 1_000
+            delay(1_000)
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -713,6 +728,20 @@ private fun TurnActivityRow(activity: TurnActivity) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 8.dp)
+        )
+        Text(
+            text = if (elapsedSeconds < 60) {
+                stringResource(R.string.chat_turn_elapsed_seconds, elapsedSeconds)
+            } else {
+                stringResource(
+                    R.string.chat_turn_elapsed_minutes,
+                    elapsedSeconds / 60,
+                    elapsedSeconds % 60
+                )
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp)
         )
     }
 }

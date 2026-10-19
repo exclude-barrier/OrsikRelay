@@ -141,6 +141,8 @@
     <string name="chat_loading">Nachrichten werden geladen…</string>
     <string name="chat_turn_working">Hermes arbeitet…</string>
     <string name="chat_turn_thinking">Hermes denkt nach…</string>
+    <string name="chat_turn_elapsed_seconds">%1$d s</string>
+    <string name="chat_turn_elapsed_minutes">%1$d:%2$02d min</string>
     <string name="chat_stream_reconnecting">Verbinde neu …</string>
     <string name="chat_run_conflict">In einer anderen Session läuft bereits eine Antwort. Beende diesen Lauf zuerst.</string>
     <string name="chat_run_uncertain">Die Verbindung wurde unterbrochen. Es wird nichts erneut gesendet.</string>
