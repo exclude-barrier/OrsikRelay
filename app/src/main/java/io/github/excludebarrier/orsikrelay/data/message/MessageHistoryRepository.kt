@@ -17,6 +17,9 @@ import io.github.excludebarrier.orsikrelay.security.credential.CredentialStore
  * maps to a generic [MessageHistoryError] reason: no profile data, URL,
  * key, session ID or exception text ever escapes into the result.
  *
+ * [loadOlderHistory] uses the same profile/credential path with the
+ * given raw-server-row offset.
+ *
  * Expected to run on `Dispatchers.IO` (SharedPreferences, Keystore and
  * network I/O).
  */
@@ -26,7 +29,20 @@ class MessageHistoryRepository(
     private val messageFetcher: MessageFetcher = HermesMessageClient()
 ) : MessageHistorySource {
 
-    override fun loadHistory(profileId: String, sessionId: String): MessageHistoryResult {
+    override fun loadHistory(profileId: String, sessionId: String): MessageHistoryResult =
+        loadPage(profileId, sessionId, offset = 0)
+
+    override fun loadOlderHistory(
+        profileId: String,
+        sessionId: String,
+        offset: Int
+    ): MessageHistoryResult = loadPage(profileId, sessionId, offset)
+
+    private fun loadPage(
+        profileId: String,
+        sessionId: String,
+        offset: Int
+    ): MessageHistoryResult {
         if (profileId.isBlank()) {
             return MessageHistoryResult.Failure(MessageHistoryError.MissingProfile)
         }
@@ -53,7 +69,8 @@ class MessageHistoryRepository(
             messageFetcher.fetch(
                 baseUrl = profile.baseUrl,
                 apiKey = credential,
-                sessionId = sessionId
+                sessionId = sessionId,
+                offset = offset
             )
         } catch (_: Exception) {
             MessageHistoryResult.Failure(MessageHistoryError.Network)

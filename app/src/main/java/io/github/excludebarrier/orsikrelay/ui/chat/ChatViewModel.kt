@@ -13,6 +13,7 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
+import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryPaging
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
@@ -125,6 +126,25 @@ internal class ChatViewModel(
     // and disposal can cancel a request of the left screen.
     private var stopJob: Job? = null
     private var steerJob: Job? = null
+    private var olderLoadJob: Job? = null
+
+    /**
+     * Raw server rows consumed by the visible history, NOT the number of
+     * visible rows. This is the `offset` for the next older page and is
+     * advanced ONLY by a successful history page's `pagination.returned`.
+     * Local/optimistic/streamed turn lines and hidden server rows never
+     * touch it, so an active turn cannot falsify the offset.
+     */
+    private var loadedServerMessages = 0
+
+    /**
+     * Incremented whenever the main history is (re)loaded. An older-page
+     * result that belongs to an older generation is discarded. A session
+     * switch replaces this view model entirely (the screen is keyed by
+     * profile+session), and [close] cancels the scope, so no result can
+     * cross into another session either.
+     */
+    private var historyGeneration = 0
 
     init {
         // Re-attach: the run (if any) is owned app-level by the controller,
@@ -265,11 +285,19 @@ internal class ChatViewModel(
      */
     fun loadHistory() {
         if (_state.value.loadInFlight) return
+        historyGeneration += 1
+        val generation = historyGeneration
+        olderLoadJob?.cancel()
+        olderLoadJob = null
+        loadedServerMessages = 0
         _state.update {
             it.copy(
                 loadInFlight = true,
                 history = MessageHistoryState.Loading,
-                turnFailure = null
+                turnFailure = null,
+                canLoadOlder = false,
+                loadingOlder = false,
+                olderLoadError = null
             )
         }
         scope.launch {
@@ -286,6 +314,10 @@ internal class ChatViewModel(
             } finally {
                 _state.update { it.copy(loadInFlight = false) }
             }
+            if (generation != historyGeneration) return@launch
+            if (result is MessageHistoryResult.Success) {
+                loadedServerMessages = result.page.returned
+            }
             _state.update {
                 it.copy(
                     history = when (result) {
@@ -295,10 +327,72 @@ internal class ChatViewModel(
                         }
                         is MessageHistoryResult.Failure ->
                             MessageHistoryState.Failed(result.error)
-                    }
+                    },
+                    canLoadOlder = (result as? MessageHistoryResult.Success)
+                        ?.page?.hasMoreOnServer == true
                 )
             }
         }
+    }
+
+    /**
+     * User-triggered older-page load (the only trigger; no automatic
+     * retry loop). Guarded so at most one older read is in flight and so
+     * it only starts when the server proved more history exists.
+     *
+     * The offset is [loadedServerMessages], the raw row count consumed by
+     * successful history reads. Local/streamed turn lines are deliberately
+     * not part of it. The page is merged in front of the visible history
+     * by [MessageHistoryPaging]; its raw `returned` count advances the
+     * offset even when hidden rows made the visible count smaller.
+     *
+     * A failure leaves the main history untouched and only publishes
+     * [ChatUiState.olderLoadError], so the user can retry explicitly.
+     */
+    fun loadOlderMessages() {
+        val current = _state.value
+        if (current.loadingOlder || !current.canLoadOlder || current.loadInFlight) return
+        val ready = current.history as? MessageHistoryState.Ready ?: return
+        val offset = loadedServerMessages
+        val generation = historyGeneration
+        _state.update { it.copy(loadingOlder = true, olderLoadError = null) }
+        val job = scope.launch {
+            val result = try {
+                withContext(ioDispatcher) {
+                    historySource.loadOlderHistory(profileId, sessionId, offset)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                MessageHistoryResult.Failure(MessageHistoryError.Network)
+            }
+            // A history reload (including a session-key switch, which
+            // replaces this view model) makes this result stale.
+            if (generation != historyGeneration) return@launch
+            if (coroutineContext[Job]?.isCancelled == true) return@launch
+            when (result) {
+                is MessageHistoryResult.Success -> {
+                    val merged = MessageHistoryPaging.mergeOlder(ready.messages, result.page)
+                    loadedServerMessages += result.page.returned
+                    _state.update {
+                        it.copy(
+                            loadingOlder = false,
+                            olderLoadError = null,
+                            history = MessageHistoryState.Ready(merged.messages),
+                            canLoadOlder = merged.hasMore
+                        )
+                    }
+                }
+                is MessageHistoryResult.Failure -> {
+                    // Keep canLoadOlder and the visible history: the user
+                    // may deliberately retry.
+                    _state.update {
+                        it.copy(loadingOlder = false, olderLoadError = result.error)
+                    }
+                }
+            }
+        }
+        olderLoadJob = job
     }
 
     /**

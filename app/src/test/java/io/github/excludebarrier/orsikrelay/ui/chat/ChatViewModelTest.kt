@@ -35,11 +35,13 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -95,6 +97,16 @@ class ChatViewModelTest {
     private fun msg(id: Long, role: MessageRole, content: String): HermesChatMessage =
         HermesChatMessage(id = id, role = role, content = content, timestampSeconds = null, toolName = null)
 
+    private fun page(
+        messages: List<HermesChatMessage>,
+        limit: Int,
+        returned: Int
+    ): MessagePage = MessagePage(
+        messages = messages,
+        limit = limit,
+        returned = returned
+    )
+
     private fun build(
         scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
         history: MessageHistorySource = readyHistory(),
@@ -109,7 +121,9 @@ class ChatViewModelTest {
         // An EXISTING controller simulates a re-created screen that
         // re-attaches to the same app-level run.
         controller: RunSessionController? = null,
-        sessionKey: String = sessionId
+        sessionKey: String = sessionId,
+        dispatcher: CoroutineDispatcher = UnconfinedTestDispatcher(scheduler),
+        ioDispatcher: CoroutineDispatcher = UnconfinedTestDispatcher(scheduler)
     ): ChatViewModel {
         val resolvedController = controller ?: RunSessionController(
             chatSource = chat,
@@ -131,8 +145,8 @@ class ChatViewModelTest {
             onBack = onBack,
             toolActivityLabel = "Tool ist aktiv…",
             namedToolActivityLabel = "Werkzeug %s ist aktiv…",
-            dispatcher = UnconfinedTestDispatcher(scheduler),
-            ioDispatcher = UnconfinedTestDispatcher(scheduler)
+            dispatcher = dispatcher,
+            ioDispatcher = ioDispatcher
         )
     }
 
@@ -192,6 +206,338 @@ class ChatViewModelTest {
         testScheduler.advanceUntilIdle()
         assertEquals(0, chat.calls.get())
         assertFalse(model.state.value.turnActive)
+    }
+
+    // ------------------------------------------------------------------
+    // Older history pages
+    // ------------------------------------------------------------------
+
+    @Test
+    fun aFullInitialPageEnablesOlderLoadingAndAShortPageDoesNot() = runTest {
+        val full = build(
+            testScheduler,
+            history = MessageHistorySource { _, _ ->
+                MessageHistoryResult.Success(
+                    page(listOf(msg(1, MessageRole.USER, "eins")), limit = 1, returned = 1)
+                )
+            }
+        )
+        full.loadHistory()
+        testScheduler.advanceUntilIdle()
+        assertTrue(full.state.value.canLoadOlder)
+        assertFalse(full.state.value.loadingOlder)
+        full.close()
+        lastController?.close()
+
+        val short = build(
+            testScheduler,
+            history = MessageHistorySource { _, _ ->
+                MessageHistoryResult.Success(
+                    page(listOf(msg(1, MessageRole.USER, "eins")), limit = 2, returned = 1)
+                )
+            }
+        )
+        short.loadHistory()
+        testScheduler.advanceUntilIdle()
+        assertFalse(short.state.value.canLoadOlder)
+        short.close()
+        lastController?.close()
+    }
+
+    @Test
+    fun olderPageIsPrependedInServerOrderUsingTheLoadedServerRowCount() = runTest {
+        val offsets = mutableListOf<Int>()
+        val source = object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    page(
+                        listOf(
+                            msg(3, MessageRole.USER, "drei"),
+                            msg(4, MessageRole.ASSISTANT, "vier")
+                        ),
+                        limit = 2,
+                        returned = 2
+                    )
+                )
+
+            override fun loadOlderHistory(
+                profileId: String,
+                sessionId: String,
+                offset: Int
+            ): MessageHistoryResult {
+                offsets += offset
+                return MessageHistoryResult.Success(
+                    page(
+                        listOf(
+                            msg(1, MessageRole.USER, "eins"),
+                            msg(2, MessageRole.ASSISTANT, "zwei")
+                        ),
+                        limit = 2,
+                        returned = 1
+                    )
+                )
+            }
+        }
+        val model = build(testScheduler, history = source)
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+
+        model.loadOlderMessages()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(2), offsets)
+        val state = model.state.value
+        assertEquals(
+            listOf(1L, 2L, 3L, 4L),
+            (state.history as MessageHistoryState.Ready).messages.map { it.id }
+        )
+        assertFalse(state.canLoadOlder)
+        assertFalse(state.loadingOlder)
+        assertNull(state.olderLoadError)
+        model.close()
+        lastController?.close()
+    }
+
+    @Test
+    fun aDuplicateOnlyOlderPageStopsPagingAndKeepsTheHistory() = runTest {
+        val source = object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    page(
+                        listOf(
+                            msg(3, MessageRole.USER, "drei"),
+                            msg(4, MessageRole.ASSISTANT, "vier")
+                        ),
+                        limit = 2,
+                        returned = 2
+                    )
+                )
+
+            override fun loadOlderHistory(
+                profileId: String,
+                sessionId: String,
+                offset: Int
+            ) = MessageHistoryResult.Success(
+                page(
+                    listOf(
+                        msg(3, MessageRole.USER, "drei"),
+                        msg(4, MessageRole.ASSISTANT, "vier")
+                    ),
+                    limit = 2,
+                    returned = 2
+                )
+            )
+        }
+        val model = build(testScheduler, history = source)
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+
+        model.loadOlderMessages()
+        testScheduler.advanceUntilIdle()
+
+        val state = model.state.value
+        assertEquals(
+            listOf(3L, 4L),
+            (state.history as MessageHistoryState.Ready).messages.map { it.id }
+        )
+        assertFalse(state.canLoadOlder)
+        assertNull(state.olderLoadError)
+        model.close()
+        lastController?.close()
+    }
+
+    @Test
+    fun anOlderFailureLeavesTheMainHistoryIntactAndAllowsAManualRetry() = runTest {
+        var olderCalls = 0
+        val source = object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    page(
+                        listOf(
+                            msg(3, MessageRole.USER, "drei"),
+                            msg(4, MessageRole.ASSISTANT, "vier")
+                        ),
+                        limit = 2,
+                        returned = 2
+                    )
+                )
+
+            override fun loadOlderHistory(
+                profileId: String,
+                sessionId: String,
+                offset: Int
+            ): MessageHistoryResult {
+                olderCalls += 1
+                return if (olderCalls == 1) {
+                    MessageHistoryResult.Failure(MessageHistoryError.RateLimited)
+                } else {
+                    MessageHistoryResult.Success(
+                        page(listOf(msg(1, MessageRole.USER, "eins")), limit = 2, returned = 1)
+                    )
+                }
+            }
+        }
+        val model = build(testScheduler, history = source)
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+
+        model.loadOlderMessages()
+        testScheduler.advanceUntilIdle()
+        val failed = model.state.value
+        assertEquals(MessageHistoryError.RateLimited, failed.olderLoadError)
+        assertEquals(
+            listOf(3L, 4L),
+            (failed.history as MessageHistoryState.Ready).messages.map { it.id }
+        )
+        assertTrue(failed.canLoadOlder)
+        assertNull(failed.turnFailure)
+
+        model.loadOlderMessages()
+        testScheduler.advanceUntilIdle()
+        val retried = model.state.value
+        assertNull(retried.olderLoadError)
+        assertEquals(
+            listOf(1L, 3L, 4L),
+            (retried.history as MessageHistoryState.Ready).messages.map { it.id }
+        )
+        assertFalse(retried.canLoadOlder)
+        assertEquals(2, olderCalls)
+        model.close()
+        lastController?.close()
+    }
+
+    @Test
+    fun onlyOneOlderLoadRunsAtATimeAndLoadingOlderToggles() = runTest {
+        var olderCalls = 0
+        val source = object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    page(listOf(msg(3, MessageRole.USER, "drei")), limit = 1, returned = 1)
+                )
+
+            override fun loadOlderHistory(
+                profileId: String,
+                sessionId: String,
+                offset: Int
+            ): MessageHistoryResult {
+                olderCalls += 1
+                return MessageHistoryResult.Success(
+                    page(listOf(msg(1, MessageRole.USER, "eins")), limit = 1, returned = 0)
+                )
+            }
+        }
+        val io = StandardTestDispatcher(testScheduler)
+        val model = build(
+            testScheduler,
+            history = source,
+            dispatcher = StandardTestDispatcher(testScheduler),
+            ioDispatcher = io
+        )
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+        assertTrue(model.state.value.canLoadOlder)
+
+        val ready = model.state.value
+        assertFalse(ready.loadingOlder)
+        assertNull(ready.olderLoadError)
+
+        model.loadOlderMessages()
+        val loading = model.state.value
+        assertTrue(loading.loadingOlder)
+        assertTrue(loading.canLoadOlder)
+
+        // A second request while one is in flight is ignored.
+        model.loadOlderMessages()
+        testScheduler.advanceUntilIdle()
+
+        val done = model.state.value
+        assertFalse(done.loadingOlder)
+        assertFalse(done.canLoadOlder)
+        assertNull(done.olderLoadError)
+        assertEquals(
+            listOf(1L, 3L),
+            (done.history as MessageHistoryState.Ready).messages.map { it.id }
+        )
+        assertEquals(1, olderCalls)
+        model.close()
+        lastController?.close()
+    }
+
+    @Test
+    fun aNewHistoryLoadDiscardsAnInFlightOlderResult() = runTest {
+        val source = object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    page(listOf(msg(3, MessageRole.USER, "drei")), limit = 1, returned = 1)
+                )
+
+            override fun loadOlderHistory(
+                profileId: String,
+                sessionId: String,
+                offset: Int
+            ) = MessageHistoryResult.Success(
+                page(listOf(msg(1, MessageRole.USER, "eins")), limit = 1, returned = 1)
+            )
+        }
+        val model = build(
+            testScheduler,
+            history = source,
+            ioDispatcher = StandardTestDispatcher(testScheduler)
+        )
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+
+        model.loadOlderMessages()
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+
+        val state = model.state.value
+        assertEquals(
+            listOf(3L),
+            (state.history as MessageHistoryState.Ready).messages.map { it.id }
+        )
+        assertTrue(state.canLoadOlder)
+        model.close()
+        lastController?.close()
+    }
+
+    @Test
+    fun closingTheSessionCancelsAnInFlightOlderLoad() = runTest {
+        var olderCalls = 0
+        val source = object : MessageHistorySource {
+            override fun loadHistory(profileId: String, sessionId: String) =
+                MessageHistoryResult.Success(
+                    page(listOf(msg(3, MessageRole.USER, "drei")), limit = 1, returned = 1)
+                )
+
+            override fun loadOlderHistory(
+                profileId: String,
+                sessionId: String,
+                offset: Int
+            ): MessageHistoryResult {
+                olderCalls += 1
+                return MessageHistoryResult.Success(
+                    page(listOf(msg(1, MessageRole.USER, "eins")), limit = 1, returned = 0)
+                )
+            }
+        }
+        val model = build(
+            testScheduler,
+            history = source,
+            ioDispatcher = StandardTestDispatcher(testScheduler)
+        )
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+        model.loadOlderMessages()
+        model.close()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(0, olderCalls)
+        assertEquals(
+            listOf(3L),
+            (model.state.value.history as MessageHistoryState.Ready).messages.map { it.id }
+        )
+        lastController?.close()
     }
 
     @Test

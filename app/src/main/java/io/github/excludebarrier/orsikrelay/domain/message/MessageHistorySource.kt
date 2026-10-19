@@ -15,4 +15,20 @@ package io.github.excludebarrier.orsikrelay.domain.message
  */
 fun interface MessageHistorySource {
     fun loadHistory(profileId: String, sessionId: String): MessageHistoryResult
+
+    /**
+     * Reads the page just before the [offset] newest raw server rows.
+     * The returned page is still chronologically ordered; merging it
+     * into the visible history is [MessageHistoryPaging]'s job.
+     *
+     * The default keeps every existing single-method fake and lambda
+     * source compiling; a source that does not support paging reports a
+     * closed failure instead of silently re-reading the newest page.
+     */
+    fun loadOlderHistory(
+        profileId: String,
+        sessionId: String,
+        offset: Int
+    ): MessageHistoryResult =
+        MessageHistoryResult.Failure(MessageHistoryError.IncompatibleApi)
 }
