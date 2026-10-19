@@ -248,8 +248,10 @@ class SessionSearchUiTest {
         searchField().performTextInput("beta")
         composeRule.onAllNodesWithText("Alpha Session").assertCountEquals(0)
 
-        composeRule.onNodeWithText(context.getString(R.string.sessions_refresh))
-            .performClick()
+        composeRule.onNodeWithContentDescription(
+            context.getString(R.string.sessions_more_options)
+        ).performClick()
+        composeRule.onNodeWithTag("sessions_menu_refresh").performClick()
 
         waitForText("Beta Session")
         searchField().assert(hasText("beta"))

@@ -84,7 +84,7 @@ class LanguageSwitchUiTest {
         selectionStore.write(PROFILE_ID)
         MainActivity.sessionPageSourceForTests = fakePageSource
         composeRule.activityRule.scenario.recreate()
-        waitForText(localizedString("en", R.string.sessions_refresh))
+        waitForText(localizedString("en", R.string.sessions_search_placeholder))
     }
 
     @After
@@ -100,21 +100,21 @@ class LanguageSwitchUiTest {
         selectLanguage("settings_language_de")
         awaitSettingsIn("de")
         composeRule.onNodeWithText(localizedString("de", R.string.settings_back)).performClick()
-        waitForText(localizedString("de", R.string.sessions_refresh))
+        waitForText(localizedString("de", R.string.sessions_search_placeholder))
         assertEquals("de", SharedPreferencesLanguageSettingStore(context).read())
 
         openSettings()
         selectLanguage("settings_language_en")
         awaitSettingsIn("en")
         composeRule.onNodeWithText(localizedString("en", R.string.settings_back)).performClick()
-        waitForText(localizedString("en", R.string.sessions_refresh))
+        waitForText(localizedString("en", R.string.sessions_search_placeholder))
         assertEquals("en", SharedPreferencesLanguageSettingStore(context).read())
 
         openSettings()
         selectLanguage("settings_language_system")
         awaitSettingsIn("en")
         composeRule.onNodeWithText(localizedString("en", R.string.settings_back)).performClick()
-        waitForText(localizedString("en", R.string.sessions_refresh))
+        waitForText(localizedString("en", R.string.sessions_search_placeholder))
         assertNull(SharedPreferencesLanguageSettingStore(context).read())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val localeManager = context.getSystemService(LocaleManager::class.java)

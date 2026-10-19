@@ -19,9 +19,14 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
@@ -258,6 +263,133 @@ class SessionsScreenUiTest {
     }
 
     @Test
+    fun newSessionFabOpensTheDialog() {
+        setScreen(
+            source = SessionPageSource { _, _, _ -> success(emptyList(), false) },
+            creator = SessionCreator { _, title -> SessionCreateResult.Success("created-id", title) }
+        )
+
+        val fab = composeRule.onNodeWithTag("sessionsNewSessionFab")
+        fab.assertIsDisplayed()
+        fab.assertWidthIsAtLeast(48.dp)
+        fab.assertHeightIsAtLeast(48.dp)
+
+        fab.performClick()
+
+        composeRule.onNodeWithText(context.getString(R.string.new_session_title_label))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun newSessionFabIsAbsentWithoutCreator() {
+        setScreen(SessionPageSource { _, _, _ -> success(emptyList(), false) })
+
+        composeRule.onNodeWithTag("sessionsNewSessionFab").assertDoesNotExist()
+    }
+
+    @Test
+    fun pullToRefreshReloadsTheListExactlyOnce() {
+        val calls = AtomicInteger()
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                calls.incrementAndGet()
+                success(listOf(session("fixture-a", "Ziehbar")), false)
+            }
+        )
+        waitForText("Ziehbar")
+        assertEquals(1, calls.get())
+
+        composeRule.onNodeWithTag("sessionsPullToRefresh").performTouchInput { swipeDown() }
+
+        composeRule.waitUntil(timeoutMillis = 5_000) { calls.get() == 2 }
+        composeRule.waitForIdle()
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun pullToRefreshWorksOnTheEmptyState() {
+        val calls = AtomicInteger()
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                if (calls.incrementAndGet() == 1) {
+                    success(emptyList(), false)
+                } else {
+                    success(listOf(session("fixture-a", "Nach Leer-Refresh")), false)
+                }
+            }
+        )
+        waitForText(context.getString(R.string.sessions_empty))
+
+        composeRule.onNodeWithTag("sessionsPullToRefresh").performTouchInput { swipeDown() }
+
+        waitForText("Nach Leer-Refresh")
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun pullToRefreshWorksInTheErrorStateAndKeepsTheRetryButton() {
+        val calls = AtomicInteger()
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                if (calls.incrementAndGet() == 1) {
+                    SessionListResult.Failure(SessionListError.Network)
+                } else {
+                    success(listOf(session("fixture-a", "Nach Fehler-Refresh")), false)
+                }
+            }
+        )
+        waitForText(context.getString(R.string.error_session_generic))
+        composeRule.onNodeWithText(context.getString(R.string.sessions_retry))
+            .assertIsDisplayed()
+
+        composeRule.onNodeWithTag("sessionsPullToRefresh").performTouchInput { swipeDown() }
+
+        waitForText("Nach Fehler-Refresh")
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun overflowRefreshActionReloadsTheListExactlyOnce() {
+        val calls = AtomicInteger()
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                calls.incrementAndGet()
+                success(listOf(session("fixture-a", "Menü-Refresh")), false)
+            }
+        )
+        waitForText("Menü-Refresh")
+        assertEquals(1, calls.get())
+
+        openOverflowMenu()
+        composeRule.onNodeWithTag("sessions_menu_refresh").performClick()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) { calls.get() == 2 }
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun searchStillFiltersTheLoadedSessions() {
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                success(
+                    listOf(
+                        session("fixture-a", "Alpha Session"),
+                        session("fixture-b", "Beta Session")
+                    ),
+                    false
+                )
+            }
+        )
+        waitForText("Alpha Session")
+
+        composeRule.onNodeWithTag("sessionsSearchField").performTextInput("beta")
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithText("Alpha Session").assertCountEquals(0)
+        composeRule.onNodeWithText("Beta Session").assertIsDisplayed()
+    }
+
+    @Test
     fun loadMoreUsesAccumulatedOffsetAndKeepsServerOrder() {
         val offsets = mutableListOf<Int>()
         setScreen(
@@ -300,8 +432,10 @@ class SessionsScreenUiTest {
         )
 
         assertTrue(started.await(3, TimeUnit.SECONDS))
-        composeRule.onNodeWithText(context.getString(R.string.sessions_refresh)).performClick()
-        composeRule.onNodeWithText(context.getString(R.string.sessions_refresh)).performClick()
+        openOverflowMenu()
+        composeRule.onNodeWithTag("sessions_menu_refresh").performClick()
+        openOverflowMenu()
+        composeRule.onNodeWithTag("sessions_menu_refresh").performClick()
         assertEquals(1, calls.get())
         assertEquals(1, maxActive.get())
         release.countDown()
@@ -321,15 +455,16 @@ class SessionsScreenUiTest {
     }
 
     @Test
-    fun overflowMenuShowsExactlyTheThreeEntriesInOrder() {
+    fun overflowMenuShowsExactlyTheFourEntriesInOrder() {
         setScreen(SessionPageSource { _, _, _ -> success(emptyList(), false) })
 
         openOverflowMenu()
 
         composeRule.onNodeWithTag("sessions_overflow_menu")
             .onChildren()
-            .assertCountEquals(3)
+            .assertCountEquals(4)
         val tags = listOf(
+            "sessions_menu_refresh",
             "sessions_menu_manage_servers",
             "sessions_menu_settings",
             "sessions_menu_about"
@@ -397,13 +532,15 @@ class SessionsScreenUiTest {
         onOpenSettings: () -> Unit = {},
         onOpenAbout: () -> Unit = {},
         onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
-        clock: Clock = Clock.systemDefaultZone()
+        clock: Clock = Clock.systemDefaultZone(),
+        creator: SessionCreator? = null
     ) {
         composeRule.setContent {
             HermesTheme {
                 SessionsScreen(
                     pageSource = source,
                     profileId = PROFILE_ID,
+                    creator = creator,
                     onSessionSelected = onSessionSelected,
                     onOpenProfileManagement = onOpenProfileManagement,
                     onOpenSettings = onOpenSettings,
