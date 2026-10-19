@@ -64,6 +64,23 @@ class AboutSourceLinkUiTest {
         )
     }
 
+    @Test
+    fun reportBugRowOpensAPrefilledIssueWithVersionsOnly() {
+        val opened = mutableListOf<String>()
+        setAbout(opened::add)
+
+        composeRule.onNodeWithText(context.getString(R.string.settings_report_bug_label))
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("about_report_bug").performClick()
+
+        val url = opened.single()
+        assertTrue(url.startsWith("$PROJECT_SOURCE_URL/issues/new?title=&body="))
+        val body = java.net.URLDecoder.decode(url.substringAfter("&body="), "UTF-8")
+        assertTrue(body.contains("App: "))
+        assertTrue(body.contains("Android: "))
+        assertTrue(body.contains("Device: "))
+    }
+
     private fun setAbout(onAllowedLinkOpen: (String) -> Unit) {
         composeRule.setContent {
             HermesTheme {

@@ -22,13 +22,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.domain.crash.CrashReport
+import io.github.excludebarrier.orsikrelay.platform.crash.CrashReporter
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
 
 /** The only place that carries the public project URL. */
 internal const val PROJECT_SOURCE_URL = "https://github.com/exclude-barrier/OrsikRelay"
 
 /**
- * About screen with the app version, license and source-code link.
+ * About screen with the app version, license, source-code link and a
+ * "report a bug" row that opens a prefilled GitHub issue (app version,
+ * Android version and device model only).
  *
  * Same [SettingsTopBar] header and layout as the settings screen; the version
  * comes from `BuildConfig.VERSION_NAME`. The source row opens the public
@@ -121,6 +125,30 @@ fun AboutScreen(
                     text = PROJECT_SOURCE_URL.removePrefix("https://"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(
+                        role = Role.Button,
+                        onClick = {
+                            uriHandler.openUri(
+                                CrashReport.issueUrl(
+                                    projectUrl = PROJECT_SOURCE_URL,
+                                    title = "",
+                                    report = CrashReporter.environment()
+                                )
+                            )
+                        }
+                    )
+                    .testTag("about_report_bug"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_report_bug_label),
+                    style = MaterialTheme.typography.bodyLarge
                 )
             }
         }
