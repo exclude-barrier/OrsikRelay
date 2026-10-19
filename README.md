@@ -254,6 +254,7 @@ stores anything.
 | Task | Where |
 | --- | --- |
 | Add a server | **⋮ → Manage servers → Add server** (or open an `orsik://pair` link) |
+| Pair with a QR code | Onboarding → **Scan QR code** (the bridge prints it with `pairing-code` when `qrencode` is installed) |
 | Switch or remove servers | **⋮ → Manage servers**, then tap a server or use its ⋮ |
 | Disconnect this phone from a server | **⋮ → Manage servers → tap the server → Delete** (the device is disconnected on the server first) |
 | Start a conversation | **+** (New session) on the session list |

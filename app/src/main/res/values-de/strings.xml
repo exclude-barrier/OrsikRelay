@@ -7,7 +7,7 @@
     <string name="onboarding_base_url_label">Server-Basis-URL</string>
     <string name="onboarding_api_key_label">API-Key</string>
     <string name="onboarding_mode_pairing">Pairing-Code</string>
-    <string name="onboarding_mode_pairing_recommended">empfohlen</string>
+    <string name="onboarding_mode_pairing_recommended">Empfohlen</string>
     <string name="onboarding_mode_api_key">API-Key</string>
     <string name="onboarding_pairing_code_label">Pairing-Code</string>
     <string name="onboarding_submit">Verbinden</string>
@@ -49,6 +49,14 @@
     <string name="onboarding_error_pairing_failed_text">Erzeuge einen neuen Code und versuche es erneut.</string>
     <string name="onboarding_error_pairing_credential_rejected_title">Gerätezugang abgelehnt</string>
     <string name="onboarding_error_pairing_credential_rejected_text">Erzeuge einen neuen Code und kopple erneut.</string>
+    <string name="onboarding_scan_qr">QR-Code scannen</string>
+    <string name="onboarding_scan_title">Pairing-Code scannen</string>
+    <string name="onboarding_scan_hint">Richte die Kamera auf den QR-Code der Bridge.</string>
+    <string name="onboarding_scan_invalid">Kein Orsik-Pairing-Code</string>
+    <string name="onboarding_scan_close">Scanner schließen</string>
+    <string name="onboarding_scan_permission_denied">Kamerazugriff abgelehnt. Erlaube den Kamerazugriff in den App-Einstellungen, um einen QR-Code zu scannen.</string>
+    <string name="onboarding_scan_open_settings">App-Einstellungen öffnen</string>
+    <string name="onboarding_scan_camera_unavailable">Kamera nicht verfügbar.</string>
     <string name="error_pairing_code_local_invalid">Bitte einen gültigen Pairing-Code eingeben.</string>
     <string name="error_pairing_code_invalid">Der Pairing-Code ist ungültig, abgelaufen oder bereits verwendet.</string>
     <string name="error_pairing_invalid_request">Der Server hat den Pairing-Vorgang abgelehnt.</string>

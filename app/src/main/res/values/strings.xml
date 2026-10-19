@@ -7,7 +7,7 @@
     <string name="onboarding_base_url_label">Server base URL</string>
     <string name="onboarding_api_key_label">API key</string>
     <string name="onboarding_mode_pairing">Pairing code</string>
-    <string name="onboarding_mode_pairing_recommended">recommended</string>
+    <string name="onboarding_mode_pairing_recommended">Recommended</string>
     <string name="onboarding_mode_api_key">API key</string>
     <string name="onboarding_pairing_code_label">Pairing code</string>
     <string name="onboarding_submit">Connect</string>
@@ -49,6 +49,14 @@
     <string name="onboarding_error_pairing_failed_text">Create a new code and try again.</string>
     <string name="onboarding_error_pairing_credential_rejected_title">Device access rejected</string>
     <string name="onboarding_error_pairing_credential_rejected_text">Create a new code and pair again.</string>
+    <string name="onboarding_scan_qr">Scan QR code</string>
+    <string name="onboarding_scan_title">Scan pairing code</string>
+    <string name="onboarding_scan_hint">Point the camera at the QR code from the bridge.</string>
+    <string name="onboarding_scan_invalid">No Orsik pairing code</string>
+    <string name="onboarding_scan_close">Close scanner</string>
+    <string name="onboarding_scan_permission_denied">Camera access denied. Allow camera access in the app settings to scan a QR code.</string>
+    <string name="onboarding_scan_open_settings">Open app settings</string>
+    <string name="onboarding_scan_camera_unavailable">Camera unavailable.</string>
     <string name="error_pairing_code_local_invalid">Enter a valid pairing code.</string>
     <string name="error_pairing_code_invalid">The pairing code is invalid, expired, or already used.</string>
     <string name="error_pairing_invalid_request">The server rejected the pairing request.</string>
