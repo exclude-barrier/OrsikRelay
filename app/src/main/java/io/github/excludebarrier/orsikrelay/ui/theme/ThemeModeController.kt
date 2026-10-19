@@ -13,8 +13,7 @@ import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
  * The controller owns a single [MutableState] of the current mode plus a
  * [persist] callback. [select] updates the state synchronously (so the
  * change is visible in the same composition) and persists it in call
- * order. A [selectionGeneration] guard prevents a stale, in-flight
- * preference read from overwriting a fresh user selection.
+ * order.
  *
  * [rememberThemeModeController] reads the persisted mode synchronously on
  * first composition (a single SharedPreferences.getString) so the very
@@ -32,21 +31,10 @@ class ThemeModeController internal constructor(
             modeState.value = value
         }
 
-    private var selectionGeneration = 0
-
     fun select(mode: ThemeMode) {
-        selectionGeneration += 1
         this.mode = mode
         persist(mode)
     }
-
-    internal fun applyLoaded(mode: ThemeMode, generationAtRead: Int) {
-        if (selectionGeneration == generationAtRead) {
-            this.mode = mode
-        }
-    }
-
-    internal fun generation(): Int = selectionGeneration
 }
 
 /**

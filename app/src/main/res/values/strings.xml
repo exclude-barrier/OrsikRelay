@@ -58,13 +58,6 @@
     <string name="onboarding_scan_open_settings">Open app settings</string>
     <string name="onboarding_scan_camera_unavailable">Camera unavailable.</string>
     <string name="error_pairing_code_local_invalid">Enter a valid pairing code.</string>
-    <string name="error_pairing_code_invalid">The pairing code is invalid, expired, or already used.</string>
-    <string name="error_pairing_invalid_request">The server rejected the pairing request.</string>
-    <string name="error_pairing_device_limit">Too many devices are paired with this server.</string>
-    <string name="error_pairing_rate_limited">Too many pairing requests. Try again later.</string>
-    <string name="error_pairing_failed">The server could not complete the pairing request.</string>
-    <string name="error_pairing_incompatible_api">The server does not support secure device pairing.</string>
-    <string name="error_pairing_credential_rejected">The server rejected the new device credential.</string>
     <string name="sessions_title">Sessions</string>
     <string name="sessions_loading">Loading sessions…</string>
     <string name="sessions_empty">No sessions available.</string>
@@ -165,7 +158,6 @@
     <string name="chat_attachment_add">Attach</string>
     <string name="chat_attachment_remove">Remove</string>
     <string name="chat_attachment_busy">Reading attachment…</string>
-    <string name="chat_attachment_error_generic">This attachment cannot be sent.</string>
     <string name="chat_attachment_error_type">This file type is not supported. Supported formats are JPEG, PNG, and WEBP images.</string>
     <string name="chat_attachment_error_size">The attachment is too large. Maximum 5 MiB per image.</string>
     <string name="chat_attachment_error_unreadable">The attachment could not be read.</string>
@@ -201,7 +193,6 @@
     <string name="error_base_url_generic">Enter a valid server base URL.</string>
     <string name="error_api_key_empty">API key must not be empty.</string>
     <string name="error_api_key_generic">Enter a valid API key.</string>
-    <string name="error_connection_invalid_input">The connection details are invalid.</string>
     <string name="error_connection_invalid_credentials">The API key was rejected.</string>
     <string name="error_connection_rate_limited">Too many requests. Try again later.</string>
     <string name="error_connection_incompatible_api">The server does not provide the required Hermes features.</string>
@@ -209,7 +200,6 @@
     <string name="error_connection_timeout">The server did not respond in time.</string>
     <string name="error_connection_network">The Hermes server is currently unreachable.</string>
     <string name="error_connection_http">The server did not process the request successfully.</string>
-    <string name="error_connection_persistence">The server could not be saved securely.</string>
     <string name="profiles_manage">Manage servers</string>
     <string name="profiles_title">Servers</string>
     <string name="profiles_loading">Loading servers…</string>
