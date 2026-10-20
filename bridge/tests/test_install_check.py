@@ -350,3 +350,38 @@ class InstallPrerequisiteTest(unittest.TestCase):
         self.assertFalse(
             self.home.exists(), "installer created BRIDGE_HOME without uv present"
         )
+
+
+@unittest.skipUnless(HAVE_BASH, "bash is required")
+class CheckOriginTest(unittest.TestCase):
+    """An existing checkout is only reused when it points at the official repo."""
+
+    def _run(self, origin: str | None):
+        with tempfile.TemporaryDirectory() as d:
+            subprocess.run(["git", "init", "-q", d], check=True)
+            if origin is not None:
+                subprocess.run(["git", "-C", d, "remote", "add", "origin", origin], check=True)
+            script = (
+                "set -euo pipefail\n"
+                "die() { printf '%s\\n' \"$*\" >&2; exit 1; }\n"
+                "REPO_URL=https://github.com/exclude-barrier/OrsikRelay.git\n"
+                "ORSIK_DIR=\"$TEST_DIR\"\n"
+                + _bash_function("check_origin")
+                + "\ncheck_origin\n"
+            )
+            env = dict(os.environ, TEST_DIR=d)
+            return subprocess.run(
+                ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30)
+
+    def test_official_origins_are_accepted(self):
+        for origin in ("https://github.com/exclude-barrier/OrsikRelay",
+                       "https://github.com/exclude-barrier/OrsikRelay.git",
+                       "git@github.com:exclude-barrier/OrsikRelay.git"):
+            result = self._run(origin)
+            self.assertEqual(result.returncode, 0, (origin, result.stderr))
+
+    def test_foreign_or_missing_origin_is_refused(self):
+        for origin in ("https://github.com/attacker/OrsikRelay.git", None):
+            result = self._run(origin)
+            self.assertNotEqual(result.returncode, 0, origin)
+            self.assertIn("is not a checkout of", result.stderr)

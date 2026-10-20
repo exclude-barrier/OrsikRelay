@@ -99,9 +99,22 @@ if command -v loginctl >/dev/null && [ "$(loginctl show-user "$USER" -p Linger -
   echo "Note: without lingering the bridge stops when you log out. Fix once with: sudo loginctl enable-linger $USER"
 fi
 
+# Only build code from the official repository: an existing checkout that
+# points elsewhere is refused instead of being fetched and installed.
+check_origin() {
+  local origin
+  origin="$(git -C "$ORSIK_DIR" remote get-url origin 2>/dev/null || true)"
+  case "$origin" in
+    https://github.com/exclude-barrier/OrsikRelay | https://github.com/exclude-barrier/OrsikRelay.git | \
+      git@github.com:exclude-barrier/OrsikRelay.git) ;;
+    *) die "$ORSIK_DIR is not a checkout of $REPO_URL (origin: ${origin:-none}). Fix it with: git -C \"$ORSIK_DIR\" remote set-url origin $REPO_URL" ;;
+  esac
+}
+
 # --- 2. Source of the release -----------------------------------------------
 say "Getting the release"
 if [ -d "$ORSIK_DIR/.git" ]; then
+  check_origin
   git -C "$ORSIK_DIR" fetch --quiet --tags origin
   REF="${ORSIK_REF:-$(git -C "$ORSIK_DIR" describe --tags --abbrev=0 origin/main)}"
 else
