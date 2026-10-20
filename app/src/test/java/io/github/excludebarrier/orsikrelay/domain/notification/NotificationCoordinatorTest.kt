@@ -126,6 +126,23 @@ class NotificationCoordinatorTest {
     }
 
     @Test
+    fun `notified keys stay bounded and evict the oldest entry`() {
+        val poster = RecordingPoster()
+        val coordinator = coordinator(poster, isForeground = { false })
+
+        repeat(65) { index -> coordinator.onRunCompleted("p1", "s1", "run-$index") }
+        assertEquals(65, poster.posted.size)
+
+        // The oldest key has been evicted, so the same run may notify again.
+        coordinator.onRunCompleted("p1", "s1", "run-0")
+        assertEquals(66, poster.posted.size)
+
+        // A key that is still inside the bound remains suppressed.
+        coordinator.onRunCompleted("p1", "s1", "run-64")
+        assertEquals(66, poster.posted.size)
+    }
+
+    @Test
     fun `a safe server label is used as the title`() {
         val poster = RecordingPoster()
         val coordinator = coordinator(poster, isForeground = { false }, serverName = "demo-server")

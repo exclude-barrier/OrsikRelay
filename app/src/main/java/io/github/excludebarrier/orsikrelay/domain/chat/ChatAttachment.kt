@@ -21,11 +21,7 @@ data class ChatAttachmentDraft(
     val mimeType: String,
     val sizeBytes: Long,
     val kind: ChatAttachmentKind
-) {
-    /** `true` for every attachment kind whose bytes travel inline in the turn body. */
-    val inline: Boolean
-        get() = kind == ChatAttachmentKind.IMAGE
-}
+)
 
 /** Closed set of attachment kinds the v1 attachment feature supports. */
 enum class ChatAttachmentKind { IMAGE }

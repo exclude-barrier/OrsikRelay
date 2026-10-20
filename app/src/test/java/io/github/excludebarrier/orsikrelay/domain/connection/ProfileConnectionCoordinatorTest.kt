@@ -18,7 +18,7 @@ class ProfileConnectionCoordinatorTest {
         var saveCount = 0
         val probe = ConnectionProbe {
             events += "probe"
-            HermesConnectionResult.Success("0.20-test", true, true, true)
+            HermesConnectionResult.Success("0.20-test", true)
         }
         val saver = VerifiedProfileSaver {
             events += "save"
@@ -61,7 +61,7 @@ class ProfileConnectionCoordinatorTest {
     fun `persistence exception becomes data-free persistence failure`() {
         val coordinator = ProfileConnectionCoordinator(
             connectionProbe = ConnectionProbe {
-                HermesConnectionResult.Success("0.20-test", true, true, true)
+                HermesConnectionResult.Success("0.20-test", true)
             },
             profileSaver = VerifiedProfileSaver {
                 throw IllegalStateException("synthetic persistence failure")

@@ -336,8 +336,6 @@ class ActiveServerSelectionRestartUiTest {
         val probe = ConnectionProbe {
             HermesConnectionResult.Success(
                 version = "1",
-                sessionsSupported = true,
-                sessionStreamingSupported = true,
                 sessionChatInteractiveApprovals = true
             )
         }

@@ -64,9 +64,33 @@ class HermesConnectionClientTest {
         assertTrue(result is HermesConnectionResult.Success)
         result as HermesConnectionResult.Success
         assertEquals("0.20-test", result.version)
-        assertTrue(result.sessionsSupported)
-        assertTrue(result.sessionStreamingSupported)
         assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun missingSessionsEndpointIsIncompatible() {
+        val capabilities = validCapabilitiesJson()
+        capabilities.getJSONObject("endpoints").remove("sessions")
+        server.enqueue(validHealthResponse())
+        server.enqueue(jsonResponse(capabilities))
+
+        assertFailure(
+            client.probe(draft()),
+            ConnectionFailureReason.INCOMPATIBLE_API
+        )
+    }
+
+    @Test
+    fun missingStreamingEndpointIsIncompatible() {
+        val capabilities = validCapabilitiesJson()
+        capabilities.getJSONObject("endpoints").remove("session_chat_stream")
+        server.enqueue(validHealthResponse())
+        server.enqueue(jsonResponse(capabilities))
+
+        assertFailure(
+            client.probe(draft()),
+            ConnectionFailureReason.INCOMPATIBLE_API
+        )
     }
 
     @Test

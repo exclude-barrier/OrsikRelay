@@ -42,7 +42,7 @@ object ImeClickSettle {
     }
 
     /** Hides the real soft keyboard and waits until its inset is gone. */
-    fun hideRealImeAndWait(rule: ComposeTestRule, activity: ComponentActivity) {
+    private fun hideRealImeAndWait(rule: ComposeTestRule, activity: ComponentActivity) {
         val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         activity.runOnUiThread {
             imm.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
@@ -58,7 +58,7 @@ object ImeClickSettle {
      * Re-dispatches the window insets as they are currently measured, so the
      * Compose tree re-applies a stable inset state synchronously.
      */
-    fun dispatchMeasuredInsets(rule: ComposeTestRule, activity: ComponentActivity) {
+    private fun dispatchMeasuredInsets(rule: ComposeTestRule, activity: ComponentActivity) {
         val rootInsets = ViewCompat.getRootWindowInsets(activity.window.decorView)
         val statusTop = rootInsets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
         val navBottom = rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
@@ -67,7 +67,7 @@ object ImeClickSettle {
     }
 
     /** Injects the given insets once; status/nav/IME are set explicitly. */
-    fun dispatchImeInsets(
+    private fun dispatchImeInsets(
         rule: ComposeTestRule,
         activity: ComponentActivity,
         statusTop: Int,

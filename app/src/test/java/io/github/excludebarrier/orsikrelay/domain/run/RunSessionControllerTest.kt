@@ -929,6 +929,46 @@ class RunSessionControllerTest {
         built.controller.close()
     }
 
+    @Test
+    fun notificationFailureNeverChangesTheRunStatus() = runTest {
+        val source = FakeTurnSource()
+        val starter = FakeServiceStarter()
+        val controller = RunSessionController(
+            chatSource = source,
+            serviceStarter = starter,
+            notificationCoordinator = NotificationCoordinator(
+                poster = NotificationPoster {
+                    throw IllegalStateException("notification failure")
+                },
+                isForeground = { false },
+                serverNameProvider = { "srv" },
+                fallbackTitle = "Orsik Relay"
+            ),
+            dispatcher = UnconfinedTestDispatcher(testScheduler),
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler)
+        )
+        controller.startTurn(profileId, sessionId, "hi")
+        source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.ApprovalRequested(approvalRequest())
+        )
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            "an approval notification failure must not fail the run",
+            RunSessionController.ActiveRun.Status.WAITING_FOR_APPROVAL,
+            controller.activeRun.value?.status
+        )
+
+        source.enqueue(ChatTurnEvent.TurnCompleted())
+        testScheduler.advanceUntilIdle()
+        assertNull(
+            "a run-completed notification failure must not keep the slot",
+            controller.activeRun.value
+        )
+        assertEquals("the terminal path still stops the service", 1, starter.stops.get())
+        controller.close()
+    }
+
     // ------------------------------------------------------------------
     // Persisted run lease for process-death recovery
     // ------------------------------------------------------------------

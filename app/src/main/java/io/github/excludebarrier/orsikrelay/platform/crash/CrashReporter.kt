@@ -17,18 +17,31 @@ import kotlin.system.exitProcess
  */
 object CrashReporter {
     private const val FILE_NAME = "last-crash.txt"
+    private const val TEMP_FILE_NAME = "$FILE_NAME.tmp"
 
-    /** Records an uncaught exception, then hands it to the previous handler. */
+    /** Guards the record writes and the one-time install decision. */
+    private val lock = Any()
+    private var installed = false
+
+    /**
+     * Records an uncaught exception, then hands it to the previous handler.
+     * Idempotent: a second call in the same process is a no-op, so the
+     * report is never written twice by stacked handlers.
+     */
     fun install(context: Context) {
         val appContext = context.applicationContext
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            runCatching { record(appContext, throwable) }
-            if (previous != null) {
-                previous.uncaughtException(thread, throwable)
-            } else {
-                Process.killProcess(Process.myPid())
-                exitProcess(10)
+        synchronized(lock) {
+            if (installed) return
+            installed = true
+            val previous = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+                runCatching { record(appContext, throwable) }
+                if (previous != null) {
+                    previous.uncaughtException(thread, throwable)
+                } else {
+                    Process.killProcess(Process.myPid())
+                    exitProcess(10)
+                }
             }
         }
     }
@@ -40,7 +53,22 @@ object CrashReporter {
     )
 
     internal fun record(context: Context, throwable: Throwable) {
-        file(context).writeText(CrashReport.format(throwable, environment()))
+        val text = CrashReport.format(throwable, environment())
+        val target = file(context)
+        synchronized(lock) {
+            // Write-then-rename: a crash, a second writer or a killed process
+            // can never leave a truncated report in place. The temporary file
+            // lives in the same directory, so renameTo is an atomic replace.
+            val temp = File(context.noBackupFilesDir, TEMP_FILE_NAME)
+            try {
+                temp.writeText(text)
+                if (!temp.renameTo(target)) {
+                    target.writeText(text)
+                }
+            } finally {
+                temp.delete()
+            }
+        }
     }
 
     fun pending(context: Context): String? =

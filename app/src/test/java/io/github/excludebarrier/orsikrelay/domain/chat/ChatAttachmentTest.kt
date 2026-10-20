@@ -56,7 +56,6 @@ class ChatAttachmentTest {
             assertEquals(ChatAttachmentKind.IMAGE, draft.kind)
             assertEquals(mime, draft.mimeType)
             assertEquals(SANE_SIZE_BYTES, draft.sizeBytes)
-            assertTrue(draft.inline)
         }
     }
 

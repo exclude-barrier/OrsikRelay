@@ -48,8 +48,6 @@ class HermesConnectionClient(
             val negotiated = parseCapabilities(capabilities)
             HermesConnectionResult.Success(
                 version = version,
-                sessionsSupported = true,
-                sessionStreamingSupported = true,
                 sessionChatInteractiveApprovals = negotiated.sessionChatInteractiveApprovals,
                 deviceCredentialsSupported = negotiated.deviceCredentials
             )

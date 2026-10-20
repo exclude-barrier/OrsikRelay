@@ -25,6 +25,7 @@ import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreen
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
+import io.github.excludebarrier.orsikrelay.navigation.NotificationTap
 import io.github.excludebarrier.orsikrelay.navigation.initialDestination
 import io.github.excludebarrier.orsikrelay.security.applock.AndroidAppAuthenticator
 import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
@@ -57,10 +58,14 @@ class MainActivity : FragmentActivity() {
     private val pairingBootstrap = mutableStateOf<PairingBootstrap?>(null)
 
     // A notification tap (cold start or warm start) is parsed once into a
-    // validated (profileId, sessionId) and handed to the navigation host,
-    // which opens exactly that chat. Malformed intents yield null (fail-closed)
-    // and leave the normal startup navigation untouched.
-    private val notificationBootstrap = mutableStateOf<Pair<String, String>?>(null)
+    // validated (profileId, sessionId) plus a monotonically increasing
+    // delivery number, and handed to the navigation host, which opens exactly
+    // that chat. The delivery number makes every onNewIntent a new state
+    // value, so tapping the same notification twice navigates twice.
+    // Malformed intents yield null (fail-closed) and leave the normal startup
+    // navigation untouched.
+    private val notificationBootstrap = mutableStateOf<NotificationTap?>(null)
+    private var notificationDelivery = 0L
 
     /**
      * Process-scoped app-lock state. Created before the first composition so
@@ -90,7 +95,7 @@ class MainActivity : FragmentActivity() {
         // savedInstanceState and still consumes the intent.
         if (savedInstanceState == null) {
             pairingBootstrap.value = PairingDeepLink.parse(intent?.data?.toString().orEmpty())
-            notificationBootstrap.value = NotificationSessionIntent.parse(intent, NotificationSessionIntent.tapToken(this))
+            deliverNotificationTap(intent)
         }
         setContent {
             val themeStore = remember {
@@ -160,7 +165,27 @@ class MainActivity : FragmentActivity() {
         // recreation does not see a stale intent (singleTop delivery).
         setIntent(intent)
         pairingBootstrap.value = PairingDeepLink.parse(intent.data?.toString().orEmpty())
-        notificationBootstrap.value = NotificationSessionIntent.parse(intent, NotificationSessionIntent.tapToken(this))
+        deliverNotificationTap(intent)
+    }
+
+    /**
+     * Parses one delivered intent and publishes it with a new delivery
+     * number. A malformed intent clears the pending tap; a valid one always
+     * produces a distinct [NotificationTap], even when its routing IDs equal
+     * the previous tap's.
+     */
+    private fun deliverNotificationTap(intent: Intent?) {
+        val parsed = intent?.let {
+            NotificationSessionIntent.parse(it, NotificationSessionIntent.tapToken(this))
+        }
+        if (parsed == null) {
+            notificationBootstrap.value = null
+            return
+        }
+        val (profileId, sessionId) = parsed
+        notificationDelivery += 1L
+        notificationBootstrap.value =
+            NotificationTap(profileId, sessionId, delivery = notificationDelivery)
     }
 
     companion object {
