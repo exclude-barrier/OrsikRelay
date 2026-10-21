@@ -113,14 +113,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.produceState
 import androidx.compose.foundation.Image
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.compose.rememberLauncherForActivityResult
 
 /**
  * Chat screen with the live turn slice — thin presentation
@@ -223,17 +220,7 @@ fun ChatScreen(
     val turnStartedAt = rememberSaveable(state.turnActive) { SystemClock.elapsedRealtime() }
 
     val context = LocalContext.current
-    // The Android system photo picker - no storage permission, no custom
-    // file browser; the app can only ever read what the user explicitly
-    // picked. The result is a content:// URI that the view model validates
-    // through the ChatAttachmentSource seam.
-    val pickImage = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.onAttachmentPicked(uri.toString())
-        }
-    }
+    val pickImage = rememberImagePicker(viewModel::onAttachmentPicked)
     // The chip preview is decoded from the picked URI, bounded and local-only;
     // it is recomputed when the picked attachment changes.
     val attachmentThumbnail by produceState<ImageBitmap?>(null, state.attachment?.contentUri) {
@@ -592,11 +579,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     attachmentAddLabel = attachmentAddLabel,
                     attachmentRemoveLabel = attachmentRemoveLabel,
                     attachmentBusyLabel = attachmentBusyLabel,
-                    onPickAttachment = {
-                        pickImage.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
+                    onPickAttachment = pickImage,
                     onRemoveAttachment = { viewModel.removeAttachment() },
                     compact = compactComposer,
                     runControls = if (state.controlsVisible) {

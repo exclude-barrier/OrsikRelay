@@ -18,5 +18,7 @@
         <activity
             android:name="androidx.activity.ComponentActivity"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Host for PhotoPickerLaunchUiTest: MainActivity's base class. -->
+        <activity android:name="androidx.fragment.app.FragmentActivity" />
     </application>
 </manifest>

@@ -31,8 +31,8 @@ android {
         applicationId = "io.github.excludebarrier.orsikrelay"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.1.0-alpha.10"
+        versionCode = 11
+        versionName = "0.1.0-alpha.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -129,6 +129,8 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.navigation.compose)
     implementation(libs.androidx.biometric)
+    // MainActivity is a FragmentActivity (BiometricPrompt); see the catalog.
+    implementation(libs.androidx.fragment)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     // Markdown rendering for assistant messages. Pure Compose, no WebView.
@@ -150,4 +152,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    // Compose UI tests idle through Espresso; 3.5.0 (pulled in by
+    // ui-test-junit4) fails on API 37. espresso-intents stubs the system
+    // photo picker's answer in PhotoPickerLaunchUiTest.
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.espresso.intents)
 }

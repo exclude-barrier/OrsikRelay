@@ -307,6 +307,106 @@ class HermesSessionStreamClientTest {
     }
 
     @Test
+    fun reconnectAfterTruncatedConfirmedRunSendsOnlyTheResumeGetNeverASecondPost() {
+        // Initial POST: the server confirms the run and streams one delta,
+        // then the socket dies at a frame boundary without a terminal frame.
+        server.enqueue(
+            sseResponse(
+                listOf(
+                    frame("run.started", 1, JSONObject(), SESSION_ID),
+                    frame("message.started", 2, messageExtra(), SESSION_ID),
+                    frame("assistant.delta", 3, deltaExtra("Hallo"), SESSION_ID)
+                )
+            )
+        )
+        // Re-attach from the confirmed after_seq=3: only the remaining
+        // frames, no repeated turn body.
+        server.enqueue(
+            sseResponse(
+                listOf(
+                    frame("assistant.delta", 4, deltaExtra(" Welt"), SESSION_ID),
+                    frame("assistant.completed", 5, completedExtra(), SESSION_ID),
+                    frame("run.completed", 6, JSONObject(), SESSION_ID),
+                    frame("done", 7, JSONObject(), SESSION_ID)
+                )
+            )
+        )
+        val profileId = "reattach-profile"
+        val profile = ServerProfile.create(
+            profileId,
+            "Reattach",
+            server.url("/reattach").toString().trimEnd('/')
+        )
+        val credentials = FakeCredentialStore(
+            mutableMapOf(profileId to SecretValue(FIXTURE_KEY))
+        )
+        val repository = StreamingChatRepository(
+            profileRepository = ServerProfileRepository(
+                FakeMetadataStore(mutableListOf(profile)),
+                credentials
+            ),
+            credentialStore = credentials,
+            streamTransport = client,
+            reconnectBackoffMs = longArrayOf(1L)
+        )
+
+        val collected = java.util.Collections.synchronizedList(
+            mutableListOf<ChatTurnEvent>()
+        )
+        val finished = CountDownLatch(1)
+        val collector = Thread {
+            kotlinx.coroutines.runBlocking {
+                repository.streamTurn(profileId, SESSION_ID, "Hallo")
+                    .collect { event -> collected += event }
+            }
+            finished.countDown()
+        }
+        collector.start()
+        assertTrue(
+            "the resumed turn did not finish",
+            finished.await(20, TimeUnit.SECONDS)
+        )
+        collector.join(5_000)
+
+        assertEquals(
+            listOf<ChatTurnEvent>(
+                ChatTurnEvent.RunStarted(RUN_ID),
+                ChatTurnEvent.AssistantStarted,
+                ChatTurnEvent.AssistantDelta("Hallo"),
+                ChatTurnEvent.StreamReconnecting,
+                ChatTurnEvent.AssistantDelta(" Welt"),
+                ChatTurnEvent.AssistantCompleted("Hallo Welt"),
+                ChatTurnEvent.TurnCompleted()
+            ),
+            collected.toList()
+        )
+
+        val initial = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+            "expected the initial turn POST"
+        }
+        val resume = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS)) {
+            "expected the resume GET"
+        }
+        assertEquals("POST", initial.method)
+        assertEquals("GET", resume.method)
+        assertEquals(
+            "/reattach/api/sessions/$SESSION_ID/runs/$RUN_ID/stream",
+            resume.requestUrl!!.encodedPath
+        )
+        assertEquals(
+            "the re-attach resumes exactly after the confirmed sequence",
+            "3",
+            resume.requestUrl!!.queryParameter("after_seq")
+        )
+        assertEquals(2, server.requestCount)
+        assertEquals(
+            "the turn POST is never repeated",
+            1,
+            listOf(initial, resume).count { it.method == "POST" }
+        )
+    }
+
+    @Test
     fun resumeWithForeignRunIdFailsClosedWithoutSendingARequest() {
         // Run-id boundary: the confirmed snapshot of a DIFFERENT run
         // must never be used to build a re-attach request. No request

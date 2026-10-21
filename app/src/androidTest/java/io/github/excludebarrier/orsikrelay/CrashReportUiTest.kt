@@ -9,6 +9,7 @@ import io.github.excludebarrier.orsikrelay.domain.crash.CrashReport
 import io.github.excludebarrier.orsikrelay.platform.crash.CrashReporter
 import io.github.excludebarrier.orsikrelay.ui.crash.CrashReportDialog
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -37,6 +38,27 @@ class CrashReportUiTest {
         assertFalse(report.contains("secret"))
         CrashReporter.clear(context)
         assertNull(CrashReporter.pending(context))
+    }
+
+    @Test
+    fun aDamagedReportNeverThrowsAndCanBeDiscarded() {
+        val stored = File(context.noBackupFilesDir, "last-crash.txt")
+        CrashReporter.clear(context)
+        stored.writeBytes(byteArrayOf(0xFF.toByte(), 0x00, 0xC3.toByte(), 0x28))
+
+        assertNotNull(CrashReporter.pending(context))
+        CrashReporter.clear(context)
+        assertNull(CrashReporter.pending(context))
+        assertFalse(stored.exists())
+
+        // A directory in the report's place is unreadable, not a crash.
+        assertTrue(File(stored, "child").let { stored.mkdir() && it.createNewFile() })
+        try {
+            assertNull(CrashReporter.pending(context))
+            CrashReporter.clear(context)
+        } finally {
+            stored.deleteRecursively()
+        }
     }
 
     @Test

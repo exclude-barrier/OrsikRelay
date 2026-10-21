@@ -669,6 +669,88 @@ class RunSessionControllerTest {
     }
 
     @Test
+    fun resumeGapAfterReconnectingKeepsTheSlotUncertainWithoutASecondPost() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(
+            ChatTurnEvent.RunStarted(runId),
+            ChatTurnEvent.StreamReconnecting,
+            ChatTurnEvent.TurnFailed(ChatStreamError.ResumeGap)
+        )
+        testScheduler.advanceUntilIdle()
+
+        val active = built.controller.activeRun.value
+        assertNotNull("a failed re-attach does not prove the run ended", active)
+        assertEquals(runId, active?.runId)
+        assertEquals(RunSessionController.ActiveRun.Status.UNCERTAIN, active?.status)
+        assertFalse("the dead transport is no longer announced as reconnecting", active?.reconnecting == true)
+        assertTrue("no active transport survives, so the FGS stops", built.starter.stops.get() >= 1)
+
+        // The uncertain run keeps the single slot: a later start of the
+        // same session must be refused and must never POST again.
+        assertEquals(
+            RunSessionController.StartTurnResult.ActiveRunConflict,
+            built.controller.startTurn(profileId, sessionId, "again")
+        )
+        assertEquals("exactly one stream/POST", 1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun terminalDirectlyAfterReconnectingReleasesSlotLeaseAndService() = runTest {
+        val store = FakeLeaseStore()
+        val built = build(this.testScheduler, leaseStore = store)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.StreamReconnecting)
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            RunSessionController.ActiveRun.Status.RECONNECTING,
+            built.controller.activeRun.value?.status
+        )
+        assertEquals(lease, store.current)
+
+        // The re-attached stream reports the authoritative terminal: the
+        // slot, the durable lease and the foreground service all settle.
+        built.source.enqueue(ChatTurnEvent.TurnCompleted())
+        testScheduler.advanceUntilIdle()
+
+        assertNull(built.controller.activeRun.value)
+        assertNull("a terminal after reconnecting clears the lease", store.current)
+        assertEquals(1, built.starter.starts.get())
+        assertTrue(built.starter.stops.get() >= 1)
+        assertEquals("no second stream/POST after the terminal", 1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
+    fun confirmedStreamEndingDuringReconnectKeepsTheSlotUncertainAndRejectsTheSameSession() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.StreamReconnecting)
+        testScheduler.advanceUntilIdle()
+
+        // Bridge restart: the re-attach socket ends without any terminal
+        // frame. The confirmed run may still be alive server-side.
+        built.source.complete()
+        testScheduler.advanceUntilIdle()
+
+        val active = built.controller.activeRun.value
+        assertNotNull(active)
+        assertEquals(runId, active?.runId)
+        assertEquals(RunSessionController.ActiveRun.Status.UNCERTAIN, active?.status)
+        assertTrue(built.starter.stops.get() >= 1)
+        assertEquals("no automatic re-POST", 1, built.source.calls.get())
+
+        // Even the same session is refused while the outcome is unknown.
+        assertEquals(
+            RunSessionController.StartTurnResult.ActiveRunConflict,
+            built.controller.startTurn(profileId, sessionId, "again")
+        )
+        assertEquals("exactly one stream/POST", 1, built.source.calls.get())
+        built.controller.close()
+    }
+
+    @Test
     fun markTurnUncertainKeepsOwnershipAndCancelsTheLocalStream() = runTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "hi")
