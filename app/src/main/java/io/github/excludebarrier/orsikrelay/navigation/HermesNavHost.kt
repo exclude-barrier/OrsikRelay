@@ -1,6 +1,16 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
+import androidx.navigation.compose.currentBackStackEntryAsState
+import io.github.excludebarrier.orsikrelay.domain.home.ServerConnectionCheck
+import io.github.excludebarrier.orsikrelay.ui.home.HomeRoute
+import io.github.excludebarrier.orsikrelay.ui.home.PreviewPlaceholderScreen
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -83,6 +93,7 @@ fun HermesNavHost(
     runSteerRequester: RunSteerRequester? = null,
     runApprovalRequester: RunApprovalRequester? = null,
     runStatusRequester: RunStatusRequester? = null,
+    serverConnectionCheck: ServerConnectionCheck? = null,
     chatDraftRepository: ChatDraftRepository? = null,
     profileAdmin: ProfileAdmin? = null,
     themeController: ThemeModeController? = null,
@@ -161,14 +172,11 @@ fun HermesNavHost(
     var activeSessionTitleSessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var activeSessionTitle by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Safe return after a profile deletion: the Profiles
-    // destination is only reachable from Sessions, so popping everything
-    // from the first Sessions entry upward (inclusive) removes the
-    // Profiles entry AND every chat entry; the single new Sessions entry
-    // carries no profile in its route and re-derives everything from
-    // [activeProfileId]. Deleting the active profile resets the ID so the
-    // Sessions screen falls into its existing generic incomplete-profile
-    // state — no chat can keep living under the deleted profile.
+    // Safe return after a profile deletion: the whole back stack (Profiles
+    // and every chat entry) is cleared and a single new Home entry
+    // re-derives everything from [activeProfileId]. Deleting the active
+    // profile resets the ID so Home falls into its unreachable state - no
+    // chat can keep living under the deleted profile.
     suspend fun profileDeleted(profileId: String) {
         // The caller invokes this from the deletion coroutine, which may
         // resume off the main thread (e.g. under the Compose test
@@ -178,21 +186,18 @@ fun HermesNavHost(
             if (activeProfileId == profileId) {
                 activeProfileId = ""
             }
-            navController.navigate(routeOf(AppScreen.Sessions)) {
-                popUpTo(routeOf(AppScreen.Sessions)) { inclusive = true }
+            navController.navigate(routeOf(AppScreen.Home)) {
+                popUpTo(navController.graph.id) { inclusive = true }
                 launchSingleTop = true
             }
         }
     }
 
-    // Safe switch of the active server. Reuses exactly the
-    // [profileDeleted] pattern, but sets [activeProfileId] to the chosen
-    // server instead of clearing it. Popping from the first Sessions entry
-    // upward (inclusive) removes the Profiles entry AND every existing Chat
-    // destination, so no chat can keep living under the previous server; the
-    // single new Sessions entry re-derives its list from the new ID. The
-    // selection path itself reads no credential — only the (re)loaded
-    // Sessions list does, under the new server.
+    // Safe switch of the active server. Same pattern as [profileDeleted],
+    // but [activeProfileId] becomes the chosen server: clearing the back
+    // stack removes every chat of the previous server, and the single new
+    // Home entry reloads under the new ID. The selection path itself reads
+    // no credential.
     suspend fun serverSelected(profileId: String) {
         // The caller invokes this from the ProfilesScreen select button,
         // which runs on the main thread, but the NavController mutation and
@@ -200,8 +205,8 @@ fun HermesNavHost(
         // so the transition is always main-thread safe.
         withContext(Dispatchers.Main) {
             activeProfileId = profileId
-            navController.navigate(routeOf(AppScreen.Sessions)) {
-                popUpTo(routeOf(AppScreen.Sessions)) { inclusive = true }
+            navController.navigate(routeOf(AppScreen.Home)) {
+                popUpTo(navController.graph.id) { inclusive = true }
                 launchSingleTop = true
             }
         }
@@ -226,11 +231,11 @@ fun HermesNavHost(
             StartupProfile.None -> resolvedStart = AppScreen.Onboarding
             is StartupProfile.Ready -> {
                 activeProfileId = startupProfile.profileId
-                resolvedStart = AppScreen.Sessions
+                resolvedStart = AppScreen.Home
             }
             StartupProfile.Unavailable -> {
                 activeProfileId = ""
-                resolvedStart = AppScreen.Sessions
+                resolvedStart = AppScreen.Home
             }
         }
     }
@@ -277,243 +282,330 @@ fun HermesNavHost(
         return
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = routeOf(initialScreen)
-    ) {
-        composable(routeOf(AppScreen.Onboarding)) {
-            OnboardingRoute(
-                pairingBootstrap = pairingBootstrap,
-                // Only an onboarding opened FROM the server management
-                // screen has a destination to return to. The first start
-                // and the pairing deep link keep their header unchanged.
-                onBack = navController.previousBackStackEntry?.let {
-                    { navController.popBackStack() }
-                },
-                connect = { draft ->
-                    val coordinator = connectionCoordinator
-                        ?: productionDependencies.value.coordinator
-                    coordinator.connect(draft)
-                },
-                // The pairing path (recommended default in the
-                // UI). Unauthenticated pair POST, authenticated probe with
-                // strict device-credential capability check, persistence only
-                // after verification, exactly one best-effort self-revoke on
-                // every post-pair failure.
-                connectPairing = { profileName, baseUrl, pairingCode ->
-                    productionDependencies.value.pairingCoordinator
-                        .connect(profileName, baseUrl, pairingCode)
-                },
-                // A freshly verified server becomes the ACTIVE
-                // server. The selection is persisted FIRST (metadata-only
-                // write). The navigation to the verified server keeps the
-                // existing, verified behavior — the user must never be stuck
-                // on Onboarding after a successful connection — but a failed
-                // selection persist is never applied optimistically: the
-                // in-memory switch is the existing active-server switch pattern and the
-                // selection itself stays as it was on disk; the next
-                // startup deterministically falls back to the existing
-                // resolution. No error details are surfaced.
-                onConnected = { success ->
-                    navHostCoroutineScope.launch {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                (profileAdmin
-                                    ?: productionDependencies.value.profileAdmin)
-                                    .selectActiveServer(success.profileId)
-                            }
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (_: Exception) {
-                            // Selection persist failed: see the comment above.
+    fun openChat(sessionId: String, title: String?) {
+        activeSessionTitleSessionId = sessionId
+        activeSessionTitle = title
+        navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
+            launchSingleTop = true
+        }
+    }
+
+    // A tab keeps Home underneath it, so back from any tab returns to Home
+    // and back on Home leaves the app.
+    fun openTab(tab: AppScreen) {
+        navController.navigate(routeOf(tab)) {
+            popUpTo(routeOf(AppScreen.Home))
+            launchSingleTop = true
+        }
+    }
+
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val currentTab = BottomTabs.firstOrNull { routeOf(it) == currentRoute }
+
+    Scaffold(
+        // The screens keep handling the status bar and IME themselves; the
+        // scaffold only reserves the bar.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            if (currentTab != null) {
+                val resolvedRunController = runController
+                    ?: productionDependencies.value.runController
+                val activeRun by resolvedRunController.activeRun.collectAsState()
+                val approvalPending = activeRun?.let {
+                    it.profileId == activeProfileId &&
+                        it.status == RunSessionController.ActiveRun.Status.WAITING_FOR_APPROVAL
+                } == true
+                AppBottomBar(
+                    current = currentTab,
+                    approvalPending = approvalPending,
+                    onSelect = ::openTab
+                )
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = routeOf(initialScreen),
+            modifier = Modifier
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+        ) {
+            composable(routeOf(AppScreen.Home)) {
+                val dependencies = productionDependencies
+                HomeRoute(
+                    profileId = activeProfileId.orEmpty(),
+                    profileAdmin = profileAdmin ?: dependencies.value.profileAdmin,
+                    connectionCheck = serverConnectionCheck ?: dependencies.value.serverConnectionCheck,
+                    sessionPageSource = sessionPageSource ?: dependencies.value.sessionPageSource,
+                    sessionCreator = sessionCreator ?: dependencies.value.sessionCreator,
+                    runController = runController ?: dependencies.value.runController,
+                    runStatusRequester = runStatusRequester ?: dependencies.value.runStatusRequester,
+                    attachmentSource = dependencies.value.chatAttachmentSource,
+                    onOpenChat = ::openChat,
+                    onOpenAllSessions = { openTab(AppScreen.Sessions) },
+                    onSwitchServer = { navController.navigate(routeOf(AppScreen.Profiles)) },
+                    onOpenSettings = {
+                        navController.navigate(routeOf(AppScreen.Settings)) {
+                            launchSingleTop = true
                         }
-                        // Persist the onboarding-confirmed
-                        // approval capability for the verified profile
-                        // (metadata only, no credential). Best-effort and
-                        // independent of the selection persist above: a
-                        // failure never blocks the already-verified
-                        // navigation; the capability stays fail-closed
-                        // (absent -> false) until the next onboarding.
-                        try {
-                            withContext(Dispatchers.IO) {
-                                productionDependencies.value.capabilityStore.write(
-                                    success.profileId,
-                                    success.sessionChatInteractiveApprovals
-                                )
-                            }
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (_: Exception) {
-                            // Capability persist failed: stays fail-closed.
-                        }
-                        // The persist work above resumes off the main
-                        // thread (e.g. under the Compose test dispatcher),
-                        // while popping the back stack updates the popped
-                        // entries' lifecycle and must run on the main
-                        // thread — same guard as [serverSelected].
-                        withContext(Dispatchers.Main) {
-                            activeProfileId = success.profileId
-                            // After a successful connection the back stack
-                            // must contain exactly ONE Sessions entry: the
-                            // onboarding entry, the server management entry
-                            // that opened it and every previous entry up to
-                            // (and including) the graph start are removed.
-                            // Back on the session list then leaves the app,
-                            // exactly as after a first start.
-                            navController.navigate(routeOf(AppScreen.Sessions)) {
-                                popUpTo(routeOf(initialScreen)) { inclusive = true }
-                                launchSingleTop = true
-                            }
+                    },
+                    onNoServer = {
+                        navController.navigate(routeOf(AppScreen.Onboarding)) {
+                            popUpTo(navController.graph.id) { inclusive = true }
+                            launchSingleTop = true
                         }
                     }
-                }
-            )
-        }
-        composable(routeOf(AppScreen.Sessions)) {
-            SessionsScreen(
-                pageSource = sessionPageSource
-                    ?: productionDependencies.value.sessionPageSource,
-                profileId = activeProfileId.orEmpty(),
-                creator = sessionCreator
-                    ?: productionDependencies.value.sessionCreator,
-                onSessionSelected = { sessionId, title ->
-                    activeSessionTitleSessionId = sessionId
-                    activeSessionTitle = title
-                    navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
-                        launchSingleTop = true
+                )
+            }
+            composable(routeOf(AppScreen.Server)) {
+                PreviewPlaceholderScreen(
+                    title = stringResource(R.string.placeholder_server_title),
+                    text = stringResource(R.string.placeholder_server_text),
+                    testTag = SERVER_PLACEHOLDER_TAG
+                )
+            }
+            composable(routeOf(AppScreen.Activity)) {
+                PreviewPlaceholderScreen(
+                    title = stringResource(R.string.placeholder_activity_title),
+                    text = stringResource(R.string.placeholder_activity_text),
+                    testTag = ACTIVITY_PLACEHOLDER_TAG
+                )
+            }
+            composable(routeOf(AppScreen.Onboarding)) {
+                OnboardingRoute(
+                    pairingBootstrap = pairingBootstrap,
+                    // Only an onboarding opened FROM the server management
+                    // screen has a destination to return to. The first start
+                    // and the pairing deep link keep their header unchanged.
+                    onBack = navController.previousBackStackEntry?.let {
+                        { navController.popBackStack() }
+                    },
+                    connect = { draft ->
+                        val coordinator = connectionCoordinator
+                            ?: productionDependencies.value.coordinator
+                        coordinator.connect(draft)
+                    },
+                    // The pairing path (recommended default in the
+                    // UI). Unauthenticated pair POST, authenticated probe with
+                    // strict device-credential capability check, persistence only
+                    // after verification, exactly one best-effort self-revoke on
+                    // every post-pair failure.
+                    connectPairing = { profileName, baseUrl, pairingCode ->
+                        productionDependencies.value.pairingCoordinator
+                            .connect(profileName, baseUrl, pairingCode)
+                    },
+                    // A freshly verified server becomes the ACTIVE
+                    // server. The selection is persisted FIRST (metadata-only
+                    // write). The navigation to the verified server keeps the
+                    // existing, verified behavior — the user must never be stuck
+                    // on Onboarding after a successful connection — but a failed
+                    // selection persist is never applied optimistically: the
+                    // in-memory switch is the existing active-server switch pattern and the
+                    // selection itself stays as it was on disk; the next
+                    // startup deterministically falls back to the existing
+                    // resolution. No error details are surfaced.
+                    onConnected = { success ->
+                        navHostCoroutineScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    (profileAdmin
+                                        ?: productionDependencies.value.profileAdmin)
+                                        .selectActiveServer(success.profileId)
+                                }
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                // Selection persist failed: see the comment above.
+                            }
+                            // Persist the onboarding-confirmed
+                            // approval capability for the verified profile
+                            // (metadata only, no credential). Best-effort and
+                            // independent of the selection persist above: a
+                            // failure never blocks the already-verified
+                            // navigation; the capability stays fail-closed
+                            // (absent -> false) until the next onboarding.
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    productionDependencies.value.capabilityStore.write(
+                                        success.profileId,
+                                        success.sessionChatInteractiveApprovals
+                                    )
+                                }
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                // Capability persist failed: stays fail-closed.
+                            }
+                            // The persist work above resumes off the main
+                            // thread (e.g. under the Compose test dispatcher),
+                            // while popping the back stack updates the popped
+                            // entries' lifecycle and must run on the main
+                            // thread — same guard as [serverSelected].
+                            withContext(Dispatchers.Main) {
+                                activeProfileId = success.profileId
+                                // After a successful connection the back stack
+                                // must contain exactly ONE Home entry: the
+                                // onboarding entry, the server management entry
+                                // that opened it and every previous entry up to
+                                // (and including) the graph start are removed.
+                                // Back on Home then leaves the app,
+                                // exactly as after a first start.
+                                navController.navigate(routeOf(AppScreen.Home)) {
+                                    popUpTo(routeOf(initialScreen)) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        }
                     }
-                },
-                onSessionCreated = { sessionId ->
-                    pendingCreatedSessionId = sessionId
-                },
-                onOpenProfileManagement = {
-                    navController.navigate(routeOf(AppScreen.Profiles))
-                },
-                onOpenSettings = {
-                    navController.navigate(routeOf(AppScreen.Settings)) {
-                        launchSingleTop = true
+                )
+            }
+            composable(routeOf(AppScreen.Sessions)) {
+                SessionsScreen(
+                    pageSource = sessionPageSource
+                        ?: productionDependencies.value.sessionPageSource,
+                    profileId = activeProfileId.orEmpty(),
+                    creator = sessionCreator
+                        ?: productionDependencies.value.sessionCreator,
+                    onSessionSelected = ::openChat,
+                    onSessionCreated = { sessionId ->
+                        pendingCreatedSessionId = sessionId
+                    },
+                    onOpenProfileManagement = {
+                        navController.navigate(routeOf(AppScreen.Profiles))
+                    },
+                    onOpenSettings = {
+                        navController.navigate(routeOf(AppScreen.Settings)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenAbout = {
+                        navController.navigate(routeOf(AppScreen.About)) {
+                            launchSingleTop = true
+                        }
                     }
-                },
-                onOpenAbout = {
-                    navController.navigate(routeOf(AppScreen.About)) {
-                        launchSingleTop = true
+                )
+            }
+            composable(routeOf(AppScreen.Settings)) {
+                SettingsScreen(
+                    languageController = resolvedLanguageController,
+                    themeController = settingsThemeController,
+                    chatTextSizeController = resolvedChatTextSizeController,
+                    screenProtectionController = resolvedScreenProtectionController,
+                    materialYouController = resolvedMaterialYouController,
+                    appLockController = resolvedAppLockController,
+                    appAuthenticator = resolvedAppAuthenticator,
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
                     }
-                }
-            )
-        }
-        composable(routeOf(AppScreen.Settings)) {
-            SettingsScreen(
-                languageController = resolvedLanguageController,
-                themeController = settingsThemeController,
-                chatTextSizeController = resolvedChatTextSizeController,
-                screenProtectionController = resolvedScreenProtectionController,
-                materialYouController = resolvedMaterialYouController,
-                appLockController = resolvedAppLockController,
-                appAuthenticator = resolvedAppAuthenticator,
-                onBack = {
-                    if (navController.previousBackStackEntry != null) {
-                        navController.popBackStack()
+                )
+            }
+            composable(routeOf(AppScreen.About)) {
+                AboutScreen(
+                    versionName = BuildConfig.VERSION_NAME,
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
                     }
-                }
-            )
-        }
-        composable(routeOf(AppScreen.About)) {
-            AboutScreen(
-                versionName = BuildConfig.VERSION_NAME,
-                onBack = {
-                    if (navController.previousBackStackEntry != null) {
-                        navController.popBackStack()
+                )
+            }
+            composable(routeOf(AppScreen.Profiles)) {
+                ProfilesScreen(
+                    admin = profileAdmin
+                        ?: productionDependencies.value.profileAdmin,
+                    activeProfileId = activeProfileId,
+                    // Guard against popping the back stack empty, exactly like the
+                    // Chat back handler below: a fast double tap on "Zurück" must
+                    // never pop the root entry and leave the NavHost without a
+                    // destination.
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    },
+                    onProfileDeleted = { profileId ->
+                        navHostCoroutineScope.launch { profileDeleted(profileId) }
+                    },
+                    onServerSelected = { profileId ->
+                        navHostCoroutineScope.launch { serverSelected(profileId) }
+                    },
+                    onAddServer = {
+                        navController.navigate(routeOf(AppScreen.Onboarding))
+                    },
+                    // A confirmed, server-acknowledged disconnect
+                    // removes the local profile connection; the navigation is
+                    // exactly the verified profile-deletion path, so no chat or
+                    // session can keep living under the disconnected profile.
+                    onDeviceDisconnected = { profileId ->
+                        navHostCoroutineScope.launch { profileDeleted(profileId) }
+                    },
+                    disconnect = { profileId ->
+                        productionDependencies.value.deviceDisconnectCoordinator
+                            .disconnect(profileId)
                     }
-                }
-            )
-        }
-        composable(routeOf(AppScreen.Profiles)) {
-            ProfilesScreen(
-                admin = profileAdmin
-                    ?: productionDependencies.value.profileAdmin,
-                activeProfileId = activeProfileId,
-                // Guard against popping the back stack empty, exactly like the
-                // Chat back handler below: a fast double tap on "Zurück" must
-                // never pop the root entry and leave the NavHost without a
-                // destination.
-                onBack = {
-                    if (navController.previousBackStackEntry != null) {
-                        navController.popBackStack()
+                )
+            }
+            composable(
+                route = CHAT_ROUTE,
+                arguments = listOf(navArgument(CHAT_ARGUMENT) { type = NavType.StringType })
+            ) { entry ->
+                val encodedSessionId = entry.arguments?.getString(CHAT_ARGUMENT).orEmpty()
+                val decodedSessionId = decodeRouteArgument(encodedSessionId)
+                ChatScreen(
+                    historySource = messageHistorySource
+                        ?: productionDependencies.value.messageHistorySource,
+                    runController = runController
+                        ?: productionDependencies.value.runController,
+                    runStopRequester = runStopRequester
+                        ?: productionDependencies.value.runStopRequester,
+                    runSteerRequester = runSteerRequester
+                        ?: productionDependencies.value.runSteerRequester,
+                    chatDraftRepository = chatDraftRepository
+                        ?: productionDependencies.value.chatDraftRepository,
+                    runApprovalRequester = runApprovalRequester
+                        ?: productionDependencies.value.runApprovalRequester,
+                    runStatusRequester = runStatusRequester
+                        ?: productionDependencies.value.runStatusRequester,
+                    notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
+                    attachmentSource = productionDependencies.value.chatAttachmentSource,
+                    chatTextSizeController = resolvedChatTextSizeController,
+                    profileId = activeProfileId.orEmpty(),
+                    sessionId = decodedSessionId,
+                    sessionTitle = activeSessionTitle
+                        .takeIf { activeSessionTitleSessionId == decodedSessionId },
+                    onBack = {
+                        // Guard against popping the back stack empty: a double
+                        // back event (fast double-tap on "Zurück" or a spurious
+                        // input event, e.g. from an accessibility service while
+                        // the tree changes) must never leave the NavHost without
+                        // a destination — that renders an empty screen whose
+                        // BackHandler is gone, so the next back closes the task.
+                        // Only an entry with a predecessor is popped. Comparing
+                        // with the start destination is not enough: a successful
+                        // onboarding removes the start entry (popUpTo inclusive),
+                        // so the remaining root can be Sessions while the start
+                        // destination is Onboarding.
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
                     }
-                },
-                onProfileDeleted = { profileId ->
-                    navHostCoroutineScope.launch { profileDeleted(profileId) }
-                },
-                onServerSelected = { profileId ->
-                    navHostCoroutineScope.launch { serverSelected(profileId) }
-                },
-                onAddServer = {
-                    navController.navigate(routeOf(AppScreen.Onboarding))
-                },
-                // A confirmed, server-acknowledged disconnect
-                // removes the local profile connection; the navigation is
-                // exactly the verified profile-deletion path, so no chat or
-                // session can keep living under the disconnected profile.
-                onDeviceDisconnected = { profileId ->
-                    navHostCoroutineScope.launch { profileDeleted(profileId) }
-                },
-                disconnect = { profileId ->
-                    productionDependencies.value.deviceDisconnectCoordinator
-                        .disconnect(profileId)
-                }
-            )
-        }
-        composable(
-            route = CHAT_ROUTE,
-            arguments = listOf(navArgument(CHAT_ARGUMENT) { type = NavType.StringType })
-        ) { entry ->
-            val encodedSessionId = entry.arguments?.getString(CHAT_ARGUMENT).orEmpty()
-            val decodedSessionId = decodeRouteArgument(encodedSessionId)
-            ChatScreen(
-                historySource = messageHistorySource
-                    ?: productionDependencies.value.messageHistorySource,
-                runController = runController
-                    ?: productionDependencies.value.runController,
-                runStopRequester = runStopRequester
-                    ?: productionDependencies.value.runStopRequester,
-                runSteerRequester = runSteerRequester
-                    ?: productionDependencies.value.runSteerRequester,
-                chatDraftRepository = chatDraftRepository
-                    ?: productionDependencies.value.chatDraftRepository,
-                runApprovalRequester = runApprovalRequester
-                    ?: productionDependencies.value.runApprovalRequester,
-                runStatusRequester = runStatusRequester
-                    ?: productionDependencies.value.runStatusRequester,
-                notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
-                attachmentSource = productionDependencies.value.chatAttachmentSource,
-                chatTextSizeController = resolvedChatTextSizeController,
-                profileId = activeProfileId.orEmpty(),
-                sessionId = decodedSessionId,
-                sessionTitle = activeSessionTitle
-                    .takeIf { activeSessionTitleSessionId == decodedSessionId },
-                onBack = {
-                    // Guard against popping the back stack empty: a double
-                    // back event (fast double-tap on "Zurück" or a spurious
-                    // input event, e.g. from an accessibility service while
-                    // the tree changes) must never leave the NavHost without
-                    // a destination — that renders an empty screen whose
-                    // BackHandler is gone, so the next back closes the task.
-                    // Only an entry with a predecessor is popped. Comparing
-                    // with the start destination is not enough: a successful
-                    // onboarding removes the start entry (popUpTo inclusive),
-                    // so the remaining root can be Sessions while the start
-                    // destination is Onboarding.
-                    if (navController.previousBackStackEntry != null) {
-                        navController.popBackStack()
-                    }
-                }
-            )
+                )
+            }
         }
     }
 }
 
+internal const val SERVER_PLACEHOLDER_TAG = "server_placeholder"
+internal const val ACTIVITY_PLACEHOLDER_TAG = "activity_placeholder"
+
 internal fun routeOf(screen: AppScreen): String = when (screen) {
     AppScreen.Onboarding -> "onboarding"
+    AppScreen.Home -> "home"
+    AppScreen.Server -> "server"
+    AppScreen.Activity -> "activity"
     AppScreen.Sessions -> "sessions"
     is AppScreen.Chat -> "chat/${encodeRouteArgument(screen.sessionId)}"
     AppScreen.Profiles -> "profiles"

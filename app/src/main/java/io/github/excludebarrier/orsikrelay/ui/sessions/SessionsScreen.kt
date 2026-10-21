@@ -546,7 +546,7 @@ private fun SessionGroupHeader(group: SessionGroup) {
 }
 
 @Composable
-private fun SessionRow(
+internal fun SessionRow(
     session: HermesSession,
     locale: Locale,
     zone: ZoneId,

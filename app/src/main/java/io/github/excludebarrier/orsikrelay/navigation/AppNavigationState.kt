@@ -6,36 +6,50 @@ package io.github.excludebarrier.orsikrelay.navigation
  */
 sealed interface AppScreen {
     data object Onboarding : AppScreen
+    data object Home : AppScreen
     data object Sessions : AppScreen
+    data object Server : AppScreen
+    data object Activity : AppScreen
     data class Chat(val sessionId: String) : AppScreen
     data object Profiles : AppScreen
     data object Settings : AppScreen
     data object About : AppScreen
 }
 
+/** The bottom-navigation tabs, in bar order. Every other screen hides the bar. */
+val BottomTabs: List<AppScreen> = listOf(AppScreen.Home, AppScreen.Sessions, AppScreen.Server, AppScreen.Activity)
+
 /**
  * Pure navigation state machine.
  *
  * Rules:
  * - The app starts on [AppScreen.Onboarding].
- * - [goToSessions] moves from Onboarding to Sessions.
- * - [goBack] moves from Sessions back to Onboarding (system back key).
- * - Both transitions are no-ops when already at the target, so the state
- *   is total and safe to drive from any event source.
+ * - [goToHome] moves to Home (after a successful connection or startup).
+ * - [goBack]: Home goes back to Onboarding (system back key); the other
+ *   tabs and the screens opened from Home return to Home; a chat returns to
+ *   the session list.
+ * - Transitions are no-ops when already at the target, so the state is
+ *   total and safe to drive from any event source.
  */
 @JvmInline
 value class AppNavigationState(val current: AppScreen) {
+
+    fun goToHome(): AppNavigationState =
+        if (current is AppScreen.Home) this else AppNavigationState(AppScreen.Home)
 
     fun goToSessions(): AppNavigationState =
         if (current is AppScreen.Sessions) this else AppNavigationState(AppScreen.Sessions)
 
     fun goBack(): AppNavigationState = when (current) {
         AppScreen.Onboarding -> this
-        AppScreen.Sessions -> AppNavigationState(AppScreen.Onboarding)
+        AppScreen.Home -> AppNavigationState(AppScreen.Onboarding)
+        AppScreen.Sessions,
+        AppScreen.Server,
+        AppScreen.Activity,
+        AppScreen.Profiles,
+        AppScreen.Settings,
+        AppScreen.About -> AppNavigationState(AppScreen.Home)
         is AppScreen.Chat -> AppNavigationState(AppScreen.Sessions)
-        AppScreen.Profiles -> AppNavigationState(AppScreen.Sessions)
-        AppScreen.Settings -> AppNavigationState(AppScreen.Sessions)
-        AppScreen.About -> AppNavigationState(AppScreen.Sessions)
     }
 }
 
