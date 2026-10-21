@@ -58,8 +58,11 @@ import org.json.JSONObject
  * - `pagination.limit` and `.returned` are kept on the domain
  *   page. `returned` counts the raw server rows of the page (including
  *   hidden entries), which is what the next offset advances by;
- * - `display_kind == "hidden"` entries are dropped before the domain
- *   page is built; duplicate visible message IDs are rejected.
+ * - `display_kind == "hidden"` entries and rows with a role the app does
+ *   not show (e.g. the core's `session_meta` row closing a turn, whose
+ *   content is null) are dropped before the domain page is built; a role
+ *   that is not a string is still rejected. Duplicate visible message IDs
+ *   are rejected.
  */
 class HermesMessageClient(
     okHttpClient: OkHttpClient = HermesHttp.defaultClient()
@@ -173,6 +176,7 @@ class HermesMessageClient(
             if (displayKind == HIDDEN_DISPLAY_KIND) {
                 continue
             }
+            val role = strictRole(item, ROLE_FIELD) ?: continue
             val id = strictPositiveInt(item, ID_FIELD)
             if (!seenVisibleIds.add(id)) {
                 throw PageFailure(MessageHistoryError.IncompatibleApi)
@@ -180,7 +184,7 @@ class HermesMessageClient(
             val content = parseContent(item.opt(CONTENT_FIELD))
             messages += HermesChatMessage(
                 id = id,
-                role = strictRole(item, ROLE_FIELD),
+                role = role,
                 content = content.text,
                 timestampSeconds = optionalRealSeconds(item, TIMESTAMP_FIELD),
                 toolName = optionalNonBlankString(item, TOOL_NAME_FIELD),
@@ -258,14 +262,15 @@ class HermesMessageClient(
         strictString(json, key).takeIf { it.isNotEmpty() && isSafeServerString(it) }
             ?: throw PageFailure(MessageHistoryError.IncompatibleApi)
 
-    private fun strictRole(json: JSONObject, key: String): MessageRole {
+    /** The row's role, or null for a role the app does not show (row skipped). */
+    private fun strictRole(json: JSONObject, key: String): MessageRole? {
         val role = strictString(json, key)
         return when (role) {
             ROLE_USER -> MessageRole.USER
             ROLE_ASSISTANT -> MessageRole.ASSISTANT
             ROLE_SYSTEM -> MessageRole.SYSTEM
             ROLE_TOOL -> MessageRole.TOOL
-            else -> throw PageFailure(MessageHistoryError.IncompatibleApi)
+            else -> null
         }
     }
 
