@@ -334,7 +334,7 @@ real Android 17 device.
 
 Test stand: a fresh clone of the official core (`1186b6bd`, same session authority as the
 published 0.22.x), DeepSeek Flash, `approvals.mode: manual`, the bridge from `main`; started
-and stopped with `scripts/live-test-stack.sh`. Three incompatibilities were found and fixed:
+and stopped with `scripts/live-test-stack.sh`. Three incompatibilities and one relay bug were found and fixed:
 
 - **Approvals.** With the session authority the core accepts
   `POST /v1/runs/{id}/approval` only as `{request_id, execution_generation, choice}` and
@@ -348,6 +348,11 @@ and stopped with `scripts/live-test-stack.sh`. Three incompatibilities were foun
 - **Images in history.** The core stores an API image turn as text plus
   `[Image attached at: <server path>]`. The bridge turns exactly that shape into the
   caption plus one data-less image part, so the app shows "1 image" and no server path.
+
+- **Core refusals.** The core sends errors as `application/json; charset=utf-8`; the run
+  buffer handed that to aiohttp, which refuses parameters in `content_type`, so a refusal
+  such as "Too many concurrent runs (max 10)" (429) reached the app as a bridge 500. Only
+  the media type is kept now; a burst of 30 turns gives 10 × 200 and 20 × 429.
 
 Real responses of this core run through the production clients in
 `HermesCoreFixtureCompatTest` (fixtures in `app/src/test/resources/hermes-core-0.22/`).
