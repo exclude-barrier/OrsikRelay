@@ -1,0 +1,27 @@
+event: run.started
+data: {"runtime":{"provider":"","model":"","route_source":"global","requested":{"provider":"","model":""}},"session_id":"api_1792619525_40b5a943","run_id":"run_7f1ef0a28a61490f93b561ec7b021c32","seq":1,"ts":1792619525.8321886}
+
+event: message.started
+data: {"message": {"id": "msg_4e9ea512727d418a845415163ce1f413", "role": "assistant"}, "session_id": "api_1792619525_40b5a943", "run_id": "run_7f1ef0a28a61490f93b561ec7b021c32", "seq": 2, "ts": 1792619525.8322003}
+
+event: tool.started
+data: {"message_id":"msg_4e9ea512727d418a845415163ce1f413","tool_name":"terminal","session_id":"api_1792619525_40b5a943","run_id":"run_7f1ef0a28a61490f93b561ec7b021c32","seq":3,"ts":1792619527.6182587}
+
+event: tool.completed
+data: {"message_id":"msg_4e9ea512727d418a845415163ce1f413","tool_name":"terminal","session_id":"api_1792619525_40b5a943","run_id":"run_7f1ef0a28a61490f93b561ec7b021c32","seq":4,"ts":1792619527.6957898}
+
+event: assistant.delta
+data: {"message_id": "msg_4e9ea512727d418a845415163ce1f413", "delta": "\n\n202", "session_id": "api_1792619525_40b5a943", "run_id": "run_7f1ef0a28a61490f93b561ec7b021c32", "seq": 5, "ts": 1792619528.597535}
+
+event: assistant.delta
+data: {"message_id": "msg_4e9ea512727d418a845415163ce1f413", "delta": "6", "session_id": "api_1792619525_40b5a943", "run_id": "run_7f1ef0a28a61490f93b561ec7b021c32", "seq": 6, "ts": 1792619528.610776}
+
+event: assistant.completed
+data: {"session_id":"api_1792619525_40b5a943","message_id":"msg_4e9ea512727d418a845415163ce1f413","content":"2026","completed":true,"partial":false,"interrupted":false,"run_id":"run_7f1ef0a28a61490f93b561ec7b021c32","seq":7,"ts":1792619528.763264}
+
+event: run.completed
+data: {"session_id":"api_1792619525_40b5a943","message_id":"msg_4e9ea512727d418a845415163ce1f413","completed":true,"partial":false,"interrupted":false,"run_id":"run_7f1ef0a28a61490f93b561ec7b021c32","seq":8,"ts":1792619528.7632692}
+
+event: done
+data: {"session_id": "api_1792619525_40b5a943", "run_id": "run_7f1ef0a28a61490f93b561ec7b021c32", "seq": 9, "ts": 1792619528.7632828}
+
