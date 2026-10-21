@@ -868,6 +868,13 @@ class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
         async def chat(request):
             UPSTREAM["chat_posts"] = int(UPSTREAM.get("chat_posts", 0)) + 1
             if self.mode == "error":
+                charset_header = getattr(self, "error_charset_header", None)
+                if charset_header:
+                    # aiohttp's json_response (the real core) adds "; charset=utf-8".
+                    return web.Response(
+                        status=self.error_status, body=self.error_body,
+                        headers={"Content-Type": charset_header},
+                    )
                 return web.Response(
                     status=self.error_status, body=self.error_body, content_type="application/json"
                 )
@@ -930,6 +937,20 @@ class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
             bridge_server._MAX_UPSTREAM_ERROR_BODY_BYTES = original
         self.assertEqual(resp.status, 502)
         self.assertEqual((await resp.json())["error"]["code"], "upstream_error_too_large")
+
+    async def test_upstream_error_with_a_charset_keeps_its_status(self):
+        # The core answers with "application/json; charset=utf-8"; relaying that
+        # must not turn a refusal into a bridge 500.
+        self.mode = "error"
+        self.error_status = 429
+        self.error_body = b'{"error":{"code":"rate_limited"}}'
+        self.error_charset_header = "application/json; charset=utf-8"
+        resp = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+        self.assertEqual(resp.status, 429)
+        self.assertEqual(resp.content_type, "application/json")
+        self.assertEqual((await resp.json())["error"]["code"], "rate_limited")
 
     async def test_upstream_error_body_never_reflects_master_key(self):
         self.mode = "error"
