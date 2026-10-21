@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -75,9 +77,7 @@ fun SuggestionChips(enabled: Boolean, onSuggestion: (String) -> Unit, modifier: 
                 onClick = { onSuggestion(text) },
                 enabled = enabled,
                 label = { Text(text) },
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .testTag(HomeTags.SUGGESTION_PREFIX + key)
+                modifier = Modifier.testTag(HomeTags.SUGGESTION_PREFIX + key)
             )
         }
     }
@@ -216,17 +216,29 @@ private fun SendButton(enabled: Boolean, sending: Boolean, onClick: () -> Unit) 
 }
 
 /** The harnesses the picker lists; only Hermes can be chosen today. */
+private class PreviewHarness(val key: String, val name: String, val initial: String)
+
 private val PreviewHarnesses = listOf(
-    "claude_code" to "Claude Code",
-    "codex" to "OpenAI Codex",
-    "omp" to "OMP"
+    PreviewHarness("claude_code", "Claude Code", "C"),
+    PreviewHarness("codex", "OpenAI Codex", "X"),
+    PreviewHarness("omp", "OMP", "O")
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HarnessPickerSheet(serverName: String, connected: Boolean, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag(HomeTags.PICKER)) {
-        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // Five short rows: open fully instead of a half-height first stop.
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.testTag(HomeTags.PICKER)
+    ) {
+        Column(
+            Modifier
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 16.dp)
+        ) {
             Text(
                 text = stringResource(R.string.home_picker_title),
                 style = MaterialTheme.typography.headlineSmall,
@@ -257,15 +269,15 @@ fun HarnessPickerSheet(serverName: String, connected: Boolean, onDismiss: () -> 
                 modifier = Modifier.testTag(HomeTags.PICKER_PREVIEW_PREFIX + "auto")
             )
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            PreviewHarnesses.forEach { (key, name) ->
+            PreviewHarnesses.forEach { harness ->
                 HarnessRow(
-                    initial = name.first().toString(),
-                    name = name,
+                    initial = harness.initial,
+                    name = harness.name,
                     detail = stringResource(R.string.home_picker_not_available),
                     selected = false,
                     available = false,
                     onClick = {},
-                    modifier = Modifier.testTag(HomeTags.PICKER_PREVIEW_PREFIX + key)
+                    modifier = Modifier.testTag(HomeTags.PICKER_PREVIEW_PREFIX + harness.key)
                 )
             }
         }

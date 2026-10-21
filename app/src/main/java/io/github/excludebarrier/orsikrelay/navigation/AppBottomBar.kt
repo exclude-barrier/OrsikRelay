@@ -11,8 +11,10 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -54,6 +56,13 @@ internal fun AppBottomBar(
                     }
                 },
                 label = { Text(label) },
+                // The theme's secondary is a dark container colour, so the
+                // default selected label would be unreadable.
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                ),
                 modifier = Modifier
                     .semantics { contentDescription = description }
                     .testTag(bottomTabTag(tab))

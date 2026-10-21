@@ -204,7 +204,12 @@ fun ServerHeader(
 }
 
 @Composable
-fun SectionTitle(text: String, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
+fun SectionTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    countBadge: Int? = null,
+    trailing: @Composable () -> Unit = {}
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -215,10 +220,22 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier, trailing: @Composa
             text = text,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier
-                .weight(1f)
-                .semantics { heading() }
+            modifier = Modifier.semantics { heading() }
         )
+        if (countBadge != null) {
+            Text(
+                text = countBadge.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+        }
+        Spacer(Modifier.weight(1f))
         trailing()
     }
 }
@@ -320,7 +337,11 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
                 if (item.uncertain) {
                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
                 } else {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    CircularProgressIndicator(
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
             Column(

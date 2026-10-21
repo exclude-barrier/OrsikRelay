@@ -165,13 +165,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.runsSection(
 ) {
     if (runs.isEmpty()) return
     item(key = "running_title") {
-        SectionTitle(stringResource(R.string.home_section_running)) {
-            Text(
-                text = runs.size.toString(),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
+        SectionTitle(stringResource(R.string.home_section_running), countBadge = runs.size)
     }
     items(runs, key = { "run_" + it.sessionId }) { run ->
         if (run.awaitingApproval) {
