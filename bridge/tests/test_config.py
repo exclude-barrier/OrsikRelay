@@ -108,11 +108,11 @@ class BindValidationTest(unittest.TestCase):
 
 
 class SecretFileHardeningTest(unittest.TestCase):
-    SECRET = "secret_value_must_not_leak"
+    MARKER = "fixture_marker_must_not_leak"
 
-    def _write(self, directory, mode, name="secret.env"):
+    def _write(self, directory, mode, name="hermes.env"):
         path = os.path.join(directory, name)
-        Path(path).write_text(f"API_SERVER_KEY={self.SECRET}\n")
+        Path(path).write_text(f"API_SERVER_KEY={self.MARKER}\n")
         os.chmod(path, mode)
         return path
 
@@ -125,7 +125,7 @@ class SecretFileHardeningTest(unittest.TestCase):
                 message = str(cm.exception)
                 self.assertIn(path, message)
                 self.assertIn("chmod 600", message)
-                self.assertNotIn(self.SECRET, message)
+                self.assertNotIn(self.MARKER, message)
 
     def test_non_regular_secret_file_aborts(self):
         with tempfile.TemporaryDirectory() as d:
@@ -141,7 +141,7 @@ class SecretFileHardeningTest(unittest.TestCase):
             path = self._write(d, 0o600)
             state = bridge_server.build_state_from_env(_env(BRIDGE_HERMES_ENV=path))
             self.addCleanup(state.store.close)
-            self.assertEqual(state.master_key, self.SECRET)
+            self.assertEqual(state.master_key, self.MARKER)
 
     def test_bridge_env_file_is_checked_before_reading(self):
         with tempfile.TemporaryDirectory() as d:
