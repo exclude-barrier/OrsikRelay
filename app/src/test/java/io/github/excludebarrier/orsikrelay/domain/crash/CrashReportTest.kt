@@ -26,6 +26,24 @@ class CrashReportTest {
     }
 
     @Test
+    fun suppressedExceptionsAndTheIssueUrlCarryNoMessages() {
+        val crash = RuntimeException("Bearer secret-token").apply {
+            addSuppressed(IllegalArgumentException("https://hermes.example/?key=secret"))
+        }
+
+        val report = CrashReport.format(crash, environment)
+        val url = URLDecoder.decode(
+            CrashReport.issueUrl("https://github.com/o/r", CrashReport.crashTitle(report), report),
+            Charsets.UTF_8.name()
+        )
+
+        assertFalse(report.contains("secret"))
+        assertFalse(report.contains("hermes.example"))
+        assertFalse(url.contains("secret"))
+        assertFalse(url.contains("hermes.example"))
+    }
+
+    @Test
     fun framesAndCausesAreBounded() {
         val deep = RuntimeException()
         deep.stackTrace = Array(CrashReport.MAX_FRAMES + 7) {
