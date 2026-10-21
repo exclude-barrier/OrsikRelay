@@ -39,6 +39,17 @@ import kotlinx.coroutines.withContext
 internal const val HOME_RECENT_LIMIT = 3
 
 /**
+ * The last connection result and recent sessions per profile, kept for the
+ * process so returning to Home (e.g. from a chat) shows them at once while
+ * they are refreshed, instead of flashing the loading skeleton. Only status
+ * values and session metadata; no credential or chat content.
+ */
+private object HomeMemory {
+    val connection = mutableMapOf<String, HomeConnection>()
+    val recent = mutableMapOf<String, HomeRecent>()
+}
+
+/**
  * Wires [HomeScreen] to the existing sources. Sending from Home creates a
  * new session through [SessionCreator], starts the first turn through the
  * app-level [RunSessionController] and then opens that chat, which attaches
@@ -82,9 +93,14 @@ fun HomeRoute(
     }
 
     var retryCount by remember { mutableIntStateOf(0) }
-    var connection by remember(profileId) { mutableStateOf<HomeConnection>(HomeConnection.Checking) }
+    var connection by remember(profileId) {
+        mutableStateOf(HomeMemory.connection[profileId] ?: HomeConnection.Checking)
+    }
     LaunchedEffect(profileId, retryCount) {
-        connection = HomeConnection.Checking
+        // An explicit retry shows the check; a return to Home refreshes silently.
+        if (retryCount > 0 || HomeMemory.connection[profileId] == null) {
+            connection = HomeConnection.Checking
+        }
         val result = try {
             withContext(ioDispatcher) { connectionCheck.check(profileId) }
         } catch (error: CancellationException) {
@@ -96,9 +112,12 @@ fun HomeRoute(
             is HermesConnectionResult.Success -> HomeConnection.Connected
             is HermesConnectionResult.Failure -> HomeConnection.Unreachable(result.reason)
         }
+        HomeMemory.connection[profileId] = connection
     }
 
-    var recent by remember(profileId) { mutableStateOf<HomeRecent>(HomeRecent.Loading) }
+    var recent by remember(profileId) {
+        mutableStateOf(HomeMemory.recent[profileId] ?: HomeRecent.Loading)
+    }
     val connected = connection == HomeConnection.Connected
     LaunchedEffect(profileId, connected) {
         if (!connected) return@LaunchedEffect
@@ -113,6 +132,7 @@ fun HomeRoute(
             is SessionListResult.Success -> HomeRecent.Ready(result.page.sessions.take(HOME_RECENT_LIMIT))
             else -> HomeRecent.Failed
         }
+        HomeMemory.recent[profileId] = recent
     }
 
     // Polls GET /v1/runs/{id} only while Home is at least STARTED.
