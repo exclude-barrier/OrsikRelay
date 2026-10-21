@@ -303,3 +303,26 @@ Afterwards the test sends the question about the color, waits for the terminal t
 (never UNCERTAIN, attachment consumed), and as the only content assertion checks that
 the answer contains „rot“. **Live 2026-10-16 (DeepSeek `deepseek-flash`): 1/1
 green**, exactly one `chat/stream` POST with 200.
+
+## 13. Photo picker crash (issue #51)
+
+Since the app lock (2026-10-18, shipped in alpha.9 and alpha.10) `MainActivity` is a
+`FragmentActivity`. Its only fragment dependency was `biometric:1.1.0`, which resolves
+`androidx.fragment` to 1.2.5 next to `activity` 1.13.0. Fragment 1.2.5 rejects request
+codes above `0xFFFF`, and `ActivityResultRegistry` always uses such codes, so every
+launch of the photo picker crashed (`IllegalArgumentException: Can only use lower 16 bits
+for requestCode` in `FragmentActivity.checkForValidRequestCode`). The live run of
+section 12 predates the app lock.
+
+`PhotoPickerLaunchUiTest` opens the production launcher (`rememberImagePicker`) in a real
+`FragmentActivity` and stubs only the picker's answer (espresso-intents): pick, cancel,
+repeated picks, recreation. 2026-10-21 on the build host:
+
+- before the fix: API 36 emulator, 4/4 failed with the stack of issue #51;
+- with `androidx.fragment` 1.8.9 declared explicitly: 4/4 green on API 36 and API 26,
+  inside the full suites (API 36: 422 tests, 1 skipped, 0 failures; API 26: 421 tests,
+  2 skipped, 0 failures).
+
+Not verified here: the API 37 emulator image did not run stably on the build host
+(SurfaceFlinger aborts with both `swiftshader_indirect` and `guest` GPU modes), so the
+API 37 result comes from the CI job `picker-api37` and a real Android 17 device.
