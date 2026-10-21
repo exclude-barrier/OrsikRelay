@@ -61,6 +61,8 @@ class NotificationTapNavigationUiTest {
         waitForText(CHAT_CONTENT)
         composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back))
             .performClick()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(SESSION_TITLE)
 
         composeRule.runOnIdle {

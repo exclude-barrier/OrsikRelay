@@ -256,19 +256,21 @@ contract before it stores anything.
 | --- | --- |
 | Add a server | **⋮ → Manage servers → Add server** (or open an `orsik://pair` link) |
 | Pair with a QR code | Onboarding → **Scan QR code** (the bridge prints it with `pairing-code` when `qrencode` is installed) |
-| Switch or remove servers | **⋮ → Manage servers**, then tap a server or use its ⋮ |
+| Switch or remove servers | tap the server name on **Home** (or **⋮ → Manage servers** on **Agents**), then tap a server or use its ⋮ |
 | Disconnect this phone from a server | **⋮ → Manage servers → tap the server → Delete** (the device is disconnected on the server first) |
-| Start a conversation | **+** (New session) on the session list |
+| Start a task | type it into the composer on **Home** and send (a new session opens), or **+** (New session) on **Agents** |
+| See running tasks and approvals | **Home → Running now**; **Review** opens the chat with the approval |
 | Stop a running answer | **Stop** |
 | Correct a running answer | type in **Steer message**, then **Steer** |
 | Answer a tool approval | **Deny** or **Allow** (allow once) |
 | Attach an image | **Attach** in the composer (one image, ≤ 5 MiB) |
-| Change the app language | **⋮ → Settings → Language** (System / English / Deutsch) |
-| Light / dark mode | **⋮ → Settings → Appearance** (System / Light / Dark) |
-| Chat text size | **⋮ → Settings → Chat** |
-| Block screenshots | **⋮ → Settings → Privacy → Screen protection** |
-| Lock the app | **⋮ → Settings → Privacy → App lock** |
-| App version and license | **⋮ → About the app** |
+| Open the settings | the gear on **Home** (or **⋮ → Settings** on **Agents**) |
+| Change the app language | **Settings → Language** (System / English / Deutsch) |
+| Light / dark mode | **Settings → Appearance** (System / Light / Dark) |
+| Chat text size | **Settings → Chat** |
+| Block screenshots | **Settings → Privacy → Screen protection** |
+| Lock the app | **Settings → Privacy → App lock** |
+| App version and license | **⋮ → About the app** on **Agents** |
 
 On the server, `admin list-devices` and `admin revoke-device <device_id>` list
 and immediately revoke paired phones.
@@ -287,6 +289,10 @@ and immediately revoke paired phones.
   ([threat model](docs/bridge-security.md)).
 - **Attachments:** images only (JPEG, PNG, WEBP), one per turn, up to 5 MiB;
   vision depends on your model.
+- **Home:** shows only tasks started from this phone; runs started elsewhere
+  (Telegram, cron) do not appear. Server values (CPU, RAM, GPU, services), the
+  Server and Activity tabs, the dashed quick-access tiles and agents other than
+  Hermes are previews without function.
 - **Not yet:** approvals do not show the command being approved, no voice input,
   no bot management.
 

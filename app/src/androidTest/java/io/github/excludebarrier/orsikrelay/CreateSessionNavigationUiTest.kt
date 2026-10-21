@@ -81,6 +81,10 @@ class CreateSessionNavigationUiTest {
             }
         }
 
+        // Home is the start page; the session list lives in the Agents tab.
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
+
         // The FAB is visible and opens the dialog.
         composeRule
             .onNodeWithContentDescription(context.getString(R.string.new_session_fab))

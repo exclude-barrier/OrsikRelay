@@ -90,6 +90,8 @@ class SessionChatNavigationUiTest {
             }
         }
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Fixture-Session")
         composeRule.onNodeWithText("Fixture-Session").performClick()
         waitForText("Fixture-Chatinhalt")

@@ -3,6 +3,8 @@ package io.github.excludebarrier.orsikrelay.di
 import android.content.Context
 import androidx.annotation.VisibleForTesting
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.data.connection.StoredProfileConnectionCheck
+import io.github.excludebarrier.orsikrelay.domain.home.ServerConnectionCheck
 import io.github.excludebarrier.orsikrelay.data.chat.ChatAttachmentSource
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesChatDraftRepository
@@ -85,6 +87,7 @@ internal data class AppDependencies(
     val runApprovalRequester: RunApprovalRequester,
     /** Reads `GET /v1/runs/{run_id}` for the manual uncertain-run recovery. */
     val runStatusRequester: RunStatusRequester,
+    val serverConnectionCheck: ServerConnectionCheck,
     val notificationCoordinator: NotificationCoordinator,
     val notificationPermissionStore: NotificationPermissionStore,
     val capabilityStore: RunApprovalCapabilityStore,
@@ -294,6 +297,11 @@ internal fun buildAppDependencies(
             profileRepository = profileRepository,
             credentialStore = credentialStore,
             runStatusTransport = HermesRunStatusClient()
+        ),
+        serverConnectionCheck = StoredProfileConnectionCheck(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore,
+            probe = HermesConnectionClient()
         ),
         notificationCoordinator = notificationCoordinator,
         notificationPermissionStore = notificationPermissionStore,

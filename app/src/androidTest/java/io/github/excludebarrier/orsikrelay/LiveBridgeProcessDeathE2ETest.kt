@@ -82,6 +82,8 @@ class LiveBridgeProcessDeathE2ETest {
         dependencies.notificationPermissionStore.markRequested()
 
         composeRule.activityRule.scenario.recreate()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.sessions_title))
         composeRule.onNodeWithContentDescription(context.getString(R.string.new_session_fab)).performClick()
         waitForText(context.getString(R.string.new_session_title))
@@ -116,6 +118,8 @@ class LiveBridgeProcessDeathE2ETest {
         lease!!
 
         try {
+            composeRule.waitForHome()
+            composeRule.openAgentsTab()
             waitForText(context.getString(R.string.sessions_title))
             waitForText(title)
             composeRule.onNodeWithText(title).performClick()

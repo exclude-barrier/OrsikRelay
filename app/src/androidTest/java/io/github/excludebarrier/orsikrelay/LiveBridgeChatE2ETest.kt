@@ -154,6 +154,8 @@ class LiveBridgeChatE2ETest {
         // resolution against the freshly paired, selected profile and lands on
         // the session list.
         composeRule.activityRule.scenario.recreate()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(SESSIONS_TITLE)
 
         // 2. Create a new session through the real sessions UI (FAB + dialog).

@@ -19,10 +19,10 @@ package io.github.excludebarrier.orsikrelay.domain.notification
  *   push channel;
  * - the app is visible on the SAME chat: the user is watching, so no
  *   notification;
- * - the app is visible on a DIFFERENT session while a run streams in another:
- *   the current architecture disposes the other session's collector on
- *   navigation, so its stream stops and no event arrives; this is also a
- *   documented limitation and is intentionally NOT worked around here.
+ * - the app is visible on a DIFFERENT screen while a run streams: the run
+ *   belongs to the app-level run controller and keeps streaming, but the app
+ *   is in the foreground, so no notification is posted (Home shows the run
+ *   and its approval instead).
  */
 object NotificationPolicy {
 

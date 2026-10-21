@@ -84,6 +84,8 @@ class LanguageSwitchUiTest {
         selectionStore.write(PROFILE_ID)
         MainActivity.sessionPageSourceForTests = fakePageSource
         composeRule.activityRule.scenario.recreate()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(localizedString("en", R.string.sessions_search_placeholder))
     }
 

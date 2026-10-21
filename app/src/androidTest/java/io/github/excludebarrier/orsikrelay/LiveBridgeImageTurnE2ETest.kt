@@ -82,6 +82,8 @@ class LiveBridgeImageTurnE2ETest {
     @Test
     fun pickedImageReachesTheVisionModel() {
         composeRule.activityRule.scenario.recreate()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.sessions_title))
         composeRule.onNodeWithContentDescription(context.getString(R.string.new_session_fab)).performClick()
         waitForText(context.getString(R.string.new_session_title))

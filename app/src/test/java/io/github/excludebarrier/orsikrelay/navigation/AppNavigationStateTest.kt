@@ -35,12 +35,40 @@ class AppNavigationStateTest {
     }
 
     @Test
-    fun `back moves from sessions to onboarding`() {
-        val state = AppNavigationState(AppScreen.Sessions)
+    fun `go to home moves from onboarding to home and is idempotent`() {
+        val home = AppNavigationState(initialDestination()).goToHome()
 
-        val next = state.goBack()
+        assertEquals(AppScreen.Home, home.current)
+        assertEquals(home, home.goToHome())
+    }
+
+    @Test
+    fun `back moves from home to onboarding`() {
+        val next = AppNavigationState(AppScreen.Home).goBack()
 
         assertEquals(AppScreen.Onboarding, next.current)
+    }
+
+    @Test
+    fun `back from every other tab returns to home`() {
+        listOf(AppScreen.Sessions, AppScreen.Server, AppScreen.Activity).forEach { tab ->
+            assertEquals(AppNavigationState(AppScreen.Home), AppNavigationState(tab).goBack())
+        }
+    }
+
+    @Test
+    fun `back from a chat returns to the session list`() {
+        val next = AppNavigationState(AppScreen.Chat("s1")).goBack()
+
+        assertEquals(AppNavigationState(AppScreen.Sessions), next)
+    }
+
+    @Test
+    fun `the bottom bar lists home agents server and activity in order`() {
+        assertEquals(
+            listOf(AppScreen.Home, AppScreen.Sessions, AppScreen.Server, AppScreen.Activity),
+            BottomTabs
+        )
     }
 
     @Test
@@ -53,29 +81,29 @@ class AppNavigationStateTest {
     }
 
     @Test
-    fun `back moves from profiles to sessions`() {
+    fun `back moves from profiles to home`() {
         val state = AppNavigationState(AppScreen.Profiles)
 
         val next = state.goBack()
 
-        assertEquals(AppNavigationState(AppScreen.Sessions), next)
+        assertEquals(AppNavigationState(AppScreen.Home), next)
     }
 
     @Test
-    fun `back moves from settings to sessions`() {
+    fun `back moves from settings to home`() {
         val state = AppNavigationState(AppScreen.Settings)
 
         val next = state.goBack()
 
-        assertEquals(AppNavigationState(AppScreen.Sessions), next)
+        assertEquals(AppNavigationState(AppScreen.Home), next)
     }
 
     @Test
-    fun `back moves from about to sessions`() {
+    fun `back moves from about to home`() {
         val state = AppNavigationState(AppScreen.About)
 
         val next = state.goBack()
 
-        assertEquals(AppNavigationState(AppScreen.Sessions), next)
+        assertEquals(AppNavigationState(AppScreen.Home), next)
     }
 }

@@ -65,7 +65,7 @@ internal fun SessionSourceDescriptor.icon(): ImageVector? = when (this) {
  * Terminal and Chat are Material Icons, Copyright Google LLC,
  * licensed under the Apache License 2.0 (https://fonts.google.com/icons).
  */
-private val TerminalSourceIcon: ImageVector by lazy {
+internal val TerminalSourceIcon: ImageVector by lazy {
     ImageVector.Builder(
         name = "Filled.Terminal",
         defaultWidth = 24.dp,
@@ -108,7 +108,7 @@ private val TerminalSourceIcon: ImageVector by lazy {
     }.build()
 }
 
-private val ChatSourceIcon: ImageVector by lazy {
+internal val ChatSourceIcon: ImageVector by lazy {
     ImageVector.Builder(
         name = "Filled.Chat",
         defaultWidth = 24.dp,

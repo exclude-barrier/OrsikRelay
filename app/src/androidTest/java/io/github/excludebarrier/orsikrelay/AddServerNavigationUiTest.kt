@@ -61,6 +61,8 @@ class AddServerNavigationUiTest {
     fun addServerOpensOnboardingWithBackAndBackReturnsWithoutSaving() {
         setHost(startup = StartupProfile.Ready(ALPHA_ID), coordinator = null)
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Alpha")
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
@@ -85,7 +87,7 @@ class AddServerNavigationUiTest {
     }
 
     @Test
-    fun successfulConnectLandsOnSessionsWithASingleBackStackEntry() {
+    fun successfulConnectLandsOnHomeWithASingleBackStackEntry() {
         val coordinator = ProfileConnectionCoordinator(
             connectionProbe = ConnectionProbe {
                 HermesConnectionResult.Success(
@@ -100,6 +102,8 @@ class AddServerNavigationUiTest {
         )
         setHost(startup = StartupProfile.Ready(ALPHA_ID), coordinator = coordinator)
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Alpha")
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
@@ -114,7 +118,7 @@ class AddServerNavigationUiTest {
             .performScrollTo()
             .performClick()
 
-        waitForText("Session Neu")
+        composeRule.waitForHome()
         assertEquals(listOf("Neu"), savedNames)
         assertEquals(listOf(NEW_ID), admin.selected)
         // The new server is the active one; neither Profiles nor Onboarding
@@ -122,7 +126,15 @@ class AddServerNavigationUiTest {
         composeRule.onNodeWithText(context.getString(R.string.profiles_title)).assertDoesNotExist()
         composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertDoesNotExist()
 
-        // Exactly one Sessions entry: system back leaves the app.
+        composeRule.openAgentsTab()
+        waitForText("Session Neu")
+
+        // Back from the Agents tab returns to the single Home entry; back on
+        // Home leaves the app.
+        composeRule.runOnUiThread {
+            composeRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForHome()
         composeRule.runOnUiThread {
             composeRule.activity.onBackPressedDispatcher.onBackPressed()
         }
@@ -133,8 +145,9 @@ class AddServerNavigationUiTest {
 
     /**
      * After the first-start onboarding the start entry (Onboarding) is gone
-     * and Sessions is the root. A fast double tap on a back button must pop
-     * only once and never leave the NavHost without a destination.
+     * and Home is the root. A fast double tap on a back button must never
+     * leave the NavHost without a destination: the second pop reaches Home
+     * and stops there.
      */
     @Test
     fun doubleBackAfterFirstStartNeverEmptiesTheBackStack() {
@@ -160,6 +173,8 @@ class AddServerNavigationUiTest {
         composeRule.onNodeWithTag("onboardingSubmitButton")
             .performScrollTo()
             .performClick()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Neu")
 
         openProfilesFromOverflowMenu()
@@ -174,7 +189,7 @@ class AddServerNavigationUiTest {
         }
         composeRule.waitForIdle()
 
-        waitForText("Session Neu")
+        composeRule.waitForHome()
         assertFalse(composeRule.activity.isFinishing)
     }
 
