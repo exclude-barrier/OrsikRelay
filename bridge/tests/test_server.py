@@ -65,12 +65,17 @@ def _upstream_app():
         return resp
 
     async def run(_):
+        UPSTREAM["run_gets"] = int(UPSTREAM.get("run_gets", 0)) + 1
         if UPSTREAM.get("run_404"):
             return web.json_response({"error": {"code": "run_not_found"}}, status=404)
-        return web.json_response({"status": "completed"})
+        body = {"status": "completed"}
+        if "run_generation" in UPSTREAM:
+            body = {"status": "waiting_for_approval", "execution_generation": UPSTREAM["run_generation"]}
+        return web.json_response(body)
 
     async def approval(request):
         UPSTREAM["approval_posts"] = int(UPSTREAM.get("approval_posts", 0)) + 1
+        UPSTREAM["approval_body"] = await request.json()
         return web.json_response(
             {"object": "hermes.run.approval_response", "run_id": "run_1", "choice": "once", "resolved": 1}
         )
@@ -286,6 +291,43 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             resp = await self._post_approval(cred["device_key"], {"choice": choice, "request_id": "r1"})
             self.assertEqual(resp.status, 200, choice)
         self.assertEqual(UPSTREAM.get("approval_posts"), 2)
+
+    async def test_approval_adds_the_execution_generation_of_the_session_authority(self):
+        # Hermes with the session authority (0.22+) accepts only
+        # {request_id, execution_generation, choice}; the generation comes from
+        # the run status, never from the device.
+        cred = await self._pair()
+        UPSTREAM["run_generation"] = 3
+        resp = await self._post_approval(cred["device_key"], {"choice": "deny", "request_id": "r1"})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(
+            UPSTREAM["approval_body"],
+            {"choice": "deny", "request_id": "r1", "execution_generation": 3},
+        )
+
+    async def test_approval_keeps_the_v1_body_without_a_generation(self):
+        cred = await self._pair()
+        resp = await self._post_approval(cred["device_key"], {"choice": "once", "request_id": "r1"})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(UPSTREAM["approval_body"], {"choice": "once", "request_id": "r1"})
+
+    async def test_approval_ignores_a_generation_that_is_not_an_integer(self):
+        cred = await self._pair()
+        for bad in (True, "3", 1.5, None, [3]):
+            UPSTREAM["run_generation"] = bad
+            await self._post_approval(cred["device_key"], {"choice": "deny", "request_id": "r1"})
+            self.assertEqual(UPSTREAM["approval_body"], {"choice": "deny", "request_id": "r1"}, bad)
+        UPSTREAM.pop("run_generation")
+        UPSTREAM["run_404"] = True
+        resp = await self._post_approval(cred["device_key"], {"choice": "deny", "request_id": "r1"})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(UPSTREAM["approval_body"], {"choice": "deny", "request_id": "r1"})
+
+    async def test_rejected_approval_never_reads_the_run(self):
+        cred = await self._pair()
+        await self._post_approval(cred["device_key"], {"choice": "always", "request_id": "r1"})
+        self.assertEqual(int(UPSTREAM.get("run_gets", 0)), 0)
+        self.assertEqual(int(UPSTREAM.get("approval_posts", 0)), 0)
 
     async def test_mutations_are_audited_per_device_without_secrets(self):
         # Every forwarded approval/stop is attributable to one device;
