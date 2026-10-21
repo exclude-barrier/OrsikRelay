@@ -9,6 +9,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.espresso.Espresso
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
@@ -27,6 +29,8 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
@@ -38,6 +42,7 @@ import io.github.excludebarrier.orsikrelay.navigation.bottomTabTag
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -51,6 +56,7 @@ import org.junit.Test
 /** Home as the start page, its tabs and the approval card's way into the chat. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeNavigationUiTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     // Same reason as SessionChatNavigationUiTest: startup resolution runs on
     // Dispatchers.IO; a confined dispatcher keeps navigation on the main thread.
@@ -58,9 +64,17 @@ class HomeNavigationUiTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>(StandardTestDispatcher())
 
     private val events = Channel<ChatTurnEvent>(Channel.UNLIMITED)
+    private val streamedTurn = AtomicReference<Pair<String, String>>()
     private val source = object : StreamingChatSource {
-        override fun streamTurn(profileId: String, sessionId: String, message: String): Flow<ChatTurnEvent> =
-            events.receiveAsFlow()
+        override fun streamTurn(profileId: String, sessionId: String, message: String): Flow<ChatTurnEvent> {
+            streamedTurn.set(sessionId to message)
+            return events.receiveAsFlow()
+        }
+    }
+    private val createdSessions = AtomicInteger()
+    private val creator = SessionCreator { _, _ ->
+        createdSessions.incrementAndGet()
+        SessionCreateResult.Success(NEW_SESSION_ID, null)
     }
     private val controller = RunSessionController(
         chatSource = source,
@@ -104,6 +118,7 @@ class HomeNavigationUiTest {
                     runController = controller,
                     runStatusRequester = status,
                     serverConnectionCheck = connected,
+                    sessionCreator = creator,
                     profileAdmin = admin,
                     startupProfileResolver = { StartupProfile.Ready(PROFILE_ID) }
                 )
@@ -148,6 +163,20 @@ class HomeNavigationUiTest {
         controller.close()
     }
 
+    @Test
+    fun sendingFromHomeCreatesOneSessionStartsTheTurnAndOpensItsChat() {
+        show()
+        waitForText(context.getString(R.string.home_status_connected))
+
+        composeRule.onNodeWithTag(HomeTags.COMPOSER_INPUT).performTextInput("Check disk space")
+        composeRule.onNodeWithTag(HomeTags.COMPOSER_SEND).performClick()
+
+        composeRule.waitUntil(5_000) { openedSession.get() == NEW_SESSION_ID }
+        assertEquals(1, createdSessions.get())
+        assertEquals(NEW_SESSION_ID to "Check disk space", streamedTurn.get())
+        controller.close()
+    }
+
     private fun waitForTag(tag: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
@@ -165,5 +194,6 @@ class HomeNavigationUiTest {
     private companion object {
         const val PROFILE_ID = "fixture-profile-id"
         const val SESSION_ID = "session-approval"
+        const val NEW_SESSION_ID = "session-new"
     }
 }
