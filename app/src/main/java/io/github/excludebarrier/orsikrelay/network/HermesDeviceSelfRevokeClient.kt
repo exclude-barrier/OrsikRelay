@@ -6,19 +6,14 @@ import io.github.excludebarrier.orsikrelay.domain.device.DeviceSelfRevokeResult
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceSelfRevokeTransport
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileBaseUrlValidator
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
-import okhttp3.ResponseBody
 import org.json.JSONObject
 
 /**
@@ -59,7 +54,7 @@ import org.json.JSONObject
  *   appears in a result or log.
  */
 class HermesDeviceSelfRevokeClient(
-    okHttpClient: OkHttpClient = defaultDeviceSelfRevokeHttpClient()
+    okHttpClient: OkHttpClient = HermesHttp.defaultClient()
 ) : DeviceSelfRevokeTransport {
 
     private val client = okHttpClient.newBuilder()
@@ -99,8 +94,14 @@ class HermesDeviceSelfRevokeClient(
             client.newCall(request).execute().use { response ->
                 when (response.code) {
                     OK_CODE -> {
-                        requireJsonContentType(response)
-                        parseRevokedAnswer(readBoundedUtf8(response.body))
+                        requireJsonContentType(response) {
+                            throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
+                        }
+                        parseRevokedAnswer(
+                            readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                                throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
+                            }
+                        )
                     }
                     UNAUTHORIZED_CODE -> {
                         DeviceSelfRevokeResult.Failure(DeviceSelfRevokeError.InvalidCredentials)
@@ -132,16 +133,6 @@ class HermesDeviceSelfRevokeClient(
         }
     }
 
-    /** Only a JSON media type is accepted (parameters such as a charset are allowed). */
-    private fun requireJsonContentType(response: Response) {
-        val type = response.header(CONTENT_TYPE_HEADER)
-            ?.substringBefore(';')
-            ?.trim()
-        if (!JSON_MEDIA_TYPE_VALUE.equals(type, ignoreCase = true)) {
-            throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
-        }
-    }
-
     /**
      * Strict contract check of the 200 answer: JSON object root with
      * EXACTLY the closed field set (missing or extra fields fail
@@ -169,38 +160,6 @@ class HermesDeviceSelfRevokeClient(
         return DeviceSelfRevokeResult.Revoked(revoked = revoked, deviceId = deviceId)
     }
 
-    private fun readBoundedUtf8(body: ResponseBody?): String {
-        if (body == null || body.contentLength() > MAX_RESPONSE_BYTES) {
-            throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
-        }
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER_SIZE)
-        body.byteStream().use { input ->
-            var total = 0
-            while (true) {
-                val remaining = MAX_RESPONSE_BYTES + 1 - total
-                if (remaining <= 0) {
-                    throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
-                }
-                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                total += read
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
-                }
-            }
-        }
-        val bytes = output.toByteArray()
-        val text = try {
-            decodeUtf8Strict(bytes)
-        } finally {
-            bytes.fill(0)
-            buffer.fill(0)
-        }
-        return text ?: throw RevokeFailure(DeviceSelfRevokeError.IncompatibleApi)
-    }
-
     private class RevokeFailure(val reason: DeviceSelfRevokeError) : Exception()
 
     /**
@@ -210,15 +169,12 @@ class HermesDeviceSelfRevokeClient(
      */
     internal companion object {
         const val MAX_RESPONSE_BYTES = 512 * 1024
-        const val BUFFER_SIZE = 8 * 1024
         const val V1_SEGMENT = "v1"
         const val DEVICES_SEGMENT = "devices"
         const val SELF_SEGMENT = "self"
         const val REVOKE_SEGMENT = "revoke"
         const val AUTHORIZATION_HEADER = "Authorization"
         const val BEARER_PREFIX = "Bearer "
-        const val CONTENT_TYPE_HEADER = "Content-Type"
-        const val JSON_MEDIA_TYPE_VALUE = "application/json"
         const val REVOKED_FIELD = "revoked"
         const val DEVICE_ID_FIELD = "device_id"
         val REVOKED_FIELDS = setOf(REVOKED_FIELD, DEVICE_ID_FIELD)
@@ -227,15 +183,5 @@ class HermesDeviceSelfRevokeClient(
         const val FORBIDDEN_CODE = 403
         const val NOT_FOUND_CODE = 404
         const val RATE_LIMITED_CODE = 429
-
-        fun defaultDeviceSelfRevokeHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
     }
 }

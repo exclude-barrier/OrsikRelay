@@ -28,8 +28,19 @@ class NotificationCoordinator(
      * Terminal events that already produced a notification this process
      * lifetime, keyed so an approval and a run completion for the same
      * session never collide and a second identical event is suppressed.
+     * Bounded to [MAX_NOTIFIED_KEYS] most recent keys: an unbounded set would
+     * grow for the whole process lifetime, and only the latest terminal
+     * events can still be re-delivered.
      */
-    private val notifiedKeys = HashSet<String>()
+    private val notifiedKeys = object : LinkedHashMap<String, Boolean>(
+        MAX_NOTIFIED_KEYS,
+        LOAD_FACTOR,
+        false
+    ) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<String, Boolean>?
+        ): Boolean = size > MAX_NOTIFIED_KEYS
+    }
 
     /**
      * Called when a valid, server-redacted [ApprovalRequest] arrives for the
@@ -42,9 +53,9 @@ class NotificationCoordinator(
      */
     fun onApprovalRequested(profileId: String, sessionId: String, request: ApprovalRequest) {
         val key = "approval|$profileId|$sessionId|${request.requestId}"
-        if (notifiedKeys.contains(key)) return
+        if (notifiedKeys.containsKey(key)) return
         if (!NotificationPolicy.shouldNotify(isForeground(), alreadyNotified = false)) return
-        notifiedKeys.add(key)
+        notifiedKeys[key] = true
         poster.post(
             NotificationContent(
                 type = NotificationType.APPROVAL,
@@ -62,9 +73,9 @@ class NotificationCoordinator(
      */
     fun onRunCompleted(profileId: String, sessionId: String, runId: String) {
         val key = "run|$profileId|$sessionId|$runId"
-        if (notifiedKeys.contains(key)) return
+        if (notifiedKeys.containsKey(key)) return
         if (!NotificationPolicy.shouldNotify(isForeground(), alreadyNotified = false)) return
-        notifiedKeys.add(key)
+        notifiedKeys[key] = true
         poster.post(
             NotificationContent(
                 type = NotificationType.RUN_COMPLETED,
@@ -84,5 +95,10 @@ class NotificationCoordinator(
     private fun titleFor(profileId: String): String {
         val name = runCatching { serverNameProvider(profileId) }.getOrNull().orEmpty()
         return if (NotificationContent.isSafeTitle(name)) name else fallbackTitle
+    }
+
+    private companion object {
+        const val MAX_NOTIFIED_KEYS = 64
+        const val LOAD_FACTOR = 0.75f
     }
 }

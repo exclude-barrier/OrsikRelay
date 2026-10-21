@@ -106,6 +106,21 @@ class ChatBubbleUiTest {
     }
 
     @Test
+    fun userMessageWithAnImageShowsTheImageCountAndItsText() {
+        setScreen(
+            listOf(
+                message(1, MessageRole.USER, "Was ist das?").copy(imageCount = 1),
+                message(2, MessageRole.USER, "").copy(imageCount = 2)
+            )
+        )
+        val one = context.resources.getQuantityString(R.plurals.chat_message_images, 1, 1)
+        val two = context.resources.getQuantityString(R.plurals.chat_message_images, 2, 2)
+        waitForText("Was ist das?")
+        composeRule.onNodeWithText(one).assertIsDisplayed()
+        composeRule.onNodeWithText(two).assertIsDisplayed()
+    }
+
+    @Test
     fun historyToolRowRendersOnlyTheSafeLabel() {
         setScreen(
             listOf(

@@ -598,8 +598,18 @@ class RunSessionController(
                 }
                 // The title resolves the server label from profile metadata
                 // (SharedPreferences + JSON), so keep it off the main thread.
-                withContext(ioDispatcher) {
-                    notificationCoordinator.onApprovalRequested(profileId, sessionId, event.request)
+                // A notification failure is never a run failure; cancellation
+                // still propagates.
+                runCatching {
+                    withContext(ioDispatcher) {
+                        notificationCoordinator.onApprovalRequested(
+                            profileId,
+                            sessionId,
+                            event.request
+                        )
+                    }
+                }.onFailure { error ->
+                    if (error is CancellationException || error !is Exception) throw error
                 }
             }
 
@@ -626,8 +636,14 @@ class RunSessionController(
                 if (runId != null) {
                     // Server-label lookup is storage + JSON parsing; never on
                     // the main thread that emits the terminal event below.
-                    withContext(ioDispatcher) {
-                        notificationCoordinator.onRunCompleted(profileId, sessionId, runId)
+                    // A notification failure must not turn the completed run
+                    // into an uncertain one; cancellation still propagates.
+                    runCatching {
+                        withContext(ioDispatcher) {
+                            notificationCoordinator.onRunCompleted(profileId, sessionId, runId)
+                        }
+                    }.onFailure { error ->
+                        if (error is CancellationException || error !is Exception) throw error
                     }
                 }
                 _activeRun.value = null

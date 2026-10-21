@@ -18,7 +18,6 @@ import java.net.SocketTimeoutException
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLException
 import okhttp3.Call
@@ -166,16 +165,10 @@ class HermesSessionStreamClient(
     ): ChatStreamHandle {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
             ?: return failNow(listener, ChatStreamError.InvalidInput)
-        if (!isSafeSessionId(sessionId)) {
+        if (!isSafeOpaqueId(sessionId)) {
             return failNow(listener, ChatStreamError.InvalidInput)
         }
-        val keyIsSafe = apiKey.useRaw { rawKey ->
-            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
-                rawKey.none { character ->
-                    character.isWhitespace() || character.isISOControl()
-                }
-        }
-        if (!keyIsSafe) {
+        if (!isSafeApiKey(apiKey)) {
             return failNow(listener, ChatStreamError.InvalidInput)
         }
         // Defensive re-validation: only a well-formed body is ever sent.
@@ -256,7 +249,7 @@ class HermesSessionStreamClient(
     ): ChatStreamHandle {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
             ?: return failNow(listener, ChatStreamError.InvalidInput)
-        if (!isSafeSessionId(sessionId) || !isSafeRunId(runId)) {
+        if (!isSafeOpaqueId(sessionId) || !isSafeOpaqueId(runId)) {
             return failNow(listener, ChatStreamError.InvalidInput)
         }
         if (resume.lastSeq !in 0L..MAX_AFTER_SEQ) {
@@ -269,13 +262,7 @@ class HermesSessionStreamClient(
             // this one - fail closed without sending anything.
             return failNow(listener, ChatStreamError.InvalidInput)
         }
-        val keyIsSafe = apiKey.useRaw { rawKey ->
-            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
-                rawKey.none { character ->
-                    character.isWhitespace() || character.isISOControl()
-                }
-        }
-        if (!keyIsSafe) {
+        if (!isSafeApiKey(apiKey)) {
             return failNow(listener, ChatStreamError.InvalidInput)
         }
 
@@ -610,18 +597,6 @@ class HermesSessionStreamClient(
         return SSE_CONTENT_TYPE.equals(type, ignoreCase = true)
     }
 
-    private fun isSafeSessionId(sessionId: String): Boolean {
-        if (sessionId.isBlank()) return false
-        if (sessionId.length > MAX_SESSION_ID_LENGTH) return false
-        return sessionId.none { it.isISOControl() }
-    }
-
-    private fun isSafeRunId(runId: String): Boolean {
-        if (runId.isBlank()) return false
-        if (runId.length > MAX_SESSION_ID_LENGTH) return false
-        return runId.none { it.isISOControl() }
-    }
-
     /**
      * Serializes one turn body. Text-only keeps the plain single-string shape
      * (`{"message": "<text>"}`); with attachments the message becomes the
@@ -787,9 +762,9 @@ class HermesSessionStreamClient(
     // `internal` so the production default configuration can be
     // verified directly from the unit tests without reflection.
     internal companion object {
-        const val MAX_STREAM_BYTES = 8L * 1024 * 1024
-        const val MAX_API_KEY_CHARACTERS = 4096
-        const val MAX_SESSION_ID_LENGTH = 256
+        // A long agent turn (many tool calls, long answers) easily streams
+        // several MiB; frames themselves are bounded by the parser.
+        const val MAX_STREAM_BYTES = 64L * 1024 * 1024
         const val MAX_AFTER_SEQ = 0x7FFFFFFF
         const val BUFFER_SIZE = 8 * 1024
         const val API_SEGMENT = "api"
@@ -836,44 +811,38 @@ class HermesSessionStreamClient(
          */
         const val STREAM_READ_TIMEOUT_SECONDS = 45L
 
+        // Timeout-chain decision (Finding "no wallclock bound"):
+        // an ESTABLISHED SSE stream may be long-lived by design - a
+        // model answer can take minutes - so the global
+        // `callTimeout` stays 0 (none) and never kills a live
+        // stream.
+        //
+        // The chain is nevertheless finite everywhere it matters:
+        // * connectTimeout bounds TCP connect AND the TLS
+        //   handshake of every (re-)attach attempt: a dead or
+        //   blackholed endpoint returns within 10 s instead of
+        //   hanging;
+        // * readTimeout bounds the first byte (response headers)
+        //   of every (re-)attach attempt and every inter-byte gap
+        //   of a live stream - it is 45 s, above the confirmed 30 s
+        //   server keepalive, so an idle-but-alive turn is never
+        //   aborted while a dead socket is detected;
+        // * writeTimeout bounds the request body write;
+        // * the complete reconnect ladder is bounded by
+        //   `maxReconnectAttempts` plus the finite backoff series
+        //   (see StreamingChatRepository), so a broken run can
+        //   never be re-attached forever.
+        // No additional global wallclock budget is therefore added.
+
         /**
          * Builds the production default streaming client. Tests may
          * keep their own short timeouts; this factory is the single
          * configurable production default.
          */
-        fun newDefaultStreamClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(STREAM_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            // Timeout-chain decision (Finding "no wallclock bound"):
-            // an ESTABLISHED SSE stream may be long-lived by design - a
-            // model answer can take minutes - so the global
-            // `callTimeout` stays 0 (none) and never kills a live
-            // stream.
-            //
-            // The chain is nevertheless finite everywhere it matters:
-            // * connectTimeout bounds TCP connect AND the TLS
-            //   handshake of every (re-)attach attempt: a dead or
-            //   blackholed endpoint returns within 10 s instead of
-            //   hanging;
-            // * readTimeout bounds the first byte (response headers)
-            //   of every (re-)attach attempt and every inter-byte gap
-            //   of a live stream - it is 45 s, above the confirmed 30 s
-            //   server keepalive, so an idle-but-alive turn is never
-            //   aborted while a dead socket is detected;
-            // * writeTimeout bounds the request body write;
-            // * the complete reconnect ladder is bounded by
-            //   `maxReconnectAttempts` plus the finite backoff series
-            //   (see StreamingChatRepository), so a broken run can
-            //   never be re-attached forever.
-            // No additional global wallclock budget is therefore added.
-            .callTimeout(0, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
-
-        fun defaultSessionStreamHttpClient(): OkHttpClient = newDefaultStreamClient()
+        fun defaultSessionStreamHttpClient(): OkHttpClient = HermesHttp.defaultClient(
+            readTimeoutSeconds = STREAM_READ_TIMEOUT_SECONDS,
+            callTimeoutSeconds = 0
+        )
     }
 }
 

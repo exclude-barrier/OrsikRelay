@@ -98,9 +98,10 @@ fun HermesNavHost(
     // Product Gate: pairing deep-link bootstrap (server URL + code) pre-filled
     // into the onboarding route. Null when no deep link was received.
     pairingBootstrap: PairingBootstrap? = null,
-    // A validated notification tap (profileId, sessionId) to open
-    // directly. Consumed exactly once; null when no tap is pending.
-    notificationBootstrap: Pair<String, String>? = null
+    // A validated notification tap (profileId, sessionId, delivery) to open
+    // directly. Consumed exactly once per delivery; null when no tap is
+    // pending.
+    notificationBootstrap: NotificationTap? = null
 ) {
     val applicationContext = LocalContext.current.applicationContext
     // The settings screen owns both selections. Production passes the theme
@@ -259,12 +260,11 @@ fun HermesNavHost(
     LaunchedEffect(resolvedStart, pendingNotificationTap) {
         if (resolvedStart == null) return@LaunchedEffect
         val bootstrap = pendingNotificationTap ?: return@LaunchedEffect
-        val (profileId, sessionId) = bootstrap
         withContext(Dispatchers.Main) {
-            activeProfileId = profileId
+            activeProfileId = bootstrap.profileId
             activeSessionTitleSessionId = null
             activeSessionTitle = null
-            navController.navigate(routeOf(AppScreen.Chat(sessionId))) {
+            navController.navigate(routeOf(AppScreen.Chat(bootstrap.sessionId))) {
                 launchSingleTop = true
             }
         }

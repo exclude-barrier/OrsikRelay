@@ -48,4 +48,14 @@ class NotificationSessionIntentTest {
     fun `id with a path separator is not safe`() {
         assertFalse(NotificationSessionIntent.isSafeId("a/b"))
     }
+
+    @Test
+    fun `tap token matches only the exact value`() {
+        assertTrue(NotificationSessionIntent.tokenMatches("abc123", "abc123"))
+        assertFalse(NotificationSessionIntent.tokenMatches("abc123", "abc124"))
+        assertFalse(NotificationSessionIntent.tokenMatches("abc123", null))
+        assertFalse(NotificationSessionIntent.tokenMatches("abc123", ""))
+        assertFalse(NotificationSessionIntent.tokenMatches(null, null))
+        assertFalse(NotificationSessionIntent.tokenMatches("", ""))
+    }
 }

@@ -299,6 +299,7 @@ ExecStart=$BRIDGE_HOME/venv/bin/orsik-mobile-bridge
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
+UMask=0077
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only

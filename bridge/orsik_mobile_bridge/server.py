@@ -43,6 +43,7 @@ import ipaddress
 import json
 import logging
 import os
+import stat
 import sys
 import time
 from pathlib import Path
@@ -55,7 +56,15 @@ from . import core
 from . import pairing
 from . import runhub
 from . import store as store_mod
-from .sse import MAX_FRAME_BYTES, Frame, SSEDecoder, SSEFrameTooLarge, normalize_approval, redact_echo
+from .sse import (
+    MAX_FRAME_BYTES,
+    Frame,
+    SSEDecoder,
+    SSEFrameTooLarge,
+    normalize_approval,
+    redact_echo,
+    strip_unused,
+)
 
 logger = logging.getLogger("orsik_mobile_bridge")
 # One line per state-changing call, attributable to a device. Only
@@ -65,9 +74,13 @@ audit_logger = logging.getLogger("orsik_mobile_bridge.audit")
 _AUDITED_RUN_ACTIONS = ("stop", "steer")
 
 
-def _audit(action: str, record: core.DeviceRecord, **fields: object) -> None:
+def _audit_event(action: str, device_id: str, **fields: object) -> None:
     detail = "".join(f" {key}={value}" for key, value in fields.items())
-    audit_logger.info("audit action=%s device=%s%s", action, record.device_id, detail)
+    audit_logger.info("audit action=%s device=%s%s", action, device_id, detail)
+
+
+def _audit(action: str, record: core.DeviceRecord, **fields: object) -> None:
+    _audit_event(action, record.device_id, **fields)
 
 APPROVAL_PATH = "/v1/runs/{run_id}/approval"
 # Match the official api_server request bound (10_000_000) so the bridge does
@@ -81,6 +94,8 @@ _MAX_BODY_BYTES = 10_000_000
 _MAX_ECHO_FRAME_BYTES = _MAX_BODY_BYTES + 64 * 1024
 _PAIR_PER_MINUTE = 60
 _RUN_STREAM_KEEPALIVE = 15.0
+# How often an open run stream re-checks that its device token is still valid.
+_REVOKE_CHECK_INTERVAL = 15.0
 # Bounds the authoritative upstream status read used by _indeterminate_run.
 _INDETERMINATE_TIMEOUT = ClientTimeout(total=10, sock_connect=5)
 # Bound for a non-SSE upstream error body; a larger body fails closed instead of
@@ -126,7 +141,28 @@ def _safe_upstream_label(upstream: str) -> str:
     return f"{parts.scheme}://{parts.hostname}:{parts.port or ''}".rstrip(":")
 
 
+_SECRET_FILE_ERROR = (
+    "Bridge refuses secret file {path}: it must be a regular file owned by the"
+    " current user with permissions 0600 (run: chmod 600 {path})"
+)
+
+
+def _check_secret_file(path: str) -> None:
+    """Fail closed before reading a file that can carry the master key."""
+    try:
+        info = os.stat(path)
+    except OSError:
+        raise SystemExit(_SECRET_FILE_ERROR.format(path=path)) from None
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or (info.st_mode & 0o077) != 0
+    ):
+        raise SystemExit(_SECRET_FILE_ERROR.format(path=path))
+
+
 def _load_env_file(path: str) -> dict[str, str]:
+    _check_secret_file(path)
     values: dict[str, str] = {}
     try:
         for line in Path(path).read_text(encoding="utf-8").splitlines():
@@ -149,6 +185,18 @@ def _state_db_path(env: dict[str, str]) -> str:
 
 
 _UPSTREAM_ERROR = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8642"
+_BIND_ERROR = "BRIDGE_BIND must be a literal loopback IP address (127.0.0.1 or ::1)"
+
+
+def _validate_bind(bind: str) -> str:
+    """Only literal loopback IPs; a name like ``localhost`` is refused."""
+    try:
+        host = ipaddress.ip_address(bind)
+    except ValueError:
+        raise SystemExit(_BIND_ERROR) from None
+    if not host.is_loopback:
+        raise SystemExit(_BIND_ERROR)
+    return bind
 
 
 def _validate_upstream(upstream: str) -> str:
@@ -204,6 +252,26 @@ def _closed(status: int, code: str) -> web.Response:
     return web.json_response({"error": {"code": code}}, status=status)
 
 
+_REDACTED = b"[redacted]"
+# Bound of a buffered (non-SSE) upstream body. Twice the app's own bound for
+# the largest JSON answer (message history, 8 MiB).
+_MAX_BUFFERED_BODY_BYTES = 16 * 1024 * 1024
+# Raw history pages before their inline images are dropped.
+_MAX_HISTORY_BODY_BYTES = 64 * 1024 * 1024
+
+
+def _redact_master_key(state: BridgeState, payload: bytes) -> bytes:
+    """Defense in depth for buffered upstream bodies.
+
+    A reflected ``Authorization`` header must never reach the device. SSE
+    bodies are relayed chunk by chunk and deliberately left untouched.
+    """
+    key = state.master_key.encode("utf-8")
+    if not key:
+        return payload
+    return payload.replace(key, _REDACTED)
+
+
 STATE_KEY = web.AppKey("state", BridgeState)
 
 
@@ -248,6 +316,13 @@ def create_app(state: BridgeState) -> web.Application:
 
 async def _handle_health(request: web.Request) -> web.StreamResponse:
     # Unauthenticated liveness; proxied so the client sees the real core health.
+    # A request body is never read or forwarded: /health needs no body and the
+    # endpoint has no device token to bound the work.
+    if (
+        request.headers.get("Content-Length") not in (None, "0")
+        or "Transfer-Encoding" in request.headers
+    ):
+        return _closed(400, "body_not_allowed")
     return await _proxy(request, request.app[STATE_KEY], "/health")
 
 
@@ -261,19 +336,25 @@ async def _handle_capabilities(request: web.Request) -> web.Response:
 async def _handle_pair(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
     if not state.pair_limiter.allow():
+        _audit_event("pair", "-", status=429)
         return _closed(429, "rate_limited")
     try:
         body = await request.json()
     except web.HTTPRequestEntityTooLarge:
+        _audit_event("pair", "-", status=413)
         return _closed(413, "body_too_large")
     except Exception:
+        _audit_event("pair", "-", status=400)
         return _closed(400, "invalid_json")
     if not isinstance(body, dict) or not await _db(state, state.codes.redeem, body.get("code")):
+        _audit_event("pair", "-", status=400)
         return _closed(400, "pairing_code_invalid")
     minted = await _db(state, state.tokens.mint, label="paired-device", profile="default")
     if minted is None:
+        _audit_event("pair", "-", status=503)
         return _closed(503, "device_capacity_reached")
     token, record = minted
+    _audit("pair", record, status=201)
     return web.json_response(core.build_credential(record, token, time.time()), status=201)
 
 
@@ -281,7 +362,9 @@ async def _handle_self_revoke(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
     record = await _db(state, state.tokens.revoke, _device_token(request))
     if record is None:
+        _audit_event("revoke", "-", status=401)
         return _closed(401, "invalid_credentials")
+    _audit("revoke", record, status=200)
     return web.json_response({"revoked": True, "device_id": record.device_id})
 
 
@@ -369,14 +452,15 @@ async def _handle_chat_stream(request: web.Request) -> web.StreamResponse:
 
 
 def _relay_frame(state: BridgeState, buf: runhub.RunBuffer, frame: Frame) -> bool:
-    """Redact the run.started echo, narrow approval.request to Mobile-v1,
-    enforce the relay bound, then buffer the frame.
+    """Redact the run.started echo, narrow approval.request to Mobile-v1, drop
+    the fields a phone never reads, enforce the relay bound, then buffer the
+    frame.
 
     Returns False when a frame is still above :data:`MAX_FRAME_BYTES` after
     redaction; the caller then closes the upstream exactly like the decoder's own
     oversize path. Such a frame is never buffered.
     """
-    frame = normalize_approval(redact_echo(frame))
+    frame = strip_unused(normalize_approval(redact_echo(frame)))
     if len(frame.raw) > MAX_FRAME_BYTES:
         return False
     buf.append(frame)
@@ -435,7 +519,7 @@ async def _pump_chat_stream(
                 buf.fail(502, "application/json",
                          b'{"error":{"code":"upstream_error_too_large"}}')
                 return
-            buf.fail(upstream.status, content_type, payload)
+            buf.fail(upstream.status, content_type, _redact_master_key(state, payload))
             return
         decoder = SSEDecoder(max_frame_bytes=_MAX_ECHO_FRAME_BYTES)
         async for chunk in upstream.content.iter_any():
@@ -521,6 +605,10 @@ async def _stream_buffer_to_client(
     if attached is None:
         return _closed(409, "resume_gap")
     subscriber, replay = attached
+    state: BridgeState = request.app[STATE_KEY]
+    token = _device_token(request)
+    loop = asyncio.get_running_loop()
+    next_auth_check = loop.time() + _REVOKE_CHECK_INTERVAL
     downstream = web.StreamResponse(status=200)
     downstream.content_type = "text/event-stream"
     downstream.headers["Cache-Control"] = "no-cache"
@@ -532,6 +620,14 @@ async def _stream_buffer_to_client(
             await _write_abort_comment(downstream, buf)
             return downstream
         while True:
+            if loop.time() >= next_auth_check:
+                # A revoked device (from the phone or `admin revoke-device` in
+                # another process) loses an open stream within one interval,
+                # not only on its next request. The run itself keeps running.
+                if await _db(state, state.tokens.lookup, token) is None:
+                    await downstream.write(b": bridge_revoked\n\n")
+                    break
+                next_auth_check = loop.time() + _REVOKE_CHECK_INTERVAL
             try:
                 item = await asyncio.wait_for(subscriber.get(), timeout=_RUN_STREAM_KEEPALIVE)
             except TimeoutError:
@@ -617,9 +713,20 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
         return _closed(403, "endpoint_out_of_scope")
     action = match.upstream_path.rsplit("/", 1)[-1]
     on_status = None
-    if request.method == "POST" and "run_id" in match.params and action in _AUDITED_RUN_ACTIONS:
+    if request.method == "POST" and match.upstream_path == "/api/sessions":
+        on_status = lambda status: _audit("session_create", record, status=status)  # noqa: E731
+    elif request.method == "POST" and "run_id" in match.params and action in _AUDITED_RUN_ACTIONS:
         run_id = match.params["run_id"]
         on_status = lambda status: _audit(action, record, run=run_id, status=status)  # noqa: E731
+    if request.method == "GET" and match.upstream_path.endswith("/messages"):
+        # History pages carry the inline images of earlier turns; they are
+        # dropped here (see core.strip_history_images), so the raw page may
+        # be far larger than what reaches the phone.
+        return await _proxy(
+            request, state, match.upstream_path,
+            transform=core.strip_history_images,
+            max_buffered_bytes=_MAX_HISTORY_BODY_BYTES,
+        )
     return await _proxy(request, state, match.upstream_path, on_status=on_status)
 
 
@@ -629,6 +736,8 @@ async def _proxy(
     upstream_path: str,
     body_override: bytes | None = None,
     on_status: Callable[[int], None] | None = None,
+    transform: Callable[[bytes], bytes] | None = None,
+    max_buffered_bytes: int = 0,
 ) -> web.StreamResponse:
     """Forward one request upstream and relay the response.
 
@@ -686,8 +795,20 @@ async def _proxy(
             on_status(upstream.status)
         await downstream.prepare(request)
         try:
-            async for chunk in upstream.content.iter_chunked(4096):
-                await downstream.write(chunk)
+            if "text/event-stream" in content_type:
+                async for chunk in upstream.content.iter_chunked(4096):
+                    await downstream.write(chunk)
+            else:
+                # Buffered path: a reflected Authorization header must not reach
+                # the device. SSE stays a chunk-wise relay (see module docstring).
+                payload = await _read_bounded_body(
+                    upstream, max_buffered_bytes or _MAX_BUFFERED_BODY_BYTES)
+                if payload is not None and transform is not None and upstream.status == 200:
+                    payload = transform(payload)
+                if payload is not None:
+                    # Above the bound nothing is written (a truncated answer the
+                    # client rejects); never an unredacted body.
+                    await downstream.write(_redact_master_key(state, payload))
         except Exception:
             pass
         finally:
@@ -765,6 +886,9 @@ def _admin_main(argv: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Files created by the bridge (store, sidecars, backups) must never be
+    # group/world accessible, even before _harden_file runs.
+    os.umask(0o077)
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "admin":
         logging.basicConfig(level=logging.WARNING, format="%(message)s")
@@ -772,10 +896,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     env = _load_env()
     state = build_state_from_env(env)
-    bind = env.get("BRIDGE_BIND", "127.0.0.1")
+    bind = _validate_bind(env.get("BRIDGE_BIND", "127.0.0.1"))
     port = int(env.get("BRIDGE_PORT", "9842"))
-    if bind not in {"127.0.0.1", "::1", "localhost"}:
-        raise SystemExit("Bridge refuses to bind a non-loopback address")
     logger.info(
         "Orsik Mobile Bridge on http://%s:%d -> %s",
         bind, port, _safe_upstream_label(state.upstream),

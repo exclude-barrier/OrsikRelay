@@ -39,6 +39,9 @@ def render_ascii_qr(text: str) -> str | None:
     Uses the system ``qrencode`` when available; this is a display convenience
     only — the bridge never depends on it for correctness.
 
+    The payload is passed on stdin, never in argv: the deep link carries the
+    single-use pairing code and ``/proc/<pid>/cmdline`` is world-readable.
+
     ``ANSIUTF8`` carries explicit black/white ANSI colors, so the code keeps
     the dark-on-light polarity a scanner expects in both dark and light
     terminal themes. ``-m 2`` keeps a two-module quiet zone around it.
@@ -48,7 +51,8 @@ def render_ascii_qr(text: str) -> str | None:
         return None
     try:
         result = subprocess.run(
-            [exe, "-t", "ANSIUTF8", "-o", "-", "-m", "2", text],
+            [exe, "-t", "ANSIUTF8", "-o", "-", "-m", "2"],
+            input=text.encode("utf-8"),
             capture_output=True, check=True, timeout=10,
         )
         return result.stdout.decode("utf-8", "replace")

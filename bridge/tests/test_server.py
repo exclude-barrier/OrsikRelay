@@ -10,6 +10,7 @@ and the exact pairing/self-revoke/credential contract.
 import asyncio
 import json
 import unittest
+from unittest import mock
 import uuid
 
 from aiohttp import web
@@ -34,10 +35,12 @@ UPSTREAM: dict = {}
 
 def _upstream_app():
     async def health(_):
+        UPSTREAM["health_gets"] = int(UPSTREAM.get("health_gets", 0)) + 1
         return web.json_response({"status": "ok", "platform": "hermes-agent", "version": "t"})
 
     async def sessions_get(request):
         UPSTREAM["sessions_gets"] = int(UPSTREAM.get("sessions_gets", 0)) + 1
+        UPSTREAM["seen_auth"] = request.headers.get("Authorization")
         if UPSTREAM.get("redirect"):
             return web.Response(status=302, headers={"Location": "http://evil.example/steal"})
         return web.json_response({"data": [], "auth": request.headers.get("Authorization")})
@@ -46,7 +49,7 @@ def _upstream_app():
         return web.json_response({"object": "hermes.session", "session": {"id": "s1"}}, status=201)
 
     async def messages(_):
-        return web.json_response({"data": []})
+        return web.json_response(UPSTREAM.get("messages_page", {"data": []}))
 
     async def chat(request):
         UPSTREAM["chat_posts"] = int(UPSTREAM.get("chat_posts", 0)) + 1
@@ -122,6 +125,49 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual((await resp.json())["status"], "ok")
 
+    async def test_health_with_body_is_refused_and_not_proxied(self):
+        before = int(UPSTREAM.get("health_gets", 0))
+        resp = await self.client.get("/health", data=b"payload")
+        self.assertEqual(resp.status, 400)
+        self.assertEqual((await resp.json())["error"]["code"], "body_not_allowed")
+        self.assertEqual(int(UPSTREAM.get("health_gets", 0)), before)
+
+    async def test_history_page_drops_inline_image_data(self):
+        image = "data:image/png;base64," + "Q" * (20 * 1024 * 1024)
+        UPSTREAM["messages_page"] = {
+            "object": "list", "session_id": "s1",
+            "data": [
+                {"id": 1, "role": "user", "content": [
+                    {"type": "text", "text": "Was ist das?"},
+                    {"type": "image_url", "image_url": {"url": image}},
+                ]},
+                {"id": 2, "role": "assistant", "content": "Ein Baum.",
+                 "reasoning": "secret-thought",
+                 "tool_calls": [{"function": {"arguments": "rm -rf /x"}}]},
+                {"id": 3, "role": "tool", "tool_name": "terminal", "content": "secret-output"},
+            ],
+            "pagination": {"limit": 200, "offset": 0, "order": "latest", "returned": 2},
+        }
+        try:
+            token = (await self._pair())["device_key"]
+            resp = await self.client.get(
+                "/api/sessions/s1/messages", headers=self._bearer(token))
+            self.assertEqual(resp.status, 200)
+            body = await resp.read()
+        finally:
+            UPSTREAM.pop("messages_page", None)
+        self.assertLess(len(body), 4096)
+        page = json.loads(body)
+        self.assertEqual(
+            page["data"][0]["content"],
+            [{"type": "text", "text": "Was ist das?"}, {"type": "image_url"}],
+        )
+        self.assertEqual(page["data"][1]["content"], "Ein Baum.")
+        self.assertEqual(page["data"][2], {"id": 3, "role": "tool", "tool_name": "terminal", "content": ""})
+        for secret in (b"secret-thought", b"rm -rf", b"secret-output"):
+            self.assertNotIn(secret, body)
+        self.assertEqual(page["pagination"]["returned"], 2)
+
     async def test_capabilities_requires_device_token(self):
         self.assertEqual((await self.client.get("/v1/capabilities")).status, 401)
         cred = await self._pair()
@@ -173,7 +219,17 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         cred = await self._pair()
         resp = await self.client.get("/api/sessions", headers=self._bearer(cred["device_key"]))
         self.assertEqual(resp.status, 200)
-        self.assertEqual((await resp.json())["auth"], "Bearer master_key_test")
+        # Upstream sees the master key, never the device token.
+        self.assertEqual(UPSTREAM.get("seen_auth"), "Bearer master_key_test")
+        # A reflected Authorization header is redacted before it reaches the device.
+        self.assertEqual((await resp.json())["auth"], "Bearer [redacted]")
+
+    async def test_proxy_body_never_contains_master_key(self):
+        cred = await self._pair()
+        resp = await self.client.get("/api/sessions", headers=self._bearer(cred["device_key"]))
+        text = await resp.text()
+        self.assertNotIn("master_key_test", text)
+        self.assertIn("[redacted]", text)
 
     async def test_sse_stream_proxied(self):
         cred = await self._pair()
@@ -248,6 +304,30 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         for line in lines:
             self.assertNotIn(token, line)
             self.assertNotIn("master_key_test", line)
+
+    async def test_pair_session_create_and_revoke_are_audited(self):
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            cred = await self._pair()
+            token = cred["device_key"]
+            created = await self.client.post(
+                "/api/sessions", headers=self._bearer(token), json={"title": "x"})
+            self.assertEqual(created.status, 201)
+            revoked = await self.client.post(
+                "/v1/devices/self/revoke", headers=self._bearer(token))
+            self.assertEqual(revoked.status, 200)
+            failed = await self.client.post(
+                "/v1/devices/pair", json={"code": "BAD-CODE"})
+            self.assertEqual(failed.status, 400)
+        lines = [record.getMessage() for record in logs.records]
+        device = cred["device_id"]
+        self.assertIn(f"audit action=pair device={device} status=201", lines)
+        self.assertIn(f"audit action=session_create device={device} status=201", lines)
+        self.assertIn(f"audit action=revoke device={device} status=200", lines)
+        self.assertIn("audit action=pair device=- status=400", lines)
+        for line in lines:
+            self.assertNotIn(token, line)
+            self.assertNotIn("master_key_test", line)
+            self.assertNotIn("BAD-CODE", line)
 
     async def test_approval_escalation_and_malformed_never_reach_upstream(self):
         cred = await self._pair()
@@ -608,6 +688,24 @@ class ReconnectStreamTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.posts, 1)            # never re-POSTed
 
 
+    async def test_revoked_device_loses_an_open_stream(self):
+        # Revoking (here directly in the store, like `admin revoke-device` in
+        # another process) must end an already open stream, not only new ones.
+        with mock.patch.object(bridge_server, "_REVOKE_CHECK_INTERVAL", 0.05), \
+                mock.patch.object(bridge_server, "_RUN_STREAM_KEEPALIVE", 0.05):
+            post = await self.client.post(
+                "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+            )
+            buf = b""
+            while b"\n\n" not in buf:
+                buf += await post.content.read(64)
+            self.assertIn(b"run.started", buf)
+            self.assertIsNotNone(self.state.tokens.revoke(self.token))
+            rest = await asyncio.wait_for(post.content.read(), timeout=5)
+            self.assertIn(b": bridge_revoked", rest)
+            self.assertNotIn(b"assistant.delta", rest)
+            self.release.set()
+
 class IndeterminateRunTest(unittest.IsolatedAsyncioTestCase):
     """A re-attach with no bridge buffer must fail closed from the
     authoritative upstream status — never a false 404, never fabricated events."""
@@ -790,6 +888,18 @@ class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
             bridge_server._MAX_UPSTREAM_ERROR_BODY_BYTES = original
         self.assertEqual(resp.status, 502)
         self.assertEqual((await resp.json())["error"]["code"], "upstream_error_too_large")
+
+    async def test_upstream_error_body_never_reflects_master_key(self):
+        self.mode = "error"
+        self.error_status = 500
+        self.error_body = b'{"auth": "Bearer master_key_test"}'
+        resp = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+        self.assertEqual(resp.status, 500)
+        text = await resp.text()
+        self.assertNotIn("master_key_test", text)
+        self.assertIn("[redacted]", text)
 
     async def test_oversized_first_frame_is_502_with_no_fabricated_done(self):
         self.mode = "big_frame_only"
@@ -1005,6 +1115,44 @@ class EchoRedactionTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(self._blocks(replay)[0], first)
 
+    async def test_transcript_tool_output_and_reasoning_never_reach_the_phone(self):
+        # The official core puts the whole turn transcript on run.completed;
+        # alone it exceeds the 1 MiB relay bound and used to abort a finished turn.
+        transcript = [{"role": "tool", "content": "secret-output " + "x" * (2 * 1024 * 1024)}]
+        frames = [
+            {"event": "run.started", "data": {"session_id": "s1", "run_id": "run_t", "seq": 1}},
+            {"event": "message.started", "data": {"session_id": "s1", "run_id": "run_t", "seq": 2}},
+            {"event": "tool.started", "data": {"session_id": "s1", "run_id": "run_t", "seq": 3,
+                                               "tool_name": "terminal", "preview": "rm -rf /x",
+                                               "args": {"cmd": "rm -rf /x"}}},
+            {"event": "tool.progress", "data": {"session_id": "s1", "run_id": "run_t", "seq": 4,
+                                                "tool_name": "_thinking", "delta": "secret-thought"}},
+            {"event": "assistant.commentary", "data": {"session_id": "s1", "run_id": "run_t", "seq": 5,
+                                                       "text": "secret-commentary"}},
+            {"event": "assistant.completed", "data": {"session_id": "s1", "run_id": "run_t", "seq": 6,
+                                                      "content": "Fertig", "runtime": {"m": 1}}},
+            {"event": "run.completed", "data": {"session_id": "s1", "run_id": "run_t", "seq": 7,
+                                                "messages": transcript, "usage": {"t": 1},
+                                                "runtime": {}, "pending_steer": "weiter"}},
+            {"event": "done", "data": {"session_id": "s1", "run_id": "run_t", "seq": 8}},
+        ]
+        self.frames = [
+            b"event: " + f["event"].encode() + b"\ndata: " + json.dumps(f["data"]).encode() + b"\n\n"
+            for f in frames
+        ]
+        resp = await self._chat()
+        self.assertEqual(resp.status, 200)
+        body = await resp.read()
+        self.assertIn(b"event: done", body)
+        for secret in (b"secret-output", b"rm -rf", b"secret-thought", b"secret-commentary"):
+            self.assertNotIn(secret, body)
+        blocks = {b.split(b"\n")[0]: self._data(b) for b in self._blocks(body)}
+        self.assertEqual(blocks[b"event: tool.progress"]["tool_name"], "_thinking")
+        self.assertEqual(blocks[b"event: tool.started"]["tool_name"], "terminal")
+        self.assertEqual(blocks[b"event: assistant.completed"]["content"], "Fertig")
+        self.assertEqual(blocks[b"event: run.completed"]["pending_steer"], "weiter")
+        self.assertEqual([blocks[k]["seq"] for k in blocks], list(range(1, 9)))
+
     async def test_core_approval_request_is_narrowed_to_mobile_v1(self):
         # The shape the official core emits (measured live 2026-10-16).
         core_approval = {
@@ -1077,16 +1225,14 @@ class EchoRedactionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 502)
         self.assertEqual((await resp.json())["error"]["code"], "upstream_frame_too_large")
 
-    async def test_proxied_run_events_stream_is_a_raw_relay(self):
-        # GET /v1/runs/{id}/events is a raw byte relay with no SSEDecoder, so the
-        # echo defect is specific to the decoder-backed session chat pump: the
-        # same oversized run.started passes through here unmodified.
-        echo = (b'event: run.started\ndata: {"run_id": "run_raw", "seq": 1, "user_message": "'
-                + b"A" * (2 * 1024 * 1024) + b'"}\n\n')
-        self.run_events_frame = echo
+    async def test_raw_run_events_route_is_out_of_scope(self):
+        # The app follows runs only through the filtered session stream; the raw
+        # core relay would bypass echo/approval/field filtering and the revoke
+        # check, so it is not offered.
+        self.run_events_frame = b'event: run.started\ndata: {"run_id": "run_raw", "seq": 1}\n\n'
         resp = await self.client.get("/v1/runs/run_raw/events", headers=self._bearer())
-        self.assertEqual(resp.status, 200)
-        self.assertEqual(await resp.read(), echo)
+        self.assertEqual(resp.status, 403)
+        self.assertEqual((await resp.json())["error"]["code"], "endpoint_out_of_scope")
 
 
 if __name__ == "__main__":

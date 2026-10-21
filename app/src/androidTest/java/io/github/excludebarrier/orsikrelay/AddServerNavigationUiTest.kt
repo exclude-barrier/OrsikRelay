@@ -90,8 +90,6 @@ class AddServerNavigationUiTest {
             connectionProbe = ConnectionProbe {
                 HermesConnectionResult.Success(
                     version = "1",
-                    sessionsSupported = true,
-                    sessionStreamingSupported = true,
                     sessionChatInteractiveApprovals = true
                 )
             },
@@ -144,8 +142,6 @@ class AddServerNavigationUiTest {
             connectionProbe = ConnectionProbe {
                 HermesConnectionResult.Success(
                     version = "1",
-                    sessionsSupported = true,
-                    sessionStreamingSupported = true,
                     sessionChatInteractiveApprovals = true
                 )
             },

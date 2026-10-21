@@ -70,7 +70,7 @@ class DevicePairingCoordinatorTest {
     @Test
     fun missingDeviceCapabilityRevokesAndFailsClosed() {
         val fixture = fixture(probe = {
-            HermesConnectionResult.Success("test", true, true, true, false)
+            HermesConnectionResult.Success("test", true, false)
         })
 
         val result = fixture.coordinator.connect("Server", BASE_URL, VALID_CODE)
@@ -137,7 +137,7 @@ class DevicePairingCoordinatorTest {
     private fun fixture(
         pair: () -> DevicePairResult = { paired() },
         probe: () -> HermesConnectionResult = {
-            HermesConnectionResult.Success("test", true, true, true, true)
+            HermesConnectionResult.Success("test", true, true)
         },
         save: (io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft, DeviceCredential) -> ServerProfile =
             { _, _ -> profile() }

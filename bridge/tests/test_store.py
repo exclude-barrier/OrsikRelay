@@ -298,5 +298,26 @@ class StorePersistenceTest(unittest.TestCase):
         s.close()
 
 
+class StoreHardeningTest(unittest.TestCase):
+    def test_journal_is_hardened_when_present(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "state.db")
+            store = store_mod.BridgeStore(path)
+            store.close()
+            journal = path + "-journal"
+            with open(journal, "wb") as fh:
+                fh.write(b"")
+            os.chmod(journal, 0o644)
+            store_mod._harden_file(path)
+            self.assertEqual(os.stat(journal).st_mode & 0o777, 0o600)
+
+    def test_failed_chmod_refuses_to_open_the_store(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "state.db")
+            with mock.patch.object(store_mod.os, "chmod", side_effect=OSError("denied")):
+                with self.assertRaises(store_mod.StoreUnavailable):
+                    store_mod.BridgeStore(path)
+
+
 if __name__ == "__main__":
     unittest.main()

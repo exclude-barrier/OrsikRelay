@@ -12,6 +12,8 @@ device token in plaintext after minting.
 
 from __future__ import annotations
 
+import json
+
 import hashlib
 import secrets
 import time
@@ -46,7 +48,6 @@ PROXIED_ROUTES: tuple[tuple[str, str], ...] = (
     ("GET", "/api/sessions/{session_id}/messages"),
     ("POST", "/api/sessions/{session_id}/chat/stream"),
     ("GET", "/v1/runs/{run_id}"),
-    ("GET", "/v1/runs/{run_id}/events"),
     ("POST", "/v1/runs/{run_id}/approval"),
     ("POST", "/v1/runs/{run_id}/stop"),
     ("POST", "/v1/runs/{run_id}/steer"),
@@ -375,7 +376,6 @@ def build_capabilities() -> dict:
             "session_messages": {"method": "GET", "path": "/api/sessions/{session_id}/messages"},
             "session_chat_stream": {"method": "POST", "path": "/api/sessions/{session_id}/chat/stream"},
             "run_status": {"method": "GET", "path": "/v1/runs/{run_id}"},
-            "run_events": {"method": "GET", "path": "/v1/runs/{run_id}/events"},
             "run_approval": {"method": "POST", "path": "/v1/runs/{run_id}/approval"},
             "run_stop": {"method": "POST", "path": "/v1/runs/{run_id}/stop"},
             "run_steer": {"method": "POST", "path": "/v1/runs/{run_id}/steer"},
@@ -396,3 +396,51 @@ def build_credential(record: DeviceRecord, token: str, issued_at: float) -> dict
         "permissions": list(record.permissions),
         "issued_at": issued_at,
     }
+
+
+_HISTORY_IMAGE_PART_TYPES = frozenset({"image", "image_url", "input_image"})
+# Never read by the app: model scratch text and the raw tool-call arguments.
+_HISTORY_UNUSED_FIELDS = ("tool_calls", "reasoning", "reasoning_content")
+
+
+def strip_history_images(body: bytes) -> bytes:
+    """Slim a ``GET /api/sessions/{id}/messages`` page to what the app reads.
+
+    - Inline image data is dropped: Hermes keeps a turn with an image as its
+      multimodal part list, base64 included, so a page with a few images
+      would exceed every client bound. The image parts stay (without data)
+      so the app can count them.
+    - Tool messages lose their ``content`` (tool output, commands, paths);
+      the app renders only the tool name for them.
+    - ``tool_calls`` and reasoning fields are removed.
+
+    A body that is not the expected JSON shape is returned unchanged.
+    """
+    try:
+        page = json.loads(body)
+    except ValueError:
+        return body
+    data = page.get("data") if isinstance(page, dict) else None
+    if not isinstance(data, list):
+        return body
+    changed = False
+    for message in data:
+        if not isinstance(message, dict):
+            continue
+        for key in _HISTORY_UNUSED_FIELDS:
+            if key in message:
+                del message[key]
+                changed = True
+        if message.get("role") == "tool" and message.get("content"):
+            message["content"] = ""
+            changed = True
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for index, part in enumerate(content):
+            if isinstance(part, dict) and part.get("type") in _HISTORY_IMAGE_PART_TYPES:
+                content[index] = {"type": part["type"]}
+                changed = True
+    if not changed:
+        return body
+    return json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")

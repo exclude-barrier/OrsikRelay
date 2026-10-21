@@ -310,6 +310,29 @@ the mobile-v1 opt-in. A terminal completion is `assistant.completed` →
 `run.completed` → `done` or `error` → `done` (the server sets the status to
 `failed`).
 
+### 8.1.1 Events of the session chat stream (checked 2026-10-20)
+
+Checked read-only against the official core (`f86276d2`,
+`gateway/platforms/api_server.py`, session chat stream):
+
+- every frame carries `session_id`, `run_id`, `seq` and `ts` (`_SessionEventQueue.payload`);
+- reasoning is **not** sent as `reasoning.*` but as `tool.progress` with
+  `tool_name: "_thinking"` and the text in `delta`; the app shows only "thinking"
+  and drops the text, the bridge drops `delta`;
+- Codex-style models send `assistant.commentary` (`text`, `already_streamed`) inside the
+  message window; the app accepts and drops it, the bridge drops `text`;
+- `run.completed` / `run.failed` / `run.cancelled` carry the whole turn transcript in
+  `messages` plus `usage`/`runtime`. The app reads only `pending_steer`; the bridge drops
+  the rest, because the transcript alone can exceed the 1 MiB relay bound;
+- `assistant.completed` carries the whole final answer in `content` on one line, so the
+  app's SSE line and frame bound equals the bridge relay bound (1 MiB).
+
+History (`GET /api/sessions/{id}/messages`): a turn with an image is stored and
+returned as its multimodal part list (`text` / `image_url` parts, see
+`agent/session_persistence.py`), not as a string. The app joins the text parts and
+counts the image parts; the bridge removes the inline image data, the `content` of
+tool messages, `tool_calls` and the reasoning fields.
+
 ### 8.2 Re-attach (existing)
 
 `GET /api/sessions/{session_id}/runs/{run_id}/stream?after_seq=N`:

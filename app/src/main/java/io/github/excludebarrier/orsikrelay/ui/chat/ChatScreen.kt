@@ -70,6 +70,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1770,16 +1771,38 @@ private fun MessageRow(message: TimelineRow) {
                             )
                             .padding(horizontal = 14.dp, vertical = 12.dp)
                     ) {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (isUser) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                            modifier = Modifier.testTag("chatMessageText:${message.key}")
-                        )
+                        Column {
+                            if (message.imageCount > 0) {
+                                Text(
+                                    text = pluralStringResource(
+                                        R.plurals.chat_message_images,
+                                        message.imageCount,
+                                        message.imageCount
+                                    ),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isUser) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier
+                                        .padding(bottom = if (message.content.isEmpty()) 0.dp else 4.dp)
+                                        .testTag("chatMessageImages:${message.key}")
+                                )
+                            }
+                            if (message.content.isNotEmpty() || message.imageCount == 0) {
+                                Text(
+                                    text = message.content,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (isUser) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                    modifier = Modifier.testTag("chatMessageText:${message.key}")
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -8,12 +8,9 @@ import io.github.excludebarrier.orsikrelay.domain.device.DevicePairResult
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairTransport
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileBaseUrlValidator
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -21,7 +18,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.ResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -68,7 +64,7 @@ import org.json.JSONObject
  *   server details never appear in a result or log.
  */
 class HermesDevicePairClient(
-    okHttpClient: OkHttpClient = defaultDevicePairHttpClient()
+    okHttpClient: OkHttpClient = HermesHttp.defaultClient()
 ) : DevicePairTransport {
 
     private val client = okHttpClient.newBuilder()
@@ -105,8 +101,14 @@ class HermesDevicePairClient(
             client.newCall(request).execute().use { response ->
                 when (response.code) {
                     CREATED_CODE -> {
-                        requireJsonContentType(response)
-                        parsePairedAnswer(readBoundedUtf8(response.body))
+                        requireJsonContentType(response) {
+                            throw PairFailure(DevicePairError.IncompatibleApi)
+                        }
+                        parsePairedAnswer(
+                            readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                                throw PairFailure(DevicePairError.IncompatibleApi)
+                            }
+                        )
                     }
                     BAD_REQUEST_CODE -> mapClosedErrorCode(response, BAD_REQUEST_CODE)
                     CONFLICT_CODE -> mapClosedErrorCode(response, CONFLICT_CODE)
@@ -140,8 +142,11 @@ class HermesDevicePairClient(
      * [DevicePairError.IncompatibleApi] — never a silent adoption.
      */
     private fun mapClosedErrorCode(response: Response, status: Int): DevicePairResult {
-        val code = extractErrorCode(readBoundedUtf8(response.body))
-            ?: return DevicePairResult.Failure(DevicePairError.IncompatibleApi)
+        val code = extractErrorCode(
+            readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                throw PairFailure(DevicePairError.IncompatibleApi)
+            }
+        ) ?: return DevicePairResult.Failure(DevicePairError.IncompatibleApi)
         val error = when (status) {
             BAD_REQUEST_CODE -> when (code) {
                 PAIRING_CODE_INVALID -> DevicePairError.PairingCodeInvalid
@@ -163,26 +168,6 @@ class HermesDevicePairClient(
             else -> DevicePairError.Http
         }
         return DevicePairResult.Failure(error)
-    }
-
-    private fun extractErrorCode(text: String): String? {
-        val root = try {
-            JSONObject(text)
-        } catch (_: Exception) {
-            return null
-        }
-        val error = root.opt(ERROR_FIELD) as? JSONObject ?: return null
-        return error.opt(ERROR_CODE_FIELD) as? String
-    }
-
-    /** Only HTTP 201 continues; the media type must be JSON. */
-    private fun requireJsonContentType(response: Response) {
-        val type = response.header(CONTENT_TYPE_HEADER)
-            ?.substringBefore(';')
-            ?.trim()
-        if (!JSON_MEDIA_TYPE_VALUE.equals(type, ignoreCase = true)) {
-            throw PairFailure(DevicePairError.IncompatibleApi)
-        }
     }
 
     /**
@@ -257,38 +242,6 @@ class HermesDevicePairClient(
         )
     }
 
-    private fun readBoundedUtf8(body: ResponseBody?): String {
-        if (body == null || body.contentLength() > MAX_RESPONSE_BYTES) {
-            throw PairFailure(DevicePairError.IncompatibleApi)
-        }
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER_SIZE)
-        body.byteStream().use { input ->
-            var total = 0
-            while (true) {
-                val remaining = MAX_RESPONSE_BYTES + 1 - total
-                if (remaining <= 0) {
-                    throw PairFailure(DevicePairError.IncompatibleApi)
-                }
-                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                total += read
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw PairFailure(DevicePairError.IncompatibleApi)
-                }
-            }
-        }
-        val bytes = output.toByteArray()
-        val text = try {
-            decodeUtf8Strict(bytes)
-        } finally {
-            bytes.fill(0)
-            buffer.fill(0)
-        }
-        return text ?: throw PairFailure(DevicePairError.IncompatibleApi)
-    }
-
     private fun isUuid(value: String): Boolean = isStrictUuid(value)
 
     private class PairFailure(val reason: DevicePairError) : Exception()
@@ -300,13 +253,10 @@ class HermesDevicePairClient(
      */
     internal companion object {
         const val MAX_RESPONSE_BYTES = 512 * 1024
-        const val BUFFER_SIZE = 8 * 1024
         const val V1_SEGMENT = "v1"
         const val DEVICES_SEGMENT = "devices"
         const val PAIR_SEGMENT = "pair"
-        const val CONTENT_TYPE_HEADER = "Content-Type"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
-        const val JSON_MEDIA_TYPE_VALUE = "application/json"
         const val CODE_FIELD = "code"
         const val OBJECT_FIELD = "object"
         const val DEVICE_ID_FIELD = "device_id"
@@ -326,8 +276,6 @@ class HermesDevicePairClient(
             ISSUED_AT_FIELD
         )
         val EXPECTED_PERMISSIONS = setOf("approvals", "chat", "runs")
-        const val ERROR_FIELD = "error"
-        const val ERROR_CODE_FIELD = "code"
         const val PAIRING_CODE_INVALID = "pairing_code_invalid"
         const val INVALID_PAIR_REQUEST = "invalid_pair_request"
         const val DEVICE_LIMIT_EXCEEDED = "device_limit_exceeded"
@@ -339,15 +287,5 @@ class HermesDevicePairClient(
         const val CONFLICT_CODE = 409
         const val RATE_LIMITED_CODE = 429
         const val INTERNAL_ERROR_CODE = 500
-
-        fun defaultDevicePairHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
     }
 }

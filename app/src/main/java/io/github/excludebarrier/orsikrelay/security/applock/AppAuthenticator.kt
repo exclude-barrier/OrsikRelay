@@ -12,4 +12,12 @@ package io.github.excludebarrier.orsikrelay.security.applock
 interface AppAuthenticator {
     fun canAuthenticate(): Boolean
     fun authenticate(onResult: (Boolean) -> Unit)
+
+    /**
+     * `true` only when the device has no screen lock at all. Unlike a failed
+     * [canAuthenticate] (which also covers a busy or briefly unavailable
+     * sensor), this is the one state in which the app lock may switch itself
+     * off.
+     */
+    fun deviceLockMissing(): Boolean = !canAuthenticate()
 }

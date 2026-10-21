@@ -5,19 +5,15 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerError
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerTransport
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
-import okhttp3.ResponseBody
 import org.json.JSONObject
 
 /**
@@ -68,7 +64,7 @@ import org.json.JSONObject
  *   in a result or log.
  */
 class HermesRunSteerClient(
-    okHttpClient: OkHttpClient = defaultRunSteerHttpClient()
+    okHttpClient: OkHttpClient = HermesHttp.defaultClient()
 ) : RunSteerTransport {
 
     private val client = okHttpClient.newBuilder()
@@ -85,18 +81,12 @@ class HermesRunSteerClient(
     ): RunSteerResult {
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
             ?: return RunSteerResult.Failure(RunSteerError.InvalidInput)
-        if (!isSafeRunId(runId)) {
+        if (!isSafeOpaqueId(runId)) {
             return RunSteerResult.Failure(RunSteerError.InvalidInput)
         }
         val normalizedText = normalizeText(text)
             ?: return RunSteerResult.Failure(RunSteerError.InvalidInput)
-        val keyIsSafe = apiKey.useRaw { rawKey ->
-            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
-                rawKey.none { character ->
-                    character.isWhitespace() || character.isISOControl()
-                }
-        }
-        if (!keyIsSafe) {
+        if (!isSafeApiKey(apiKey)) {
             return RunSteerResult.Failure(RunSteerError.InvalidInput)
         }
 
@@ -126,8 +116,15 @@ class HermesRunSteerClient(
             client.newCall(request).execute().use { response ->
                 when (response.code) {
                     OK_CODE -> {
-                        requireJsonContentType(response)
-                        parseQueuedAnswer(readBoundedUtf8(response.body), runId)
+                        requireJsonContentType(response) {
+                            throw SteerFailure(RunSteerError.IncompatibleApi)
+                        }
+                        parseQueuedAnswer(
+                            readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                                throw SteerFailure(RunSteerError.IncompatibleApi)
+                            },
+                            runId
+                        )
                     }
                     401, 403 -> RunSteerResult.Failure(RunSteerError.InvalidCredentials)
                     NOT_FOUND_CODE -> RunSteerResult.Failure(RunSteerError.NotFound)
@@ -135,7 +132,11 @@ class HermesRunSteerClient(
                         // Only the documented conflict codes mean "not
                         // accepting"; any other 409 fails closed instead of
                         // being misreported as a benign outcome.
-                        val code = extractErrorCode(readBoundedUtf8(response.body))
+                        val code = extractErrorCode(
+                            readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                                throw SteerFailure(RunSteerError.IncompatibleApi)
+                            }
+                        )
                         if (code != null && code in NOT_ACCEPTING_CODES) {
                             RunSteerResult.NotAccepting(runId)
                         } else {
@@ -158,19 +159,6 @@ class HermesRunSteerClient(
             RunSteerResult.Failure(if (error.hasTlsFailure()) RunSteerError.Tls else RunSteerError.Network)
         } catch (_: Exception) {
             RunSteerResult.Failure(RunSteerError.IncompatibleApi)
-        }
-    }
-
-    /**
-     * Only a JSON media type is accepted (parameters such as a charset
-     * are allowed); anything else is a closed protocol violation.
-     */
-    private fun requireJsonContentType(response: Response) {
-        val type = response.header(CONTENT_TYPE_HEADER)
-            ?.substringBefore(';')
-            ?.trim()
-        if (!JSON_MEDIA_TYPE_VALUE.equals(type, ignoreCase = true)) {
-            throw SteerFailure(RunSteerError.IncompatibleApi)
         }
     }
 
@@ -201,44 +189,6 @@ class HermesRunSteerClient(
         return RunSteerResult.Queued(runId)
     }
 
-    private fun readBoundedUtf8(body: ResponseBody?): String {
-        if (body == null || body.contentLength() > MAX_RESPONSE_BYTES) {
-            throw SteerFailure(RunSteerError.IncompatibleApi)
-        }
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER_SIZE)
-        body.byteStream().use { input ->
-            var total = 0
-            while (true) {
-                val remaining = MAX_RESPONSE_BYTES + 1 - total
-                if (remaining <= 0) {
-                    throw SteerFailure(RunSteerError.IncompatibleApi)
-                }
-                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                total += read
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw SteerFailure(RunSteerError.IncompatibleApi)
-                }
-            }
-        }
-        val bytes = output.toByteArray()
-        val text = try {
-            decodeUtf8Strict(bytes)
-        } finally {
-            bytes.fill(0)
-            buffer.fill(0)
-        }
-        return text ?: throw SteerFailure(RunSteerError.IncompatibleApi)
-    }
-
-    private fun isSafeRunId(runId: String): Boolean {
-        if (runId.isBlank()) return false
-        if (runId.length > MAX_RUN_ID_LENGTH) return false
-        return runId.none { it.isISOControl() }
-    }
-
     private fun normalizeText(text: String): String? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null
@@ -264,9 +214,6 @@ class HermesRunSteerClient(
      */
     internal companion object {
         const val MAX_RESPONSE_BYTES = 512 * 1024
-        const val MAX_API_KEY_CHARACTERS = 4096
-        const val MAX_RUN_ID_LENGTH = 256
-        const val BUFFER_SIZE = 8 * 1024
         const val V1_SEGMENT = "v1"
         const val RUNS_SEGMENT = "runs"
         const val STEER_SEGMENT = "steer"
@@ -275,7 +222,6 @@ class HermesRunSteerClient(
         const val CONTENT_TYPE_HEADER = "Content-Type"
         const val CONTENT_TYPE_HEADER_VALUE = "application/json"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
-        const val JSON_MEDIA_TYPE_VALUE = "application/json"
         const val OBJECT_FIELD = "object"
         const val RUN_ID_FIELD = "run_id"
         const val ACCEPTED_FIELD = "accepted"
@@ -288,15 +234,5 @@ class HermesRunSteerClient(
         // Documented 409 `error.code` values that mean "run not accepting steer".
         val NOT_ACCEPTING_CODES = setOf("run_not_accepting_steer", "steer_not_accepted")
         const val RATE_LIMITED_CODE = 429
-
-        fun defaultRunSteerHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
     }
 }

@@ -14,7 +14,9 @@ data class HermesChatMessage(
     val role: MessageRole,
     val content: String,
     val timestampSeconds: Long?,
-    val toolName: String?
+    val toolName: String?,
+    /** Images attached to the message; their data is never kept or shown. */
+    val imageCount: Int = 0
 )
 
 /** Closed set of message roles the UI can distinguish. */

@@ -4,23 +4,20 @@ import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureRe
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionProbe
 import io.github.excludebarrier.orsikrelay.domain.connection.HermesConnectionResult
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.ResponseBody
 import org.json.JSONException
 import org.json.JSONObject
 
 class HermesConnectionClient(
-    okHttpClient: OkHttpClient = defaultHttpClient()
+    okHttpClient: OkHttpClient = HermesHttp.defaultClient()
 ) : ConnectionProbe {
     private val client = okHttpClient.newBuilder()
         .followRedirects(false)
@@ -29,13 +26,7 @@ class HermesConnectionClient(
         .build()
 
     override fun probe(draft: ProfileDraft): HermesConnectionResult {
-        val apiKeyIsSafe = draft.apiKey.useRaw { rawKey ->
-            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
-                rawKey.none { character ->
-                    character.isWhitespace() || character.isISOControl()
-                }
-        }
-        if (!apiKeyIsSafe) {
+        if (!isSafeApiKey(draft.apiKey)) {
             return failure(ConnectionFailureReason.INVALID_INPUT)
         }
         val baseUrl = parseSecureBaseUrl(draft.baseUrl)
@@ -57,8 +48,6 @@ class HermesConnectionClient(
             val negotiated = parseCapabilities(capabilities)
             HermesConnectionResult.Success(
                 version = version,
-                sessionsSupported = true,
-                sessionStreamingSupported = true,
                 sessionChatInteractiveApprovals = negotiated.sessionChatInteractiveApprovals,
                 deviceCredentialsSupported = negotiated.deviceCredentials
             )
@@ -104,7 +93,9 @@ class HermesConnectionClient(
         }
         return client.newCall(request).execute().use { response ->
             requireSuccessful(response)
-            val text = readBoundedUtf8(response.body)
+            val text = readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
+            }
             try {
                 JSONObject(text)
             } catch (_: JSONException) {
@@ -120,38 +111,6 @@ class HermesConnectionClient(
             429 -> throw ProbeFailure(ConnectionFailureReason.RATE_LIMITED)
             else -> throw ProbeFailure(ConnectionFailureReason.HTTP)
         }
-    }
-
-    private fun readBoundedUtf8(body: ResponseBody?): String {
-        if (body == null || body.contentLength() > MAX_RESPONSE_BYTES) {
-            throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
-        }
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER_SIZE)
-        body.byteStream().use { input ->
-            var total = 0
-            while (true) {
-                val remaining = MAX_RESPONSE_BYTES + 1 - total
-                if (remaining <= 0) {
-                    throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
-                }
-                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                total += read
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
-                }
-            }
-        }
-        val bytes = output.toByteArray()
-        val text = try {
-            decodeUtf8Strict(bytes)
-        } finally {
-            bytes.fill(0)
-            buffer.fill(0)
-        }
-        return text ?: throw ProbeFailure(ConnectionFailureReason.INCOMPATIBLE_API)
     }
 
     private fun parseHealth(json: JSONObject): String {
@@ -321,8 +280,6 @@ class HermesConnectionClient(
 
     private companion object {
         const val MAX_RESPONSE_BYTES = 256 * 1024
-        const val MAX_API_KEY_CHARACTERS = 4096
-        const val BUFFER_SIZE = 8 * 1024
         const val HTTPS_SCHEME = "https"
         const val HEALTH_SEGMENT = "health"
         const val V1_SEGMENT = "v1"
@@ -403,15 +360,5 @@ class HermesConnectionClient(
         const val RUN_APPROVAL_PATH = "/v1/runs/{run_id}/approval"
         const val DEVICE_PAIR_PATH = "/v1/devices/pair"
         const val DEVICE_SELF_REVOKE_PATH = "/v1/devices/self/revoke"
-
-        fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
     }
 }

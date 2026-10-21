@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.platform.notification
 
+import java.util.concurrent.CopyOnWriteArrayList
+
 /**
  * Foreground state of the single-activity app. It tracks
  * the started-activity count: >0 means the app is in the foreground (visible),
@@ -16,11 +18,19 @@ object AppForegroundTracker {
     @Volatile
     private var startedActivities = 0
 
+    private val foregroundListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    /** [listener] runs on the main thread each time the app becomes visible. */
+    fun addForegroundListener(listener: () -> Unit) {
+        foregroundListeners += listener
+    }
+
     val isForeground: Boolean
         get() = startedActivities > 0
 
     fun activityStarted() {
         startedActivities += 1
+        if (startedActivities == 1) foregroundListeners.forEach { it() }
     }
 
     fun activityStopped() {

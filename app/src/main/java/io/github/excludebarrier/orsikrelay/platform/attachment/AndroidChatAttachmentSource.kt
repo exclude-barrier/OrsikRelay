@@ -31,8 +31,9 @@ import kotlinx.coroutines.withContext
  *   stalled stream) yields [ChatAttachmentReadResult.Unreadable], never an
  *   exception and never provider text; [readInlineDataUrl] maps both failure
  *   outcomes onto its `null` for callers that cannot act on the difference;
- * - the decoded thumbnail is bounded by [THUMBNAIL_MAX_PIXELS] so a malformed
- *   or huge image cannot exhaust memory.
+ * - the decoded thumbnail is bounded by
+ *   [ChatAttachmentThumbnails.THUMBNAIL_MAX_PIXELS] so a malformed or huge
+ *   image cannot exhaust memory.
  */
 class AndroidChatAttachmentSource(context: Context) : ChatAttachmentSource {
 
@@ -104,10 +105,6 @@ class AndroidChatAttachmentSource(context: Context) : ChatAttachmentSource {
             ChatAttachmentReadResult.Unreadable
         }
     }
-
-    private companion object {
-        const val THUMBNAIL_MAX_PIXELS = 256
-    }
 }
 
 /**
@@ -119,7 +116,14 @@ class AndroidChatAttachmentSource(context: Context) : ChatAttachmentSource {
  */
 object ChatAttachmentThumbnails {
 
-    fun decode(context: Context, contentUri: String, maxPixels: Int = 256): Bitmap? {
+    /** Bound for the longer edge of a decoded attachment thumbnail. */
+    const val THUMBNAIL_MAX_PIXELS = 256
+
+    fun decode(
+        context: Context,
+        contentUri: String,
+        maxPixels: Int = THUMBNAIL_MAX_PIXELS
+    ): Bitmap? {
         val resolver = context.applicationContext.contentResolver
         val uri = runCatching { Uri.parse(contentUri) }.getOrNull() ?: return null
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return null
@@ -138,7 +142,7 @@ object ChatAttachmentThumbnails {
         }
     }
 
-    private fun sampleSizeFor(width: Int, height: Int, maxPixels: Int): Int {
+    internal fun sampleSizeFor(width: Int, height: Int, maxPixels: Int): Int {
         var sample = 1
         var longest = maxOf(width, height)
         while (longest / 2 >= maxPixels) {

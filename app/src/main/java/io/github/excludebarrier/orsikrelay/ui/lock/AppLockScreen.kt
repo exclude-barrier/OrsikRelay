@@ -48,7 +48,9 @@ fun AppLockGate(
         // screen lock requires the current PIN, and a phone without one is
         // open anyway. So the app lock turns itself off, with a notice.
         val deviceLockMissing = remember(controller.locked, appAuthenticator) {
-            appAuthenticator != null && !runCatching { appAuthenticator.canAuthenticate() }.getOrDefault(false)
+            // Only a missing screen lock counts; a transient sensor error keeps
+            // the lock screen, whose unlock button can simply try again.
+            appAuthenticator != null && runCatching { appAuthenticator.deviceLockMissing() }.getOrDefault(false)
         }
         if (deviceLockMissing) {
             AppLockDeviceLockMissingScreen(onContinue = { controller.setEnabled(false) })

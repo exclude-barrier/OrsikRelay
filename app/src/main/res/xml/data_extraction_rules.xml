@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nothing leaves the device through a backup or a device-to-device
+     transfer: server profiles, drafts and settings stay on this phone, and
+     the Keystore-bound credential could not be decrypted elsewhere anyway.
+     android:allowBackup="false" alone does not stop device-to-device
+     transfers on every Android 12+ device
+     (https://developer.android.com/identity/data/autobackup). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="device_root" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="device_root" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>

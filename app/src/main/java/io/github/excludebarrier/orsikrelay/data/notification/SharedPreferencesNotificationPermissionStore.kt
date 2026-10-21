@@ -23,11 +23,11 @@ class SharedPreferencesNotificationPermissionStore(
         get() = preferences.getBoolean(PREFERENCES_KEY, false)
 
     override fun markRequested() {
-        // Durable write: the flag must survive a process death right after the
-        // request, otherwise the app would ask for the permission again. The
-        // result is intentionally not surfaced; this is best-effort bookkeeping
-        // and must never crash the caller.
-        preferences.edit().putBoolean(PREFERENCES_KEY, true).commit()
+        // Best-effort bookkeeping: never block the caller (the launcher
+        // callback runs on the main thread) and never surface a failure.
+        // apply() keeps the in-memory value immediately while the disk write
+        // happens asynchronously.
+        preferences.edit().putBoolean(PREFERENCES_KEY, true).apply()
     }
 
     companion object {

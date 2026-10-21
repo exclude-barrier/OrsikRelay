@@ -7,19 +7,16 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageFetcher
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.ResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -40,7 +37,7 @@ import org.json.JSONObject
  *   result, error or log.
  */
 class HermesSessionClient(
-    okHttpClient: OkHttpClient = defaultSessionHttpClient()
+    okHttpClient: OkHttpClient = HermesHttp.defaultClient()
 ) : SessionPageFetcher {
 
     private val client = okHttpClient.newBuilder()
@@ -58,13 +55,7 @@ class HermesSessionClient(
         if (limit !in LIMIT_RANGE || offset < 0) {
             return SessionListResult.Failure(SessionListError.InvalidInput)
         }
-        val keyIsSafe = apiKey.useRaw { rawKey ->
-            rawKey.length in 1..MAX_API_KEY_CHARACTERS &&
-                rawKey.none { character ->
-                    character.isWhitespace() || character.isISOControl()
-                }
-        }
-        if (!keyIsSafe) {
+        if (!isSafeApiKey(apiKey)) {
             return SessionListResult.Failure(SessionListError.InvalidInput)
         }
         val base = ProfileBaseUrlValidator.validate(baseUrl).getOrNull()
@@ -88,7 +79,11 @@ class HermesSessionClient(
         return try {
             val page = client.newCall(request).execute().use { response ->
                 requireSuccessful(response)
-                parsePage(readBoundedUtf8(response.body))
+                parsePage(
+                    readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) {
+                        throw PageFailure(SessionListError.IncompatibleApi)
+                    }
+                )
             }
             SessionListResult.Success(page)
         } catch (error: PageFailure) {
@@ -113,38 +108,6 @@ class HermesSessionClient(
             429 -> throw PageFailure(SessionListError.RateLimited)
             else -> throw PageFailure(SessionListError.Http)
         }
-    }
-
-    private fun readBoundedUtf8(body: ResponseBody?): String {
-        if (body == null || body.contentLength() > MAX_RESPONSE_BYTES) {
-            throw PageFailure(SessionListError.IncompatibleApi)
-        }
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER_SIZE)
-        body.byteStream().use { input ->
-            var total = 0
-            while (true) {
-                val remaining = MAX_RESPONSE_BYTES + 1 - total
-                if (remaining <= 0) {
-                    throw PageFailure(SessionListError.IncompatibleApi)
-                }
-                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                total += read
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw PageFailure(SessionListError.IncompatibleApi)
-                }
-            }
-        }
-        val bytes = output.toByteArray()
-        val text = try {
-            decodeUtf8Strict(bytes)
-        } finally {
-            bytes.fill(0)
-            buffer.fill(0)
-        }
-        return text ?: throw PageFailure(SessionListError.IncompatibleApi)
     }
 
     /**
@@ -274,8 +237,6 @@ class HermesSessionClient(
     private companion object {
         val LIMIT_RANGE = 1..50
         const val MAX_RESPONSE_BYTES = 512 * 1024
-        const val MAX_API_KEY_CHARACTERS = 4096
-        const val BUFFER_SIZE = 8 * 1024
         const val API_SEGMENT = "api"
         const val SESSIONS_SEGMENT = "sessions"
         const val AUTHORIZATION_HEADER = "Authorization"
@@ -294,15 +255,5 @@ class HermesSessionClient(
         const val MESSAGE_COUNT_FIELD = "message_count"
         const val PINNED_FIELD = "pinned"
         val LONG_MAX_DECIMAL: BigDecimal = BigDecimal.valueOf(Long.MAX_VALUE)
-
-        fun defaultSessionHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
     }
 }

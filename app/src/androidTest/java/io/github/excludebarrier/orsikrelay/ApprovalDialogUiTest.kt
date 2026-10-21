@@ -30,6 +30,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalError
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalResult
 import io.github.excludebarrier.orsikrelay.ui.chat.ApprovalDialog
+import io.github.excludebarrier.orsikrelay.ui.chat.ObscuredTouchGuard
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.atomic.AtomicInteger
@@ -68,6 +69,19 @@ class ApprovalDialogUiTest {
                 composeRule.onAllNodesWithText(forbidden).fetchSemanticsNodes().isEmpty()
             )
         }
+    }
+
+    @Test
+    fun obscuredTouchGuardFiltersTouchesOnItsWindow() {
+        var dialogView: android.view.View? = null
+        composeRule.setContent {
+            androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+                ObscuredTouchGuard()
+                dialogView = androidx.compose.ui.platform.LocalView.current
+            }
+        }
+        composeRule.waitForIdle()
+        assertTrue(checkNotNull(dialogView).filterTouchesWhenObscured)
     }
 
     // captureToImage() of a dialog window needs API 28+; older devices skip it.

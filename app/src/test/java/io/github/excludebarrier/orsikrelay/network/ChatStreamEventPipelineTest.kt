@@ -223,6 +223,48 @@ class ChatStreamEventPipelineTest {
     }
 
     @Test
+    fun hermesThinkingProgressBecomesReasoningAndCommentaryIsIgnored() {
+        feedRunStarted()
+        pipeline.process(messageStartedFrame(2, MSG_ID))
+
+        // Hermes reports reasoning as tool.progress of the pseudo tool
+        // `_thinking`; the text itself never crosses the boundary.
+        val thinking = pipeline.process(
+            ParsedSseFrame(
+                "tool.progress",
+                baseFrame(3).put("tool_name", "_thinking").put("delta", "secret-thought").toString()
+            )
+        )
+        assertEquals(listOf<ChatTurnEvent>(ChatTurnEvent.Reasoning(active = true)), thinking)
+        assertFalse(thinking.toString().contains("secret-thought"))
+
+        // Mid-turn commentary of Codex-style models is accepted and dropped.
+        val commentary = pipeline.process(
+            ParsedSseFrame(
+                "assistant.commentary",
+                baseFrame(4).put("text", "secret-commentary").put("already_streamed", false).toString()
+            )
+        )
+        assertTrue(commentary.isEmpty())
+
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.AssistantCompleted("Hallo")),
+            pipeline.process(completedFrame(5, MSG_ID, "Hallo"))
+        )
+    }
+
+    @Test
+    fun commentaryOutsideTheMessageWindowIsRejected() {
+        val fresh = ChatStreamEventPipeline(SESSION_ID)
+        fresh.process(frame("run.started", 1))
+        assertProtocolViolation(
+            fresh,
+            ParsedSseFrame("assistant.commentary", baseFrame(2).put("text", "x").toString()),
+            "assistant.commentary"
+        )
+    }
+
+    @Test
     fun errorEventProducesOnlyClosedGenericFailure() {
         feedRunStarted()
         pipeline.process(messageStartedFrame(2, MSG_ID))
