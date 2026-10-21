@@ -129,6 +129,8 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.navigation.compose)
     implementation(libs.androidx.biometric)
+    // MainActivity is a FragmentActivity (BiometricPrompt); see the catalog.
+    implementation(libs.androidx.fragment)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     // Markdown rendering for assistant messages. Pure Compose, no WebView.
