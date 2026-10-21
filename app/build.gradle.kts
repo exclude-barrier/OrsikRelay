@@ -150,4 +150,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    // Compose UI tests idle through Espresso; 3.5.0 (pulled in by
+    // ui-test-junit4) fails on API 37. espresso-intents stubs the system
+    // photo picker's answer in PhotoPickerLaunchUiTest.
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.espresso.intents)
 }
