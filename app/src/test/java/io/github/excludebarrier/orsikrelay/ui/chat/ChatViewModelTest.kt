@@ -1039,6 +1039,23 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun stopDuringReconnectingStartsExactlyOneStopRequestAndNoNewStream() =
+        withModel { model, chat, stop, _, _ ->
+            model.onDraftChange("hi")
+            model.send()
+            chat.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.StreamReconnecting)
+            testScheduler.advanceUntilIdle()
+            assertTrue(model.state.value.reconnecting)
+
+            model.stop()
+            testScheduler.advanceUntilIdle()
+
+            assertEquals("exactly one stop request", 1, stop.calls.get())
+            assertEquals("no new stream/POST while re-attaching", 1, chat.calls.get())
+            assertTrue("an accepted stop leaves the re-attach running", model.state.value.turnActive)
+        }
+
+    @Test
     fun stopFailureLeavesOneDeliberateRetry() = withModel { model, chat, stop, _, _ ->
         stop.result = RunStopResult.Failure(RunStopError.Network)
         model.onDraftChange("hi")
