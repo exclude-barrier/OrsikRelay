@@ -324,5 +324,8 @@ repeated picks, recreation. 2026-10-21 on the build host:
   2 skipped, 0 failures).
 
 Not verified here: the API 37 emulator image did not run stably on the build host
-(SurfaceFlinger aborts with both `swiftshader_indirect` and `guest` GPU modes), so the
-API 37 result comes from the CI job `picker-api37` and a real Android 17 device.
+(SurfaceFlinger aborts with both `swiftshader_indirect` and `guest` GPU modes), and it
+also timed out while booting on hosted CI runners. The smoke test therefore runs outside
+the pull request checks, in the nightly or manually started workflow
+`.github/workflows/android-api37.yml`; the API 37 result comes from that workflow and a
+real Android 17 device.

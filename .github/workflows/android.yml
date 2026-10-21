@@ -1,7 +1,8 @@
 name: Android CI
 
 # Reproducible gates for Orsik Relay: unit tests, lint, builds, instrumented
-# tests and a release build run on every push and pull request to main.
+# tests and a release build run on every push and pull request to main. The
+# API 37 photo picker smoke test lives in android-api37.yml (nightly, manual).
 # The `release` job signs with a throwaway key generated on the runner: that
 # signature is NOT distributable and only proves the pipeline. No secret is
 # stored in GitHub and no artifact is published outside the workflow run.
@@ -143,68 +144,6 @@ jobs:
           name: connected-reports
           path: |
             app/build/reports/**
-            app/build/outputs/androidTest-results/**
-          if-no-files-found: ignore
-
-  picker-api37:
-    name: Photo picker smoke test (API 37)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    # Issue #51 was reported on Android 17. Not yet a required check: the
-    # API 37 emulator image has not proven stable on hosted runners, so a
-    # failure here is reported but does not fail the workflow.
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0'
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
-            /usr/local/lib/android/sdk/ndk
-          df -h /home/runner
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Photo picker test on an API 37 emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          # The SDK names this platform "android-37.0".
-          api-level: '37.0'
-          target: google_apis
-          arch: x86_64
-          disk-size: 6144
-          emulator-boot-timeout: 900
-          disable-animations: true
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.excludebarrier.orsikrelay.PhotoPickerLaunchUiTest
-
-      - name: Upload picker test reports
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: picker-api37-reports
-          path: |
-            app/build/reports/androidTests/**
             app/build/outputs/androidTest-results/**
           if-no-files-found: ignore
 
