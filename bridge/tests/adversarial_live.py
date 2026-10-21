@@ -58,6 +58,13 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _opener = urllib.request.build_opener(_NoRedirect())
 
 
+def _tls_context() -> ssl.SSLContext:
+    """Default verification, TLS 1.2 or newer (only used for an https BRIDGE_URL)."""
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 def check(name: str, cond: bool, detail: str = "") -> None:
     _results.append((name, bool(cond), detail))
     print(("PASS" if cond else "FAIL"), name, detail)
@@ -157,7 +164,7 @@ def _hc_request(method: str, path: str, header_pairs: list[tuple[str, str]],
         if parts.scheme == "https":
             conn = http.client.HTTPSConnection(
                 host, parts.port or 443, timeout=TIMEOUT,
-                context=ssl.create_default_context())
+                context=_tls_context())
         else:
             conn = http.client.HTTPConnection(host, parts.port or 80, timeout=TIMEOUT)
         skip_host = any(name.lower() == "host" for name, _ in header_pairs)
@@ -193,7 +200,7 @@ def _raw_request(payload: bytes, label: str):
         return 0, b"", {}
     try:
         if parts.scheme == "https":
-            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+            sock = _tls_context().wrap_socket(sock, server_hostname=host)
         try:
             sock.sendall(payload)
         except OSError:
