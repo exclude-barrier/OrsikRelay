@@ -35,6 +35,8 @@ class SettingsNavigationUiTest {
     @Test
     fun settingsEntryOpensSettingsAndBackReturnsToSessions() {
         setHost()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.sessions_title))
         openOverflowMenu()
         composeRule.onNodeWithText(context.getString(R.string.settings_entry)).performClick()
@@ -67,6 +69,8 @@ class SettingsNavigationUiTest {
     @Test
     fun aboutEntryOpensAboutWithVersionAndLicenseAndBackReturnsToSessions() {
         setHost()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.sessions_title))
         openOverflowMenu()
         composeRule.onNodeWithText(context.getString(R.string.settings_about_section)).performClick()

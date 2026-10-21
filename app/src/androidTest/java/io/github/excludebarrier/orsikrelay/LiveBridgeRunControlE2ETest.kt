@@ -157,6 +157,8 @@ class LiveBridgeRunControlE2ETest {
         // Enter the session list through a real recreation (the reward of the
         // fresh pairing), then create and open a session via the real UI.
         composeRule.activityRule.scenario.recreate()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(SESSIONS_TITLE)
         composeRule.onNodeWithContentDescription(NEW_SESSION_FAB).performClick()
         waitForText(NEW_SESSION_TITLE)

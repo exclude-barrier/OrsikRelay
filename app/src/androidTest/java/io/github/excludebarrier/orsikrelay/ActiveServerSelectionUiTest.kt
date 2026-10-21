@@ -78,7 +78,10 @@ class ActiveServerSelectionUiTest {
         val source = sessionsSourceFor(profileIdsQueried)
         setHost(startup = StartupProfile.Ready(ALPHA_ID), source = source)
 
-        // Active server is Alpha at startup: its sessions are shown.
+        // Active server is Alpha at startup: Home is the start page and its
+        // sessions are shown in the Agents tab.
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Alpha")
 
         // Open a chat under Alpha so a Chat destination exists on the stack.
@@ -101,9 +104,11 @@ class ActiveServerSelectionUiTest {
         val queriesBeforeSwitch = profileIdsQueried.size
         composeRule.onNodeWithTag(rowTag(BETA_ID)).performClick()
 
-        // The safe state: back on Sessions, the chosen server's (Beta)
-        // sessions are shown, the previous server's (Alpha) sessions are gone,
-        // and no Chat destination survived the switch.
+        // The safe state: back on Home, no Chat destination survived the
+        // switch. The chosen server's (Beta) sessions are shown in the
+        // Agents tab, the previous server's (Alpha) sessions are gone.
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Beta")
         composeRule.onNodeWithText("Session Alpha").assertDoesNotExist()
         assertTrue(
@@ -134,6 +139,8 @@ class ActiveServerSelectionUiTest {
         val source = sessionsSourceFor(profileIdsQueried)
         setHost(startup = StartupProfile.Ready(ALPHA_ID), source = source)
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Alpha")
 
         // Open the management screen and return without selecting anything.

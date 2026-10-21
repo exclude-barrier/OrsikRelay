@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import android.content.Context
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -16,6 +17,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
+import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -119,7 +121,15 @@ class ActiveServerSelectionRecreationUiTest {
     }
 
     private fun assertSessionsRestored() {
-        // The restored server's sessions are displayed.
+        // A recreated startup lands on Home and its sessions live in the
+        // Agents tab; a recreation on the Agents tab restores that tab.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(HomeTags.SCREEN).fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText(SESSION_TITLE).fetchSemanticsNodes().isNotEmpty()
+        }
+        if (composeRule.onAllNodesWithTag(HomeTags.SCREEN).fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.openAgentsTab()
+        }
         waitForText(SESSION_TITLE)
         // ... and onboarding is never visible.
         assertTrue(

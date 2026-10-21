@@ -7,6 +7,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
+import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
@@ -35,6 +38,8 @@ class SessionStartupNavigationUiTest {
         }
         setHost(source, startup = StartupProfile.Ready(PROFILE_ID))
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session nach Neustart")
 
         assertEquals(PROFILE_ID, receivedProfile.get())
@@ -60,8 +65,12 @@ class SessionStartupNavigationUiTest {
                 listSuccess("Nicht sichtbar")
             }
         }
-        setHost(source, startup = StartupProfile.Unavailable)
+        // A metadata-only profile is still listed, so Home stays reachable;
+        // only the agent list behind it has no credential to load.
+        setHost(source, startup = StartupProfile.Unavailable, admin = incompleteProfileAdmin)
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.error_session_profile))
         composeRule.onNodeWithText(
             context.getString(R.string.error_session_profile)
@@ -69,16 +78,33 @@ class SessionStartupNavigationUiTest {
     }
 
 
-    private fun setHost(source: SessionPageSource, startup: StartupProfile) {
+    private fun setHost(
+        source: SessionPageSource,
+        startup: StartupProfile,
+        admin: ProfileAdmin? = null
+    ) {
         composeRule.setContent {
             HermesTheme {
                 HermesNavHost(
                     startDestination = AppScreen.Onboarding,
                     sessionPageSource = source,
+                    profileAdmin = admin,
                     startupProfileResolver = { startup }
                 )
             }
         }
+    }
+
+    private val incompleteProfileAdmin = object : ProfileAdmin {
+        override fun listProfiles(): List<ServerProfile> =
+            listOf(ServerProfile.create(PROFILE_ID, "Incomplete", "https://incomplete.local"))
+
+        override fun deleteProfile(profileId: String) = Unit
+
+        override fun selectActiveServer(profileId: String) = Unit
+
+        override fun credentialKind(profileId: String): ProfileCredentialKind =
+            ProfileCredentialKind.API_KEY
     }
 
     private fun waitForText(text: String) {

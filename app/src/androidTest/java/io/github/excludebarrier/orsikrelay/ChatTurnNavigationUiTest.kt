@@ -142,6 +142,8 @@ class ChatTurnNavigationUiTest {
             }
         }
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Turn-Session")
         composeRule.onNodeWithText("Turn-Session").performClick()
         waitForText("Fixture-Chatinhalt")
@@ -224,6 +226,8 @@ class ChatTurnNavigationUiTest {
             }
         }
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("SystemBack-Session")
         composeRule.onNodeWithText("SystemBack-Session").performClick()
         // We are now on the chat screen. The title appears before the (empty)
@@ -277,12 +281,13 @@ class ChatTurnNavigationUiTest {
      * A double back event on the chat screen (no active turn) — as from a
      * fast double-tap on the back button or a spurious input event — must NOT pop
      * the navigation stack empty. The first back returns to the session
-     * list; the second back must be a no-op. Without the guard the NavHost
-     * is left without a destination, renders an empty (white) screen whose
-     * BackHandler is gone, and the next back closes the whole task.
+     * list; the second back reaches the single Home root and must stop
+     * there. Without the guard the NavHost is left without a destination,
+     * renders an empty (white) screen whose BackHandler is gone, and the next
+     * back closes the whole task.
      */
     @Test
-    fun doubleBackWithoutActiveTurnKeepsSessionListVisible() {
+    fun doubleBackWithoutActiveTurnKeepsHomeVisible() {
         val turnSource = FakeTurnSource()
         val sessionId = "fixture/double-back-session"
         val sessions = SessionPageSource { _, _, _ ->
@@ -319,6 +324,8 @@ class ChatTurnNavigationUiTest {
             }
         }
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("DoubleBack-Session")
         composeRule.onNodeWithText("DoubleBack-Session").performClick()
         composeRule.onNodeWithTag(TAG_CHAT_TITLE).assertIsDisplayed()
@@ -329,9 +336,9 @@ class ChatTurnNavigationUiTest {
             composeRule.activity.onBackPressed()
         }
 
-        // The session list must still be visible (NOT an empty white
-        // screen): the second back must have been a no-op.
-        waitForText("DoubleBack-Session")
+        // The double back must stop at the single Home root (NOT an empty
+        // white screen) and must not finish the activity.
+        composeRule.waitForHome()
         assertTrue(
             "activity must not be finished after the double back",
             !composeRule.activity.isFinishing

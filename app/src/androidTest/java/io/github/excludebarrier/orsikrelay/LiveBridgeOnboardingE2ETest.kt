@@ -141,8 +141,10 @@ class LiveBridgeOnboardingE2ETest {
         composeRule.onNodeWithText(submitLabel()).assertIsDisplayed()
         composeRule.onNodeWithTag(TAG_SUBMIT).performClick()
 
-        // 3. Wait (bounded, no sleeps) for the new profile's sessions view,
-        // identified by its production title.
+        // 3. Wait (bounded, no sleeps) for Home and the new profile's
+        // sessions view in the Agents tab, identified by its production title.
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         composeRule.waitUntil(timeoutMillis = TIMEOUT_MILLIS) {
             composeRule
                 .onAllNodesWithText(sessionsTitle())

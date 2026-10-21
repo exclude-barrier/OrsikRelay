@@ -70,6 +70,8 @@ class AppLockUiTest {
         val authenticator = FakeAppAuthenticator(autoResult = true)
 
         setApp(controller, authenticator)
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(SESSION_TITLE)
 
         composeRule.onNodeWithTag("app_lock_screen").assertDoesNotExist()
@@ -98,6 +100,8 @@ class AppLockUiTest {
         composeRule.runOnIdle { assertEquals(2, authenticator.callCount) }
 
         composeRule.runOnUiThread { authenticator.complete(true) }
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(SESSION_TITLE)
         assertFalse(controller.locked)
     }

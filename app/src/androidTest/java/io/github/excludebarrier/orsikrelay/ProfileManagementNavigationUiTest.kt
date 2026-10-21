@@ -52,6 +52,8 @@ class ProfileManagementNavigationUiTest {
     fun profileButtonOpensTheProfileListWithStoredProfiles() {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.sessions_title))
         openProfilesFromOverflowMenu()
 
@@ -66,7 +68,7 @@ class ProfileManagementNavigationUiTest {
     }
 
     @Test
-    fun confirmedDeletionReturnsToSessionsWithoutAnyChatUnderTheDeletedProfile() {
+    fun confirmedDeletionReturnsToHomeWithoutAnyChatUnderTheDeletedProfile() {
         val profileIdsQueried = CopyOnWriteArrayList<String>()
         val sessions = SessionPageSource { profileId, _, _ ->
             if (profileId.isBlank()) {
@@ -92,6 +94,8 @@ class ProfileManagementNavigationUiTest {
         }
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID), source = sessions)
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Alpha")
         composeRule.onNodeWithText("Session Alpha").performClick()
         composeRule.onNodeWithTag(TAG_CHAT_TITLE).assertIsDisplayed()
@@ -108,6 +112,8 @@ class ProfileManagementNavigationUiTest {
         val queriesBeforeDeletion = profileIdsQueried.size
         composeRule.onNodeWithText(context.getString(R.string.profiles_delete_confirm)).performClick()
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.error_session_profile))
         // The safe state: no chat entry is alive any more.
         assertTrue(
@@ -128,6 +134,8 @@ class ProfileManagementNavigationUiTest {
     fun cancelKeepsTheProfileAndNoDeletionIsStarted() {
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID))
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.sessions_title))
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
@@ -160,6 +168,8 @@ class ProfileManagementNavigationUiTest {
         }
         setHost(startup = StartupProfile.Ready(PROFILE_A_ID), admin = failingAdmin)
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.sessions_title))
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))

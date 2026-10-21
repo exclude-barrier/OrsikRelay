@@ -137,8 +137,11 @@ class ActiveServerSelectionRestartUiTest {
         // persisted stores through the PRODUCTION resolver.
         setHost()
 
-        // The persisted selection wins: the chosen server's sessions are
-        // shown directly and onboarding never appears.
+        // The persisted selection wins: startup lands on Home and the
+        // chosen server's sessions are shown in the Agents tab; onboarding
+        // never appears.
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Fixture")
         assertTrue(
             composeRule.onAllNodesWithText(context.getString(R.string.onboarding_title))
@@ -200,6 +203,8 @@ class ActiveServerSelectionRestartUiTest {
 
         setHost()
 
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText(context.getString(R.string.error_session_profile))
         assertTrue(
             composeRule.onAllNodesWithText(context.getString(R.string.onboarding_title))
