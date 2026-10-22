@@ -1,5 +1,10 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WELCOME_SCREEN_TAG
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -46,14 +51,16 @@ class SessionStartupNavigationUiTest {
     }
 
     @Test
-    fun noStoredProfileKeepsOnboardingAsStart() {
+    fun noStoredProfileStartsOnWelcome() {
         setHost(
             source = SessionPageSource { _, _, _ -> listSuccess("Nicht sichtbar") },
             startup = StartupProfile.None
         )
 
-        waitForText(context.getString(R.string.onboarding_title))
-        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertIsDisplayed()
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(WELCOME_SCREEN_TAG).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithTag(WELCOME_SCREEN_TAG).assertIsDisplayed()
+        composeRule.onAllNodesWithText(context.getString(R.string.onboarding_title)).assertCountEquals(0)
+        composeRule.onAllNodesWithTag(HomeTags.SCREEN).assertCountEquals(0)
     }
 
     @Test

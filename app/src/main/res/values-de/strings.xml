@@ -332,4 +332,14 @@
     <string name="profiles_tile_monitoring">Monitoring</string>
     <string name="settings_group_general">Allgemein</string>
     <string name="settings_theme_label">Design</string>
+    <string name="welcome_title">Verbinde deinen Server</string>
+    <string name="welcome_text">Orsik Relay steuert Agenten auf deinem eigenen Server – über die Orsik-Bridge.</string>
+    <string name="welcome_step1_title">Bridge auf dem Server starten</string>
+    <string name="welcome_step1_text">Sie zeigt einen Pairing-Code und QR-Code an.</string>
+    <string name="welcome_step2_title">QR-Code scannen</string>
+    <string name="welcome_step2_text">Das Gerät wird gekoppelt. Zugangsdaten bleiben auf diesem Gerät.</string>
+    <string name="welcome_step3_title">Erste Aufgabe an Hermes geben</string>
+    <string name="welcome_step3_text">Weitere Agenten folgen später.</string>
+    <string name="welcome_scan">QR-Code scannen</string>
+    <string name="welcome_enter_code">Pairing-Code oder API-Key eingeben</string>
 </resources>

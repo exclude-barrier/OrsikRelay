@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onAllNodesWithTag
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WELCOME_SCREEN_TAG
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -79,11 +81,16 @@ class AddServerNavigationUiTest {
     }
 
     @Test
-    fun firstStartOnboardingShowsNoBack() {
+    fun firstStartShowsWelcomeAndItsFormReturnsToIt() {
         setHost(startup = StartupProfile.None, coordinator = null)
 
+        composeRule.onNodeWithTag(WELCOME_SCREEN_TAG).assertExists()
+        composeRule.openOnboardingFromWelcome()
         waitForText(context.getString(R.string.onboarding_title))
-        composeRule.onNodeWithTag("onboardingBack").assertDoesNotExist()
+        composeRule.onNodeWithTag("onboardingBack").performClick()
+
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(WELCOME_SCREEN_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("nothing may be saved on back", savedNames.isEmpty())
     }
 
     @Test
@@ -165,6 +172,7 @@ class AddServerNavigationUiTest {
         )
         setHost(startup = StartupProfile.None, coordinator = coordinator)
 
+        composeRule.openOnboardingFromWelcome()
         waitForText(context.getString(R.string.onboarding_title))
         composeRule.onNodeWithTag("onboardingModeApiKey").performClick()
         composeRule.onNodeWithTag("onboardingProfileName").performTextInput("Neu")

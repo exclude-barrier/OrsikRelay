@@ -61,6 +61,7 @@ import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.security.applock.AppLockHolder
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WelcomeScreen
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.AboutScreen
@@ -166,6 +167,9 @@ fun HermesNavHost(
     var resolvedStart by remember(startDestination) { mutableStateOf<AppScreen?>(null) }
     var activeProfileId by remember { mutableStateOf<String?>(null) }
     var pendingCreatedSessionId by remember { mutableStateOf<String?>(null) }
+    // Set by the Welcome screen: open the onboarding form with its QR
+    // scanner already showing. A plain UI hint; pairing itself is unchanged.
+    var onboardingOpensScanner by remember { mutableStateOf(false) }
     // The session list already knows the title of the tapped session. Keep it
     // here so the chat header can show it without a second list/history read;
     // a notification tap or a direct chat route starts with the generic
@@ -230,7 +234,8 @@ fun HermesNavHost(
             StartupProfile.Unavailable
         }
         when (startupProfile) {
-            StartupProfile.None -> resolvedStart = AppScreen.Onboarding
+            StartupProfile.None ->
+                resolvedStart = startScreenFor(startupProfile, pairingDeepLink = pairingBootstrap != null)
             is StartupProfile.Ready -> {
                 activeProfileId = startupProfile.profileId
                 resolvedStart = AppScreen.Home
@@ -399,7 +404,7 @@ fun HermesNavHost(
                         }
                     },
                     onNoServer = {
-                        navController.navigate(routeOf(AppScreen.Onboarding)) {
+                        navController.navigate(routeOf(AppScreen.Welcome)) {
                             popUpTo(navController.graph.id) { inclusive = true }
                             launchSingleTop = true
                         }
@@ -418,12 +423,25 @@ fun HermesNavHost(
                     testTag = ACTIVITY_PLACEHOLDER_TAG
                 )
             }
+            composable(routeOf(AppScreen.Welcome)) {
+                WelcomeScreen(
+                    onScan = {
+                        onboardingOpensScanner = true
+                        navController.navigate(routeOf(AppScreen.Onboarding)) { launchSingleTop = true }
+                    },
+                    onEnterCode = {
+                        onboardingOpensScanner = false
+                        navController.navigate(routeOf(AppScreen.Onboarding)) { launchSingleTop = true }
+                    }
+                )
+            }
             composable(routeOf(AppScreen.Onboarding)) {
                 OnboardingRoute(
                     pairingBootstrap = pairingBootstrap,
-                    // Only an onboarding opened FROM the server management
-                    // screen has a destination to return to. The first start
-                    // and the pairing deep link keep their header unchanged.
+                    startWithScanner = onboardingOpensScanner,
+                    // Only an onboarding opened from Welcome or the server
+                    // management screen has a destination to return to. The
+                    // pairing deep link keeps its header unchanged.
                     onBack = navController.previousBackStackEntry?.let {
                         { navController.popBackStack() }
                     },
@@ -644,6 +662,7 @@ fun HermesNavHost(
 internal const val ACTIVITY_PLACEHOLDER_TAG = "activity_placeholder"
 
 internal fun routeOf(screen: AppScreen): String = when (screen) {
+    AppScreen.Welcome -> "welcome"
     AppScreen.Onboarding -> "onboarding"
     AppScreen.Home -> "home"
     AppScreen.Server -> "server"

@@ -333,4 +333,14 @@
     <string name="profiles_tile_monitoring">Monitoring</string>
     <string name="settings_group_general">General</string>
     <string name="settings_theme_label">Design</string>
+    <string name="welcome_title">Connect your server</string>
+    <string name="welcome_text">Orsik Relay runs agents on your own server – through the Orsik bridge.</string>
+    <string name="welcome_step1_title">Start the bridge on the server</string>
+    <string name="welcome_step1_text">It shows a pairing code and a QR code.</string>
+    <string name="welcome_step2_title">Scan the QR code</string>
+    <string name="welcome_step2_text">The device gets paired. Credentials stay on this device.</string>
+    <string name="welcome_step3_title">Give Hermes a first task</string>
+    <string name="welcome_step3_text">More agents will follow later.</string>
+    <string name="welcome_scan">Scan QR code</string>
+    <string name="welcome_enter_code">Enter pairing code or API key</string>
 </resources>

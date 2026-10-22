@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WELCOME_ENTER_CODE_TAG
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -12,6 +13,16 @@ import io.github.excludebarrier.orsikrelay.ui.sessions.SESSIONS_HEADER_TAG
 /** Waits until the app shows Home (the start page after a resolved server). */
 fun ComposeTestRule.waitForHome(timeoutMillis: Long = 5_000) {
     waitUntil(timeoutMillis) { onAllNodesWithTag(HomeTags.SCREEN).fetchSemanticsNodes().isNotEmpty() }
+    waitForIdle()
+}
+
+/**
+ * Without a saved server the app starts on Welcome; this opens the
+ * onboarding form through "Pairing-Code oder API-Key eingeben".
+ */
+fun ComposeTestRule.openOnboardingFromWelcome(timeoutMillis: Long = 5_000) {
+    waitUntil(timeoutMillis) { onAllNodesWithTag(WELCOME_ENTER_CODE_TAG).fetchSemanticsNodes().isNotEmpty() }
+    onNodeWithTag(WELCOME_ENTER_CODE_TAG).performClick()
     waitForIdle()
 }
 

@@ -104,7 +104,10 @@ fun OnboardingScreen(
     // False on devices without a camera: the QR scan action is then hidden.
     cameraAvailable: Boolean = true,
     // Test seam for the QR scan source; null means the real camera scanner.
-    scanFrames: Flow<String>? = null
+    scanFrames: Flow<String>? = null,
+    // True when the user chose "QR-Code scannen" on Welcome: the scanner
+    // opens right away (pairing mode); closing it shows this form.
+    startWithScanner: Boolean = false
 ) {
     // Non-secret fields survive a rotation/recreation via the saved instance
     // state. The secrets (API key, one-time pairing code) deliberately stay in
@@ -120,7 +123,7 @@ fun OnboardingScreen(
     }
     var pairingCodeError by remember { mutableStateOf(false) }
     var showModeInfo by rememberSaveable { mutableStateOf(false) }
-    var showScanner by rememberSaveable { mutableStateOf(false) }
+    var showScanner by rememberSaveable { mutableStateOf(startWithScanner) }
 
     // Re-tap support: a deep link delivered after first composition (onNewIntent)
     // updates the pre-filled fields. Only non-empty values override, so a

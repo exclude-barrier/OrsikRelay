@@ -77,6 +77,8 @@ class OnboardingFormUiTest {
     @Test
     fun submittingEmptyFormShowsFieldErrorsAndStaysOnOnboarding() {
         // Start screen with title.
+        // Without a saved server the app starts on Welcome.
+        composeRule.openOnboardingFromWelcome()
         composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertIsDisplayed()
 
         // The API-key assertions apply to the unchanged API-key mode;
@@ -101,6 +103,8 @@ class OnboardingFormUiTest {
 
     @Test
     fun apiKeyIsHiddenInTheFieldAndNotShownAsPlainText() {
+        // Without a saved server the app starts on Welcome.
+        composeRule.openOnboardingFromWelcome()
         composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertIsDisplayed()
 
         switchToApiKeyMode()

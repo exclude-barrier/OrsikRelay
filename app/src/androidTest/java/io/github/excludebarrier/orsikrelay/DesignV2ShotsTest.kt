@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WelcomeScreen
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.data.settings.ChatTextSizeSettingStore
 import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
@@ -287,4 +288,7 @@ class DesignV2ShotsTest {
 
     @CaptureOnly @Test fun settingsDark() = shot("06-einstellungen-dark") { App(true, null) { Settings(it) } }
     @CaptureOnly @Test fun settingsLight() = shot("06-einstellungen-light") { App(false, null) { Settings(it) } }
+
+    @CaptureOnly @Test fun welcomeDark() = shot("07-willkommen-dark") { App(true, null) { WelcomeScreen(onScan = {}, onEnterCode = {}, modifier = it, cameraAvailable = true) } }
+    @CaptureOnly @Test fun welcomeLight() = shot("07-willkommen-light") { App(false, null) { WelcomeScreen(onScan = {}, onEnterCode = {}, modifier = it, cameraAvailable = true) } }
 }
