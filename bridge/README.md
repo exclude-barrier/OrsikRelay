@@ -33,6 +33,15 @@ URL unchanged.
 
 ## Security hardening
 
+- **Host metrics, read-only.** `GET /v1/host/metrics` (device token, no query,
+  no body) is answered by the bridge itself, never proxied: CPU share from two
+  `/proc/stat` samples, RAM from `/proc/meminfo`, the first NVIDIA GPU via
+  `nvidia-smi` with fixed arguments (when installed) and `systemctl --user
+  is-active` for the operator's fixed unit list `BRIDGE_HOST_SERVICES`
+  (comma-separated, at most 8 plain names; default `hermes-gateway,
+  orsik-mobile-bridge`; an unsafe name stops the bridge at start). No shell and
+  no request-chosen argument; any failing source reads as "no value".
+  Advertised as `host_metrics`.
 - **Lost-run resolution least-privilege.** `POST /v1/runs/{id}/resolve-unknown`
   (newer Hermes cores report a run they lost, e.g. after a crash, as
   `unknown`) accepts exactly `{"admission_id": <string>, "execution_generation":

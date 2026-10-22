@@ -8,6 +8,7 @@ Public paths mirror the Orsik Mobile Protocol v1 contract (the api_server
 namespace the shipped client already speaks), so the client is a drop-in:
   GET  /health                              (proxied, unauthenticated)
   GET  /v1/capabilities                     (bridge-generated, device token)
+  GET  /v1/host/metrics                     (bridge-generated, read-only, device token)
   POST /v1/devices/pair                     (bridge-generated, unauthenticated)
   POST /v1/devices/self/revoke              (bridge-generated, device token)
   POST /v1/runs/{run_id}/approval           (validated, device token)
@@ -55,6 +56,7 @@ from urllib.parse import urlsplit
 from aiohttp import ClientResponse, ClientSession, ClientTimeout, web
 
 from . import core
+from . import hostmetrics
 from . import pairing
 from . import runhub
 from . import store as store_mod
@@ -85,6 +87,7 @@ def _audit(action: str, record: core.DeviceRecord, **fields: object) -> None:
     _audit_event(action, record.device_id, **fields)
 
 APPROVAL_PATH = "/v1/runs/{run_id}/approval"
+HOST_METRICS_PATH = "/v1/host/metrics"
 # Match the official api_server request bound (10_000_000) so the bridge does
 # not silently reject the client's supported image bodies (<= 8 MiB encoded).
 _MAX_BODY_BYTES = 10_000_000
@@ -111,6 +114,7 @@ class BridgeState:
         upstream: str,
         master_key: str,
         store: store_mod.BridgeStore | None = None,
+        host_services: tuple[str, ...] = hostmetrics.DEFAULT_SERVICES,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.master_key = master_key
@@ -129,6 +133,11 @@ class BridgeState:
         self.runhub = runhub.RunHub()
         self.background: set[asyncio.Task] = set()
         self.pair_limiter = core.RateLimiter(_PAIR_PER_MINUTE, 60.0)
+        # Operator-fixed unit names for the Home card (BRIDGE_HOST_SERVICES).
+        self.host_services = host_services
+        # One snapshot at a time: a burst of requests never runs the
+        # subprocesses in parallel.
+        self.host_metrics_lock = asyncio.Lock()
 
 
 async def _db(state: BridgeState, fn, *args, **kwargs):
@@ -238,8 +247,9 @@ def build_state_from_env(env: dict[str, str]) -> BridgeState:
     master_key = master_key or env.get("HERMES_API_KEY", "")
     if not master_key:
         raise SystemExit("Bridge needs the Hermes API key (BRIDGE_HERMES_ENV or HERMES_API_KEY)")
+    host_services = hostmetrics.parse_services(env.get("BRIDGE_HOST_SERVICES"))
     store = store_mod.BridgeStore(_state_db_path(env))
-    return BridgeState(upstream=upstream, master_key=master_key, store=store)
+    return BridgeState(upstream=upstream, master_key=master_key, store=store, host_services=host_services)
 
 
 def _device_token(request: web.Request) -> str | None:
@@ -292,6 +302,7 @@ def create_app(state: BridgeState) -> web.Application:
     app[STATE_KEY] = state
     app.router.add_get("/health", _handle_health)
     app.router.add_get("/v1/capabilities", _handle_capabilities)
+    app.router.add_get(HOST_METRICS_PATH, _handle_host_metrics)
     app.router.add_post("/v1/devices/pair", _handle_pair)
     app.router.add_post("/v1/devices/self/revoke", _handle_self_revoke)
     # No HTTP admin surface: pairing codes are issued only via the local operator
@@ -333,6 +344,21 @@ async def _handle_capabilities(request: web.Request) -> web.Response:
     if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
     return web.json_response(core.build_capabilities())
+
+
+async def _handle_host_metrics(request: web.Request) -> web.Response:
+    """Read-only CPU/RAM/GPU/service snapshot of the bridge host (bridge-generated)."""
+    state: BridgeState = request.app[STATE_KEY]
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+        return _closed(401, "invalid_credentials")
+    if request.query_string:
+        return _closed(403, "query_not_allowed")
+    if request.can_read_body and await request.read():
+        return _closed(400, "body_not_allowed")
+    async with state.host_metrics_lock:
+        loop = asyncio.get_running_loop()
+        snapshot = await loop.run_in_executor(None, hostmetrics.collect, state.host_services)
+    return web.json_response(snapshot)
 
 
 async def _handle_pair(request: web.Request) -> web.Response:

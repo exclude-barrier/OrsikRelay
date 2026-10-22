@@ -445,6 +445,29 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 401)
         self.assertEqual(int(UPSTREAM.get("resolve_posts", 0)), 0)
 
+    # --- host metrics (bridge-generated, read-only) -----------------------
+    async def test_host_metrics_need_a_device_token_and_never_reach_upstream(self):
+        self.assertEqual((await self.client.get("/v1/host/metrics")).status, 401)
+        cred = await self._pair()
+        fake = {"object": "orsik.host.metrics", "cpu": {"percent": 1.0, "cores": 2}, "memory": None,
+                "gpu": None, "services": [], "collected_at": 1.0}
+        with mock.patch.object(bridge_server.hostmetrics, "collect", return_value=fake) as collect:
+            resp = await self.client.get("/v1/host/metrics", headers=self._bearer(cred["device_key"]))
+            self.assertEqual(resp.status, 200)
+            self.assertEqual(await resp.json(), fake)
+            collect.assert_called_once_with(self.state.host_services)
+            self.assertEqual(
+                (await self.client.get("/v1/host/metrics?x=1", headers=self._bearer(cred["device_key"]))).status, 403)
+            self.assertEqual(
+                (await self.client.get("/v1/host/metrics", headers=self._bearer(cred["device_key"]), data=b"x")).status, 400)
+        self.assertEqual(int(UPSTREAM.get("sessions_gets", 0)), 0)
+
+    def test_capabilities_advertise_host_metrics_and_services_come_from_the_env(self):
+        caps = core.build_capabilities()
+        self.assertIs(caps["features"]["host_metrics"], True)
+        self.assertEqual(caps["endpoints"]["host_metrics"], {"method": "GET", "path": "/v1/host/metrics"})
+        self.assertEqual(self.state.host_services, ("hermes-gateway", "orsik-mobile-bridge"))
+
     async def test_pair_session_create_and_revoke_are_audited(self):
         with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
             cred = await self._pair()
