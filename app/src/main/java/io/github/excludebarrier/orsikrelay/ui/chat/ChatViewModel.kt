@@ -606,25 +606,31 @@ internal class ChatViewModel(
             // A late result must never mutate a screen that was already left
             // (back) or disposed.
             if (coroutineContext[Job]?.isCancelled == true) return@launch
-            when (result) {
-                is RunStatusResult.Known -> {
-                    if (result.status.isTerminal) {
-                        // The server proved the run terminal: release the
-                        // ownership authoritatively and reconcile the visible
-                        // turn from the authoritative history. The chat POST
-                        // is never resent.
-                        if (runController.confirmTerminalForUncertainRun(profileId, sessionId, runId)) {
-                            releaseUncertainRun()
-                        } else {
-                            _state.update { it.copy(reconcileInFlight = false) }
-                        }
+            // A confirmed 404 for this very run means the server no longer
+            // knows it (Hermes forgets finished runs after an hour and sweeps
+            // orphaned ones): it cannot be running, so it settles like a
+            // terminal status. Every other failure keeps the ownership.
+            val over = when (result) {
+                is RunStatusResult.Known -> result.status.isTerminal
+                is RunStatusResult.Failure -> result.error == RunStatusError.NotFound
+            }
+            when {
+                over -> {
+                    // The server proved the run over: release the ownership
+                    // authoritatively and reconcile the visible turn from the
+                    // authoritative history. The chat POST is never resent.
+                    if (runController.confirmTerminalForUncertainRun(profileId, sessionId, runId)) {
+                        releaseUncertainRun()
                     } else {
-                        _state.update {
-                            it.copy(reconcileInFlight = false, reconcileStillActive = true)
-                        }
+                        _state.update { it.copy(reconcileInFlight = false) }
                     }
                 }
-                is RunStatusResult.Failure -> {
+                result is RunStatusResult.Known -> {
+                    _state.update {
+                        it.copy(reconcileInFlight = false, reconcileStillActive = true)
+                    }
+                }
+                else -> {
                     _state.update {
                         it.copy(reconcileInFlight = false, reconcileFailed = true)
                     }

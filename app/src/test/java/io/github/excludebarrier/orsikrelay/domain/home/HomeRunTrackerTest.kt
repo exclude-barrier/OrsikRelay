@@ -297,4 +297,75 @@ class HomeRunTrackerTest {
         assertEquals(2, requester.calls)
         assertFalse(job.isActive)
     }
+
+    /** Records release requests; answers like the controller (only an uncertain slot is released). */
+    private class ReleaseRecorder(private val active: MutableStateFlow<RunSessionController.ActiveRun?>) {
+        val released = mutableListOf<Triple<String, String, String>>()
+
+        fun release(profileId: String, sessionId: String, runId: String): Boolean {
+            val current = active.value ?: return false
+            if (!current.uncertain || current.runId != runId) return false
+            released += Triple(profileId, sessionId, runId)
+            active.value = null
+            return true
+        }
+    }
+
+    @Test
+    fun uncertainRunUnknownToTheServer_isReleasedAndHidden() = runTest {
+        val active = MutableStateFlow<RunSessionController.ActiveRun?>(activeRun(uncertain = true))
+        val requester = FakeStatusRequester().apply {
+            result = { RunStatusResult.Failure(RunStatusError.NotFound) }
+        }
+        val recorder = ReleaseRecorder(active)
+        val tracker = HomeRunTracker(active, requester, releaseUncertain = recorder::release)
+        val emissions = mutableListOf<List<TrackedRun>>()
+
+        startCollecting(tracker, emissions)
+        runCurrent()
+
+        assertEquals(listOf(Triple(profileId, sessionId, runId)), recorder.released)
+        assertEquals(emptyList<TrackedRun>(), emissions.last())
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(1, requester.calls)
+    }
+
+    @Test
+    fun liveRunUnknownToTheServer_staysAndKeepsPolling() = runTest {
+        val active = MutableStateFlow<RunSessionController.ActiveRun?>(activeRun(uncertain = false))
+        val requester = FakeStatusRequester().apply {
+            result = { RunStatusResult.Failure(RunStatusError.NotFound) }
+        }
+        val recorder = ReleaseRecorder(active)
+        val tracker = HomeRunTracker(active, requester, releaseUncertain = recorder::release)
+        val emissions = mutableListOf<List<TrackedRun>>()
+
+        startCollecting(tracker, emissions)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        // A live stream is authoritative; a 404 alone never frees its slot.
+        assertTrue(recorder.released.isEmpty())
+        assertEquals(1, emissions.last().size)
+        assertEquals(2, requester.calls)
+    }
+
+    @Test
+    fun uncertainRunProvenTerminal_releasesTheSlot() = runTest {
+        val active = MutableStateFlow<RunSessionController.ActiveRun?>(activeRun(uncertain = true))
+        val requester = FakeStatusRequester().apply {
+            result = { RunStatusResult.Known(RunServerStatus.COMPLETED) }
+        }
+        val recorder = ReleaseRecorder(active)
+        val tracker = HomeRunTracker(active, requester, releaseUncertain = recorder::release)
+        val emissions = mutableListOf<List<TrackedRun>>()
+
+        startCollecting(tracker, emissions)
+        runCurrent()
+
+        assertEquals(listOf(Triple(profileId, sessionId, runId)), recorder.released)
+        assertEquals(emptyList<TrackedRun>(), emissions.last())
+    }
 }

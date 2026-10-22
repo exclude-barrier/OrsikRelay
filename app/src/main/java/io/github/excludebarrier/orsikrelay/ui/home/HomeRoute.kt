@@ -137,7 +137,11 @@ fun HomeRoute(
 
     // Polls GET /v1/runs/{id} only while Home is at least STARTED.
     val tracker = remember(runController, runStatusRequester) {
-        HomeRunTracker(runController.activeRun, runStatusRequester)
+        HomeRunTracker(
+            activeRun = runController.activeRun,
+            statusRequester = runStatusRequester,
+            releaseUncertain = runController::confirmTerminalForUncertainRun
+        )
     }
     val trackedFlow = remember(tracker) { tracker.runs() }
     val tracked by trackedFlow.collectAsStateWithLifecycle(initialValue = emptyList())
