@@ -52,6 +52,10 @@ PROXIED_ROUTES: tuple[tuple[str, str], ...] = (
     ("POST", "/v1/runs/{run_id}/approval"),
     ("POST", "/v1/runs/{run_id}/stop"),
     ("POST", "/v1/runs/{run_id}/steer"),
+    # Chat management from the session list. PATCH carries ONLY the archived
+    # flag (validate_session_patch_body); DELETE carries no body.
+    ("PATCH", "/api/sessions/{session_id}"),
+    ("DELETE", "/api/sessions/{session_id}"),
 )
 
 
@@ -111,6 +115,23 @@ def validate_approval_body(body: object) -> tuple[bool, str]:
         or not _is_control_free(request_id)
     ):
         return False, "invalid_request_id"
+    return True, ""
+
+
+# --- Session archive contract (least privilege) ----------------------------
+# The core's PATCH also accepts title/pinned/hidden/unread/end_reason; the
+# mobile client only archives and restores, so nothing else may reach Hermes.
+SESSION_PATCH_FIELDS = frozenset({"archived"})
+
+
+def validate_session_patch_body(body: object) -> tuple[bool, str]:
+    """Returns ``(ok, error_code)``; on failure no upstream request is made."""
+    if not isinstance(body, dict):
+        return False, "invalid_json"
+    if set(body.keys()) != SESSION_PATCH_FIELDS:
+        return False, "invalid_fields"
+    if not isinstance(body["archived"], bool):
+        return False, "invalid_archived"
     return True, ""
 
 
@@ -366,6 +387,8 @@ def build_capabilities() -> dict:
             "run_status": True,
             "run_stop": True,
             "run_steer": True,
+            "session_archive": True,
+            "session_delete": True,
             "session_chat_interactive_approvals": build_interactive_approvals_contract(),
             "device_credentials": build_device_credentials_contract(),
         },
@@ -376,6 +399,8 @@ def build_capabilities() -> dict:
             "session_detail": {"method": "GET", "path": "/api/sessions/{session_id}"},
             "session_messages": {"method": "GET", "path": "/api/sessions/{session_id}/messages"},
             "session_chat_stream": {"method": "POST", "path": "/api/sessions/{session_id}/chat/stream"},
+            "session_update": {"method": "PATCH", "path": "/api/sessions/{session_id}"},
+            "session_delete": {"method": "DELETE", "path": "/api/sessions/{session_id}"},
             "run_status": {"method": "GET", "path": "/v1/runs/{run_id}"},
             "run_approval": {"method": "POST", "path": "/v1/runs/{run_id}/approval"},
             "run_stop": {"method": "POST", "path": "/v1/runs/{run_id}/stop"},
