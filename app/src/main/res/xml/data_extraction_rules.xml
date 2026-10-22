@@ -4,16 +4,30 @@
      the Keystore-bound credential could not be decrypted elsewhere anyway.
      android:allowBackup="false" alone does not stop device-to-device
      transfers on every Android 12+ device
-     (https://developer.android.com/identity/data/autobackup). -->
+     (https://developer.android.com/identity/data/autobackup).
+     Every domain is excluded on its own: shared_prefs, files and databases
+     are separate domains that a "root" exclusion does not cover. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
         <exclude domain="device_root" path="." />
+        <exclude domain="device_file" path="." />
+        <exclude domain="device_database" path="." />
+        <exclude domain="device_sharedpref" path="." />
         <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
         <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
         <exclude domain="device_root" path="." />
+        <exclude domain="device_file" path="." />
+        <exclude domain="device_database" path="." />
+        <exclude domain="device_sharedpref" path="." />
         <exclude domain="external" path="." />
     </device-transfer>
 </data-extraction-rules>

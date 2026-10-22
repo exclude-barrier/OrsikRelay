@@ -109,7 +109,7 @@
     <string name="settings_screen_protection_label">Screen protection</string>
     <string name="settings_screen_protection_description">No screenshots and no preview in the app switcher.</string>
     <string name="settings_app_lock_label">App lock</string>
-    <string name="settings_app_lock_description">Unlock with fingerprint, face or device PIN when opening the app and after 30 seconds in the background.</string>
+    <string name="settings_app_lock_description">Unlock with fingerprint, face or device PIN when opening the app and after 30 seconds in the background. Also hides the app from screenshots and the app switcher preview.</string>
     <string name="settings_app_lock_unavailable">Set up a screen lock on the device first.</string>
     <string name="app_lock_unlock">Unlock</string>
     <string name="app_lock_device_lock_missing">The device no longer has a screen lock, so the app lock has been turned off.</string>
@@ -390,4 +390,8 @@
     <string name="chat_run_release_text">The app frees the chat without asking the server. If the run is still alive there, the server may reject a new message. Nothing is sent again.</string>
     <string name="approval_close">Close</string>
     <string name="approval_already_sent">A decision was already sent for this request.</string>
+    <string name="onboarding_link_offer_title">Use the pairing link?</string>
+    <string name="onboarding_link_offer_text">A link wants to point this form at the server %1$s. Use it only if you opened the link yourself.</string>
+    <string name="onboarding_link_offer_apply">Use link</string>
+    <string name="onboarding_link_offer_discard">Discard</string>
 </resources>

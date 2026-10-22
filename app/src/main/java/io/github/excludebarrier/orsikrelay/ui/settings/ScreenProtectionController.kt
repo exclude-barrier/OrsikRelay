@@ -60,9 +60,12 @@ fun rememberScreenProtectionController(
  * required.
  */
 @Composable
-fun ApplyScreenProtection(controller: ScreenProtectionController) {
+fun ApplyScreenProtection(controller: ScreenProtectionController, appLockEnabled: Boolean = false) {
     val activity = LocalActivity.current
-    val enabled = controller.enabled
+    // An enabled app lock also hides the window from screenshots and the
+    // recents thumbnail; otherwise Recents would show the last chat without
+    // any authentication.
+    val enabled = controller.enabled || appLockEnabled
     LaunchedEffect(activity, enabled) {
         val window = activity?.window ?: return@LaunchedEffect
         if (enabled) {

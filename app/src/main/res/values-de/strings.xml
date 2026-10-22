@@ -109,7 +109,7 @@
     <string name="settings_screen_protection_label">Bildschirmschutz</string>
     <string name="settings_screen_protection_description">Keine Screenshots und keine Vorschau im App-Wechsler.</string>
     <string name="settings_app_lock_label">App-Sperre</string>
-    <string name="settings_app_lock_description">Beim Öffnen und nach 30 Sekunden im Hintergrund mit Fingerabdruck, Gesicht oder Geräte-PIN entsperren.</string>
+    <string name="settings_app_lock_description">Beim Öffnen und nach 30 Sekunden im Hintergrund mit Fingerabdruck, Gesicht oder Geräte-PIN entsperren. Schützt auch vor Screenshots und der Vorschau im App-Wechsler.</string>
     <string name="settings_app_lock_unavailable">Richte zuerst eine Displaysperre auf dem Gerät ein.</string>
     <string name="app_lock_unlock">Entsperren</string>
     <string name="app_lock_device_lock_missing">Auf dem Gerät ist keine Displaysperre mehr eingerichtet. Die App-Sperre wurde deshalb ausgeschaltet.</string>
@@ -389,4 +389,8 @@
     <string name="chat_run_release_text">Die App gibt den Chat frei, ohne den Server zu fragen. Läuft der Lauf dort noch, kann der Server eine neue Nachricht ablehnen. Es wird nichts erneut gesendet.</string>
     <string name="approval_close">Schließen</string>
     <string name="approval_already_sent">Für diese Anfrage wurde bereits eine Entscheidung gesendet.</string>
+    <string name="onboarding_link_offer_title">Kopplungslink übernehmen?</string>
+    <string name="onboarding_link_offer_text">Ein Link möchte dieses Formular auf den Server %1$s setzen. Übernimm ihn nur, wenn du den Link selbst geöffnet hast.</string>
+    <string name="onboarding_link_offer_apply">Übernehmen</string>
+    <string name="onboarding_link_offer_discard">Verwerfen</string>
 </resources>

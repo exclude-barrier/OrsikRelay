@@ -71,6 +71,16 @@ class ScreenProtectionUiTest {
         assertEquals(2, screenProtectionStore.writes)
     }
 
+    @Test
+    fun anEnabledAppLockProtectsTheWindowEvenWithScreenProtectionOff() {
+        composeRule.setContent {
+            val controller = rememberScreenProtectionController(screenProtectionStore)
+            ApplyScreenProtection(controller, appLockEnabled = true)
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) { isSecure(composeRule.activity.window) }
+        assertFalse("the screen-protection setting itself stays off", screenProtectionStore.value)
+    }
+
     private fun isSecure(window: android.view.Window): Boolean =
         window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
 
