@@ -31,8 +31,8 @@ android {
         applicationId = "io.github.excludebarrier.orsikrelay"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.1.0-alpha.12"
+        versionCode = 15
+        versionName = "0.1.0-alpha.13"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
