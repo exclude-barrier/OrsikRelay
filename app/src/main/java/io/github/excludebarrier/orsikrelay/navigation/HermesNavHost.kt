@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -557,7 +558,24 @@ fun HermesNavHost(
             ) { entry ->
                 val encodedSessionId = entry.arguments?.getString(CHAT_ARGUMENT).orEmpty()
                 val decodedSessionId = decodeRouteArgument(encodedSessionId)
+                // Presentation only: the header's "Hermes · <server>" line.
+                // Metadata read (no credential); a failure just hides it.
+                val chatServerName by produceState<String?>(null, activeProfileId) {
+                    value = try {
+                        withContext(Dispatchers.IO) {
+                            (profileAdmin ?: productionDependencies.value.profileAdmin)
+                                .listProfiles()
+                                .firstOrNull { it.id == activeProfileId }
+                                ?.profileName
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
                 ChatScreen(
+                    serverName = chatServerName,
                     historySource = messageHistorySource
                         ?: productionDependencies.value.messageHistorySource,
                     runController = runController

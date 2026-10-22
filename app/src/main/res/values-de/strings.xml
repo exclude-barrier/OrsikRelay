@@ -166,7 +166,7 @@
     <string name="chat_attachment_error_size">Der Anhang ist zu groß. Maximal 5 MiB pro Bild.</string>
     <string name="chat_attachment_error_unreadable">Der Anhang konnte nicht gelesen werden.</string>
     <string name="chat_send">Senden</string>
-    <string name="chat_input_label">Nachricht</string>
+    <string name="chat_input_label">Nachricht an Hermes</string>
     <string name="chat_tool_activity">Tool ist aktiv…</string>
     <string name="chat_tool_activity_named">Tool aktiv: %1$s</string>
     <string name="chat_refresh_history">Verlauf aktualisieren</string>
@@ -327,4 +327,6 @@
     <string name="placeholder_activity_text">Ein Verlauf über alles, was deine Agenten getan haben, folgt in einer späteren Version.</string>
     <string name="sessions_running">läuft</string>
     <string name="sessions_pinned">Angeheftet</string>
+    <string name="chat_header_subtitle">Hermes · %1$s</string>
+    <string name="chat_tool_done">fertig</string>
 </resources>

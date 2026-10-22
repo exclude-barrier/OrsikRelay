@@ -94,7 +94,7 @@ class ChatMarkdownUiTest {
     }
 
     @Test
-    fun codeHeaderIs40DpHighAndCopyKeepsA48DpTouchTarget() {
+    fun codeHeaderIs44DpHighAndCopyKeepsA48DpTouchTarget() {
         renderMarkdown("```kotlin\nval a = 1\n```")
         waitForText("KOTLIN")
 
@@ -102,8 +102,8 @@ class ChatMarkdownUiTest {
             composeRule.onNodeWithTag(TAG_CODE_HEADER).fetchSemanticsNode().boundsInRoot.height / density
         }
         assertTrue(
-            "visible code header must be 40 dp high, was $headerHeightDp dp",
-            abs(headerHeightDp - 40f) <= 1f
+            "visible code header must be 44 dp high (design v2), was $headerHeightDp dp",
+            abs(headerHeightDp - 44f) <= 1f
         )
 
         val copy = composeRule.onNodeWithTag(TAG_CODE_COPY).fetchSemanticsNode().touchBoundsInRoot

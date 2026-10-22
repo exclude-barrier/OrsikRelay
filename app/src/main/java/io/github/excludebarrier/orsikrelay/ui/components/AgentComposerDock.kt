@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
@@ -132,15 +133,17 @@ fun AgentComposerDock(
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.heightIn(min = 44.dp)) {
-                        if (draft.isEmpty()) {
-                            Text(
-                                text = hint,
-                                fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        // The hint stays composed (invisible once there is
+                        // text) so it keeps labelling the field for screen
+                        // readers, like a Material text-field label.
+                        Text(
+                            text = hint,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.alpha(if (draft.isEmpty()) 1f else 0f)
+                        )
                         inner()
                     }
                 },

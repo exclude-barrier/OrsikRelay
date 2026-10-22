@@ -14,6 +14,21 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.test.onAllNodesWithText
+import io.github.excludebarrier.orsikrelay.domain.chat.StreamingChatSource
+import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
+import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryResult
+import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
+import io.github.excludebarrier.orsikrelay.domain.message.MessagePage
+import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
+import io.github.excludebarrier.orsikrelay.domain.run.RunForegroundServiceStarter
+import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
+import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
+import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
+import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
+import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
+import kotlinx.coroutines.flow.emptyFlow
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
@@ -132,4 +147,61 @@ class DesignV2ShotsTest {
 
     @CaptureOnly @Test fun agentsDark() = shot("03-agenten-dark") { App(true, AppScreen.Sessions) { Agents(it) } }
     @CaptureOnly @Test fun agentsLight() = shot("03-agenten-light") { App(false, AppScreen.Sessions) { Agents(it) } }
+
+    private val chatHistory = MessageHistorySource { _, _ ->
+        MessageHistoryResult.Success(
+            MessagePage(
+                listOf(
+                    HermesChatMessage(1, MessageRole.USER, "Wie ist der aktuelle Speicherstatus des Servers?", null, null),
+                    HermesChatMessage(2, MessageRole.TOOL, "", null, "Terminal"),
+                    HermesChatMessage(
+                        3,
+                        MessageRole.ASSISTANT,
+                        "**Speicherstatus: alles gut**\n\nDer Server läuft stabil. Die wichtigsten Werte:\n\n" +
+                            "- **Festplatte:** 12 % belegt\n- **Arbeitsspeicher:** 3,1 GB frei\n- **Systemlast:** gering\n\n" +
+                            "```bash\ndf -h /srv\n/dev/vda1  50G  6,2G  44G  12%\n```",
+                        null,
+                        null
+                    )
+                )
+            )
+        )
+    }
+
+    @Composable
+    private fun Chat(modifier: Modifier) {
+        ChatScreen(
+            historySource = chatHistory,
+            runController = RunSessionController(
+                chatSource = StreamingChatSource { _, _, _ -> emptyFlow() },
+                serviceStarter = object : RunForegroundServiceStarter {
+                    override fun start(profileId: String, sessionId: String) {}
+                    override fun stop() {}
+                },
+                notificationCoordinator = NoOpNotificationCoordinator
+            ),
+            runStopRequester = object : RunStopRequester {
+                override suspend fun stopRun(profileId: String, runId: String): Nothing = throw AssertionError("unused")
+            },
+            runSteerRequester = object : RunSteerRequester {
+                override suspend fun steerRun(profileId: String, runId: String, text: String): Nothing = throw AssertionError("unused")
+            },
+            chatDraftRepository = NoOpChatDraftRepository(),
+            profileId = "fixture",
+            sessionId = "fixture-chat",
+            sessionTitle = "Speicherstatus",
+            serverName = "Heimserver",
+            onBack = {},
+            modifier = modifier
+        )
+    }
+
+    private fun waitForChat() {
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Speicherstatus: alles gut", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @CaptureOnly @Test fun chatDark() = shot("04-chat-dark", ::waitForChat) { App(true, null) { Chat(it) } }
+    @CaptureOnly @Test fun chatLight() = shot("04-chat-light", ::waitForChat) { App(false, null) { Chat(it) } }
 }
