@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -87,7 +88,9 @@ class HomeScreenUiTest {
         composeRule.onNodeWithText("hp-server").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.home_status_connected)).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.SERVER_STRIP).assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.home_server_reachable)).assertIsDisplayed()
+        // The connection is stated once, in the server card (no second
+        // "Erreichbar" chip over the server values).
+        assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_reachable)).fetchSemanticsNodes().size)
         scrollTo(HomeTags.QUICK_CHAT)
         composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).assertIsEnabled().assertHasClickAction()
         // Server works today (it opens the Server tab); the rest is "Bald".
@@ -176,6 +179,11 @@ class HomeScreenUiTest {
         listOf("auto", "claude_code", "codex", "omp").forEach { key ->
             composeRule.onNodeWithTag(HomeTags.PICKER_PREVIEW_PREFIX + key).assertIsNotEnabled()
         }
+        // Same names as the Agents filter.
+        listOf("Claude Code", "Codex", "OMP").forEach { name ->
+            composeRule.onNodeWithText(name).assertIsDisplayed()
+        }
+        assertEquals(0, composeRule.onAllNodesWithText("OpenAI Codex").fetchSemanticsNodes().size)
     }
 
     @Test

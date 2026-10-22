@@ -59,8 +59,6 @@ import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewNote
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewTile
-import io.github.excludebarrier.orsikrelay.ui.components.StatusChip
-import io.github.excludebarrier.orsikrelay.ui.components.StatusKind
 import io.github.excludebarrier.orsikrelay.ui.components.dashedBorder
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionListItem
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
@@ -424,11 +422,11 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-fun ServerStatusStrip(connected: Boolean, modifier: Modifier = Modifier) {
+fun ServerStatusStrip(modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
-        SectionTitle(text = stringResource(R.string.home_section_server)) {
-            if (connected) StatusChip(stringResource(R.string.home_server_reachable), StatusKind.Ok)
-        }
+        // No status chip here: the server card above already says whether
+        // the server is connected.
+        SectionTitle(text = stringResource(R.string.home_section_server))
         val noValue = stringResource(R.string.home_server_no_value)
         val dash = MaterialTheme.colorScheme.outline
         Column(
