@@ -19,7 +19,8 @@ data class HostMetrics(
 
 data class GpuMetrics(val name: String, val utilizationPercent: Int, val memoryUsedBytes: Long, val memoryTotalBytes: Long)
 
-data class ServiceState(val name: String, val active: Boolean)
+/** [active] is `null` when the bridge could not ask systemd (unknown, not stopped). */
+data class ServiceState(val name: String, val active: Boolean?)
 
 sealed interface HostMetricsResult {
     /** The server does not advertise `host_metrics` (an older bridge). */

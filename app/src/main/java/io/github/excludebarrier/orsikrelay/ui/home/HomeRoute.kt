@@ -1,6 +1,9 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import kotlinx.coroutines.delay
 import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsSource
@@ -85,24 +88,13 @@ fun HomeRoute(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var serverName by remember(profileId) { mutableStateOf<String?>(null) }
-    // Live server values while Home is shown: one idempotent read every
-    // HOST_METRICS_INTERVAL_MS, stopped when Home leaves the composition.
-    var hostMetrics by remember(profileId) { mutableStateOf<HostMetricsResult?>(null) }
-    LaunchedEffect(profileId, hostMetricsSource) {
-        if (profileId.isBlank()) return@LaunchedEffect
-        while (true) {
-            hostMetrics = try {
-                withContext(ioDispatcher) { hostMetricsSource.read(profileId) }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                HostMetricsResult.Failed
-            }
-            delay(HOST_METRICS_INTERVAL_MS)
-        }
+    // Title and prepared request of each tool tile, configuration-aware.
+    val taskTexts = QuickTask.entries.associateWith { task ->
+        stringResource(task.labelRes) to stringResource(task.promptRes)
     }
+    var serverName by remember(profileId) { mutableStateOf<String?>(null) }
+    var hostMetrics by remember(profileId) { mutableStateOf<HostMetricsResult?>(null) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(profileId) {
         val profiles = try {
             withContext(ioDispatcher) { profileAdmin.listProfiles() }
@@ -147,6 +139,24 @@ fun HomeRoute(
         mutableStateOf(HomeMemory.recent[profileId] ?: HomeRecent.Loading)
     }
     val connected = connection == HomeConnection.Connected
+    // Live server values: one idempotent read every HOST_METRICS_INTERVAL_MS,
+    // only while Home is visible (STARTED) and the server is reachable, so
+    // nothing polls in the background or against an unreachable server.
+    LaunchedEffect(profileId, hostMetricsSource, connected) {
+        if (profileId.isBlank() || !connected) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                hostMetrics = try {
+                    withContext(ioDispatcher) { hostMetricsSource.read(profileId) }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    HostMetricsResult.Failed
+                }
+                delay(HOST_METRICS_INTERVAL_MS)
+            }
+        }
+    }
     LaunchedEffect(profileId, connected) {
         if (!connected) return@LaunchedEffect
         val result = try {
@@ -335,7 +345,10 @@ fun HomeRoute(
         onOpenSession = { session -> onOpenChat(session.id, session.title) },
         onOpenAllSessions = onOpenAllSessions,
         onNewChat = { newChat() },
-        onQuickTask = { task -> newChat(title = context.getString(task.labelRes), prompt = context.getString(task.promptRes)) },
+        onQuickTask = { task ->
+            val (title, prompt) = taskTexts.getValue(task)
+            newChat(title = title, prompt = prompt)
+        },
         onOpenServer = onOpenServer,
         onSwitchServer = onSwitchServer,
         onOpenSettings = onOpenSettings,

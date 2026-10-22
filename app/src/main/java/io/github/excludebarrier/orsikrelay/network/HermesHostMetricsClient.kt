@@ -33,6 +33,7 @@ class HermesHostMetricsClient(
         return try {
             client.newCall(get(url, apiKey)).execute().use { response ->
                 if (response.code != 200) return false
+                requireJsonContentType(response) { return false }
                 val root = JSONObject(readBoundedUtf8(response.body, MAX_BYTES) { return false })
                 val endpoint = root.optJSONObject("endpoints")?.optJSONObject("host_metrics") ?: return false
                 root.optJSONObject("features")?.opt("host_metrics") == true &&
@@ -49,6 +50,7 @@ class HermesHostMetricsClient(
         return try {
             client.newCall(get(url, apiKey)).execute().use { response ->
                 if (response.code != 200) return HostMetricsResult.Failed
+                requireJsonContentType(response) { return HostMetricsResult.Failed }
                 val root = JSONObject(readBoundedUtf8(response.body, MAX_BYTES) { return HostMetricsResult.Failed })
                 if (root.opt("object") != OBJECT) return HostMetricsResult.Failed
                 HostMetricsResult.Ready(parse(root))
@@ -76,8 +78,15 @@ class HermesHostMetricsClient(
             (0 until minOf(array.length(), MAX_SERVICES)).mapNotNull { i ->
                 val item = array.optJSONObject(i) ?: return@mapNotNull null
                 val name = (item.opt("name") as? String)?.takeIf { isSafeServerString(it, MAX_NAME) }
-                val active = item.opt("active") as? Boolean
-                if (name != null && active != null) ServiceState(name, active) else null
+                // true/false as systemd answered, null = the bridge could not ask.
+                val active = item.opt("active")
+                when {
+                    name == null -> null
+                    active is Boolean -> ServiceState(name, active)
+                    // An explicit null is "unknown"; a missing field is malformed.
+                    item.has("active") && item.isNull("active") -> ServiceState(name, null)
+                    else -> null
+                }
             }
         }.orEmpty()
         return HostMetrics(
@@ -90,8 +99,12 @@ class HermesHostMetricsClient(
         )
     }
 
-    private fun JSONObject.longOrNull(key: String): Long? =
-        (opt(key) as? Number)?.toLong()?.takeIf { it >= 0 }
+    /** Only a JSON integer within Long counts; 1e400 or a huge BigInteger is no value. */
+    private fun JSONObject.longOrNull(key: String): Long? = when (val value = opt(key)) {
+        is Int -> value.toLong()
+        is Long -> value
+        else -> null
+    }?.takeIf { it >= 0 }
 
     private fun base(baseUrl: String, apiKey: SecretValue): HttpUrl? {
         if (!isSafeApiKey(apiKey)) return null

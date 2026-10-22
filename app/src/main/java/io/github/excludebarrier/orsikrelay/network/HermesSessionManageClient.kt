@@ -38,6 +38,7 @@ class HermesSessionManageClient(
         return try {
             client.newCall(request(url, apiKey).get().build()).execute().use { response ->
                 if (response.code != 200) return false
+                requireJsonContentType(response) { return false }
                 val text = readBoundedUtf8(response.body, MAX_CAPABILITIES_BYTES) { return false }
                 advertisesManagement(JSONObject(text))
             }
@@ -66,14 +67,17 @@ class HermesSessionManageClient(
         client.newCall(request).execute().use { response ->
             when (response.code) {
                 200 -> {
+                    requireJsonContentType(response) { return failed() }
                     val text = readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) { return failed() }
                     val root = JSONObject(text)
                     when {
                         root.opt(OBJECT_FIELD) != expectedObject -> failed()
+                        expectedObject != DELETED_OBJECT -> SessionManageResult.Success
+                        root.opt(DELETED_FIELD) == true -> SessionManageResult.Success
                         // The row vanished between the check and the delete.
-                        expectedObject == DELETED_OBJECT && root.opt(DELETED_FIELD) != true ->
-                            SessionManageResult.Failure(SessionManageError.NotFound)
-                        else -> SessionManageResult.Success
+                        root.opt(DELETED_FIELD) == false -> SessionManageResult.Failure(SessionManageError.NotFound)
+                        // A malformed flag proves nothing.
+                        else -> failed()
                     }
                 }
                 404 -> SessionManageResult.Failure(SessionManageError.NotFound)

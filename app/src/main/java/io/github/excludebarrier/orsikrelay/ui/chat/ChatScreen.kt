@@ -281,9 +281,11 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
     // Archive/delete from the header, only when the server offers both.
     val snackbarHostState = remember { SnackbarHostState() }
     val manageScope = rememberCoroutineScope()
-    var canManage by remember(profileId, sessionManager) { mutableStateOf(false) }
-    var manageBusy by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
+    // Keyed to the chat: a reused Chat destination (notification for another
+    // chat) must never carry a pending delete or a busy flag over.
+    var canManage by remember(profileId, sessionId, sessionManager) { mutableStateOf(false) }
+    var manageBusy by remember(profileId, sessionId) { mutableStateOf(false) }
+    var confirmDelete by remember(profileId, sessionId) { mutableStateOf(false) }
     val archivedLabel = stringResource(R.string.sessions_archived)
     val undoLabel = stringResource(R.string.sessions_undo)
     val activeLabel = stringResource(R.string.sessions_manage_active)
@@ -609,6 +611,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                         unavailable = state.reconcileFailed,
                         onReconcile = { viewModel.reconcileUncertainRun() },
                         lost = state.lostRun != null,
+                        lostWithoutKey = state.lostRunWithoutKey,
                         resolving = state.resolveInFlight,
                         onResolve = { viewModel.resolveLostRun() }
                     )
@@ -719,6 +722,25 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     // while the outcome is uncertain, the single "check status"
                     // recovery action.
                     compactRunControls = when {
+                        // A lost run: the only way out is the explicit close,
+                        // also when the notice itself is not composed.
+                        state.lostRun != null -> {
+                            {
+                                OutlinedButton(
+                                    onClick = { viewModel.resolveLostRun() },
+                                    enabled = !state.resolveInFlight,
+                                    modifier = Modifier.testTag(TAG_RUN_RESOLVE_LOST)
+                                ) {
+                                    Text(
+                                        if (state.resolveInFlight) {
+                                            stringResource(R.string.chat_run_lost_resolving)
+                                        } else {
+                                            stringResource(R.string.chat_run_lost_resolve)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         state.recoveryVisible -> {
                             {
                                 OutlinedButton(
@@ -1138,6 +1160,7 @@ internal fun RunUncertainBlock(
     unavailable: Boolean,
     onReconcile: () -> Unit,
     lost: Boolean = false,
+    lostWithoutKey: Boolean = false,
     resolving: Boolean = false,
     onResolve: () -> Unit = {}
 ) {
@@ -1146,6 +1169,7 @@ internal fun RunUncertainBlock(
         title = stringResource(R.string.chat_run_uncertain_title),
         text = when {
             lost -> stringResource(R.string.chat_run_lost)
+            lostWithoutKey -> stringResource(R.string.chat_run_lost_no_key)
             stillActive -> stringResource(R.string.chat_run_uncertain_still_active)
             unavailable -> stringResource(R.string.chat_run_uncertain_unavailable)
             else -> stringResource(R.string.chat_run_uncertain)

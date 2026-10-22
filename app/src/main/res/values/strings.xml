@@ -384,4 +384,5 @@
     <string name="home_task_files_prompt">Show me the files and folders in my home directory on the server, with size and modification date.</string>
     <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
     <string name="home_task_projects_prompt">Which projects (Git repositories) are in my home directory on the server? Show name, branch and last commit for each.</string>
+    <string name="chat_run_lost_no_key">Hermes reports this run as lost but gives the app nothing to close it with. Please check the run on the server.</string>
 </resources>

@@ -203,6 +203,25 @@ class HomeScreenUiTest {
     }
 
     @Test
+    fun aServiceTheBridgeCouldNotAskAboutIsNotReportedAsStopped() {
+        show(
+            connected().copy(
+                hostMetrics = HostMetricsResult.Ready(
+                    HostMetrics(10.0, 2, 1, 2, null, listOf(ServiceState("hermes-gateway", true), ServiceState("docker", null)))
+                )
+            )
+        )
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}: 1/2").assertExists()
+        assertEquals(0, composeRule.onAllNodesWithTag(HomeTags.SERVER_SERVICES_DOWN).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun beforeTheFirstReadThereIsNoLaterVersionClaim() {
+        show(connected())
+        assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_preview_text)).fetchSemanticsNodes().size)
+    }
+
+    @Test
     fun anUnreadableOrUnsupportedServerKeepsThePlaceholders() {
         show(connected().copy(hostMetrics = HostMetricsResult.Failed))
         composeRule.onNodeWithText(context.getString(R.string.home_server_unreadable)).assertExists()

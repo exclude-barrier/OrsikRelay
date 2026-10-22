@@ -1025,14 +1025,16 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun anUnknownStatusWithoutAKeyStaysAStillActiveRun() {
+    fun anUnknownStatusWithoutAKeySaysSoAndNeverClaimsTheRunIsActive() {
         withResolverModel(FakeResolver()) { model, chat, status ->
             enterUncertainRun(model, chat)
             status.result = RunStatusResult.Known(RunServerStatus.UNKNOWN, null)
             model.reconcileUncertainRun()
             advanceUntilIdle()
             assertNull(model.state.value.lostRun)
-            assertTrue(model.state.value.reconcileStillActive)
+            assertTrue(model.state.value.lostRunWithoutKey)
+            assertFalse(model.state.value.reconcileStillActive)
+            assertTrue("still blocked, nothing sent", model.state.value.turnUncertain)
         }
     }
 

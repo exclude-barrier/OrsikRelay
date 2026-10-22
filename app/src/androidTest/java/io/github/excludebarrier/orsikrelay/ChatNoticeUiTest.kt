@@ -162,6 +162,24 @@ class ChatNoticeUiTest {
     }
 
     @Test
+    fun aLostRunWithoutAKeySaysSoInsteadOfStillActive() {
+        render {
+            RunUncertainBlock(
+                inFlight = false,
+                canReconcile = true,
+                stillActive = false,
+                unavailable = false,
+                onReconcile = {},
+                lostWithoutKey = true
+            )
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.chat_run_lost_no_key)).assertIsDisplayed()
+        composeRule.onAllNodesWithText(context.getString(R.string.chat_run_uncertain_still_active)).assertCountEquals(0)
+        composeRule.onAllNodesWithTag(TAG_RUN_RESOLVE_LOST).assertCountEquals(0)
+    }
+
+    @Test
     fun aLostRunOffersOnlyTheExplicitCloseAction() {
         var resolves = 0
         var reconciles = 0

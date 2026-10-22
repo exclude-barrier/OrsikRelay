@@ -601,7 +601,8 @@ internal class ChatViewModel(
                 reconcileInFlight = true,
                 reconcileFailed = false,
                 reconcileStillActive = false,
-                lostRun = null
+                lostRun = null,
+                lostRunWithoutKey = false
             )
         }
         scope.launch {
@@ -639,6 +640,9 @@ internal class ChatViewModel(
                     // The core lost the run and blocks the chat until the
                     // user closes it explicitly; nothing happens on its own.
                     _state.update { it.copy(reconcileInFlight = false, lostRun = result.lostRun) }
+                }
+                result is RunStatusResult.Known && result.status == RunServerStatus.UNKNOWN -> {
+                    _state.update { it.copy(reconcileInFlight = false, lostRunWithoutKey = true) }
                 }
                 result is RunStatusResult.Known -> {
                     _state.update {
@@ -711,6 +715,7 @@ internal class ChatViewModel(
                 reconcileStillActive = false,
                 lostRun = null,
                 resolveInFlight = false,
+                lostRunWithoutKey = false,
                 runStarted = false,
                 boundRunId = null,
                 localLines = emptyList()

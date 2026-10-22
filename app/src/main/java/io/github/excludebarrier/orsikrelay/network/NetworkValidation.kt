@@ -35,7 +35,7 @@ internal fun isStrictUuid(value: String): Boolean =
 internal fun isSafeServerString(
     value: String,
     maxLength: Int = MAX_SAFE_SERVER_STRING_LENGTH
-): Boolean = value.length <= maxLength && value.none { it.code < 0x20 || it.code == 0x7F }
+): Boolean = value.length <= maxLength && value.none { it.isISOControl() }
 
 /**
  * Extracts `error.code` from the closed server error envelope

@@ -446,7 +446,7 @@ fun ServerStatusStrip(metrics: HostMetricsResult?, modifier: Modifier = Modifier
             }
             when (metrics) {
                 is HostMetricsResult.Ready -> {
-                    val down = metrics.metrics.services.filterNot { it.active }.map { it.name }
+                    val down = metrics.metrics.services.filter { it.active == false }.map { it.name }
                     if (down.isNotEmpty()) {
                         Text(
                             text = stringResource(R.string.home_server_services_down, down.joinToString(", ")),
@@ -457,8 +457,10 @@ fun ServerStatusStrip(metrics: HostMetricsResult?, modifier: Modifier = Modifier
                     }
                 }
                 HostMetricsResult.Failed -> PreviewNote(stringResource(R.string.home_server_unreadable))
-                // Not loaded yet or an older bridge: the card keeps its preview.
-                HostMetricsResult.Unsupported, null -> PreviewNote(stringResource(R.string.home_server_preview_text))
+                // An older bridge: the card keeps its preview.
+                HostMetricsResult.Unsupported -> PreviewNote(stringResource(R.string.home_server_preview_text))
+                // Not read yet (or the server is unreachable): placeholders only.
+                null -> Unit
             }
         }
     }
@@ -485,7 +487,9 @@ private fun hostTiles(metrics: HostMetrics?): List<HostTile> {
     if (metrics == null) return listOf(cpu, ram, gpu, services).map { HostTile(it, null, null) }
     val used = metrics.memoryUsedBytes
     val total = metrics.memoryTotalBytes
-    val active = metrics.services.count { it.active }
+    val active = metrics.services.count { it.active == true }
+    // Only a confirmed stop is a warning; "could not ask" is not.
+    val stopped = metrics.services.any { it.active == false }
     val count = metrics.services.size
     return listOf(
         HostTile(cpu, metrics.cpuPercent?.let { "${it.roundToInt()} %" }, metrics.cpuPercent?.let { (it / 100).toFloat() }, detail = cores),
@@ -500,7 +504,7 @@ private fun hostTiles(metrics: HostMetrics?): List<HostTile> {
             services,
             if (count == 0) null else "$active/$count",
             if (count == 0) null else active.toFloat() / count,
-            warn = active < count
+            warn = stopped
         )
     )
 }

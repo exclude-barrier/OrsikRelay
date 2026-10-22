@@ -544,6 +544,8 @@ fun SessionsScreen(
                                     )
                                     SessionActionsMenu(
                                         expanded = actionsFor == session.id,
+                                        // One request at a time: never a silently dropped tap.
+                                        enabled = !manageInFlight,
                                         onDismiss = { actionsFor = null },
                                         onArchive = {
                                             actionsFor = null
@@ -737,6 +739,7 @@ private const val PAGE_SIZE = 50
 @Composable
 private fun SessionActionsMenu(
     expanded: Boolean,
+    enabled: Boolean,
     onDismiss: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit
@@ -746,12 +749,14 @@ private fun SessionActionsMenu(
             text = { Text(stringResource(R.string.sessions_archive)) },
             leadingIcon = { Icon(OrsikIcons.Archive, contentDescription = null) },
             onClick = onArchive,
+            enabled = enabled,
             modifier = Modifier.testTag(SESSION_ARCHIVE_TAG)
         )
         DropdownMenuItem(
             text = { Text(stringResource(R.string.sessions_delete), color = MaterialTheme.colorScheme.error) },
             leadingIcon = { Icon(OrsikIcons.Trash, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             onClick = onDelete,
+            enabled = enabled,
             modifier = Modifier.testTag(SESSION_DELETE_TAG)
         )
     }

@@ -56,10 +56,14 @@ class HermesRunResolveClient(
         }
         return try {
             client.newCall(request).execute().use { response ->
+                requireJsonContentType(response) { return failed() }
                 val text = readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) { return failed() }
                 when {
                     response.code == 200 && JSONObject(text).opt("run_id") == runId -> RunResolveResult.Resolved
-                    extractErrorCode(text) == "stale_generation" -> RunResolveResult.Failure(RunResolveError.Stale)
+                    // The core answers a stale key with 409; the code in any
+                    // other status is no proof of staleness.
+                    response.code == 409 && extractErrorCode(text) == "stale_generation" ->
+                        RunResolveResult.Failure(RunResolveError.Stale)
                     else -> failed()
                 }
             }
