@@ -204,7 +204,8 @@ def normalize_code(raw: object) -> str | None:
     """Trim, upper-case, drop '-'/'_'/whitespace, then enforce 24/length+alphabet."""
     if not isinstance(raw, str):
         return None
-    cleaned = "".join(ch for ch in raw.strip().upper() if ch not in "-_ \t\r\n")
+    # Every Unicode whitespace (NBSP, thin space from a rich-text copy) goes.
+    cleaned = "".join(ch for ch in raw.strip().upper() if ch not in "-_" and not ch.isspace())
     if len(cleaned) != CODE_LENGTH:
         return None
     if any(ch not in CODE_ALPHABET for ch in cleaned):
@@ -265,6 +266,8 @@ class DeviceRecord:
     profile: str
     permissions: tuple[str, ...] = DEVICE_PERMISSIONS
     revoked: bool = False
+    # Set on a self-revoke answer when the device was already revoked before.
+    already_revoked: bool = False
 
 
 class TokenStore:
@@ -306,10 +309,15 @@ class TokenStore:
         return record
 
     def revoke(self, token: str | None) -> DeviceRecord | None:
-        record = self.lookup(token)
-        if record is not None:
-            record.revoked = True
-        return record
+        if not token:
+            return None
+        record = self._by_hash.get(sha256_hex(token))
+        if record is None:
+            return None
+        already = record.revoked
+        record.revoked = True
+        return DeviceRecord(record.device_id, record.label, record.profile, record.permissions,
+                            revoked=True, already_revoked=already)
 
 
 @dataclass

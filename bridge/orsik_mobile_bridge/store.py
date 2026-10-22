@@ -313,7 +313,7 @@ class BridgeStore:
         with self._lock:
             try:
                 row = self._conn.execute(
-                    "SELECT device_id, label, profile, permissions FROM devices WHERE token_hash = ?",
+                    "SELECT device_id, label, profile, permissions, revoked FROM devices WHERE token_hash = ?",
                     (token_hash,),
                 ).fetchone()
                 if row is None:
@@ -321,13 +321,14 @@ class BridgeStore:
                 self._conn.execute("UPDATE devices SET revoked = 1 WHERE token_hash = ?", (token_hash,))
             except sqlite3.DatabaseError as exc:
                 raise StoreUnavailable("device revoke failed") from exc
-        device_id, label, profile, permissions = row
+        device_id, label, profile, permissions, was_revoked = row
         return core.DeviceRecord(
             device_id=device_id,
             label=label,
             profile=profile,
             permissions=tuple(permissions.split(",")) if permissions else core.DEVICE_PERMISSIONS,
             revoked=True,
+            already_revoked=bool(was_revoked),
         )
 
     def device_count(self) -> int:

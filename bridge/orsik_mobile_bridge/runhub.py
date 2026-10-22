@@ -149,7 +149,9 @@ class RunBuffer:
                or self.backlog_bytes > self.BACKLOG_MAX_BYTES) and len(self.backlog) > 1:
             old_seq, old_raw = self.backlog.popleft()
             self.backlog_bytes -= len(old_raw)
-            self.evicted_through = old_seq
+            # The highest seq ever evicted: an upstream with a decreasing
+            # seq must never lower it and hide a gap.
+            self.evicted_through = old_seq if self.evicted_through is None else max(self.evicted_through, old_seq)
 
     def fail(self, status: int, content_type: str, body: bytes) -> None:
         self.state = "failed"
@@ -238,6 +240,11 @@ class RunHub:
         if buf is not None and buf.session_id == session_id:
             return buf
         return None
+
+    def belongs_to_other_session(self, session_id: str, run_id: str) -> bool:
+        """True when this bridge relays [run_id] for a different session."""
+        buf = self._by_run.get(run_id)
+        return buf is not None and buf.session_id != session_id
 
     def _prune(self, now: float | None = None) -> None:
         now = time.time() if now is None else now

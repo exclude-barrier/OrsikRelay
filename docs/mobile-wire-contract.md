@@ -130,7 +130,10 @@ negotiable mobile contract.
 ### 2.4 `POST /v1/devices/self/revoke` (Bearer device key)
 - Body exactly 0 bytes, no `Content-Type`.
 - Success 200, exactly `{ "revoked": true|false, "device_id": "<uuid>" }`
-  (`revoked=true` fresh, `revoked=false` already revoked).
+  (`revoked=true` fresh, `revoked=false` already revoked). Once the bridge
+  store has pruned the revoked device, its key is unknown and the answer is
+  `401`, like for any other unknown key. A non-empty body is `400
+  body_not_allowed`.
 - 401 → closed (does not distinguish API key / unknown / revoked).
 
 ### 2.5 `POST /v1/runs/{run_id}/approval` (Bearer)

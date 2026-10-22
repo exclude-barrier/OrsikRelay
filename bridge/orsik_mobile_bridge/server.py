@@ -391,6 +391,9 @@ async def _handle_pair(request: web.Request) -> web.Response:
         _audit_event("pair", "-", status=429)
         return _closed(429, "rate_limited")
     try:
+        # Contract: Content-Type application/json and exactly {"code": ...}.
+        if request.content_type != "application/json":
+            raise ValueError("not JSON")
         body = await request.json()
     except web.HTTPRequestEntityTooLarge:
         _audit_event("pair", "-", status=413)
@@ -398,6 +401,9 @@ async def _handle_pair(request: web.Request) -> web.Response:
     except Exception:
         _audit_event("pair", "-", status=400)
         return _closed(400, "invalid_json")
+    if isinstance(body, dict) and set(body) != {"code"}:
+        _audit_event("pair", "-", status=400)
+        return _closed(400, "invalid_fields")
     if not isinstance(body, dict) or not await _db(state, state.codes.redeem, body.get("code")):
         _audit_event("pair", "-", status=400)
         return _closed(400, "pairing_code_invalid")
@@ -412,12 +418,19 @@ async def _handle_pair(request: web.Request) -> web.Response:
 
 async def _handle_self_revoke(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
+    # Contract: exactly 0 bytes. The token is checked first, so an anonymous
+    # caller learns nothing from the body rule.
+    if request.can_read_body and await request.read():
+        if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+            return _closed(401, "invalid_credentials")
+        return _closed(400, "body_not_allowed")
     record = await _db(state, state.tokens.revoke, _device_token(request))
     if record is None:
         _audit_event("revoke", "-", status=401)
         return _closed(401, "invalid_credentials")
     _audit("revoke", record, status=200)
-    return web.json_response({"revoked": True, "device_id": record.device_id})
+    # true for the fresh revocation, false when it was already revoked.
+    return web.json_response({"revoked": not record.already_revoked, "device_id": record.device_id})
 
 
 async def _handle_approval(request: web.Request) -> web.StreamResponse:
@@ -666,6 +679,10 @@ async def _handle_run_reattach(request: web.Request) -> web.StreamResponse:
         return _closed(400, "invalid_after_seq")
     buf = state.runhub.lookup(session_id, run_id)
     if buf is None:
+        if state.runhub.belongs_to_other_session(session_id, run_id):
+            # A run of another session is "not found" for this one (contract
+            # section 8.2), never a resume gap of this session.
+            return _closed(404, "run_not_found")
         return await _indeterminate_run(state, run_id)
     return await _stream_buffer_to_client(request, buf, after_seq=after_seq)
 
