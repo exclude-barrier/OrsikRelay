@@ -108,7 +108,7 @@ class LiveBridgeApprovalE2ETest {
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         composeRule.onNodeWithContentDescription(NEW_SESSION_FAB).performClick()
         waitForText(NEW_SESSION_TITLE)
         composeRule.onNodeWithText(NEW_SESSION_CREATE).performClick()

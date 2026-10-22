@@ -156,7 +156,7 @@ class LiveBridgeChatE2ETest {
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(SESSIONS_TITLE)
+        composeRule.waitForAgents(UI_TIMEOUT_MS)
 
         // 2. Create a new session through the real sessions UI (FAB + dialog).
         composeRule.onNodeWithContentDescription(NEW_SESSION_FAB).performClick()
@@ -314,7 +314,6 @@ class LiveBridgeChatE2ETest {
 
     private companion object {
         const val PROFILE_NAME = "OR-08a Live Bridge"
-        val SESSIONS_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sessions_title) }
         val NEW_SESSION_FAB: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_fab) }
         val NEW_SESSION_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_title) }
         val NEW_SESSION_CREATE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_create) }

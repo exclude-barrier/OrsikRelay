@@ -58,7 +58,7 @@
     <string name="onboarding_scan_open_settings">Open app settings</string>
     <string name="onboarding_scan_camera_unavailable">Camera unavailable.</string>
     <string name="error_pairing_code_local_invalid">Enter a valid pairing code.</string>
-    <string name="sessions_title">Sessions</string>
+    <string name="sessions_title">Agents</string>
     <string name="sessions_loading">Loading sessions…</string>
     <string name="sessions_empty">No sessions available.</string>
     <string name="sessions_refresh">Refresh</string>

@@ -135,6 +135,8 @@ class HomeNavigationUiTest {
 
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Sessions)).performClick()
         waitForText("Docker updates")
+        // The Agents tab keeps the navigation bar, with its own tab selected.
+        composeRule.onNodeWithTag(bottomTabTag(AppScreen.Sessions)).assertIsDisplayed().assertIsSelected()
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Server)).performClick()
         waitForTag(SERVER_PLACEHOLDER_TAG)
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Activity)).performClick()

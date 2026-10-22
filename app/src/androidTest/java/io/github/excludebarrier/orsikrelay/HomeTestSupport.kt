@@ -7,6 +7,7 @@ import androidx.compose.ui.test.performClick
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.bottomTabTag
 import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
+import io.github.excludebarrier.orsikrelay.ui.sessions.SESSIONS_HEADER_TAG
 
 /** Waits until the app shows Home (the start page after a resolved server). */
 fun ComposeTestRule.waitForHome(timeoutMillis: Long = 5_000) {
@@ -19,5 +20,14 @@ fun ComposeTestRule.openAgentsTab(timeoutMillis: Long = 5_000) {
     val tag = bottomTabTag(AppScreen.Sessions)
     waitUntil(timeoutMillis) { onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
     onNodeWithTag(tag).performClick()
+    waitForIdle()
+}
+
+/**
+ * Waits until the Agents screen (the session list) is shown. Its title text
+ * also labels the bottom-bar tab, so the screen is matched by its header tag.
+ */
+fun ComposeTestRule.waitForAgents(timeoutMillis: Long = 5_000) {
+    waitUntil(timeoutMillis) { onAllNodesWithTag(SESSIONS_HEADER_TAG).fetchSemanticsNodes().isNotEmpty() }
     waitForIdle()
 }

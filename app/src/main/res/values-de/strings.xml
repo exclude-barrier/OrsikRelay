@@ -58,7 +58,7 @@
     <string name="onboarding_scan_open_settings">App-Einstellungen öffnen</string>
     <string name="onboarding_scan_camera_unavailable">Kamera nicht verfügbar.</string>
     <string name="error_pairing_code_local_invalid">Bitte einen gültigen Pairing-Code eingeben.</string>
-    <string name="sessions_title">Sessions</string>
+    <string name="sessions_title">Agenten</string>
     <string name="sessions_loading">Sessions werden geladen…</string>
     <string name="sessions_empty">Keine Sessions vorhanden.</string>
     <string name="sessions_refresh">Aktualisieren</string>
@@ -72,7 +72,7 @@
     <string name="theme_mode_dark">Dunkel</string>
     <string name="sessions_retry">Erneut versuchen</string>
     <string name="sessions_load_more">Mehr laden</string>
-    <string name="sessions_group_pinned">Angepinnt</string>
+    <string name="sessions_group_pinned">Angeheftet</string>
     <string name="sessions_group_today">Heute</string>
     <string name="sessions_group_yesterday">Gestern</string>
     <string name="sessions_group_last_7_days">Letzte 7 Tage</string>

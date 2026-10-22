@@ -461,7 +461,10 @@ fun HermesNavHost(
                 )
             }
             composable(routeOf(AppScreen.Sessions)) {
+                val activeRun by (runController ?: productionDependencies.value.runController)
+                    .activeRun.collectAsState()
                 SessionsScreen(
+                    runningSessionId = activeRun?.takeIf { it.profileId == activeProfileId }?.sessionId,
                     pageSource = sessionPageSource
                         ?: productionDependencies.value.sessionPageSource,
                     profileId = activeProfileId.orEmpty(),

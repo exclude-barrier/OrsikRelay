@@ -15,6 +15,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
+import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
+import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
+import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
+import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.navigation.AppBottomBar
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.ui.home.HomeConnection
@@ -104,4 +111,25 @@ class DesignV2ShotsTest {
     @CaptureOnly @Test fun homeLight() = shot("01-home-light") { App(false, AppScreen.Home) { Home(it) } }
     @CaptureOnly @Test fun homeScrolledDark() = shot("02-home-gescrollt-dark", ::scrollHome) { App(true, AppScreen.Home) { Home(it) } }
     @CaptureOnly @Test fun homeScrolledLight() = shot("02-home-gescrollt-light", ::scrollHome) { App(false, AppScreen.Home) { Home(it) } }
+
+    private val agentSessions = listOf(
+        HermesSession("a1", "Backup prüfen", "cli", now - 3_000, 12, true),
+        HermesSession("a2", "Wochenplanung", "telegram", now - 9_000, 34, false),
+        HermesSession("a3", "Docker-Updates", "telegram", now - 90_000, 8, false),
+        HermesSession("a4", "Rezept für Sonntag", "cli", now - 260_000, 21, false)
+    )
+
+    @Composable
+    private fun Agents(modifier: Modifier) {
+        SessionsScreen(
+            pageSource = SessionPageSource { _, _, _ -> SessionListResult.Success(SessionPage(agentSessions, hasMore = false)) },
+            profileId = "fixture",
+            creator = SessionCreator { _, _ -> SessionCreateResult.Failure(SessionCreateError.Network) },
+            runningSessionId = "a1",
+            modifier = modifier
+        )
+    }
+
+    @CaptureOnly @Test fun agentsDark() = shot("03-agenten-dark") { App(true, AppScreen.Sessions) { Agents(it) } }
+    @CaptureOnly @Test fun agentsLight() = shot("03-agenten-light") { App(false, AppScreen.Sessions) { Agents(it) } }
 }

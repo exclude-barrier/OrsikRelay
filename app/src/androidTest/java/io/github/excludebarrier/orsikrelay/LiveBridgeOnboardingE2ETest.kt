@@ -8,7 +8,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -142,16 +141,10 @@ class LiveBridgeOnboardingE2ETest {
         composeRule.onNodeWithTag(TAG_SUBMIT).performClick()
 
         // 3. Wait (bounded, no sleeps) for Home and the new profile's
-        // sessions view in the Agents tab, identified by its production title.
+        // sessions view in the Agents tab, identified by its header.
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        composeRule.waitUntil(timeoutMillis = TIMEOUT_MILLIS) {
-            composeRule
-                .onAllNodesWithText(sessionsTitle())
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-        composeRule.waitForIdle()
+        composeRule.waitForAgents(TIMEOUT_MILLIS)
 
         // 4. Exactly one profile carries the paired base URL.
         val matched = productionDependencies().profileAdmin
@@ -231,7 +224,6 @@ class LiveBridgeOnboardingE2ETest {
 
     // Production texts resolved from the app's own string resources.
     private fun submitLabel(): String = context.getString(R.string.onboarding_submit)
-    private fun sessionsTitle(): String = context.getString(R.string.sessions_title)
     private fun pairingCodeLabel(): String =
         context.getString(R.string.onboarding_pairing_code_label)
 

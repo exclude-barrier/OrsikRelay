@@ -84,7 +84,7 @@ class LiveBridgeProcessDeathE2ETest {
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         composeRule.onNodeWithContentDescription(context.getString(R.string.new_session_fab)).performClick()
         waitForText(context.getString(R.string.new_session_title))
         composeRule.onNodeWithText(context.getString(R.string.new_session_title_label)).performTextInput(title)
@@ -120,7 +120,7 @@ class LiveBridgeProcessDeathE2ETest {
         try {
             composeRule.waitForHome()
             composeRule.openAgentsTab()
-            waitForText(context.getString(R.string.sessions_title))
+            composeRule.waitForAgents()
             waitForText(title)
             composeRule.onNodeWithText(title).performClick()
 
