@@ -80,19 +80,24 @@ class ServicesTest(unittest.TestCase):
 
         def run(args, **kwargs):
             calls.append(args)
-            return subprocess.CompletedProcess(args, 0 if args[-1] == "hermes-gateway.service" else 3)
+            return subprocess.CompletedProcess(args, {"hermes-gateway.service": 0, "orsik-mobile-bridge.service": 3}.get(args[-1], 1))
 
         self.assertEqual(
-            hostmetrics.services(("hermes-gateway", "orsik-mobile-bridge"), run=run),
-            [{"name": "hermes-gateway", "active": True}, {"name": "orsik-mobile-bridge", "active": False}],
+            hostmetrics.services(("hermes-gateway", "orsik-mobile-bridge", "other"), run=run),
+            [{"name": "hermes-gateway", "active": True}, {"name": "orsik-mobile-bridge", "active": False},
+             {"name": "other", "active": None}],
         )
         self.assertEqual(calls[0], ["systemctl", "--user", "is-active", "--quiet", "hermes-gateway.service"])
 
-    def test_a_hanging_systemctl_counts_as_inactive(self):
-        def run(args, **kwargs):
+    def test_a_hanging_or_missing_systemctl_is_unknown_not_stopped(self):
+        def hang(args, **kwargs):
             raise subprocess.TimeoutExpired(args, 2)
 
-        self.assertEqual(hostmetrics.services(("x",), run=run), [{"name": "x", "active": False}])
+        def missing(args, **kwargs):
+            raise FileNotFoundError("systemctl")
+
+        for run in (hang, missing):
+            self.assertEqual(hostmetrics.services(("x",), run=run), [{"name": "x", "active": None}])
 
 
 class CollectTest(unittest.TestCase):

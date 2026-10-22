@@ -40,7 +40,9 @@ URL unchanged.
   is-active` for the operator's fixed unit list `BRIDGE_HOST_SERVICES`
   (comma-separated, at most 8 plain names; default `hermes-gateway,
   orsik-mobile-bridge`; an unsafe name stops the bridge at start). No shell and
-  no request-chosen argument; any failing source reads as "no value".
+  no request-chosen argument; any failing source reads as "no value" (a
+  service systemd could not be asked about is `active: null`, not "stopped").
+  One snapshot serves all requests for 5 s.
   Advertised as `host_metrics`.
 - **Lost-run resolution least-privilege.** `POST /v1/runs/{id}/resolve-unknown`
   (newer Hermes cores report a run they lost, e.g. after a crash, as

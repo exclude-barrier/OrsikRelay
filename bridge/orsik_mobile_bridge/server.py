@@ -46,6 +46,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import stat
 import sys
 import time
@@ -78,8 +79,19 @@ audit_logger = logging.getLogger("orsik_mobile_bridge.audit")
 _AUDITED_RUN_ACTIONS = ("stop", "steer")
 
 
+# A value shaped like a device key never reaches the log, even when a client
+# puts its own key into a path segment that is audited (session/run id).
+_DEVICE_KEY_SHAPE = re.compile(r"hd_[A-Za-z0-9_-]{20,}")
+
+
+def _audit_value(value: object) -> object:
+    if isinstance(value, str) and _DEVICE_KEY_SHAPE.search(value):
+        return "[redacted]"
+    return value
+
+
 def _audit_event(action: str, device_id: str, **fields: object) -> None:
-    detail = "".join(f" {key}={value}" for key, value in fields.items())
+    detail = "".join(f" {key}={_audit_value(value)}" for key, value in fields.items())
     audit_logger.info("audit action=%s device=%s%s", action, device_id, detail)
 
 
@@ -138,6 +150,7 @@ class BridgeState:
         # One snapshot at a time: a burst of requests never runs the
         # subprocesses in parallel.
         self.host_metrics_lock = asyncio.Lock()
+        self.host_metrics_cache: tuple[float, dict] | None = None
 
 
 async def _db(state: BridgeState, fn, *args, **kwargs):
@@ -353,12 +366,23 @@ async def _handle_host_metrics(request: web.Request) -> web.Response:
         return _closed(401, "invalid_credentials")
     if request.query_string:
         return _closed(403, "query_not_allowed")
-    if request.can_read_body and await request.read():
+    try:
+        has_body = request.can_read_body and bool(await request.read())
+    except web.HTTPRequestEntityTooLarge:
+        return _closed(413, "body_too_large")
+    if has_body:
         return _closed(400, "body_not_allowed")
     async with state.host_metrics_lock:
-        loop = asyncio.get_running_loop()
-        snapshot = await loop.run_in_executor(None, hostmetrics.collect, state.host_services)
-    return web.json_response(snapshot)
+        # One snapshot serves every request within HOST_METRICS_MAX_AGE, so
+        # fast pollers never queue up subprocess work behind the lock.
+        now = time.monotonic()
+        cached = state.host_metrics_cache
+        if cached is None or now - cached[0] > hostmetrics.MAX_AGE_SECONDS:
+            loop = asyncio.get_running_loop()
+            snapshot = await loop.run_in_executor(None, hostmetrics.collect, state.host_services)
+            state.host_metrics_cache = (time.monotonic(), snapshot)
+            cached = state.host_metrics_cache
+    return web.json_response(cached[1])
 
 
 async def _handle_pair(request: web.Request) -> web.Response:
@@ -460,7 +484,7 @@ async def _run_execution_generation(state: BridgeState, run_id: str) -> int | No
         return None
     try:
         run = json.loads(raw)
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
     generation = run.get("execution_generation") if isinstance(run, dict) else None
     # bool is an int subclass; a JSON true is not a generation.
@@ -801,16 +825,28 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
 async def _handle_resolve_unknown(
     request: web.Request, state: BridgeState, record: core.DeviceRecord, match: core.ProxyMatch
 ) -> web.StreamResponse:
-    """Acknowledge one lost run; the validated body is re-serialised."""
+    """Acknowledge one lost run; the validated body is re-serialised.
+
+    A local rejection is audited like an upstream answer, so an attempt to
+    smuggle other fields is visible to the operator.
+    """
     run_id = match.params["run_id"]
-    raw = await request.read() if request.can_read_body else b""
+
+    def rejected(status: int, code: str) -> web.Response:
+        _audit("resolve_unknown", record, run=run_id, status=status)
+        return _closed(status, code)
+
+    try:
+        raw = await request.read() if request.can_read_body else b""
+    except web.HTTPRequestEntityTooLarge:
+        return rejected(413, "body_too_large")
     try:
         parsed = json.loads(raw)
-    except (ValueError, UnicodeDecodeError):
-        return _closed(400, "invalid_json")
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        return rejected(400, "invalid_json")
     ok, code = core.validate_resolve_unknown_body(parsed)
     if not ok:
-        return _closed(400, code)
+        return rejected(400, code)
     body = json.dumps({
         "admission_id": parsed["admission_id"],
         "execution_generation": parsed["execution_generation"],
@@ -828,20 +864,30 @@ async def _handle_session_management(
     (title, pin, hidden, end_reason) can ever reach Hermes through the bridge.
     """
     session_id = match.params["session_id"]
-    raw = await request.read() if request.can_read_body else b""
+    action = "session_delete" if request.method == "DELETE" else "session_archive"
+
+    def rejected(status: int, code: str) -> web.Response:
+        # Local rejections are audited too (least-privilege attempts stay visible).
+        _audit(action, record, session=session_id, status=status)
+        return _closed(status, code)
+
+    try:
+        raw = await request.read() if request.can_read_body else b""
+    except web.HTTPRequestEntityTooLarge:
+        return rejected(413, "body_too_large")
     if request.method == "DELETE":
         if raw:
-            return _closed(400, "body_not_allowed")
-        action, body = "session_delete", b""
+            return rejected(400, "body_not_allowed")
+        body = b""
     else:
         try:
             parsed = json.loads(raw)
-        except (ValueError, UnicodeDecodeError):
-            return _closed(400, "invalid_json")
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return rejected(400, "invalid_json")
         ok, code = core.validate_session_patch_body(parsed)
         if not ok:
-            return _closed(400, code)
-        action, body = "session_archive", json.dumps({"archived": parsed["archived"]}).encode()
+            return rejected(400, code)
+        body = json.dumps({"archived": parsed["archived"]}).encode()
     on_status = lambda status: _audit(action, record, session=session_id, status=status)  # noqa: E731
     return await _proxy(request, state, match.upstream_path, body_override=body, on_status=on_status)
 

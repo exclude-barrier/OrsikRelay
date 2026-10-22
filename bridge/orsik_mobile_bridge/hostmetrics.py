@@ -19,7 +19,9 @@ from typing import Callable
 DEFAULT_SERVICES = ("hermes-gateway", "orsik-mobile-bridge")
 MAX_SERVICES = 8
 _SERVICE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9@_.-]{0,63}$")
-_SUBPROCESS_TIMEOUT = 2.0
+_SUBPROCESS_TIMEOUT = 1.0
+# A snapshot younger than this answers further requests (see the route).
+MAX_AGE_SECONDS = 5.0
 _GPU_QUERY = "--query-gpu=name,utilization.gpu,memory.used,memory.total"
 
 
@@ -99,15 +101,22 @@ def gpu(which: Callable[[str], str | None] = shutil.which, run=subprocess.run) -
 
 
 def services(names: tuple[str, ...], run=subprocess.run) -> list[dict]:
+    """``active`` is True/False as systemd answers, ``None`` when it could not be asked.
+
+    ``is-active`` exits 0 for active and 3 for inactive/failed units; any other
+    outcome (no user bus, systemctl missing, timeout) is "unknown", never a
+    false "stopped".
+    """
     result = []
     for name in names:
         try:
-            active = run(
+            code = run(
                 ["systemctl", "--user", "is-active", "--quiet", name + ".service"],
                 capture_output=True, timeout=_SUBPROCESS_TIMEOUT, check=False,
-            ).returncode == 0
+            ).returncode
+            active = True if code == 0 else False if code == 3 else None
         except (OSError, subprocess.SubprocessError):
-            active = False
+            active = None
         result.append({"name": name, "active": active})
     return result
 
