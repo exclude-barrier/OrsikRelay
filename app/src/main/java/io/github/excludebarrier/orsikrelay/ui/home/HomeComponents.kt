@@ -625,7 +625,7 @@ private class QuickTile(
  * tile, otherwise a card-coloured tile (Server).
  */
 @Composable
-private fun LiveTile(
+internal fun LiveTile(
     label: String,
     icon: ImageVector,
     filled: Boolean,

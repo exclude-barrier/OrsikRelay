@@ -297,14 +297,10 @@ fun HomeRoute(
         notice = null
         scope.launch {
             try {
-                val created = withContext(ioDispatcher) { sessionCreator.createSession(profileId, title) }
+                val created = withContext(ioDispatcher) {
+                    createPreparedChat(sessionCreator, chatDraftRepository, profileId, title, prompt)
+                }
                 if (created is SessionCreateResult.Success) {
-                    if (prompt != null) {
-                        withContext(ioDispatcher) {
-                            chatDraftRepository.persistDraft(profileId, created.sessionId, prompt)
-                            chatDraftRepository.flushPendingDraft()
-                        }
-                    }
                     onOpenChat(created.sessionId, created.title ?: title)
                 } else {
                     notice = HomeNotice.NewChatFailed

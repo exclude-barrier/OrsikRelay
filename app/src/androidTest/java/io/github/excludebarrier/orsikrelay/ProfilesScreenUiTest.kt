@@ -217,7 +217,49 @@ class ProfilesScreenUiTest {
     }
 
     @Test
-    fun theManagementToolsAreOnlyAPreview() {
+    fun withActionsTheManagementToolsWorkMonitoringOpensHomeAndATaskStartsItsRequest() {
+        val admin = FakeProfileAdmin(profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")), kinds = emptyMap())
+        var monitoring = 0
+        val started = mutableListOf<Pair<String, String>>()
+        composeRule.setContent {
+            HermesTheme {
+                ProfilesScreen(
+                    admin = admin,
+                    onBack = {},
+                    activeProfileId = PAIRED_ID,
+                    onOpenMonitoring = { monitoring++ },
+                    startTask = { title, prompt -> started += title to prompt; true }
+                )
+            }
+        }
+        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+
+        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "monitoring").performScrollTo().performClick()
+        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "docker").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { started.isNotEmpty() }
+
+        assertEquals(1, monitoring)
+        assertEquals(
+            listOf(context.getString(R.string.home_quick_docker) to context.getString(R.string.home_task_docker_prompt)),
+            started.toList()
+        )
+    }
+
+    @Test
+    fun aFailedTaskSaysSo() {
+        val admin = FakeProfileAdmin(profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")), kinds = emptyMap())
+        composeRule.setContent {
+            HermesTheme {
+                ProfilesScreen(admin = admin, onBack = {}, activeProfileId = PAIRED_ID, onOpenMonitoring = {}, startTask = { _, _ -> false })
+            }
+        }
+        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "terminal").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { count(context.getString(R.string.new_session_error_generic)) > 0 }
+    }
+
+    @Test
+    fun withoutActionsTheManagementToolsStayAPreview() {
         val admin = FakeProfileAdmin(profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")), kinds = emptyMap())
         setContent(admin, activeProfileId = PAIRED_ID)
         composeRule.waitUntil(5_000) { count("Paired") > 0 }

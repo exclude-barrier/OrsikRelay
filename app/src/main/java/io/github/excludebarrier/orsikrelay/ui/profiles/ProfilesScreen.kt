@@ -1,5 +1,8 @@
 package io.github.excludebarrier.orsikrelay.ui.profiles
 
+import androidx.compose.ui.graphics.vector.ImageVector
+import io.github.excludebarrier.orsikrelay.ui.home.LiveTile
+import io.github.excludebarrier.orsikrelay.ui.home.QuickTask
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -125,7 +128,12 @@ fun ProfilesScreen(
     },
     // Opens the onboarding route to add another server. The bottom action
     // is always present, also in the empty state.
-    onAddServer: () -> Unit = {}
+    onAddServer: () -> Unit = {},
+    // "Verwaltung" of the active server: Monitoring opens Home (live
+    // values), the tools start a prepared Hermes request; null keeps the
+    // tiles as previews.
+    onOpenMonitoring: (() -> Unit)? = null,
+    startTask: (suspend (title: String, prompt: String) -> Boolean)? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     var profiles by remember { mutableStateOf<List<ServerProfile>?>(null) }
@@ -402,7 +410,7 @@ fun ProfilesScreen(
                     Text(text = stringResource(R.string.onboarding_title), fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            item(key = "management") { ManagementPreview() }
+            item(key = "management") { Management(onOpenMonitoring, startTask) }
         }
     }
 
@@ -652,11 +660,21 @@ private fun ProfileRow(
 }
 
 /**
- * "Verwaltung": the future server tools as disabled, dashed tiles. Nothing
- * here does anything yet; no live data is shown.
+ * "Verwaltung" of the active server: Monitoring opens Home's live values,
+ * Docker/Terminal/Dateien start the same prepared Hermes requests as Home's
+ * tiles. Without the callbacks (no active server) the tiles stay previews.
  */
 @Composable
-private fun ManagementPreview() {
+private fun Management(
+    onOpenMonitoring: (() -> Unit)?,
+    startTask: (suspend (title: String, prompt: String) -> Boolean)?
+) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val live = onOpenMonitoring != null && startTask != null
+    val tasks = listOf(QuickTask.Docker, QuickTask.Terminal, QuickTask.Files)
+    val taskTexts = tasks.associateWith { stringResource(it.labelRes) to stringResource(it.promptRes) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 14.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -669,27 +687,47 @@ private fun ManagementPreview() {
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.semantics { heading() }
             )
-            PreviewBadge()
+            if (!live) PreviewBadge()
         }
-        val tiles = listOf(
-            Triple("monitoring", R.string.profiles_tile_monitoring, OrsikIcons.Activity),
-            Triple("docker", R.string.home_quick_docker, OrsikIcons.Container),
-            Triple("terminal", R.string.home_quick_terminal, OrsikIcons.Terminal),
-            Triple("files", R.string.home_quick_files, OrsikIcons.Folder)
-        )
+        val tiles: List<Triple<String, Int, Pair<ImageVector, (() -> Unit)?>>> = listOf(
+            Triple("monitoring", R.string.profiles_tile_monitoring, OrsikIcons.Activity to onOpenMonitoring)
+        ) + tasks.map { task ->
+            Triple(task.key, task.labelRes, task.icon to startTask?.let { start ->
+                {
+                    if (!busy) {
+                        busy = true
+                        failed = false
+                        scope.launch {
+                            val (title, prompt) = taskTexts.getValue(task)
+                            failed = !start(title, prompt)
+                            busy = false
+                        }
+                    }
+                }
+            })
+        }
         tiles.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (key, label, icon) ->
-                    PreviewTile(
-                        label = stringResource(label),
-                        icon = icon,
-                        stacked = false,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag(MANAGEMENT_TILE_PREFIX + key)
-                    )
+                row.forEach { (key, label, iconAndAction) ->
+                    val (icon, action) = iconAndAction
+                    val tileModifier = Modifier
+                        .weight(1f)
+                        .testTag(MANAGEMENT_TILE_PREFIX + key)
+                    if (action != null) {
+                        LiveTile(stringResource(label), icon, filled = false, onClick = action, modifier = tileModifier)
+                    } else {
+                        PreviewTile(label = stringResource(label), icon = icon, stacked = false, modifier = tileModifier)
+                    }
                 }
             }
+        }
+        if (failed) {
+            Text(
+                text = stringResource(R.string.new_session_error_generic),
+                style = OrsikType.meta,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(start = 4.dp)
+            )
         }
     }
 }
