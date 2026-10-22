@@ -130,8 +130,10 @@ class AddServerNavigationUiTest {
         assertEquals(listOf(NEW_ID), admin.selected)
         // The new server is the active one; neither Profiles nor Onboarding
         // survive in the back stack.
-        composeRule.onNodeWithText(context.getString(R.string.profiles_title)).assertDoesNotExist()
-        composeRule.onNodeWithText(context.getString(R.string.onboarding_title)).assertDoesNotExist()
+        // By tag, not by title: in German the Profiles title "Server" equals
+        // the bottom bar's Server tab.
+        composeRule.onNodeWithTag("addServerButton").assertDoesNotExist()
+        composeRule.onNodeWithTag("onboardingSubmitButton").assertDoesNotExist()
 
         composeRule.openAgentsTab()
         waitForText("Session Neu")

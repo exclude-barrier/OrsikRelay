@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import android.app.LocaleManager
 import android.content.Context
+import android.content.res.Resources
 import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
@@ -86,8 +87,15 @@ class LanguageSwitchUiTest {
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(localizedString("en", R.string.sessions_search_placeholder))
+        waitForText(localizedString(systemLanguage(), R.string.sessions_search_placeholder))
     }
+
+    /**
+     * The language "System" resolves to: German on a German device, English
+     * (the default resources) on any other, so the test runs on both.
+     */
+    private fun systemLanguage(): String =
+        if (Resources.getSystem().configuration.locales[0].language == "de") "de" else "en"
 
     @After
     fun tearDown() {
@@ -114,9 +122,10 @@ class LanguageSwitchUiTest {
 
         openSettings()
         selectLanguage("settings_language_system")
-        awaitSettingsIn("en")
-        composeRule.onNodeWithContentDescription(localizedString("en", R.string.settings_back)).performClick()
-        waitForText(localizedString("en", R.string.sessions_search_placeholder))
+        val system = systemLanguage()
+        awaitSettingsIn(system)
+        composeRule.onNodeWithContentDescription(localizedString(system, R.string.settings_back)).performClick()
+        waitForText(localizedString(system, R.string.sessions_search_placeholder))
         assertNull(SharedPreferencesLanguageSettingStore(context).read())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val localeManager = context.getSystemService(LocaleManager::class.java)
@@ -169,9 +178,9 @@ class LanguageSwitchUiTest {
                 .takeIf { !it.isEmpty }
                 ?.get(0)
                 ?.language
-                ?: "en"
+                ?: systemLanguage()
         } else {
-            "en"
+            systemLanguage()
         }
     }
 
