@@ -354,6 +354,7 @@ class DesignV2ShotsTest {
                 override fun authenticate(onResult: (Boolean) -> Unit) = onResult(false)
             },
             onBack = {},
+            onOpenAbout = {},
             modifier = modifier
         )
     }

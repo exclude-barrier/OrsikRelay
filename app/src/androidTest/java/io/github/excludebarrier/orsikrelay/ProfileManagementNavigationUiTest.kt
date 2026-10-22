@@ -55,7 +55,7 @@ class ProfileManagementNavigationUiTest {
         composeRule.waitForHome()
         composeRule.openAgentsTab()
         composeRule.waitForAgents()
-        openProfilesFromOverflowMenu()
+        composeRule.openServerManagementFromHome()
 
         waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithText("Alpha").assertExists()
@@ -64,7 +64,7 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back))
             .performClick()
-        composeRule.waitForAgents()
+        composeRule.waitForHome()
     }
 
     @Test
@@ -102,7 +102,7 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.chat_back)).performClick()
         waitForText("Session Alpha")
-        openProfilesFromOverflowMenu()
+        openServerTab()
         waitForText(context.getString(R.string.profiles_title))
 
         openDeleteDialog(PROFILE_A_ID)
@@ -137,7 +137,7 @@ class ProfileManagementNavigationUiTest {
         composeRule.waitForHome()
         composeRule.openAgentsTab()
         composeRule.waitForAgents()
-        openProfilesFromOverflowMenu()
+        openServerTab()
         waitForText(context.getString(R.string.profiles_title))
         openDeleteDialog("profile-b")
         waitForText(context.getString(R.string.profiles_delete_title))
@@ -171,7 +171,7 @@ class ProfileManagementNavigationUiTest {
         composeRule.waitForHome()
         composeRule.openAgentsTab()
         composeRule.waitForAgents()
-        openProfilesFromOverflowMenu()
+        openServerTab()
         waitForText(context.getString(R.string.profiles_title))
         openDeleteDialog(PROFILE_A_ID)
         waitForText(context.getString(R.string.profiles_delete_title))
@@ -207,11 +207,9 @@ class ProfileManagementNavigationUiTest {
         composeRule.onNodeWithTag("serverDelete:$profileId").performClick()
     }
 
-    private fun openProfilesFromOverflowMenu() {
-        composeRule.onNodeWithContentDescription(
-            context.getString(R.string.sessions_more_options)
-        ).performClick()
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+    /** Server management lives in the Server tab (the Agents list has no menu). */
+    private fun openServerTab() {
+        composeRule.onNodeWithTag("nav_tab_server").performClick()
     }
 
     private fun waitForText(text: String) {

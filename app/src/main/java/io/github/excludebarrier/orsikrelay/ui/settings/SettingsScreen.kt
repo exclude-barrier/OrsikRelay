@@ -89,6 +89,7 @@ fun SettingsScreen(
     materialYouController: MaterialYouController,
     appAuthenticator: AppAuthenticator?,
     onBack: () -> Unit,
+    onOpenAbout: () -> Unit,
     modifier: Modifier = Modifier,
     sdkInt: Int = Build.VERSION.SDK_INT,
     openNotificationSettings: (Context) -> Unit = { openAppNotificationSettings(it) }
@@ -237,6 +238,23 @@ fun SettingsScreen(
                         onValueChange = { screenProtectionController.setEnabled(it) }
                     ),
                 trailing = { Switch(checked = screenProtection, onCheckedChange = null) }
+            )
+
+            GroupLabel(stringResource(R.string.settings_about_section))
+            SettingsBlock(
+                position = GroupPosition.Single,
+                icon = OrsikIcons.Relay,
+                title = stringResource(R.string.settings_about_section),
+                modifier = Modifier
+                    .testTag("settings_about")
+                    .clickable(onClick = onOpenAbout),
+                trailing = {
+                    Icon(
+                        OrsikIcons.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             )
         }
     }

@@ -66,7 +66,6 @@
     <string name="sessions_search_clear">Clear search</string>
     <string name="sessions_search_no_results">No chat titled “%1$s”.</string>
     <string name="sessions_search_only_loaded_hint">Only loaded chats are searched. Load more to search further.</string>
-    <string name="sessions_more_options">More options</string>
     <string name="theme_mode_system">System</string>
     <string name="theme_mode_light">Light</string>
     <string name="theme_mode_dark">Dark</string>
@@ -94,7 +93,6 @@
         <item quantity="one">%1$s message</item>
         <item quantity="other">%1$s messages</item>
     </plurals>
-    <string name="settings_entry">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
     <string name="settings_language_system">System</string>
@@ -204,7 +202,6 @@
     <string name="error_connection_timeout">The server did not respond in time.</string>
     <string name="error_connection_network">The Hermes server is currently unreachable.</string>
     <string name="error_connection_http">The server did not process the request successfully.</string>
-    <string name="profiles_manage">Manage servers</string>
     <string name="profiles_title">Servers</string>
     <string name="profiles_loading">Loading servers…</string>
     <string name="profiles_error_generic">The servers could not be loaded.</string>

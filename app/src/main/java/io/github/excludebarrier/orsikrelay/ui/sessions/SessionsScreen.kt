@@ -20,8 +20,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -64,6 +62,8 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionManager
 import io.github.excludebarrier.orsikrelay.domain.session.SessionManageResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionManageError
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.ui.home.PreviewHarnesses
 import androidx.compose.foundation.horizontalScroll
@@ -125,8 +125,8 @@ import java.time.Clock
  * the server has more pages, a hint explains that only loaded sessions are
  * searched and load-more stays reachable, also with zero hits.
  *
- * The header's overflow menu links to server management, settings and the
- * about screen; the appearance switcher lives in settings now.
+ * There is no header menu: servers live in the Server tab, settings and
+ * "about" behind the gear on Home.
  *
  * [pageSource] is the test seam; production injects the repository.
  * [clock] is the test seam for deterministic date grouping; production uses
@@ -141,9 +141,6 @@ fun SessionsScreen(
     creator: SessionCreator? = null,
     onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
     onSessionCreated: (sessionId: String) -> Unit = {},
-    onOpenProfileManagement: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
-    onOpenAbout: () -> Unit = {},
     runningSessionId: String? = null,
     manager: SessionManager? = null,
     clock: Clock = Clock.systemDefaultZone()
@@ -156,11 +153,11 @@ fun SessionsScreen(
     var loadInFlight by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var showNewSessionDialog by remember { mutableStateOf(false) }
-    var showOverflowMenu by remember { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var hadSessions by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val canCreateSession = !profileId.isBlank() && creator != null
+    val refreshLabel = stringResource(R.string.sessions_refresh)
     val snackbarHostState = remember { SnackbarHostState() }
     // Archive/delete are offered only when the server advertises them.
     var canManage by remember(profileId, manager) { mutableStateOf(false) }
@@ -310,72 +307,14 @@ fun SessionsScreen(
         OrsikLargeHeader(
             title = stringResource(R.string.sessions_title),
             modifier = Modifier.testTag(SESSIONS_HEADER_TAG)
-        ) {
-            Box {
-                IconButton(
-                    onClick = { showOverflowMenu = true },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = OrsikIcons.MoreVert,
-                        contentDescription = stringResource(R.string.sessions_more_options),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                DropdownMenu(
-                    expanded = showOverflowMenu,
-                    onDismissRequest = { showOverflowMenu = false }
-                ) {
-                    Column(modifier = Modifier.testTag("sessions_overflow_menu")) {
-                        DropdownMenuItem(
-                            text = { Text(text = stringResource(R.string.sessions_refresh)) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Refresh,
-                                    contentDescription = null
-                                )
-                            },
-                            modifier = Modifier.testTag("sessions_menu_refresh"),
-                            onClick = {
-                                showOverflowMenu = false
-                                loadPage(offset = 0, append = false)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(text = stringResource(R.string.profiles_manage)) },
-                            modifier = Modifier.testTag("sessions_menu_manage_servers"),
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenProfileManagement()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(text = stringResource(R.string.settings_entry)) },
-                            modifier = Modifier.testTag("sessions_menu_settings"),
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenSettings()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(text = stringResource(R.string.settings_about_section)) },
-                            modifier = Modifier.testTag("sessions_menu_about"),
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenAbout()
-                            }
-                        )
-                    }
-                }
-            }
-        }
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-        // Refreshing stays reachable for screen readers through the
-        // overflow menu; the visible control is pull-to-refresh.
+        // Refreshing is pull-to-refresh; screen readers get the same
+        // refresh as an accessibility action on the list.
         // Searching only makes sense with sessions to search: the field is
         // hidden on an error, for an empty list and before the first page,
         // but stays during a refresh (no layout jump) and while a query is
@@ -439,6 +378,14 @@ fun SessionsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction(refreshLabel) {
+                            loadPage(offset = 0, append = false)
+                            true
+                        }
+                    )
+                }
                 .testTag("sessionsPullToRefresh")
         ) {
             when (val current = state) {

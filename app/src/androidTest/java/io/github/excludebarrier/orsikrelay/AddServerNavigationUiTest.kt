@@ -6,9 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -66,7 +64,7 @@ class AddServerNavigationUiTest {
         composeRule.waitForHome()
         composeRule.openAgentsTab()
         waitForText("Session Alpha")
-        openProfilesFromOverflowMenu()
+        openServerTab()
         waitForText(context.getString(R.string.profiles_title))
 
         composeRule.onNodeWithTag("addServerButton").performClick()
@@ -112,7 +110,7 @@ class AddServerNavigationUiTest {
         composeRule.waitForHome()
         composeRule.openAgentsTab()
         waitForText("Session Alpha")
-        openProfilesFromOverflowMenu()
+        openServerTab()
         waitForText(context.getString(R.string.profiles_title))
         composeRule.onNodeWithTag("addServerButton").performClick()
         waitForText(context.getString(R.string.onboarding_title))
@@ -187,7 +185,7 @@ class AddServerNavigationUiTest {
         composeRule.openAgentsTab()
         waitForText("Session Neu")
 
-        openProfilesFromOverflowMenu()
+        composeRule.openServerManagementFromHome()
         waitForText(context.getString(R.string.profiles_title))
         // Both taps are delivered in the same UI frame, before any
         // recomposition: exactly what a fast double tap does.
@@ -238,11 +236,9 @@ class AddServerNavigationUiTest {
         }
     }
 
-    private fun openProfilesFromOverflowMenu() {
-        composeRule.onNodeWithContentDescription(
-            context.getString(R.string.sessions_more_options)
-        ).performClick()
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+    /** Server management lives in the Server tab (the Agents list has no menu). */
+    private fun openServerTab() {
+        composeRule.onNodeWithTag("nav_tab_server").performClick()
     }
 
     private fun waitForText(text: String) {

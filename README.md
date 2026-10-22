@@ -270,7 +270,7 @@ contract before it stores anything.
 | Chat text size | **Settings → Chat** |
 | Block screenshots | **Settings → Privacy → Screen protection** |
 | Lock the app | **Settings → Privacy → App lock** |
-| App version and license | **⋮ → About the app** on **Agents** |
+| App version and license | **⚙ → About the app** on **Home** |
 
 On the server, `admin list-devices` and `admin revoke-device <device_id>` list
 and immediately revoke paired phones.

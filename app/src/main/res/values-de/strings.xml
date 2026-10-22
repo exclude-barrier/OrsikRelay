@@ -66,7 +66,6 @@
     <string name="sessions_search_clear">Suche löschen</string>
     <string name="sessions_search_no_results">Kein Chat mit „%1$s“ im Titel.</string>
     <string name="sessions_search_only_loaded_hint">Durchsucht werden nur die geladenen Chats. Lade mehr, um weiter zu suchen.</string>
-    <string name="sessions_more_options">Weitere Optionen</string>
     <string name="theme_mode_system">System</string>
     <string name="theme_mode_light">Hell</string>
     <string name="theme_mode_dark">Dunkel</string>
@@ -94,7 +93,6 @@
         <item quantity="one">%1$s Nachricht</item>
         <item quantity="other">%1$s Nachrichten</item>
     </plurals>
-    <string name="settings_entry">Einstellungen</string>
     <string name="settings_title">Einstellungen</string>
     <string name="settings_back">Zurück</string>
     <string name="settings_language_system">System</string>
@@ -203,7 +201,6 @@
     <string name="error_connection_timeout">Der Server hat nicht rechtzeitig geantwortet.</string>
     <string name="error_connection_network">Der Hermes-Server ist derzeit nicht erreichbar.</string>
     <string name="error_connection_http">Der Server hat die Anfrage nicht erfolgreich verarbeitet.</string>
-    <string name="profiles_manage">Server verwalten</string>
     <string name="profiles_title">Server</string>
     <string name="profiles_loading">Server werden geladen…</string>
     <string name="profiles_error_generic">Die Server konnten nicht geladen werden.</string>

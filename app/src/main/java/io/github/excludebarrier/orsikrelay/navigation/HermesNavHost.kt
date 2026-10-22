@@ -543,19 +543,6 @@ fun HermesNavHost(
                     onSessionSelected = ::openChat,
                     onSessionCreated = { sessionId ->
                         pendingCreatedSessionId = sessionId
-                    },
-                    onOpenProfileManagement = {
-                        navController.navigate(routeOf(AppScreen.Profiles))
-                    },
-                    onOpenSettings = {
-                        navController.navigate(routeOf(AppScreen.Settings)) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onOpenAbout = {
-                        navController.navigate(routeOf(AppScreen.About)) {
-                            launchSingleTop = true
-                        }
                     }
                 )
             }
@@ -568,6 +555,11 @@ fun HermesNavHost(
                     materialYouController = resolvedMaterialYouController,
                     appLockController = resolvedAppLockController,
                     appAuthenticator = resolvedAppAuthenticator,
+                    onOpenAbout = {
+                        navController.navigate(routeOf(AppScreen.About)) {
+                            launchSingleTop = true
+                        }
+                    },
                     onBack = {
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()

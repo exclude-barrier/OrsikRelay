@@ -95,7 +95,8 @@ class ScreenProtectionUiTest {
                         persist = {}
                     ),
                     appAuthenticator = null,
-                    onBack = {}
+                    onBack = {},
+                    onOpenAbout = {}
                 )
             }
         }

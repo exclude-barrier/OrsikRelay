@@ -326,6 +326,7 @@ class SettingsScreenUiTest {
                     materialYouController = materialYouController,
                     appAuthenticator = null,
                     onBack = onBack,
+                    onOpenAbout = {},
                     sdkInt = sdkInt,
                     openNotificationSettings = opener
                 )
