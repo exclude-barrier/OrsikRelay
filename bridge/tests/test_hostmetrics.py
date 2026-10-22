@@ -12,6 +12,12 @@ class ServiceListTest(unittest.TestCase):
         self.assertEqual(hostmetrics.parse_services(""), ("hermes-gateway", "orsik-mobile-bridge"))
         self.assertEqual(hostmetrics.parse_services(" docker , hermes-gateway "), ("docker", "hermes-gateway"))
 
+    def test_a_service_suffix_is_tolerated_and_an_empty_list_refused(self):
+        self.assertEqual(hostmetrics.parse_services("docker.service, x"), ("docker", "x"))
+        for raw in (",", " , ,"):
+            with self.assertRaises(SystemExit, msg=raw):
+                hostmetrics.parse_services(raw)
+
     def test_unsafe_names_are_refused_at_start(self):
         for raw in ("a;b", "../x", "x y", "-x", "a" * 65, ",".join(f"s{i}" for i in range(9))):
             with self.assertRaises(SystemExit, msg=raw):

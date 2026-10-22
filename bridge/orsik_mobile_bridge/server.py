@@ -185,18 +185,33 @@ def _check_secret_file(path: str) -> None:
         raise SystemExit(_SECRET_FILE_ERROR.format(path=path))
 
 
+def _env_value(raw: str) -> str:
+    """dotenv-style value: matching outer quotes are removed (their content is
+    taken verbatim); an unquoted value ends at a " #" comment."""
+    val = raw.strip()
+    if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+        return val[1:-1]
+    comment = val.find(" #")
+    return val[:comment].rstrip() if comment >= 0 else val
+
+
 def _load_env_file(path: str) -> dict[str, str]:
     _check_secret_file(path)
     values: dict[str, str] = {}
     try:
-        for line in Path(path).read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            values[key.strip()] = val.strip()
-    except OSError:
-        logger.error("Could not read env file: %s", path)
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        # Fail closed: a file that passed the checks but cannot be read must
+        # never fall back to other key sources.
+        raise SystemExit(f"Could not read env file: {path}") from None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        values[key.strip()] = _env_value(val)
     return values
 
 
@@ -210,6 +225,16 @@ def _state_db_path(env: dict[str, str]) -> str:
 
 _UPSTREAM_ERROR = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8642"
 _BIND_ERROR = "BRIDGE_BIND must be a literal loopback IP address (127.0.0.1 or ::1)"
+
+
+def _validate_port(raw: str) -> int:
+    try:
+        port = int(raw)
+    except ValueError:
+        port = 0
+    if not 1 <= port <= 65535:
+        raise SystemExit("BRIDGE_PORT must be a number between 1 and 65535")
+    return port
 
 
 def _validate_bind(bind: str) -> str:
@@ -1013,7 +1038,7 @@ def _admin_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="orsik-mobile-bridge admin")
     sub = parser.add_subparsers(dest="cmd", required=True)
     issue = sub.add_parser("pairing-code", help="issue a one-time pairing code")
-    issue.add_argument("--base-url", default=os.environ.get("BRIDGE_PUBLIC_BASE_URL", ""),
+    issue.add_argument("--base-url", default=None,
                        help="HTTPS base URL for the orsik://pair deep link/QR")
     sub.add_parser("list-devices", help="list paired devices (no secrets)")
     revoke = sub.add_parser("revoke-device", help="revoke a device by device_id")
@@ -1026,14 +1051,23 @@ def _admin_main(argv: list[str]) -> int:
     state = build_state_from_env(env)
     try:
         if args.cmd == "pairing-code":
+            # The default comes from bridge.env too, not only the process env.
+            base_url = args.base_url if args.base_url is not None else env.get("BRIDGE_PUBLIC_BASE_URL", "")
+            if base_url:
+                try:
+                    pairing.pairing_uri(base_url, "A" * core.CODE_LENGTH)
+                except ValueError:
+                    print("error: BRIDGE_PUBLIC_BASE_URL / --base-url must be https://<host> without user info",
+                          file=sys.stderr)
+                    return 1
             issued = state.codes.issue()
             if issued is None:
                 print("error: pairing-code capacity reached", file=sys.stderr)
                 return 1
             code, ttl = issued
             print(f"Pairing code: {pairing.format_code(code)}  (valid {ttl}s, single-use)")
-            if args.base_url:
-                uri = pairing.pairing_uri(args.base_url, code)
+            if base_url:
+                uri = pairing.pairing_uri(base_url, code)
                 print(f"Deep link:    {uri}")
                 qr = pairing.render_ascii_qr(uri)
                 print(qr if qr else "(install 'qrencode' for an ASCII QR; deep link above is equivalent)")
@@ -1075,8 +1109,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     env = _load_env()
     state = build_state_from_env(env)
-    bind = _validate_bind(env.get("BRIDGE_BIND", "127.0.0.1"))
-    port = int(env.get("BRIDGE_PORT", "9842"))
+    # An empty value means the default, exactly as install.sh --check reads it.
+    bind = _validate_bind(env.get("BRIDGE_BIND") or "127.0.0.1")
+    port = _validate_port(env.get("BRIDGE_PORT") or "9842")
     logger.info(
         "Orsik Mobile Bridge on http://%s:%d -> %s",
         bind, port, _safe_upstream_label(state.upstream),

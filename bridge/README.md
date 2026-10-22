@@ -186,8 +186,8 @@ changes when someone does it on purpose, via
 ```sh
 ./install.sh --systemd /path/to/bridge/source
 # edit $BRIDGE_HOME/bridge.env, then:
-$BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code --base-url https://<host>
-$BRIDGE_HOME/venv/bin/orsik-mobile-bridge              # serve
+BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code
+BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/venv/bin/orsik-mobile-bridge   # serve
 ```
 
 `bridge.env`:

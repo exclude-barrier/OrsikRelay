@@ -205,6 +205,26 @@ class InstallCheckTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("FAIL public_base_url", result.stdout)
 
+    def test_a_port_the_bridge_cannot_use_fails(self):
+        for port in ("abc", "0", "99999"):
+            with self.subTest(port=port):
+                self.write_env(port=port)
+                result = self.run_check()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("FAIL port", result.stdout)
+
+    def test_an_empty_upstream_line_fails_like_the_bridge(self):
+        self.write_env(upstream="")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL upstream", result.stdout)
+
+    def test_quoted_values_are_read_like_the_bridge_reads_them(self):
+        self.write_env(upstream=f'"{self.stub.url}"', public_base_url="'https://bridge.example.invalid' ")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("OK   upstream", result.stdout)
+
     def test_public_upstream_fails_and_skips_health(self):
         self.write_env(upstream="http://example.com:8899")
         result = self.run_check()

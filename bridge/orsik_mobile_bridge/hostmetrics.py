@@ -29,8 +29,11 @@ def parse_services(raw: str | None) -> tuple[str, ...]:
     """The operator's service list; an unsafe name stops the bridge at start."""
     if raw is None or not raw.strip():
         return DEFAULT_SERVICES
-    names = tuple(part.strip() for part in raw.split(",") if part.strip())
-    if len(names) > MAX_SERVICES or not all(_SERVICE_NAME.match(name) for name in names):
+    # "x.service" means the unit x; ".service" is appended when asking systemd.
+    names = tuple(
+        part.strip().removesuffix(".service") for part in raw.split(",") if part.strip()
+    )
+    if not names or len(names) > MAX_SERVICES or not all(_SERVICE_NAME.match(name) for name in names):
         raise SystemExit("BRIDGE_HOST_SERVICES: at most 8 plain unit names (letters, digits, @ _ . -)")
     return names
 

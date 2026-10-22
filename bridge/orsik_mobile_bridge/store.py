@@ -114,12 +114,14 @@ class BridgeStore:
         self._max_devices = max_devices
         self._lock = threading.Lock()
         if path != ":memory:":
-            parent = Path(path).expanduser().resolve().parent
-            try:
-                parent.mkdir(parents=True, exist_ok=True)
-                os.chmod(parent, 0o700)
-            except OSError:
-                pass
+            parent = Path(path).expanduser().parent
+            # Only a directory the store creates itself is made 0700; an
+            # existing (possibly shared) directory keeps its mode.
+            if not parent.exists():
+                try:
+                    parent.mkdir(parents=True, mode=0o700)
+                except OSError:
+                    pass
             self.path = str(Path(path).expanduser())
         self._conn = self._open()
 

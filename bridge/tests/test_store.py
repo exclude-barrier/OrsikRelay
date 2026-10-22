@@ -321,3 +321,18 @@ class StoreHardeningTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StoreDirectoryModeTest(unittest.TestCase):
+    def test_an_existing_directory_keeps_its_mode_and_a_new_one_is_private(self):
+        import os, tempfile
+        from orsik_mobile_bridge import store as store_mod
+        with tempfile.TemporaryDirectory() as root:
+            shared = os.path.join(root, "shared")
+            os.mkdir(shared)
+            os.chmod(shared, 0o755)
+            store_mod.BridgeStore(os.path.join(shared, "state.db")).close()
+            self.assertEqual(os.stat(shared).st_mode & 0o777, 0o755)
+            fresh = os.path.join(root, "fresh")
+            store_mod.BridgeStore(os.path.join(fresh, "state.db")).close()
+            self.assertEqual(os.stat(fresh).st_mode & 0o077, 0)
