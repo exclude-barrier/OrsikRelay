@@ -329,3 +329,46 @@ also timed out while booting on hosted CI runners. The smoke test therefore runs
 the pull request checks, in the nightly or manually started workflow
 `.github/workflows/android-api37.yml`; the API 37 result comes from that workflow and a
 real Android 17 device.
+
+## 14. Compatibility with the official core 0.22 and the hardening run
+
+Test stand: a fresh clone of the official core (`1186b6bd`, same session authority as the
+published 0.22.x), DeepSeek Flash, `approvals.mode: manual`, the bridge from `main`; started
+and stopped with `scripts/live-test-stack.sh`. Three incompatibilities and one relay bug were found and fixed:
+
+- **Approvals.** With the session authority the core accepts
+  `POST /v1/runs/{id}/approval` only as `{request_id, execution_generation, choice}` and
+  answered the bridge's `{choice, request_id}` with `400 invalid_params`. The command then
+  timed out unanswered (fail closed, never executed). The bridge now reads the generation
+  with one `GET /v1/runs/{id}` and adds it upstream. Live: `approval_live.py` deny answered
+  200 and the targeted directory survived.
+- **History.** Every finished turn ends with a `session_meta` row (`content: null`); the
+  app rejected the whole page. Rows with a role the app does not show are now skipped like
+  hidden rows.
+- **Images in history.** The core stores an API image turn as text plus
+  `[Image attached at: <server path>]`. The bridge turns exactly that shape into the
+  caption plus one data-less image part, so the app shows "1 image" and no server path.
+
+- **Core refusals.** The core sends errors as `application/json; charset=utf-8`; the run
+  buffer handed that to aiohttp, which refuses parameters in `content_type`, so a refusal
+  such as "Too many concurrent runs (max 10)" (429) reached the app as a bridge 500. Only
+  the media type is kept now; a burst of 30 turns gives 10 × 200 and 20 × 429.
+
+Real responses of this core run through the production clients in
+`HermesCoreFixtureCompatTest` (fixtures in `app/src/test/resources/hermes-core-0.22/`).
+
+Live checks against the fixed bridge: `acceptance_live.py` 37/37, `adversarial_live.py`
+77/77, `soak_live.py` 1000 turns from 10 parallel devices with dropped streams and
+re-attach (0 failures, bridge memory flat at about 48 MB), steer and stop accepted.
+
+Known limitation: after the core is killed mid-run, the next turn in the same session
+stays `queued` until `POST /v1/runs/{id}/resolve-unknown`, which neither the bridge nor the
+app offers yet. A new session works normally.
+
+App stability on emulators (API 36 and API 26): full instrumented suites green, monkey runs
+of 12 000 to 30 000 events, 100 rounds of process death with "Don't keep activities", dark
+mode, font scale 0.85 to 2.0 and RTL pseudo-locale, and intent fuzzing of the exported
+activity without a crash. Two "no focused window" ANRs appeared only with monkey app-switch
+events during the recents animation (main thread idle) and not in 60 rounds without them.
+MobSF 4.5.3 (local), pip-audit and an OSV query of the 191 release dependencies reported
+no real finding.

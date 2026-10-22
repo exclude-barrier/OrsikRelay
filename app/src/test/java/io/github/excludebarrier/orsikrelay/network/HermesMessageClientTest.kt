@@ -374,6 +374,43 @@ class HermesMessageClientTest {
     }
 
     @Test
+    fun rowsWithARoleTheAppDoesNotShowAreSkippedLikeHiddenRows() {
+        // Shape of a real page from the official core (Hermes 0.22+): a
+        // `session_meta` row with null content closes every finished turn.
+        server.enqueue(
+            jsonResponse(
+                base()
+                    .put(
+                        "data",
+                        JSONArray()
+                            .put(message(11, "user", "Frage").put("display_kind", "internal_notification"))
+                            .put(message(12, "assistant", "").put("finish_reason", "tool_calls"))
+                            .put(message(13, "tool", "").put("tool_name", "terminal"))
+                            .put(message(14, "assistant", "Antwort").put("finish_reason", "stop"))
+                            .put(
+                                JSONObject()
+                                    .put("id", 15)
+                                    .put("session_id", "synthetic-id")
+                                    .put("role", "session_meta")
+                                    .put("content", JSONObject.NULL)
+                            )
+                            .put(message(16, "moderatoor", "nie sichtbar"))
+                    )
+                    .put("pagination", pagination(200, 0, 6))
+            )
+        )
+
+        val result = fetch()
+
+        assertTrue(result is MessageHistoryResult.Success)
+        val page = (result as MessageHistoryResult.Success).page
+        assertEquals(listOf(11L, 12L, 13L, 14L), page.messages.map { it.id })
+        assertEquals("Frage", page.messages.first().content)
+        // Skipped rows still count for the next offset.
+        assertEquals(6, page.returned)
+    }
+
+    @Test
     fun messageFieldsAreValidatedStrictly() {
         val tooLarge = BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE)
         val invalidEntries = listOf(
@@ -385,7 +422,6 @@ class HermesMessageClientTest {
             JSONObject().put("id", 1.5).put("role", "user").put("content", "x"),
             JSONObject().put("id", tooLarge).put("role", "user").put("content", "x"),
             JSONObject().put("id", 1).put("content", "x"),
-            JSONObject().put("id", 1).put("role", "moderatoor").put("content", "x"),
             JSONObject().put("id", 1).put("role", 4).put("content", "x"),
             JSONObject().put("id", 1).put("role", "user"),
             JSONObject().put("id", 1).put("role", "user").put("content", JSONObject.NULL),

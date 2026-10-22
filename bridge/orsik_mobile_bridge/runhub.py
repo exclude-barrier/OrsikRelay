@@ -155,7 +155,9 @@ class RunBuffer:
         self.state = "failed"
         self.error_status = status
         self.error_body = body
-        self.error_content_type = content_type or "application/json"
+        # Only the media type: aiohttp refuses parameters such as "; charset=utf-8"
+        # in content_type, which turned every relayed core refusal into a 500.
+        self.error_content_type = (content_type or "").split(";")[0].strip() or "application/json"
         self.terminal = True
         self.ready.set()
         self._fan_out(None, None)

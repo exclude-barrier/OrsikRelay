@@ -1,5 +1,6 @@
 """Unit tests for the dependency-free bridge core (stdlib unittest)."""
 
+import json
 import unittest
 import uuid
 
@@ -278,3 +279,45 @@ class StripHistoryImagesTest(unittest.TestCase):
     def test_non_json_and_unchanged_pages_are_byte_identical(self):
         for body in (b"not json", b"[]", b'{"data": "x"}', b'{"data":[{"content":"plain"}]}'):
             self.assertIs(core.strip_history_images(body), body)
+
+    def _page(self, *messages):
+        return json.dumps({"object": "list", "data": list(messages)}).encode("utf-8")
+
+    def _content(self, body):
+        return [m["content"] for m in json.loads(core.strip_history_images(body))["data"]]
+
+    def test_core_image_hints_become_image_parts_without_the_server_path(self):
+        # Hermes 0.22+ stores an API image turn as text plus one hint per image.
+        text = ("Welche Farbe?\n\n[Image attached at: /srv/home/cache/native-inputs/a.png]\n"
+                "[Image attached: https://example.org/b.png]\n[screenshot]\n[screenshot]")
+        content = self._content(self._page({"id": 1, "role": "user", "content": text}))
+        self.assertEqual(content, [[{"type": "text", "text": "Welche Farbe?"},
+                                    {"type": "image_url"}, {"type": "image_url"}]])
+        self.assertNotIn(b"/srv/home", core.strip_history_images(
+            self._page({"id": 1, "role": "user", "content": text})))
+
+    def test_a_caption_with_blank_lines_is_kept_whole(self):
+        text = "Absatz eins\n\nAbsatz zwei\n\n[Image attached at: /x/a.png]"
+        content = self._content(self._page({"id": 1, "role": "user", "content": text}))
+        self.assertEqual(content, [[{"type": "text", "text": "Absatz eins\n\nAbsatz zwei"},
+                                    {"type": "image_url"}]])
+
+    def test_core_default_caption_is_dropped(self):
+        text = "What do you see in this image?\n\n[Image attached at: /x/a.png]"
+        content = self._content(self._page({"id": 1, "role": "user", "content": text}))
+        self.assertEqual(content, [[{"type": "image_url"}]])
+
+    def test_text_that_only_looks_like_a_hint_stays_unchanged(self):
+        for text in (
+            "Schau: [Image attached at: /x/a.png]",            # no blank line before the hint
+            "Text\n\n[Image attached at: /x/a.png]\nmehr Text",  # trailing text after the hints
+            "Text\n\n[Image attached at: ]",                    # empty path
+            "Text\n\n[Image attached at: /x/a.png]\n[screenshot]\n[screenshot]",  # placeholder count
+        ):
+            body = self._page({"id": 1, "role": "user", "content": text})
+            self.assertEqual(self._content(body), [text], text)
+
+    def test_only_user_rows_are_rewritten(self):
+        text = "Text\n\n[Image attached at: /x/a.png]"
+        body = self._page({"id": 1, "role": "assistant", "content": text})
+        self.assertEqual(self._content(body), [text])

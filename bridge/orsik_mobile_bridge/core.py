@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 
 import hashlib
+import re
 import secrets
 import time
 import uuid
@@ -399,6 +400,42 @@ def build_credential(record: DeviceRecord, token: str, issued_at: float) -> dict
 
 
 _HISTORY_IMAGE_PART_TYPES = frozenset({"image", "image_url", "input_image"})
+# Hermes 0.22+ stores an API image turn as text: the caption, a blank line, one
+# hint per image (a server path or the remote URL) and optionally one
+# "[screenshot]" placeholder per image. Without a caption the core inserts its
+# default question. Mirrors tui_gateway/session_history.py of the core.
+_IMAGE_HINT_SEPARATOR = "\n\n[Image attached"
+_IMAGE_HINT_RE = re.compile(r"\[Image attached(?: at)?: [^\n\]]+\]")
+_SCREENSHOT_PLACEHOLDER = "[screenshot]"
+_DEFAULT_IMAGE_CAPTION = "What do you see in this image?"
+
+
+def _image_hint_parts(text: str) -> list[dict] | None:
+    """The content-part list for a core image-hint text, or None if it is not one.
+
+    Only an exact match is rewritten: the caption, then nothing but hint lines
+    and (0 or one per image) trailing placeholders. Anything else stays as it is.
+    """
+    index = text.find(_IMAGE_HINT_SEPARATOR)
+    if index < 0:
+        return None
+    # The caption may itself contain blank lines; the hints start at the first
+    # separator, exactly where the core appended them.
+    caption, rest = text[:index], text[index + 2:]
+    lines = rest.split("\n")
+    placeholders = 0
+    while lines and lines[-1] == _SCREENSHOT_PLACEHOLDER:
+        lines.pop()
+        placeholders += 1
+    if not lines or not all(_IMAGE_HINT_RE.fullmatch(line) for line in lines):
+        return None
+    if placeholders not in (0, len(lines)):
+        return None
+    parts: list[dict] = []
+    if caption and caption != _DEFAULT_IMAGE_CAPTION:
+        parts.append({"type": "text", "text": caption})
+    parts.extend({"type": "image_url"} for _ in lines)
+    return parts
 # Never read by the app: model scratch text and the raw tool-call arguments.
 _HISTORY_UNUSED_FIELDS = ("tool_calls", "reasoning", "reasoning_content")
 
@@ -413,6 +450,9 @@ def strip_history_images(body: bytes) -> bytes:
     - Tool messages lose their ``content`` (tool output, commands, paths);
       the app renders only the tool name for them.
     - ``tool_calls`` and reasoning fields are removed.
+    - A user text with the core's image hints (Hermes 0.22+) becomes the
+      caption plus one data-less image part per image, so neither the server
+      path of the stored image nor the hint text reaches the device.
 
     A body that is not the expected JSON shape is returned unchanged.
     """
@@ -435,6 +475,14 @@ def strip_history_images(body: bytes) -> bytes:
             message["content"] = ""
             changed = True
         content = message.get("content")
+        if message.get("role") == "user" and isinstance(content, str):
+            # The hint carries the server-side path of the stored image; the
+            # app only needs to know that an image was attached.
+            parts = _image_hint_parts(content)
+            if parts is not None:
+                message["content"] = parts
+                changed = True
+            continue
         if not isinstance(content, list):
             continue
         for index, part in enumerate(content):

@@ -394,15 +394,51 @@ async def _handle_approval(request: web.Request) -> web.StreamResponse:
         # The raw (rejected) choice is client input and is never logged.
         _audit("approval", record, run=run_id, choice="rejected", status=400)
         return _closed(400, code)
-    # Forward a canonical body (only the two contract fields) upstream.
-    payload = json.dumps(
-        {"choice": body["choice"], "request_id": body["request_id"]}
-    ).encode("utf-8")
+    # Forward a canonical body (only the two contract fields) upstream. A core
+    # with the session authority (Hermes 0.22+) also requires the run's current
+    # execution_generation; it is read from the run status, never from the device.
+    canonical = {"choice": body["choice"], "request_id": body["request_id"]}
+    generation = await _run_execution_generation(state, run_id)
+    if generation is not None:
+        canonical["execution_generation"] = generation
+    payload = json.dumps(canonical).encode("utf-8")
     choice = body["choice"]
     return await _proxy(
         request, state, f"/v1/runs/{run_id}/approval", body_override=payload,
         on_status=lambda status: _audit("approval", record, run=run_id, choice=choice, status=status),
     )
+
+
+async def _run_execution_generation(state: BridgeState, run_id: str) -> int | None:
+    """The run's ``execution_generation`` from ``GET /v1/runs/{run_id}``, or None.
+
+    One idempotent read without retry. Anything but a 200 JSON object with an
+    integer field (an older core, an unknown run, a timeout) yields None, and
+    the approval is then forwarded in its plain v1 form.
+    """
+    timeout = ClientTimeout(total=15, sock_connect=10)
+    headers = {"Authorization": "Bearer " + state.master_key, "Accept": "application/json"}
+    try:
+        async with ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{state.upstream}/v1/runs/{run_id}", headers=headers, allow_redirects=False
+            ) as upstream:
+                if upstream.status != 200:
+                    return None
+                raw = await upstream.content.read(64 * 1024 + 1)
+    except Exception:
+        return None
+    if len(raw) > 64 * 1024:
+        return None
+    try:
+        run = json.loads(raw)
+    except ValueError:
+        return None
+    generation = run.get("execution_generation") if isinstance(run, dict) else None
+    # bool is an int subclass; a JSON true is not a generation.
+    if type(generation) is not int:
+        return None
+    return generation
 
 
 def _upstream_headers(request: web.Request) -> dict[str, str]:
