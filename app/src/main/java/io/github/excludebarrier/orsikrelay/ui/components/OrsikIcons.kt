@@ -63,6 +63,8 @@ object OrsikIcons {
     val Scan by lazy {
         stroke("Scan", 2.2f, "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8")
     }
+    val Archive by lazy { stroke("Archive", 1.9f, rect(3f, 4f, 18f, 5f, 1.5f), "M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4") }
+    val Trash by lazy { stroke("Trash", 1.9f, "M4 7h16M10 3h4M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6") }
     val Key by lazy { stroke("Key", 2f, circle(8f, 15f, 4f), "m11 12 9-9M17 6l3 3M15 8l2 2") }
     val MoreVert by lazy {
         stroke("MoreVert", 1.9f, fills = listOf(circle(12f, 5f, 1.4f), circle(12f, 12f, 1.4f), circle(12f, 19f, 1.4f)))

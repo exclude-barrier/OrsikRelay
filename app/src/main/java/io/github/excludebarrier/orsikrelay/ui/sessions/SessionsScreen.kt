@@ -53,6 +53,17 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManager
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManageResult
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManageError
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.FilterChip
@@ -133,6 +144,7 @@ fun SessionsScreen(
     onOpenSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
     runningSessionId: String? = null,
+    manager: SessionManager? = null,
     clock: Clock = Clock.systemDefaultZone()
 ) {
     val configuration = LocalConfiguration.current
@@ -148,6 +160,94 @@ fun SessionsScreen(
     var hadSessions by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val canCreateSession = !profileId.isBlank() && creator != null
+    val snackbarHostState = remember { SnackbarHostState() }
+    // Archive/delete are offered only when the server advertises them.
+    var canManage by remember(profileId, manager) { mutableStateOf(false) }
+    var actionsFor by remember { mutableStateOf<String?>(null) }
+    var deleteCandidate by remember { mutableStateOf<HermesSession?>(null) }
+    var manageInFlight by remember { mutableStateOf(false) }
+    val archivedLabel = stringResource(R.string.sessions_archived)
+    val undoLabel = stringResource(R.string.sessions_undo)
+    val deletedLabel = stringResource(R.string.sessions_deleted)
+    val activeLabel = stringResource(R.string.sessions_manage_active)
+    val failedLabel = stringResource(R.string.sessions_manage_failed)
+
+    LaunchedEffect(profileId, manager) {
+        canManage = manager != null && profileId.isNotBlank() &&
+            withContext(Dispatchers.IO) { manager.supportsManagement(profileId) }
+    }
+
+    fun removeLocally(sessionId: String) {
+        (state as? SessionListState.Ready)?.let { ready ->
+            state = ready.copy(sessions = ready.sessions.filterNot { it.id == sessionId })
+        }
+    }
+
+    fun restoreLocally(session: HermesSession, index: Int) {
+        (state as? SessionListState.Ready)?.let { ready ->
+            if (ready.sessions.any { it.id == session.id }) return
+            val sessions = ready.sessions.toMutableList()
+            sessions.add(index.coerceIn(0, sessions.size), session)
+            state = ready.copy(sessions = sessions)
+        }
+    }
+
+    /**
+     * Runs one archive/delete request (never retried). The row disappears
+     * only after the server confirmed it (or confirms the chat is gone);
+     * a running turn and every other failure keep the row and say so.
+     */
+    fun manage(
+        session: HermesSession,
+        request: (SessionManager) -> SessionManageResult,
+        onDone: suspend () -> Unit
+    ) {
+        val sessionManager = manager ?: return
+        if (manageInFlight) return
+        manageInFlight = true
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) { request(sessionManager) }
+            manageInFlight = false
+            when (result) {
+                SessionManageResult.Success -> {
+                    removeLocally(session.id)
+                    onDone()
+                }
+                is SessionManageResult.Failure -> when (result.error) {
+                    SessionManageError.NotFound -> removeLocally(session.id)
+                    SessionManageError.ActiveTurn -> snackbarHostState.showSnackbar(activeLabel)
+                    SessionManageError.Failed -> snackbarHostState.showSnackbar(failedLabel)
+                }
+            }
+        }
+    }
+
+    fun archive(session: HermesSession) {
+        val index = (state as? SessionListState.Ready)?.sessions?.indexOfFirst { it.id == session.id } ?: 0
+        manage(session, { it.setArchived(profileId, session.id, archived = true) }) {
+            val undo = snackbarHostState.showSnackbar(
+                message = archivedLabel,
+                actionLabel = undoLabel,
+                duration = SnackbarDuration.Long
+            )
+            if (undo == SnackbarResult.ActionPerformed) {
+                val restored = manager?.let { sessionManager ->
+                    withContext(Dispatchers.IO) { sessionManager.setArchived(profileId, session.id, archived = false) }
+                }
+                if (restored == SessionManageResult.Success) {
+                    restoreLocally(session, index)
+                } else {
+                    snackbarHostState.showSnackbar(failedLabel)
+                }
+            }
+        }
+    }
+
+    fun delete(session: HermesSession) {
+        manage(session, { it.delete(profileId, session.id) }) {
+            snackbarHostState.showSnackbar(deletedLabel)
+        }
+    }
 
     fun loadPage(offset: Int, append: Boolean, pullRefresh: Boolean = false) {
         if (loadInFlight) return
@@ -469,6 +569,7 @@ fun SessionsScreen(
                                     items = section.sessions,
                                     key = { _, session -> "session-${session.id}" }
                                 ) { index, session ->
+                                    Box(modifier = Modifier.padding(bottom = GroupGap)) {
                                     SessionListItem(
                                         session = session,
                                         position = groupPosition(index, section.sessions.size),
@@ -486,8 +587,26 @@ fun SessionsScreen(
                                         },
                                         running = session.id == runningSessionId,
                                         showPin = true,
-                                        modifier = Modifier.padding(bottom = GroupGap)
+                                        onLongClick = if (canManage && session.id != runningSessionId) {
+                                            { actionsFor = session.id }
+                                        } else {
+                                            null
+                                        },
+                                        modifier = Modifier.testTag("sessionRow:${session.id}")
                                     )
+                                    SessionActionsMenu(
+                                        expanded = actionsFor == session.id,
+                                        onDismiss = { actionsFor = null },
+                                        onArchive = {
+                                            actionsFor = null
+                                            archive(session)
+                                        },
+                                        onDelete = {
+                                            actionsFor = null
+                                            deleteCandidate = session
+                                        }
+                                    )
+                                    }
                                 }
                             }
                             if (current.hasMore && (searching || current.sessions.isNotEmpty())) {
@@ -534,6 +653,24 @@ fun SessionsScreen(
                     .semantics { contentDescription = newSessionLabel }
             )
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 88.dp)
+        )
+    }
+
+    deleteCandidate?.let { session ->
+        DeleteSessionDialog(
+            title = session.title?.takeIf { it.isNotBlank() }
+                ?: stringResource(R.string.session_fallback_title),
+            onConfirm = {
+                deleteCandidate = null
+                delete(session)
+            },
+            onDismiss = { deleteCandidate = null }
+        )
     }
 
     if (showNewSessionDialog && creator != null) {
@@ -645,3 +782,54 @@ private fun AgentFilterChips(modifier: Modifier = Modifier) {
 }
 
 private const val PAGE_SIZE = 50
+
+/** Long-press menu of one chat: archive, delete. */
+@Composable
+private fun SessionActionsMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.sessions_archive)) },
+            leadingIcon = { Icon(OrsikIcons.Archive, contentDescription = null) },
+            onClick = onArchive,
+            modifier = Modifier.testTag(SESSION_ARCHIVE_TAG)
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.sessions_delete), color = MaterialTheme.colorScheme.error) },
+            leadingIcon = { Icon(OrsikIcons.Trash, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            onClick = onDelete,
+            modifier = Modifier.testTag(SESSION_DELETE_TAG)
+        )
+    }
+}
+
+/** Irreversible: deleting needs an explicit confirmation naming the chat. */
+@Composable
+private fun DeleteSessionDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = OrsikDialog.shape,
+        containerColor = OrsikDialog.containerColor,
+        tonalElevation = OrsikDialog.tonalElevation,
+        title = { Text(stringResource(R.string.sessions_delete_title)) },
+        text = { Text(stringResource(R.string.sessions_delete_text, title)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm, modifier = Modifier.testTag(SESSION_DELETE_CONFIRM_TAG)) {
+                Text(stringResource(R.string.sessions_delete_confirm), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.sessions_delete_cancel)) }
+        },
+        modifier = Modifier.testTag(SESSION_DELETE_DIALOG_TAG)
+    )
+}
+
+internal const val SESSION_ARCHIVE_TAG = "sessionArchive"
+internal const val SESSION_DELETE_TAG = "sessionDelete"
+internal const val SESSION_DELETE_DIALOG_TAG = "sessionDeleteDialog"
+internal const val SESSION_DELETE_CONFIRM_TAG = "sessionDeleteConfirm"

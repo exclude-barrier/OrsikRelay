@@ -120,7 +120,7 @@ Hermes home behind the bridge sets `approvals.mode: manual` (see
 
 **Auditability.** Every state-changing device request creates an
 audit line (logger `orsik_mobile_bridge.audit`):
-`audit action=<chat|approval|stop|steer|session_create|pair|revoke>
+`audit action=<chat|approval|stop|steer|session_create|session_archive|session_delete|pair|revoke>
 device=<device_id|-> [run=/session=<id>] [choice=<once|deny|rejected>]
 [status=<http>]`. Rejected choices are recorded as
 `rejected` (raw value = client input, never logged); tokens,
@@ -128,6 +128,12 @@ master key and message content never appear. Pairing failures and
 unauthenticated revoke attempts use `device=-`. The line is created as soon as
 the upstream status (or the local rejection) is determined, i.e. before the
 response to the device.
+
+**Chat management.** `PATCH /api/sessions/{id}` reaches Hermes only as exactly
+`{"archived": <bool>}` (title, pin, hidden, unread and `end_reason` are refused
+locally with `400`); `DELETE /api/sessions/{id}` only without a body. Deleting is
+irreversible on the server; the app asks for confirmation first. Like
+approvals, any paired device can archive or delete any chat of the owner (§4).
 
 §4 continues to apply unchanged: Every paired device can send approvals/stop/steer for
 **any** run of the owner (no per-device isolation); the audit makes

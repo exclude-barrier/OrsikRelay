@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,6 +66,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
+import io.github.excludebarrier.orsikrelay.ui.components.rememberReducedMotion
 import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -355,6 +362,8 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 // FOLLOW_TAIL_THRESHOLD of the end). Content that grows while
                 // the user has scrolled away must never yank the viewport.
                 var followTail by remember(profileId, sessionId) { mutableStateOf(true) }
+                // Which tool groups the user opened; survives recreation.
+                var expandedToolGroups by rememberSaveable(profileId, sessionId) { mutableStateOf(emptySet<String>()) }
                 val followThresholdPx = with(LocalDensity.current) {
                     FOLLOW_TAIL_THRESHOLD.roundToPx()
                 }
@@ -477,16 +486,36 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                                 )
                             }
                         }
-                        items(timeline, key = { it.key }) { message ->
+                        val grouped = groupTools(timeline)
+                        items(grouped, key = { it.key }) { item ->
                             CompositionLocalProvider(
                                 LocalChatTextScale provides chatTextScale
                             ) {
-                                MessageRow(message)
+                                when (item) {
+                                    is TimelineItem.Single -> MessageRow(item.row)
+                                    is TimelineItem.ToolGroup -> ToolGroupRow(
+                                        group = item,
+                                        // Only the newest live group can still grow.
+                                        running = state.turnActive && item.live && item === grouped.last(),
+                                        expanded = item.key in expandedToolGroups,
+                                        onToggle = {
+                                            expandedToolGroups = if (item.key in expandedToolGroups) {
+                                                expandedToolGroups - item.key
+                                            } else {
+                                                expandedToolGroups + item.key
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                         state.turnActivity?.let { activity ->
                             item(key = "turn_activity") {
-                                TurnActivityRow(activity, turnStartedAt)
+                                TurnActivityRow(
+                                    activity = activity,
+                                    startedAt = turnStartedAt,
+                                    toolName = state.localLines.lastOrNull()?.takeIf { it.localTool }?.toolName
+                                )
                             }
                         }
                     }
@@ -748,15 +777,41 @@ internal fun Modifier.bleed(horizontal: Dp): Modifier = layout { measurable, con
 
 /**
  * Last timeline row while a turn runs without visible progress, so a long
- * tool call or reasoning phase never looks like a stalled chat.
+ * tool call or reasoning phase never looks like a stalled chat: Orsik's
+ * own [WorkingGlyph], a status line and the elapsed time.
+ *
+ * While Hermes works the line cycles through playful verbs ("tüftelt",
+ * "sortiert", ...) under a soft shimmer; "denkt nach" stays as it is (a real
+ * status), and a running tool names the tool ([toolName], redacted). With
+ * "Remove animations" the glyph rests, the shimmer is off and the first
+ * verb (the plain "Hermes arbeitet…") stays.
  */
 @Composable
-private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
+internal fun TurnActivityRow(activity: TurnActivity, startedAt: Long, toolName: String?) {
     val elapsedSeconds by produceState(0L, startedAt) {
         while (true) {
             value = (SystemClock.elapsedRealtime() - startedAt) / 1_000
             delay(1_000)
         }
+    }
+    val reducedMotion = rememberReducedMotion()
+    val verbs = stringArrayResource(R.array.chat_turn_working_verbs)
+    var verbIndex by remember(startedAt) { mutableIntStateOf(0) }
+    LaunchedEffect(activity, reducedMotion, startedAt) {
+        if (activity != TurnActivity.Working || reducedMotion) {
+            verbIndex = 0
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(VERB_INTERVAL_MS)
+            verbIndex = (verbIndex + 1) % verbs.size
+        }
+    }
+    val label = when (activity) {
+        TurnActivity.Working -> verbs[verbIndex]
+        TurnActivity.Thinking -> stringResource(R.string.chat_turn_thinking)
+        TurnActivity.Tool -> toolName?.let { stringResource(R.string.chat_turn_tool_named, it) }
+            ?: stringResource(R.string.chat_turn_tool)
     }
     Row(
         modifier = Modifier
@@ -764,22 +819,12 @@ private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        PulsingDots()
-        // Next to a running tool chip the chip already says what happens;
-        // the row then only adds the elapsed time.
-        val label = when (activity) {
-            TurnActivity.Working -> stringResource(R.string.chat_turn_working)
-            TurnActivity.Thinking -> stringResource(R.string.chat_turn_thinking)
-            TurnActivity.Tool -> null
-        }
-        if (label != null) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 10.dp)
-            )
-        }
+        WorkingGlyph()
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(brush = shimmerBrush(reducedMotion)),
+            modifier = Modifier.padding(start = 10.dp)
+        )
         Text(
             text = if (elapsedSeconds < 60) {
                 stringResource(R.string.chat_turn_elapsed_seconds, elapsedSeconds)
@@ -792,35 +837,34 @@ private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = if (label != null) 6.dp else 10.dp)
+            modifier = Modifier.padding(start = 6.dp)
         )
     }
 }
 
-/** Three dots that fade in turn, the usual "is typing" signal. */
+/** A light band sweeping over the status text; plain text colour without animations. */
 @Composable
-private fun PulsingDots() {
-    val transition = rememberInfiniteTransition(label = "turnActivityDots")
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        repeat(3) { index ->
-            val alpha by transition.animateFloat(
-                initialValue = 0.25f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 600, delayMillis = index * 200),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "turnActivityDot$index"
-            )
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .graphicsLayer { this.alpha = alpha }
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-            )
-        }
-    }
+private fun shimmerBrush(reducedMotion: Boolean): Brush {
+    val base = MaterialTheme.colorScheme.onSurfaceVariant
+    if (reducedMotion) return SolidColor(base)
+    val highlight = MaterialTheme.colorScheme.primary
+    val transition = rememberInfiniteTransition(label = "turnShimmer")
+    val x by transition.animateFloat(
+        initialValue = -SHIMMER_WIDTH_PX,
+        targetValue = SHIMMER_TRAVEL_PX,
+        animationSpec = infiniteRepeatable(tween(1_800, easing = LinearEasing), RepeatMode.Restart),
+        label = "turnShimmerX"
+    )
+    return Brush.linearGradient(
+        colors = listOf(base, highlight, base),
+        start = Offset(x, 0f),
+        end = Offset(x + SHIMMER_WIDTH_PX, 0f)
+    )
 }
+
+private const val VERB_INTERVAL_MS = 2_800L
+private const val SHIMMER_WIDTH_PX = 220f
+private const val SHIMMER_TRAVEL_PX = 900f
 
 /**
  * First timeline row while the server has older history: a button that loads
@@ -1866,6 +1910,79 @@ private fun MessageRow(message: TimelineRow) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Several tool calls in a row as one collapsible line: "3 Tools · terminal,
+ * read_file +1 · fertig". Expanded, the individual tool chips follow. Only
+ * the safe, redacted tool names are shown - never content or arguments.
+ */
+@Composable
+private fun ToolGroupRow(
+    group: TimelineItem.ToolGroup,
+    running: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val names = group.names
+    val count = pluralStringResource(R.plurals.chat_tool_group_count, group.rows.size, group.rows.size)
+    val shown = names.take(2).joinToString(", ")
+    val more = (names.size - 2).takeIf { it > 0 }?.let { stringResource(R.string.chat_tool_group_more, it) }
+    val summary = listOfNotNull(count, listOfNotNull(shown.takeIf { it.isNotEmpty() }, more).joinToString(" ").takeIf { it.isNotEmpty() })
+        .joinToString(" · ")
+    val status = stringResource(if (running) R.string.chat_tool_running else R.string.chat_tool_done)
+    val toggleLabel = stringResource(if (expanded) R.string.chat_tool_group_collapse else R.string.chat_tool_group_expand)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MESSAGE_VERTICAL_GAP / 2)
+            .testTag("chatToolGroup:${group.key}")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClickLabel = toggleLabel, onClick = onToggle)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .testTag("chatToolGroupToggle:${group.key}")
+        ) {
+            Icon(
+                imageVector = OrsikIcons.Wrench,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "$summary · $status",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Icon(
+                imageVector = OrsikIcons.ChevronDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(16.dp)
+                    .graphicsLayer { rotationZ = if (expanded) 180f else 0f }
+            )
+        }
+        if (expanded) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(start = 12.dp, top = 6.dp)
+            ) {
+                group.rows.forEach { row -> MessageRow(row) }
             }
         }
     }

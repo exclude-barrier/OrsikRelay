@@ -36,7 +36,8 @@ internal fun SessionListItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     running: Boolean = false,
-    showPin: Boolean = false
+    showPin: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     val title = session.title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.session_fallback_title)
@@ -60,6 +61,8 @@ internal fun SessionListItem(
         title = title,
         supporting = meta.takeIf { it.isNotEmpty() },
         onClick = onClick,
+        onLongClick = onLongClick,
+        onLongClickLabel = onLongClick?.let { stringResource(R.string.sessions_actions) },
         modifier = modifier,
         leading = {
             if (running) {

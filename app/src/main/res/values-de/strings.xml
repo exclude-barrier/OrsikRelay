@@ -344,4 +344,36 @@
     <string name="activity_empty_hint">Laufende Aufgaben und offene Freigaben dieser App erscheinen hier.</string>
     <string name="activity_section_approvals">Freigaben</string>
     <string name="sessions_empty_hint">Starte einen mit „Neuer Chat“.</string>
+    <string name="chat_tool_running">läuft</string>
+    <string name="chat_tool_group_expand">Tool-Aufrufe anzeigen</string>
+    <string name="chat_tool_group_collapse">Tool-Aufrufe ausblenden</string>
+    <string name="chat_tool_group_more">+%1$d</string>
+    <plurals name="chat_tool_group_count">
+        <item quantity="one">%1$d Tool</item>
+        <item quantity="other">%1$d Tools</item>
+    </plurals>
+    <!-- First entry must equal chat_turn_working: it is shown first and whenever animations are off. -->
+    <string-array name="chat_turn_working_verbs">
+        <item>Hermes arbeitet…</item>
+        <item>Hermes tüftelt…</item>
+        <item>Hermes sortiert…</item>
+        <item>Hermes prüft…</item>
+        <item>Hermes werkelt…</item>
+        <item>Hermes kombiniert…</item>
+        <item>Hermes sucht…</item>
+    </string-array>
+    <string name="chat_turn_tool_named">Hermes nutzt %1$s…</string>
+    <string name="chat_turn_tool">Hermes nutzt ein Tool…</string>
+    <string name="sessions_actions">Chat-Aktionen</string>
+    <string name="sessions_archive">Archivieren</string>
+    <string name="sessions_delete">Löschen</string>
+    <string name="sessions_archived">Chat archiviert</string>
+    <string name="sessions_undo">Rückgängig</string>
+    <string name="sessions_deleted">Chat gelöscht</string>
+    <string name="sessions_delete_title">Chat löschen?</string>
+    <string name="sessions_delete_text">„%1$s“ wird auf dem Server endgültig gelöscht. Das lässt sich nicht rückgängig machen.</string>
+    <string name="sessions_delete_confirm">Löschen</string>
+    <string name="sessions_delete_cancel">Abbrechen</string>
+    <string name="sessions_manage_active">Der Chat läuft gerade. Stoppe ihn zuerst.</string>
+    <string name="sessions_manage_failed">Das hat nicht geklappt. Bitte versuche es erneut.</string>
 </resources>

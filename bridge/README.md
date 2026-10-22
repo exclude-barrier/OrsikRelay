@@ -33,6 +33,14 @@ URL unchanged.
 
 ## Security hardening
 
+- **Chat management least-privilege.** `PATCH /api/sessions/{id}` accepts
+  exactly `{"archived": <bool>}` and re-serialises it; title, pin, hidden,
+  unread and `end_reason` are refused with a closed `400` and never reach
+  Hermes. `DELETE /api/sessions/{id}` takes no body (`400 body_not_allowed`
+  otherwise); a running turn is answered by the core with `409
+  session_active_turn`. Both are audited (`session_archive` /
+  `session_delete` with the session ID) and advertised as the
+  `session_archive` / `session_delete` features.
 - **Approval least-privilege.** `POST /v1/runs/{run_id}/approval` is validated
   locally: only `once`/`deny` are accepted, `request_id` must be a non-blank
   string ≤ 256 chars (control-free), and the body must contain exactly

@@ -1,5 +1,13 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Surface
+import io.github.excludebarrier.orsikrelay.ui.chat.TurnActivityRow
+import io.github.excludebarrier.orsikrelay.ui.chat.TurnActivity
+import android.os.SystemClock
+import androidx.compose.ui.test.performClick
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
@@ -189,10 +197,25 @@ class DesignV2ShotsTest {
         )
     }
 
+    private val toolHistory = MessageHistorySource { _, _ ->
+        MessageHistoryResult.Success(
+            MessagePage(
+                listOf(
+                    HermesChatMessage(1, MessageRole.USER, "Räum bitte die alten Logs auf.", null, null),
+                    HermesChatMessage(2, MessageRole.TOOL, "", null, "terminal"),
+                    HermesChatMessage(3, MessageRole.TOOL, "", null, "read_file"),
+                    HermesChatMessage(4, MessageRole.TOOL, "", null, "terminal"),
+                    HermesChatMessage(5, MessageRole.TOOL, "", null, "search_files"),
+                    HermesChatMessage(6, MessageRole.ASSISTANT, "Erledigt: **14 alte Logdateien** entfernt, 2,3 GB frei.", null, null)
+                )
+            )
+        )
+    }
+
     @Composable
-    private fun Chat(modifier: Modifier) {
+    private fun Chat(modifier: Modifier, history: MessageHistorySource = chatHistory) {
         ChatScreen(
-            historySource = chatHistory,
+            historySource = history,
             runController = RunSessionController(
                 chatSource = StreamingChatSource { _, _, _ -> emptyFlow() },
                 serviceStarter = object : RunForegroundServiceStarter {
@@ -220,6 +243,28 @@ class DesignV2ShotsTest {
     private fun waitForChat() {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Speicherstatus: alles gut", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun waitForTools(expand: Boolean) {
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("14 alte Logdateien", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        if (expand) composeRule.onNodeWithTag("chatToolGroupToggle:tools:server:2").performClick()
+    }
+
+    @CaptureOnly @Test fun chatToolsDark() = shot("04b-chat-tools-dark", { waitForTools(false) }) { App(true, null) { Chat(it, toolHistory) } }
+    @CaptureOnly @Test fun chatToolsOpenLight() = shot("04c-chat-tools-offen-light", { waitForTools(true) }) { App(false, null) { Chat(it, toolHistory) } }
+
+    @CaptureOnly @Test fun workingRowDark() = shot("04d-arbeitet-dark") {
+        HermesTheme(darkTheme = true) {
+            Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.padding(24.dp)) {
+                    TurnActivityRow(TurnActivity.Working, SystemClock.elapsedRealtime() - 12_000, null)
+                    TurnActivityRow(TurnActivity.Thinking, SystemClock.elapsedRealtime() - 75_000, null)
+                    TurnActivityRow(TurnActivity.Tool, SystemClock.elapsedRealtime() - 4_000, "terminal")
+                }
+            }
         }
     }
 

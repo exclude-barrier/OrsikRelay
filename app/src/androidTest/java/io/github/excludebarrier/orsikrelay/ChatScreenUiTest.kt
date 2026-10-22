@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -139,9 +140,17 @@ class ChatScreenUiTest {
             )
         })
 
+        // Two tool calls in a row form one collapsed group (alpha.12); the
+        // payloads must stay hidden both collapsed and expanded.
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("chatToolGroupToggle:tools:server:1").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodesWithText("/home/user/.ssh/id_rsa", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("https://example.com/a?token=abc", substring = true).assertCountEquals(0)
+        composeRule.onNodeWithTag("chatToolGroupToggle:tools:server:1").performClick()
         waitForText("Tool: terminal")
-        composeRule.onAllNodesWithText("/home/user/.ssh/id_rsa").assertCountEquals(0)
-        composeRule.onAllNodesWithText("https://example.com/a?token=abc").assertCountEquals(0)
+        composeRule.onAllNodesWithText("/home/user/.ssh/id_rsa", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("https://example.com/a?token=abc", substring = true).assertCountEquals(0)
     }
 
     @Test

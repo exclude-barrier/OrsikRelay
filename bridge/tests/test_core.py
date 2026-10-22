@@ -219,6 +219,53 @@ class ApprovalValidationTest(unittest.TestCase):
             self.assertEqual(core.validate_approval_body(body), (False, "invalid_json"))
 
 
+class SessionManagementTest(unittest.TestCase):
+    def test_archive_and_delete_routes_match_only_the_session_itself(self):
+        m = core.match_proxy_route("PATCH", "/api/sessions/s_1")
+        assert m is not None
+        self.assertEqual(m.upstream_path, "/api/sessions/s_1")
+        m = core.match_proxy_route("DELETE", "/api/sessions/s_1")
+        assert m is not None
+        self.assertEqual(m.upstream_path, "/api/sessions/s_1")
+        for method, path in (
+            ("PATCH", "/api/sessions"),
+            ("DELETE", "/api/sessions"),
+            ("PATCH", "/api/sessions/s_1/messages"),
+            ("DELETE", "/api/sessions/s_1/messages"),
+            ("DELETE", "/v1/runs/run_9"),
+            ("PATCH", "/v1/runs/run_9"),
+            ("DELETE", "/api/sessions/.."),
+        ):
+            self.assertIsNone(core.match_proxy_route(method, path), (method, path))
+
+    def test_only_the_archived_flag_may_be_patched(self):
+        self.assertEqual(core.validate_session_patch_body({"archived": True}), (True, ""))
+        self.assertEqual(core.validate_session_patch_body({"archived": False}), (True, ""))
+        for body in (
+            {"title": "x"},
+            {"pinned": True},
+            {"hidden": True},
+            {"unread": True},
+            {"end_reason": "x"},
+            {"archived": True, "title": "x"},
+            {},
+        ):
+            self.assertEqual(core.validate_session_patch_body(body), (False, "invalid_fields"), body)
+        for value in ("true", 1, 0, None, []):
+            self.assertEqual(core.validate_session_patch_body({"archived": value}), (False, "invalid_archived"), value)
+        for body in (None, [], "archived", 3):
+            self.assertEqual(core.validate_session_patch_body(body), (False, "invalid_json"))
+
+    def test_capabilities_advertise_archive_and_delete(self):
+        caps = core.build_capabilities()
+        self.assertIs(caps["features"]["session_archive"], True)
+        self.assertIs(caps["features"]["session_delete"], True)
+        self.assertEqual(
+            caps["endpoints"]["session_update"], {"method": "PATCH", "path": "/api/sessions/{session_id}"})
+        self.assertEqual(
+            caps["endpoints"]["session_delete"], {"method": "DELETE", "path": "/api/sessions/{session_id}"})
+
+
 class RunIdTest(unittest.TestCase):
     def test_safe_run_ids(self):
         for value in ("run_abc123", "run_9c88525f29e4453ba10de886ad3da165", "a" * 256):

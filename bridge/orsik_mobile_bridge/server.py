@@ -14,6 +14,7 @@ namespace the shipped client already speaks), so the client is a drop-in:
   POST /api/sessions/{id}/chat/stream       (server-side takeover, device token)
   GET  /api/sessions/{id}/runs/{run_id}/stream  (after_seq re-attach, device token)
   GET/POST /api/sessions…, POST/GET /v1/runs…   (proxied, device token)
+  PATCH/DELETE /api/sessions/{id}           (archived flag only / no body, device token)
 
 Pairing codes are issued ONLY by the local operator CLI
 (``orsik-mobile-bridge admin pairing-code``); there is no HTTP admin surface.
@@ -747,6 +748,8 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
     # validating handler, never forwarded by the generic proxy.
     if request.method == "POST" and match.upstream_path.endswith("/approval"):
         return _closed(403, "endpoint_out_of_scope")
+    if "session_id" in match.params and request.method in ("PATCH", "DELETE"):
+        return await _handle_session_management(request, state, record, match)
     action = match.upstream_path.rsplit("/", 1)[-1]
     on_status = None
     if request.method == "POST" and match.upstream_path == "/api/sessions":
@@ -764,6 +767,33 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
             max_buffered_bytes=_MAX_HISTORY_BODY_BYTES,
         )
     return await _proxy(request, state, match.upstream_path, on_status=on_status)
+
+
+async def _handle_session_management(
+    request: web.Request, state: BridgeState, record: core.DeviceRecord, match: core.ProxyMatch
+) -> web.StreamResponse:
+    """Archive (PATCH, archived flag only) or delete (DELETE, no body) one session.
+
+    The body is validated locally and re-serialised, so no other session field
+    (title, pin, hidden, end_reason) can ever reach Hermes through the bridge.
+    """
+    session_id = match.params["session_id"]
+    raw = await request.read() if request.can_read_body else b""
+    if request.method == "DELETE":
+        if raw:
+            return _closed(400, "body_not_allowed")
+        action, body = "session_delete", b""
+    else:
+        try:
+            parsed = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            return _closed(400, "invalid_json")
+        ok, code = core.validate_session_patch_body(parsed)
+        if not ok:
+            return _closed(400, code)
+        action, body = "session_archive", json.dumps({"archived": parsed["archived"]}).encode()
+    on_status = lambda status: _audit(action, record, session=session_id, status=status)  # noqa: E731
+    return await _proxy(request, state, match.upstream_path, body_override=body, on_status=on_status)
 
 
 async def _proxy(

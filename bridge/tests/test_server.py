@@ -83,6 +83,20 @@ def _upstream_app():
     async def run_stop(_):
         return web.json_response({"object": "hermes.run", "status": "stopping"})
 
+    async def session_patch(request):
+        UPSTREAM["session_patches"] = int(UPSTREAM.get("session_patches", 0)) + 1
+        UPSTREAM["session_patch_body"] = await request.read()
+        return web.json_response(
+            {"object": "hermes.session", "session": {"id": request.match_info["sid"], "archived": True}})
+
+    async def session_delete(request):
+        UPSTREAM["session_deletes"] = int(UPSTREAM.get("session_deletes", 0)) + 1
+        UPSTREAM["session_delete_body"] = await request.read()
+        if UPSTREAM.get("delete_active"):
+            return web.json_response({"error": {"code": "session_active_turn"}}, status=409)
+        return web.json_response(
+            {"object": "hermes.session.deleted", "id": request.match_info["sid"], "deleted": True})
+
     app = web.Application()
     app.router.add_get("/health", health)
     app.router.add_get("/api/sessions", sessions_get)
@@ -92,6 +106,8 @@ def _upstream_app():
     app.router.add_get("/v1/runs/{rid}", run)
     app.router.add_post("/v1/runs/{rid}/approval", approval)
     app.router.add_post("/v1/runs/{rid}/stop", run_stop)
+    app.router.add_patch("/api/sessions/{sid}", session_patch)
+    app.router.add_delete("/api/sessions/{sid}", session_delete)
     return app
 
 
@@ -346,6 +362,59 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         for line in lines:
             self.assertNotIn(token, line)
             self.assertNotIn("master_key_test", line)
+
+    # --- archive / delete (only the archived flag, never title/pin/hidden) ---
+    async def test_archive_forwards_exactly_the_archived_flag_and_is_audited(self):
+        cred = await self._pair()
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            resp = await self.client.patch(
+                "/api/sessions/s1", headers=self._bearer(cred["device_key"]), json={"archived": True})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual((await resp.json())["object"], "hermes.session")
+        self.assertEqual(json.loads(UPSTREAM["session_patch_body"]), {"archived": True})
+        lines = [record.getMessage() for record in logs.records]
+        self.assertIn(f"audit action=session_archive device={cred['device_id']} session=s1 status=200", lines)
+
+    async def test_patch_with_any_other_field_never_reaches_upstream(self):
+        cred = await self._pair()
+        for body in ({"title": "x"}, {"pinned": True}, {"hidden": True}, {"end_reason": "x"},
+                     {"archived": True, "unread": True}, {"archived": "yes"}):
+            resp = await self.client.patch(
+                "/api/sessions/s1", headers=self._bearer(cred["device_key"]), json=body)
+            self.assertEqual(resp.status, 400, body)
+            self.assertEqual(set((await resp.json())["error"]), {"code"})
+        resp = await self.client.patch(
+            "/api/sessions/s1", headers=self._bearer(cred["device_key"]), data=b"not json")
+        self.assertEqual(resp.status, 400)
+        self.assertEqual(int(UPSTREAM.get("session_patches", 0)), 0)
+
+    async def test_delete_is_relayed_without_a_body_and_audited(self):
+        cred = await self._pair()
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            resp = await self.client.delete("/api/sessions/s1", headers=self._bearer(cred["device_key"]))
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(await resp.json(), {"object": "hermes.session.deleted", "id": "s1", "deleted": True})
+        self.assertEqual(UPSTREAM["session_delete_body"], b"")
+        lines = [record.getMessage() for record in logs.records]
+        self.assertIn(f"audit action=session_delete device={cred['device_id']} session=s1 status=200", lines)
+
+    async def test_delete_with_a_body_is_refused_and_an_active_turn_is_relayed(self):
+        cred = await self._pair()
+        resp = await self.client.delete(
+            "/api/sessions/s1", headers=self._bearer(cred["device_key"]), data=b'{"x":1}')
+        self.assertEqual(resp.status, 400)
+        self.assertEqual((await resp.json())["error"]["code"], "body_not_allowed")
+        self.assertEqual(int(UPSTREAM.get("session_deletes", 0)), 0)
+        UPSTREAM["delete_active"] = True
+        resp = await self.client.delete("/api/sessions/s1", headers=self._bearer(cred["device_key"]))
+        self.assertEqual(resp.status, 409)
+        self.assertEqual((await resp.json())["error"]["code"], "session_active_turn")
+
+    async def test_archive_and_delete_need_a_device_token(self):
+        self.assertEqual((await self.client.patch("/api/sessions/s1", json={"archived": True})).status, 401)
+        self.assertEqual((await self.client.delete("/api/sessions/s1")).status, 401)
+        self.assertEqual(int(UPSTREAM.get("session_patches", 0)), 0)
+        self.assertEqual(int(UPSTREAM.get("session_deletes", 0)), 0)
 
     async def test_pair_session_create_and_revoke_are_audited(self):
         with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:

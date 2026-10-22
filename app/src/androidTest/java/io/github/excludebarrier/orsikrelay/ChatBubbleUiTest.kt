@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.geometry.Rect
@@ -142,6 +143,50 @@ class ChatBubbleUiTest {
         composeRule.onAllNodesWithText("SECRET_BUBBLE_TOOL_123").assertCountEquals(0)
         composeRule.onAllNodesWithText("""{"output":"SECRET_BUBBLE_TOOL_123","exit_code":0}""")
             .assertCountEquals(0)
+    }
+
+    @Test
+    fun consecutiveToolCallsCollapseIntoOneExpandableBlock() {
+        setScreen(
+            listOf(
+                message(1, MessageRole.USER, "Prüf den Server"),
+                message(2, MessageRole.TOOL, """{"output":"SECRET_GROUP_1"}""", "terminal"),
+                message(3, MessageRole.TOOL, """{"output":"SECRET_GROUP_2"}""", "read_file"),
+                message(4, MessageRole.TOOL, """{"output":"SECRET_GROUP_3"}""", "browser"),
+                message(5, MessageRole.ASSISTANT, "Alles gut.")
+            )
+        )
+        waitForText("Alles gut.")
+
+        val toggle = "chatToolGroupToggle:tools:server:2"
+        val count = context.resources.getQuantityString(R.plurals.chat_tool_group_count, 3, 3)
+        val more = context.getString(R.string.chat_tool_group_more, 1)
+        val done = context.getString(R.string.chat_tool_done)
+        composeRule.onNodeWithText("$count · terminal, read_file $more · $done", useUnmergedTree = true).assertIsDisplayed()
+        // Collapsed: no single tool line, and never any tool payload.
+        composeRule.onAllNodesWithTag("chatToolChip:server:2").assertCountEquals(0)
+        composeRule.onAllNodesWithText("SECRET_GROUP_1", substring = true).assertCountEquals(0)
+
+        composeRule.onNodeWithTag(toggle).performClick()
+        listOf(2, 3, 4).forEach { id -> composeRule.onNodeWithTag("chatToolChip:server:$id").assertIsDisplayed() }
+        composeRule.onAllNodesWithText("SECRET_GROUP_2", substring = true).assertCountEquals(0)
+
+        composeRule.onNodeWithTag(toggle).performClick()
+        composeRule.onAllNodesWithTag("chatToolChip:server:3").assertCountEquals(0)
+    }
+
+    @Test
+    fun aSingleToolCallStaysAPlainChip() {
+        setScreen(
+            listOf(
+                message(1, MessageRole.TOOL, "", "terminal"),
+                message(2, MessageRole.ASSISTANT, "Fertig.")
+            )
+        )
+        waitForText("Fertig.")
+
+        composeRule.onNodeWithTag("chatToolChip:server:1").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("chatToolGroupToggle:tools:server:1").assertCountEquals(0)
     }
 
     @Test

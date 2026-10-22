@@ -29,6 +29,8 @@ import io.github.excludebarrier.orsikrelay.data.run.RunStopRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunSteerRepository
 import io.github.excludebarrier.orsikrelay.data.run.SharedPreferencesRunLeaseStore
 import io.github.excludebarrier.orsikrelay.data.session.SessionCreateRepository
+import io.github.excludebarrier.orsikrelay.data.session.SessionManageRepository
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManager
 import io.github.excludebarrier.orsikrelay.data.session.SessionListRepository
 import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.data.session.resolveStartupProfile
@@ -80,6 +82,7 @@ internal data class AppDependencies(
     val deviceDisconnectCoordinator: DeviceDisconnectCoordinator,
     val sessionPageSource: SessionPageSource,
     val sessionCreator: SessionCreator,
+    val sessionManager: SessionManager,
     val messageHistorySource: MessageHistorySource,
     val runController: RunSessionController,
     val runStopRequester: RunStopRequester,
@@ -270,6 +273,10 @@ internal fun buildAppDependencies(
             credentialStore = credentialStore
         ),
         sessionCreator = SessionCreateRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore
+        ),
+        sessionManager = SessionManageRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore
         ),

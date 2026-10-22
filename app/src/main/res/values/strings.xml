@@ -345,4 +345,36 @@
     <string name="activity_empty_hint">Running tasks and open approvals of this app show up here.</string>
     <string name="activity_section_approvals">Approvals</string>
     <string name="sessions_empty_hint">Start one with “New chat”.</string>
+    <string name="chat_tool_running">running</string>
+    <string name="chat_tool_group_expand">Show tool calls</string>
+    <string name="chat_tool_group_collapse">Hide tool calls</string>
+    <string name="chat_tool_group_more">+%1$d</string>
+    <plurals name="chat_tool_group_count">
+        <item quantity="one">%1$d tool</item>
+        <item quantity="other">%1$d tools</item>
+    </plurals>
+    <!-- First entry must equal chat_turn_working: it is shown first and whenever animations are off. -->
+    <string-array name="chat_turn_working_verbs">
+        <item>Hermes is working…</item>
+        <item>Hermes is tinkering…</item>
+        <item>Hermes is sorting things out…</item>
+        <item>Hermes is checking…</item>
+        <item>Hermes is crafting…</item>
+        <item>Hermes is connecting the dots…</item>
+        <item>Hermes is looking it up…</item>
+    </string-array>
+    <string name="chat_turn_tool_named">Hermes is using %1$s…</string>
+    <string name="chat_turn_tool">Hermes is using a tool…</string>
+    <string name="sessions_actions">Chat actions</string>
+    <string name="sessions_archive">Archive</string>
+    <string name="sessions_delete">Delete</string>
+    <string name="sessions_archived">Chat archived</string>
+    <string name="sessions_undo">Undo</string>
+    <string name="sessions_deleted">Chat deleted</string>
+    <string name="sessions_delete_title">Delete chat?</string>
+    <string name="sessions_delete_text">“%1$s” will be deleted from the server for good. This cannot be undone.</string>
+    <string name="sessions_delete_confirm">Delete</string>
+    <string name="sessions_delete_cancel">Cancel</string>
+    <string name="sessions_manage_active">This chat is running. Stop it first.</string>
+    <string name="sessions_manage_failed">That did not work. Please try again.</string>
 </resources>
