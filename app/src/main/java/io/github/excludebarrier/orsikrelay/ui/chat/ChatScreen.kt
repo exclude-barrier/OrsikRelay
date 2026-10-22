@@ -72,6 +72,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
+import io.github.excludebarrier.orsikrelay.ui.components.RelayPhase
 import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.ui.components.rememberReducedMotion
 import io.github.excludebarrier.orsikrelay.R
@@ -778,7 +779,8 @@ internal fun Modifier.bleed(horizontal: Dp): Modifier = layout { measurable, con
 /**
  * Last timeline row while a turn runs without visible progress, so a long
  * tool call or reasoning phase never looks like a stalled chat: Orsik's
- * own [WorkingGlyph], a status line and the elapsed time.
+ * own [WorkingGlyph] (the relay, paced by the phase), a status line and
+ * the elapsed time.
  *
  * While Hermes works the line cycles through playful verbs ("tüftelt",
  * "sortiert", ...) under a soft shimmer; "denkt nach" stays as it is (a real
@@ -819,7 +821,13 @@ internal fun TurnActivityRow(activity: TurnActivity, startedAt: Long, toolName: 
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        WorkingGlyph()
+        WorkingGlyph(
+            phase = when (activity) {
+                TurnActivity.Working -> RelayPhase.Working
+                TurnActivity.Thinking -> RelayPhase.Thinking
+                TurnActivity.Tool -> RelayPhase.Tool
+            }
+        )
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium.copy(brush = shimmerBrush(reducedMotion)),
