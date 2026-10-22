@@ -1,35 +1,10 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
-import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.min
-import kotlin.math.sin
-
-/**
- * Wavy "cookie" outline for the agent avatar and the send button: a circle
- * whose radius is modulated by a cosine with [lobes] waves. Plain
- * [GenericShape], no experimental shape API.
- */
-internal fun cookieShape(lobes: Int = 9, depth: Float = 0.07f) = GenericShape { size, _ ->
-    val centerX = size.width / 2f
-    val centerY = size.height / 2f
-    val base = min(size.width, size.height) / 2f / (1f + depth)
-    val steps = 180
-    for (step in 0..steps) {
-        val angle = 2.0 * PI * step / steps
-        val radius = base * (1f + depth * cos(lobes * angle).toFloat())
-        val x = centerX + radius * cos(angle).toFloat()
-        val y = centerY + radius * sin(angle).toFloat()
-        if (step == 0) moveTo(x, y) else lineTo(x, y)
-    }
-    close()
-}
 
 /*
  * Folder and Code are Material Icons, Copyright Google LLC,

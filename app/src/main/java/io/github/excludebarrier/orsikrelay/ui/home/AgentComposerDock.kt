@@ -54,6 +54,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.components.ExpressiveShape
+import io.github.excludebarrier.orsikrelay.ui.components.PreviewBadge
 
 private val DockShape = RoundedCornerShape(32.dp)
 
@@ -170,7 +172,7 @@ private fun AgentAvatar(enabled: Boolean, onClick: () -> Unit, modifier: Modifie
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(48.dp)
-            .clip(cookieShape())
+            .clip(ExpressiveShape.Cookie.shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description }
@@ -195,7 +197,7 @@ private fun SendButton(enabled: Boolean, sending: Boolean, onClick: () -> Unit) 
         modifier = Modifier
             .size(52.dp)
             .scaled(pressScale(pressed))
-            .clip(cookieShape())
+            .clip(ExpressiveShape.Cookie.shape)
             .background(container)
             .clickable(
                 enabled = enabled,
@@ -321,7 +323,7 @@ private fun HarnessRow(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(40.dp)
-                .clip(if (available) cookieShape() else RoundedCornerShape(50))
+                .clip(if (available) ExpressiveShape.Cookie.shape else RoundedCornerShape(50))
                 .background(
                     if (available) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
                 )

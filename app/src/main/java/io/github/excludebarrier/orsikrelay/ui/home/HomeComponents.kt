@@ -62,6 +62,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.components.ExpressiveShape
+import io.github.excludebarrier.orsikrelay.ui.components.PreviewBadge
+import io.github.excludebarrier.orsikrelay.ui.components.dashedBorder
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.ui.profiles.DnsIcon
@@ -241,21 +244,6 @@ fun SectionTitle(
 }
 
 @Composable
-fun PreviewBadge(modifier: Modifier = Modifier, text: String = stringResource(R.string.home_preview_badge)) {
-    val locale = LocalConfiguration.current.locales[0]
-    Text(
-        text = text.uppercase(locale),
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    )
-}
-
-@Composable
 fun ApprovalBanner(title: String?, onReview: () -> Unit, modifier: Modifier = Modifier) {
     val colors = approvalColors()
     Surface(
@@ -274,7 +262,7 @@ fun ApprovalBanner(title: String?, onReview: () -> Unit, modifier: Modifier = Mo
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(40.dp)
-                    .clip(cookieShape())
+                    .clip(ExpressiveShape.Cookie.shape)
                     .background(colors.button)
             ) {
                 Icon(Icons.Filled.Warning, contentDescription = null, tint = colors.onButton, modifier = Modifier.size(20.dp))
@@ -331,7 +319,7 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(40.dp)
-                    .clip(cookieShape())
+                    .clip(ExpressiveShape.Cookie.shape)
                     .background(MaterialTheme.colorScheme.primaryContainer)
             ) {
                 if (item.uncertain) {
@@ -441,19 +429,6 @@ private fun DashedBar() {
             .fillMaxWidth()
             .height(8.dp)
             .dashedBorder(color, 4.dp)
-    )
-}
-
-/** Dashed rounded outline: the "not yet available" look of the design. */
-internal fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawBehind {
-    val stroke = 1.dp.toPx()
-    drawRoundRect(
-        color = color,
-        cornerRadius = CornerRadius(radius.toPx()),
-        style = Stroke(
-            width = stroke,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
-        )
     )
 }
 
