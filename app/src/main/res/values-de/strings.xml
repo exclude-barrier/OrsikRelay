@@ -375,4 +375,8 @@
     <string name="chat_run_lost">Hermes hat diesen Lauf verloren, zum Beispiel nach einem Neustart des Servers. Der Chat bleibt blockiert, bis du den Lauf als abgebrochen abschließt. Er wird dabei nicht erneut ausgeführt.</string>
     <string name="chat_run_lost_resolve">Als abgebrochen abschließen</string>
     <string name="chat_run_lost_resolving">Wird abgeschlossen …</string>
+    <string name="home_server_gpu_none">keine</string>
+    <string name="home_server_unreadable">Die Werte sind gerade nicht lesbar.</string>
+    <string name="home_server_services_down">nicht aktiv: %1$s</string>
+    <string name="home_server_cores">%1$d Kerne</string>
 </resources>

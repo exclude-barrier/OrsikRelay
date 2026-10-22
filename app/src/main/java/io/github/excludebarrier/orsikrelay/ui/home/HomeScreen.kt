@@ -134,7 +134,7 @@ fun HomeScreen(
                     }
                     HomeConnection.Connected -> {
                         runsSection(state.runs, onOpenRun)
-                        item(key = "server") { ServerStatusStrip(modifier = Modifier.gutter()) }
+                        item(key = "server") { ServerStatusStrip(metrics = state.hostMetrics, modifier = Modifier.gutter()) }
                         item(key = "quick_title") {
                             SectionTitle(stringResource(R.string.home_section_quick), Modifier.gutter())
                         }

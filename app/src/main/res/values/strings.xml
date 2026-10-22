@@ -376,4 +376,8 @@
     <string name="chat_run_lost">Hermes lost this run, for example after a server restart. The chat stays blocked until you close the run as cancelled. It is not run again.</string>
     <string name="chat_run_lost_resolve">Close as cancelled</string>
     <string name="chat_run_lost_resolving">Closing…</string>
+    <string name="home_server_gpu_none">none</string>
+    <string name="home_server_unreadable">The values cannot be read right now.</string>
+    <string name="home_server_services_down">not running: %1$s</string>
+    <string name="home_server_cores">%1$d cores</string>
 </resources>

@@ -1,5 +1,9 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import java.util.Locale
+import kotlin.math.roundToInt
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetrics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +87,7 @@ object HomeTags {
     const val APPROVAL_REVIEW = "home_approval_review"
     const val RUN_ROW = "home_run_row"
     const val SERVER_STRIP = "home_server_strip"
+    const val SERVER_SERVICES_DOWN = "home_server_services_down"
     const val QUICK_CHAT = "home_quick_chat"
     const val QUICK_TILE_PREFIX = "home_quick_"
     const val RECENT_ROW = "home_recent_row"
@@ -421,13 +426,11 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-fun ServerStatusStrip(modifier: Modifier = Modifier) {
+fun ServerStatusStrip(metrics: HostMetricsResult?, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
         // No status chip here: the server card above already says whether
         // the server is connected.
         SectionTitle(text = stringResource(R.string.home_section_server))
-        val noValue = stringResource(R.string.home_server_no_value)
-        val dash = MaterialTheme.colorScheme.outline
         Column(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
@@ -437,32 +440,125 @@ fun ServerStatusStrip(modifier: Modifier = Modifier) {
                 .padding(16.dp)
                 .testTag(HomeTags.SERVER_STRIP)
         ) {
+            val ready = (metrics as? HostMetricsResult.Ready)?.metrics
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOf(
-                    R.string.home_server_cpu,
-                    R.string.home_server_ram,
-                    R.string.home_server_gpu,
-                    R.string.home_server_services
-                ).forEach { labelRes ->
-                    val label = stringResource(labelRes)
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clearAndSetSemantics { contentDescription = "$label: $noValue" }
-                    ) {
-                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("—", fontFamily = OrsikMono, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .dashedBorder(dash, 3.dp)
+                hostTiles(ready).forEach { tile -> HostTileView(tile, Modifier.weight(1f)) }
+            }
+            when (metrics) {
+                is HostMetricsResult.Ready -> {
+                    val down = metrics.metrics.services.filterNot { it.active }.map { it.name }
+                    if (down.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.home_server_services_down, down.joinToString(", ")),
+                            style = OrsikType.meta,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.testTag(HomeTags.SERVER_SERVICES_DOWN)
                         )
                     }
                 }
+                HostMetricsResult.Failed -> PreviewNote(stringResource(R.string.home_server_unreadable))
+                // Not loaded yet or an older bridge: the card keeps its preview.
+                HostMetricsResult.Unsupported, null -> PreviewNote(stringResource(R.string.home_server_preview_text))
             }
-            PreviewNote(stringResource(R.string.home_server_preview_text))
+        }
+    }
+}
+
+/** One value of the server card: label, value text, a fill (0..1) or none, and a warning tone. */
+private class HostTile(
+    val label: String,
+    val value: String?,
+    val fill: Float?,
+    val warn: Boolean = false,
+    val detail: String? = null
+)
+
+@Composable
+private fun hostTiles(metrics: HostMetrics?): List<HostTile> {
+    val locale = LocalConfiguration.current.locales[0]
+    val cpu = stringResource(R.string.home_server_cpu)
+    val ram = stringResource(R.string.home_server_ram)
+    val gpu = stringResource(R.string.home_server_gpu)
+    val services = stringResource(R.string.home_server_services)
+    val gpuNone = stringResource(R.string.home_server_gpu_none)
+    val cores = metrics?.cores?.let { pluralCores(it) }
+    if (metrics == null) return listOf(cpu, ram, gpu, services).map { HostTile(it, null, null) }
+    val used = metrics.memoryUsedBytes
+    val total = metrics.memoryTotalBytes
+    val active = metrics.services.count { it.active }
+    val count = metrics.services.size
+    return listOf(
+        HostTile(cpu, metrics.cpuPercent?.let { "${it.roundToInt()} %" }, metrics.cpuPercent?.let { (it / 100).toFloat() }, detail = cores),
+        HostTile(
+            ram,
+            if (used != null && total != null) "${gibibytes(used, locale)}/${gibibytes(total, locale)} GB" else null,
+            if (used != null && total != null && total > 0) used.toFloat() / total else null
+        ),
+        metrics.gpu?.let { HostTile(gpu, "${it.utilizationPercent} %", it.utilizationPercent / 100f, detail = it.name) }
+            ?: HostTile(gpu, gpuNone, null),
+        HostTile(
+            services,
+            if (count == 0) null else "$active/$count",
+            if (count == 0) null else active.toFloat() / count,
+            warn = active < count
+        )
+    )
+}
+
+@Composable
+private fun pluralCores(cores: Int): String = stringResource(R.string.home_server_cores, cores)
+
+private fun gibibytes(bytes: Long, locale: Locale): String =
+    String.format(locale, "%.0f", bytes / (1024.0 * 1024.0 * 1024.0))
+
+@Composable
+private fun HostTileView(tile: HostTile, modifier: Modifier) {
+    val noValue = stringResource(R.string.home_server_no_value)
+    val value = tile.value
+    val tone = if (tile.warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.clearAndSetSemantics {
+            contentDescription = listOfNotNull(tile.label, value ?: noValue, tile.detail).joinToString(": ")
+        }
+    ) {
+        Text(tile.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = value ?: "—",
+            fontFamily = OrsikMono,
+            fontSize = 15.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = when {
+                value == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                tile.warn -> tone
+                else -> MaterialTheme.colorScheme.onSurface
+            }
+        )
+        val fill = tile.fill
+        if (fill == null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .dashedBorder(MaterialTheme.colorScheme.outline, 3.dp)
+            )
+        } else {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(fill.coerceIn(0f, 1f))
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(tone)
+                )
+            }
         }
     }
 }

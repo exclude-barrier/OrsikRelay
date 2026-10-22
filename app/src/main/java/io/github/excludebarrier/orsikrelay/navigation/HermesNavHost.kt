@@ -397,6 +397,7 @@ fun HermesNavHost(
                     runController = runController ?: dependencies.value.runController,
                     runStatusRequester = runStatusRequester ?: dependencies.value.runStatusRequester,
                     attachmentSource = dependencies.value.chatAttachmentSource,
+                    hostMetricsSource = dependencies.value.hostMetricsSource,
                     onOpenChat = ::openChat,
                     onOpenAllSessions = { openTab(AppScreen.Sessions) },
                     onOpenServer = { openTab(AppScreen.Server) },

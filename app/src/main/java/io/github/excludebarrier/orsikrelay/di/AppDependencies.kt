@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.di
 
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsSource
+import io.github.excludebarrier.orsikrelay.data.host.HostMetricsRepository
 import android.content.Context
 import androidx.annotation.VisibleForTesting
 import io.github.excludebarrier.orsikrelay.R
@@ -85,6 +87,8 @@ internal data class AppDependencies(
     val sessionPageSource: SessionPageSource,
     val sessionCreator: SessionCreator,
     val sessionManager: SessionManager,
+    /** Live host values for the Home card (`GET /v1/host/metrics`). */
+    val hostMetricsSource: HostMetricsSource,
     val messageHistorySource: MessageHistorySource,
     val runController: RunSessionController,
     val runStopRequester: RunStopRequester,
@@ -281,6 +285,10 @@ internal fun buildAppDependencies(
             credentialStore = credentialStore
         ),
         sessionManager = SessionManageRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore
+        ),
+        hostMetricsSource = HostMetricsRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore
         ),

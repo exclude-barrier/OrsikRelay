@@ -1,5 +1,8 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import kotlinx.coroutines.delay
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsSource
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +69,7 @@ fun HomeRoute(
     runController: RunSessionController,
     runStatusRequester: RunStatusRequester,
     attachmentSource: ChatAttachmentSource,
+    hostMetricsSource: HostMetricsSource,
     onOpenChat: (sessionId: String, title: String?) -> Unit,
     onOpenAllSessions: () -> Unit,
     /** The bottom bar's Server tab (quick access "Server"). */
@@ -78,6 +82,22 @@ fun HomeRoute(
 ) {
     val scope = rememberCoroutineScope()
     var serverName by remember(profileId) { mutableStateOf<String?>(null) }
+    // Live server values while Home is shown: one idempotent read every
+    // HOST_METRICS_INTERVAL_MS, stopped when Home leaves the composition.
+    var hostMetrics by remember(profileId) { mutableStateOf<HostMetricsResult?>(null) }
+    LaunchedEffect(profileId, hostMetricsSource) {
+        if (profileId.isBlank()) return@LaunchedEffect
+        while (true) {
+            hostMetrics = try {
+                withContext(ioDispatcher) { hostMetricsSource.read(profileId) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                HostMetricsResult.Failed
+            }
+            delay(HOST_METRICS_INTERVAL_MS)
+        }
+    }
     LaunchedEffect(profileId) {
         val profiles = try {
             withContext(ioDispatcher) { profileAdmin.listProfiles() }
@@ -276,6 +296,7 @@ fun HomeRoute(
 
     HomeScreen(
         state = HomeUiState(
+            hostMetrics = hostMetrics,
             serverName = serverName,
             connection = connection,
             runs = runs,
@@ -338,3 +359,5 @@ internal fun rememberRunItems(
             HomeRunItem(run.sessionId, title, run.awaitingApproval, run.uncertain)
         }
 }
+
+private const val HOST_METRICS_INTERVAL_MS = 30_000L
