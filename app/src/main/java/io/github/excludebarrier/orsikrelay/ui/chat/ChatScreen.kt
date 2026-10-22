@@ -75,6 +75,18 @@ import androidx.compose.ui.graphics.SolidColor
 import io.github.excludebarrier.orsikrelay.ui.components.RelayPhase
 import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.ui.components.rememberReducedMotion
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.rememberCoroutineScope
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManager
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManageResult
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManageError
+import io.github.excludebarrier.orsikrelay.ui.sessions.DeleteSessionDialog
+import kotlinx.coroutines.launch
 import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -160,6 +172,7 @@ fun ChatScreen(
     runApprovalRequester: RunApprovalRequester = NoOpRunApprovalRequester,
     runStatusRequester: RunStatusRequester = NoOpRunStatusRequester,
     runUnknownResolver: RunUnknownResolver = NoOpRunUnknownResolver,
+    sessionManager: SessionManager? = null,
     attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
     notificationPermissionStore: NotificationPermissionStore = NoOpNotificationPermissionStore,
     chatTextSizeController: ChatTextSizeController? = null,
@@ -265,6 +278,53 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
         isRunActive = state.turnActive
     )
 
+    // Archive/delete from the header, only when the server offers both.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val manageScope = rememberCoroutineScope()
+    var canManage by remember(profileId, sessionManager) { mutableStateOf(false) }
+    var manageBusy by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val archivedLabel = stringResource(R.string.sessions_archived)
+    val undoLabel = stringResource(R.string.sessions_undo)
+    val activeLabel = stringResource(R.string.sessions_manage_active)
+    val failedLabel = stringResource(R.string.sessions_manage_failed)
+    LaunchedEffect(profileId, sessionManager) {
+        canManage = sessionManager != null && profileId.isNotBlank() &&
+            withContext(Dispatchers.IO) { sessionManager.supportsManagement(profileId) }
+    }
+
+    /** One archive/delete request (never repeated); [onDone] runs after a confirmed success. */
+    fun manage(request: (SessionManager) -> SessionManageResult, onDone: suspend () -> Unit) {
+        val manager = sessionManager ?: return
+        if (manageBusy) return
+        manageBusy = true
+        manageScope.launch {
+            val result = withContext(Dispatchers.IO) { request(manager) }
+            manageBusy = false
+            when (result) {
+                SessionManageResult.Success -> onDone()
+                is SessionManageResult.Failure -> when (result.error) {
+                    // The chat no longer exists on the server.
+                    SessionManageError.NotFound -> viewModel.handleBack()
+                    SessionManageError.ActiveTurn -> snackbarHostState.showSnackbar(activeLabel)
+                    SessionManageError.Failed -> snackbarHostState.showSnackbar(failedLabel)
+                }
+            }
+        }
+    }
+
+    val archiveChat = {
+        manage({ it.setArchived(profileId, sessionId, archived = true) }) {
+            val undo = snackbarHostState.showSnackbar(archivedLabel, undoLabel, duration = SnackbarDuration.Long)
+            if (undo == SnackbarResult.ActionPerformed) {
+                val restored = sessionManager?.let { manager ->
+                    withContext(Dispatchers.IO) { manager.setArchived(profileId, sessionId, archived = false) }
+                }
+                if (restored != SessionManageResult.Success) snackbarHostState.showSnackbar(failedLabel)
+            }
+        }
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // Adaptive composer (landscape + keyboard): with the soft keyboard open
         // on a phone in landscape the chat root can shrink to roughly the
@@ -298,7 +358,18 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 ?.let { stringResource(R.string.chat_header_subtitle, it) },
             onBack = { viewModel.handleBack() },
             compact = compactComposer,
-            modifier = Modifier.bleed(16.dp)
+            modifier = Modifier.bleed(16.dp),
+            actions = if (canManage) {
+                {
+                    ChatActionsMenu(
+                        enabled = !state.turnActive && !manageBusy,
+                        onArchive = archiveChat,
+                        onDelete = { confirmDelete = true }
+                    )
+                }
+            } else {
+                null
+            }
         )
 
         when (val current = state.history) {
@@ -698,6 +769,22 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
             }
         }
     }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 64.dp)
+        )
+    }
+    if (confirmDelete) {
+        DeleteSessionDialog(
+            title = sessionTitle?.takeIf { it.isNotBlank() } ?: stringResource(R.string.session_fallback_title),
+            onConfirm = {
+                confirmDelete = false
+                manage({ it.delete(profileId, sessionId) }) { viewModel.handleBack() }
+            },
+            onDismiss = { confirmDelete = false }
+        )
     }
     // A strictly validated protocol-v1 `approval.request` is emitted by the
     // authenticated chat stream only after the complete capability contract
@@ -724,7 +811,8 @@ internal fun ChatHeader(
     onBack: () -> Unit,
     compact: Boolean,
     modifier: Modifier = Modifier,
-    subtitle: String? = null
+    subtitle: String? = null,
+    actions: (@Composable () -> Unit)? = null
 ) {
     val line = MaterialTheme.colorScheme.outlineVariant
     Row(
@@ -767,6 +855,44 @@ internal fun ChatHeader(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+        actions?.invoke()
+    }
+}
+
+/**
+ * The chat's overflow menu: archive and delete this chat, offered only when
+ * the server advertises both (see [SessionManager.supportsManagement]) and
+ * disabled while a turn runs.
+ */
+@Composable
+private fun ChatActionsMenu(enabled: Boolean, onArchive: () -> Unit, onDelete: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.testTag(TAG_CHAT_MORE)) {
+            Icon(OrsikIcons.MoreVert, contentDescription = stringResource(R.string.sessions_actions))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.sessions_archive)) },
+                leadingIcon = { Icon(OrsikIcons.Archive, contentDescription = null) },
+                enabled = enabled,
+                onClick = {
+                    open = false
+                    onArchive()
+                },
+                modifier = Modifier.testTag(TAG_CHAT_ARCHIVE)
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.sessions_delete), color = MaterialTheme.colorScheme.error) },
+                leadingIcon = { Icon(OrsikIcons.Trash, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                enabled = enabled,
+                onClick = {
+                    open = false
+                    onDelete()
+                },
+                modifier = Modifier.testTag(TAG_CHAT_DELETE)
+            )
         }
     }
 }
@@ -1754,6 +1880,9 @@ private suspend fun LazyListState.scrollToTail() {
 internal const val TAG_CHAT_TITLE = "chat_header_title"
 internal const val TAG_RUN_STOP = "composer_run_stop"
 internal const val TAG_RUN_RESOLVE_LOST = "chat_run_resolve_lost"
+internal const val TAG_CHAT_MORE = "chat_more"
+internal const val TAG_CHAT_ARCHIVE = "chat_archive"
+internal const val TAG_CHAT_DELETE = "chat_delete"
 internal const val TAG_COMPOSER_BAR = "composer_bar"
 internal const val TAG_RUN_CONFLICT = "chat_run_conflict"
 internal const val TAG_RUN_UNCERTAIN = "chat_run_uncertain"

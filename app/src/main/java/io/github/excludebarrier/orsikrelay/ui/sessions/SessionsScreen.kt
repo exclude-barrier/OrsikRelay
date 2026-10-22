@@ -810,9 +810,9 @@ private fun SessionActionsMenu(
     }
 }
 
-/** Irreversible: deleting needs an explicit confirmation naming the chat. */
+/** Irreversible: deleting needs an explicit confirmation naming the chat (list and chat). */
 @Composable
-private fun DeleteSessionDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun DeleteSessionDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = OrsikDialog.shape,
