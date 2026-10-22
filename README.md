@@ -352,3 +352,8 @@ security issues privately as described in [SECURITY.md](SECURITY.md).
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+The app bundles the Roboto Mono font (Copyright 2015 The Roboto Mono Project
+Authors, [googlefonts/RobotoMono](https://github.com/googlefonts/RobotoMono))
+under the SIL Open Font License 1.1; the license text ships in the app as
+[`assets/licenses/roboto-mono-OFL.txt`](app/src/main/assets/licenses/roboto-mono-OFL.txt).

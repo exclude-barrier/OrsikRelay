@@ -53,6 +53,7 @@ import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.rememberMarkdownState
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikMono
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -121,6 +122,8 @@ internal fun AssistantMarkdownMessage(
                 h6 = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                 text = MaterialTheme.typography.bodyLarge,
                 paragraph = MaterialTheme.typography.bodyLarge,
+                code = MaterialTheme.typography.bodyMedium.copy(fontFamily = OrsikMono),
+                inlineCode = MaterialTheme.typography.bodyLarge.copy(fontFamily = OrsikMono),
             ),
             components = components,
             modifier = modifier,
@@ -212,7 +215,8 @@ internal fun OrsikCodeBlock(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .testTag(TAG_CODE_BODY),
             softWrap = false,
             overflow = TextOverflow.Clip,
         )
@@ -221,6 +225,7 @@ internal fun OrsikCodeBlock(
 
 internal const val TAG_CODE_HEADER = "chatCodeHeader"
 internal const val TAG_CODE_COPY = "chatCodeCopy"
+internal const val TAG_CODE_BODY = "chatCodeBody"
 
 private val CODE_BLOCK_HEADER_HEIGHT = 44.dp
 private val CODE_BLOCK_CORNER = 16.dp
