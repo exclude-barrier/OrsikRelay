@@ -1117,12 +1117,12 @@ internal fun ComposerBar(
     attachmentBusyLabel: String,
     onPickAttachment: () -> Unit,
     onRemoveAttachment: () -> Unit,
+    modifier: Modifier = Modifier,
     compact: Boolean = false,
     runControls: RunComposerControls? = null,
     conflictNotice: Boolean = false,
     uncertainNotice: Boolean = false,
-    compactRunControls: (@Composable RowScope.() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    compactRunControls: (@Composable RowScope.() -> Unit)? = null
 ) {
     // The tag wraps the whole bar including its own bottom padding, so
     // tests can compare the bar's bottom edge with the content area.

@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onAllNodesWithTag
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WELCOME_SCREEN_TAG
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -178,15 +180,17 @@ class ActiveServerSelectionRestartUiTest {
     }
 
     @Test
-    fun restartWithADeletedOrUnknownSelectionFallsBackToOnboarding() {
+    fun restartWithADeletedOrUnknownSelectionFallsBackToWelcome() {
         // A selection pointing at a profile that no longer exists is
         // deterministically invalid; with no other profile stored, the
-        // existing safe startup state is onboarding.
+        // safe startup state is Welcome (the way into onboarding).
         selectionStore.write("ghost-profile-id")
 
         setHost()
 
-        waitForText(context.getString(R.string.onboarding_title))
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag(WELCOME_SCREEN_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test

@@ -88,12 +88,12 @@ fun GroupedListItem(
                 overflow = TextOverflow.Ellipsis
             )
             if (supporting != null) {
+                // Wraps instead of ellipsizing: at large font sizes the meta
+                // line must stay fully readable.
                 Text(
                     text = supporting,
                     style = OrsikType.meta,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

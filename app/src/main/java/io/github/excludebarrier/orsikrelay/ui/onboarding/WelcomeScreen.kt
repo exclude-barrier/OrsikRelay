@@ -59,43 +59,51 @@ fun WelcomeScreen(
     modifier: Modifier = Modifier,
     cameraAvailable: Boolean = rememberCameraAvailable()
 ) {
+    // The explanation scrolls; the two ways in stay pinned at the bottom, so
+    // even a small screen or a large font never hides them.
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(start = 24.dp, end = 24.dp, top = 48.dp, bottom = 28.dp)
+            .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
             .testTag(WELCOME_SCREEN_TAG)
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
+        Column(
             modifier = Modifier
-                .size(72.dp)
-                .clip(ExpressiveShape.Cookie.shape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(top = 48.dp, bottom = 24.dp)
         ) {
-            Icon(OrsikIcons.Relay, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(ExpressiveShape.Cookie.shape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Icon(OrsikIcons.Relay, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+            }
+            Text(
+                text = stringResource(R.string.welcome_title),
+                style = OrsikType.screenTitle,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .padding(top = 28.dp)
+                    .semantics { heading() }
+            )
+            Text(
+                text = stringResource(R.string.welcome_text),
+                fontSize = 16.sp,
+                lineHeight = 24.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 32.dp)) {
+                WelcomeStep(1, R.string.welcome_step1_title, R.string.welcome_step1_text)
+                WelcomeStep(2, R.string.welcome_step2_title, R.string.welcome_step2_text)
+                WelcomeStep(3, R.string.welcome_step3_title, R.string.welcome_step3_text)
+            }
         }
-        Text(
-            text = stringResource(R.string.welcome_title),
-            style = OrsikType.screenTitle,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier
-                .padding(top = 28.dp)
-                .semantics { heading() }
-        )
-        Text(
-            text = stringResource(R.string.welcome_text),
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 12.dp)
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 32.dp)) {
-            WelcomeStep(1, R.string.welcome_step1_title, R.string.welcome_step1_text)
-            WelcomeStep(2, R.string.welcome_step2_title, R.string.welcome_step2_text)
-            WelcomeStep(3, R.string.welcome_step3_title, R.string.welcome_step3_text)
-        }
-        Spacer(Modifier.weight(1f).heightIn(min = 32.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (cameraAvailable) {
                 Button(

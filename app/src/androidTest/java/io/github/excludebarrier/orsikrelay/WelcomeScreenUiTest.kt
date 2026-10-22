@@ -5,7 +5,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import io.github.excludebarrier.orsikrelay.ui.onboarding.WELCOME_ENTER_CODE_TAG
 import io.github.excludebarrier.orsikrelay.ui.onboarding.WELCOME_SCAN_TAG
 import io.github.excludebarrier.orsikrelay.ui.onboarding.WelcomeScreen
@@ -34,8 +33,9 @@ class WelcomeScreenUiTest {
     fun bothEntriesLeadIntoThePairingFlow() {
         show(cameraAvailable = true)
 
-        composeRule.onNodeWithTag(WELCOME_SCAN_TAG).performScrollTo().assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag(WELCOME_ENTER_CODE_TAG).performScrollTo().assertIsDisplayed().performClick()
+        // Both entries are pinned on screen, no scrolling needed.
+        composeRule.onNodeWithTag(WELCOME_SCAN_TAG).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(WELCOME_ENTER_CODE_TAG).assertIsDisplayed().performClick()
 
         assertEquals(1, scans)
         assertEquals(1, codes)
@@ -46,6 +46,6 @@ class WelcomeScreenUiTest {
         show(cameraAvailable = false)
 
         assertEquals(0, composeRule.onAllNodesWithTag(WELCOME_SCAN_TAG).fetchSemanticsNodes().size)
-        composeRule.onNodeWithTag(WELCOME_ENTER_CODE_TAG).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(WELCOME_ENTER_CODE_TAG).assertIsDisplayed()
     }
 }

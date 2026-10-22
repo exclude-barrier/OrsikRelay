@@ -184,15 +184,24 @@ class HomeScreenUiTest {
         composeRule.onNodeWithTag(HomeTags.COMPOSER_SEND).assertIsDisplayed()
     }
 
+    /** Enough recent sessions that the list always scrolls, on any display. */
+    private fun connectedLongList() = connected().copy(
+        recent = HomeRecent.Ready((1..12).map { HermesSession("r$it", "Fixture $it", null, null, it.toLong(), false) })
+    )
+
+    private fun scrollToTheEnd() {
+        composeRule.onNodeWithTag(HomeTags.LIST).performScrollToNode(hasText("Fixture 12"))
+    }
+
     @Test
     fun suggestionsScrollWithTheContentAndNotWithTheDock() {
-        show(connected())
+        show(connectedLongList())
 
         val chip = hasTestTag(HomeTags.SUGGESTION_PREFIX + "storage")
         composeRule.onNode(chip and hasAnyAncestor(hasTestTag(HomeTags.LIST))).assertIsDisplayed()
         composeRule.onAllNodes(chip and hasAnyAncestor(hasTestTag(HomeTags.DOCK))).assertCountEquals(0)
 
-        scrollTo(HomeTags.RECENT_ROW)
+        scrollToTheEnd()
 
         composeRule.onAllNodesWithTag(HomeTags.SUGGESTIONS).assertCountEquals(0)
         composeRule.onNodeWithTag(HomeTags.COMPOSER_INPUT).assertIsDisplayed()
@@ -200,10 +209,10 @@ class HomeScreenUiTest {
 
     @Test
     fun theHeaderCollapsesIntoACompactBarWhileScrolling() {
-        show(connected())
+        show(connectedLongList())
 
         composeRule.onAllNodesWithTag(HomeTags.COMPACT_HEADER).assertCountEquals(0)
-        scrollTo(HomeTags.RECENT_ROW)
+        scrollToTheEnd()
 
         composeRule.onNodeWithTag(HomeTags.COMPACT_HEADER).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.COMPACT_SETTINGS).assertIsDisplayed().assertHasClickAction()
