@@ -54,7 +54,7 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         openProfilesFromOverflowMenu()
 
         waitForText(context.getString(R.string.profiles_title))
@@ -64,7 +64,7 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back))
             .performClick()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
     }
 
     @Test
@@ -136,7 +136,7 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         openDeleteDialog("profile-b")
@@ -170,7 +170,7 @@ class ProfileManagementNavigationUiTest {
 
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         openProfilesFromOverflowMenu()
         waitForText(context.getString(R.string.profiles_title))
         openDeleteDialog(PROFILE_A_ID)

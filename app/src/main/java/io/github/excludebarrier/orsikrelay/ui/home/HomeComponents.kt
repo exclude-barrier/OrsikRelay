@@ -1,8 +1,5 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,19 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,33 +31,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
-import io.github.excludebarrier.orsikrelay.ui.profiles.DnsIcon
-import io.github.excludebarrier.orsikrelay.ui.sessions.ChatSourceIcon
-import io.github.excludebarrier.orsikrelay.ui.sessions.SessionRow
-import io.github.excludebarrier.orsikrelay.ui.sessions.TerminalSourceIcon
+import io.github.excludebarrier.orsikrelay.ui.components.ComposerDockTags
+import io.github.excludebarrier.orsikrelay.ui.components.ExpressiveShape
+import io.github.excludebarrier.orsikrelay.ui.components.GroupPosition
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.components.PreviewNote
+import io.github.excludebarrier.orsikrelay.ui.components.PreviewTile
+import io.github.excludebarrier.orsikrelay.ui.components.StatusChip
+import io.github.excludebarrier.orsikrelay.ui.components.StatusKind
+import io.github.excludebarrier.orsikrelay.ui.components.dashedBorder
+import io.github.excludebarrier.orsikrelay.ui.sessions.SessionListItem
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikTheme
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -75,6 +71,10 @@ import java.time.LocalDate
 /** Test tags of the Home screen. */
 object HomeTags {
     const val SCREEN = "home_screen"
+    const val COMPACT_HEADER = "home_compact_header"
+    const val COMPACT_SETTINGS = "home_compact_settings"
+    const val SUGGESTIONS = "home_suggestions"
+    const val DOCK = "home_dock"
     const val LIST = "home_list"
     const val SERVER_NAME = "home_server_name"
     const val STATUS = "home_status"
@@ -91,10 +91,10 @@ object HomeTags {
     const val OFFLINE_RETRY = "home_offline_retry"
     const val OFFLINE_SWITCH = "home_offline_switch"
     const val SKELETON = "home_skeleton"
-    const val COMPOSER_INPUT = "home_composer_input"
-    const val COMPOSER_SEND = "home_composer_send"
-    const val COMPOSER_ATTACH = "home_composer_attach"
-    const val COMPOSER_AGENT = "home_composer_agent"
+    const val COMPOSER_INPUT = ComposerDockTags.INPUT
+    const val COMPOSER_SEND = ComposerDockTags.SEND
+    const val COMPOSER_ATTACH = ComposerDockTags.ATTACH
+    const val COMPOSER_AGENT = ComposerDockTags.AGENT
     const val SUGGESTION_PREFIX = "home_suggestion_"
     const val NOTICE = "home_notice"
     const val PICKER = "home_picker"
@@ -102,24 +102,45 @@ object HomeTags {
     const val PICKER_PREVIEW_PREFIX = "home_picker_preview_"
 }
 
-internal val CardShape = RoundedCornerShape(24.dp)
-
-/** Amber of the approval card; the theme has no warning role. */
-private data class ApprovalColors(val container: Color, val content: Color, val button: Color, val onButton: Color)
-
 @Composable
-private fun approvalColors(): ApprovalColors =
-    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
-        ApprovalColors(Color(0xFF4D3B0B), Color(0xFFFFE7A8), Color(0xFFF2B544), Color(0xFF2B1F00))
-    } else {
-        ApprovalColors(Color(0xFFFFF0C2), Color(0xFF3D2C00), Color(0xFF8A5A00), Color(0xFFFFFFFF))
+private fun connectionDot(connection: HomeConnection): Pair<Color, Color> {
+    val status = OrsikTheme.statusColors
+    return when (connection) {
+        HomeConnection.Connected -> status.ok to status.okContainer
+        HomeConnection.Checking -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.primaryContainer
+        is HomeConnection.Unreachable -> MaterialTheme.colorScheme.error to Color.Transparent
     }
+}
 
-/** Whether a reachable-server green is readable on this background. */
 @Composable
-private fun statusGreen(): Color =
-    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF3FB950) else Color(0xFF1A7F37)
+private fun StatusDot(connection: HomeConnection, ring: Boolean) {
+    val (dot, halo) = connectionDot(connection)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(14.dp)) {
+        if (ring) Box(Modifier.size(14.dp).clip(CircleShape).background(halo))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
+    }
+}
 
+@Composable
+private fun SettingsButton(onClick: () -> Unit, filled: Boolean, testTag: String) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (filled) MaterialTheme.colorScheme.surfaceContainerLow else Color.Transparent)
+            .testTag(testTag)
+    ) {
+        Icon(
+            OrsikIcons.Tune,
+            contentDescription = stringResource(R.string.home_open_settings),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+/** The large Home header: brand line, server switcher and status. */
 @Composable
 fun ServerHeader(
     serverName: String,
@@ -128,78 +149,116 @@ fun ServerHeader(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = onOpenSettings,
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                ),
-                modifier = Modifier.testTag(HomeTags.SETTINGS)
+    Row(
+        verticalAlignment = Alignment.Top,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 12.dp, top = 12.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(OrsikIcons.Relay, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.app_name),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.04.em,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            val switchLabel = stringResource(R.string.home_switch_server)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClickLabel = switchLabel, onClick = onSwitchServer)
+                    .heightIn(min = 48.dp)
+                    .testTag(HomeTags.SERVER_NAME)
             ) {
-                Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.home_open_settings))
+                Text(
+                    text = serverName,
+                    style = OrsikType.screenTitle,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .semantics { heading() }
+                )
+                Icon(OrsikIcons.ChevronDown, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(28.dp))
+            }
+            val label = when (connection) {
+                HomeConnection.Connected -> stringResource(R.string.home_status_connected)
+                HomeConnection.Checking -> stringResource(R.string.home_status_checking)
+                is HomeConnection.Unreachable -> stringResource(R.string.home_status_unreachable)
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.testTag(HomeTags.STATUS)
+            ) {
+                StatusDot(connection, ring = true)
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = label,
+                    fontSize = 13.5.sp,
+                    color = if (connection is HomeConnection.Unreachable) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
             }
         }
-        val switchLabel = stringResource(R.string.home_switch_server)
+        SettingsButton(onClick = onOpenSettings, filled = true, testTag = HomeTags.SETTINGS)
+    }
+}
+
+/** The compact bar that replaces [ServerHeader] once it scrolled away. */
+@Composable
+fun CompactServerHeader(
+    serverName: String,
+    connection: HomeConnection,
+    onSwitchServer: () -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val line = MaterialTheme.colorScheme.outlineVariant
+    val switchLabel = stringResource(R.string.home_switch_server)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .drawBehind {
+                val stroke = 1.dp.toPx()
+                drawLine(line, Offset(0f, size.height - stroke / 2), Offset(size.width, size.height - stroke / 2), stroke)
+            }
+            .padding(start = 20.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+            .testTag(HomeTags.COMPACT_HEADER)
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
+                .weight(1f, fill = false)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(onClickLabel = switchLabel, onClick = onSwitchServer)
                 .heightIn(min = 48.dp)
-                .testTag(HomeTags.SERVER_NAME)
         ) {
             Text(
                 text = serverName,
-                fontSize = 34.sp,
-                lineHeight = 40.sp,
-                fontWeight = FontWeight.Bold,
+                style = OrsikType.compactTitle,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .semantics { heading() }
+                modifier = Modifier.weight(1f, fill = false)
             )
-            Icon(
-                Icons.Filled.KeyboardArrowDown,
-                contentDescription = null,
-                modifier = Modifier.padding(start = 4.dp)
-            )
+            Icon(OrsikIcons.ChevronDown, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(24.dp))
         }
-        val (dotColor, label) = when (connection) {
-            HomeConnection.Connected -> statusGreen() to stringResource(R.string.home_status_connected)
-            HomeConnection.Checking -> MaterialTheme.colorScheme.primary to stringResource(R.string.home_status_checking)
-            is HomeConnection.Unreachable -> MaterialTheme.colorScheme.error to stringResource(R.string.home_status_unreachable)
-        }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .testTag(HomeTags.STATUS)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(dotColor)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (connection is HomeConnection.Unreachable) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-        }
+        Spacer(Modifier.width(10.dp))
+        StatusDot(connection, ring = false)
+        Spacer(Modifier.weight(1f))
+        SettingsButton(onClick = onOpenSettings, filled = false, testTag = HomeTags.COMPACT_SETTINGS)
     }
 }
 
@@ -214,26 +273,33 @@ fun SectionTitle(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 24.dp, bottom = 12.dp)
+            .padding(top = 26.dp)
+            .heightIn(min = 32.dp)
+            .padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
+            style = OrsikType.sectionTitle,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.semantics { heading() }
         )
         if (countBadge != null) {
-            Text(
-                text = countBadge.toString(),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .padding(start = 8.dp)
-                    .clip(CircleShape)
+                    .heightIn(min = 22.dp)
+                    .clip(RoundedCornerShape(11.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-            )
+                    .padding(horizontal = 7.dp)
+            ) {
+                Text(
+                    text = countBadge.toString(),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
         }
         Spacer(Modifier.weight(1f))
         trailing()
@@ -241,128 +307,100 @@ fun SectionTitle(
 }
 
 @Composable
-fun PreviewBadge(modifier: Modifier = Modifier, text: String = stringResource(R.string.home_preview_badge)) {
-    val locale = LocalConfiguration.current.locales[0]
-    Text(
-        text = text.uppercase(locale),
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    )
-}
-
-@Composable
 fun ApprovalBanner(title: String?, onReview: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = approvalColors()
-    Surface(
-        shape = CardShape,
-        color = colors.container,
-        contentColor = colors.content,
+    val colors = OrsikTheme.statusColors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = modifier
             .fillMaxWidth()
+            .clip(OrsikShapes.card)
+            .background(colors.warnContainer)
+            .padding(14.dp)
             .testTag(HomeTags.APPROVAL)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(16.dp)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(ExpressiveShape.Sunny.shape)
+                .background(colors.warn)
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(cookieShape())
-                    .background(colors.button)
-            ) {
-                Icon(Icons.Filled.Warning, contentDescription = null, tint = colors.onButton, modifier = Modifier.size(20.dp))
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.home_approval_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = stringResource(
-                        R.string.home_approval_subtitle,
-                        title ?: stringResource(R.string.home_run_untitled)
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Button(
-                onClick = onReview,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.button, contentColor = colors.onButton),
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .testTag(HomeTags.APPROVAL_REVIEW)
-            ) {
-                Text(stringResource(R.string.home_approval_review), fontWeight = FontWeight.SemiBold)
-            }
+            Icon(OrsikIcons.Shield, contentDescription = null, tint = colors.onWarn, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.home_approval_title),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.onWarnContainer
+            )
+            Text(
+                text = stringResource(
+                    R.string.home_approval_subtitle,
+                    title ?: stringResource(R.string.home_run_untitled)
+                ),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = colors.onWarnContainer,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Button(
+            onClick = onReview,
+            shape = OrsikShapes.pill,
+            colors = ButtonDefaults.buttonColors(containerColor = colors.warn, contentColor = colors.onWarn),
+            modifier = Modifier.testTag(HomeTags.APPROVAL_REVIEW)
+        ) {
+            Text(stringResource(R.string.home_approval_review), fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
 fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        shape = CardShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+    val status = stringResource(if (item.uncertain) R.string.home_run_uncertain else R.string.home_run_running)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = modifier
             .fillMaxWidth()
-            .clip(CardShape)
+            .clip(OrsikShapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(onClick = onClick)
+            .padding(14.dp)
             .testTag(HomeTags.RUN_ROW)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(16.dp)
-        ) {
+        if (item.uncertain) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(cookieShape())
+                    .size(44.dp)
+                    .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer)
             ) {
-                if (item.uncertain) {
-                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
-                } else {
-                    CircularProgressIndicator(
-                        strokeWidth = 2.5.dp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
-            ) {
-                Text(
-                    text = item.title ?: stringResource(R.string.home_run_untitled),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = stringResource(if (item.uncertain) R.string.home_run_uncertain else R.string.home_run_running),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+        } else {
+            OrsikLoadingIndicator(contentDescription = status)
         }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = item.title ?: stringResource(R.string.home_run_untitled),
+                style = OrsikType.listTitle,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(text = status, style = OrsikType.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(OrsikIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -370,177 +408,102 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
 fun ServerStatusStrip(connected: Boolean, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
         SectionTitle(text = stringResource(R.string.home_section_server)) {
-            if (connected) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(statusGreen().copy(alpha = 0.16f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = statusGreen(), modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.home_server_reachable),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = statusGreen()
-                    )
-                }
-            }
+            if (connected) StatusChip(stringResource(R.string.home_server_reachable), StatusKind.Ok)
         }
-        Surface(
-            shape = CardShape,
-            color = MaterialTheme.colorScheme.surfaceContainer,
+        val noValue = stringResource(R.string.home_server_no_value)
+        val dash = MaterialTheme.colorScheme.outline
+        Column(
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(OrsikShapes.card)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .padding(16.dp)
                 .testTag(HomeTags.SERVER_STRIP)
         ) {
-            Column(Modifier.padding(16.dp)) {
-                val noValue = stringResource(R.string.home_server_no_value)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    listOf(
-                        R.string.home_server_cpu,
-                        R.string.home_server_ram,
-                        R.string.home_server_gpu,
-                        R.string.home_server_services
-                    ).forEach { labelRes ->
-                        val label = stringResource(labelRes)
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clearAndSetSemantics { contentDescription = "$label: $noValue" }
-                        ) {
-                            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("—", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 4.dp))
-                            DashedBar()
-                        }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf(
+                    R.string.home_server_cpu,
+                    R.string.home_server_ram,
+                    R.string.home_server_gpu,
+                    R.string.home_server_services
+                ).forEach { labelRes ->
+                    val label = stringResource(labelRes)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clearAndSetSemantics { contentDescription = "$label: $noValue" }
+                    ) {
+                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("—", fontFamily = FontFamily.Monospace, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .dashedBorder(dash, 3.dp)
+                        )
                     }
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 16.dp)
-                ) {
-                    PreviewBadge()
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.home_server_preview_text),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
+            PreviewNote(stringResource(R.string.home_server_preview_text))
         }
     }
-}
-
-@Composable
-private fun DashedBar() {
-    val color = MaterialTheme.colorScheme.outline
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(8.dp)
-            .dashedBorder(color, 4.dp)
-    )
-}
-
-/** Dashed rounded outline: the "not yet available" look of the design. */
-internal fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawBehind {
-    val stroke = 1.dp.toPx()
-    drawRoundRect(
-        color = color,
-        cornerRadius = CornerRadius(radius.toPx()),
-        style = Stroke(
-            width = stroke,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
-        )
-    )
 }
 
 @Composable
 fun QuickActionGrid(onOpenChat: () -> Unit, modifier: Modifier = Modifier) {
     val tiles = listOf(
-        QuickTile("chat", R.string.home_quick_chat, ChatSourceIcon, available = true),
-        QuickTile("server", R.string.home_quick_server, DnsIcon),
-        QuickTile("terminal", R.string.home_quick_terminal, TerminalSourceIcon),
-        QuickTile("files", R.string.home_quick_files, FolderIcon),
-        QuickTile("docker", R.string.home_quick_docker, Icons.Filled.Build),
-        QuickTile("projects", R.string.home_quick_projects, CodeIcon)
+        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server),
+        QuickTile("terminal", R.string.home_quick_terminal, OrsikIcons.Terminal),
+        QuickTile("files", R.string.home_quick_files, OrsikIcons.Folder),
+        QuickTile("docker", R.string.home_quick_docker, OrsikIcons.Container),
+        QuickTile("projects", R.string.home_quick_projects, OrsikIcons.Code)
     )
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        tiles.chunked(3).forEach { row ->
+        val cells: List<QuickTile?> = listOf(null) + tiles
+        cells.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { tile ->
-                    QuickActionTile(
-                        label = stringResource(tile.labelRes),
-                        icon = tile.icon,
-                        available = tile.available,
-                        onClick = onOpenChat,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag(HomeTags.QUICK_TILE_PREFIX + tile.key)
-                    )
+                    if (tile == null) {
+                        ChatTile(onClick = onOpenChat, modifier = Modifier.weight(1f).testTag(HomeTags.QUICK_CHAT))
+                    } else {
+                        PreviewTile(
+                            label = stringResource(tile.labelRes),
+                            icon = tile.icon,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag(HomeTags.QUICK_TILE_PREFIX + tile.key)
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-private class QuickTile(
-    val key: String,
-    val labelRes: Int,
-    val icon: ImageVector,
-    val available: Boolean = false
-)
+private class QuickTile(val key: String, val labelRes: Int, val icon: ImageVector)
 
 @Composable
-fun QuickActionTile(
-    label: String,
-    icon: ImageVector,
-    available: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(20.dp)
-    val soon = stringResource(R.string.home_soon_badge)
-    val outline = MaterialTheme.colorScheme.outline
-    val base = modifier
-        .heightIn(min = 88.dp)
-        .clip(shape)
-    val styled = if (available) {
-        base
+private fun ChatTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val content = MaterialTheme.colorScheme.onPrimary
+    Column(
+        verticalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .height(92.dp)
+            .clip(OrsikShapes.card)
             .background(MaterialTheme.colorScheme.primary)
             .clickable(onClick = onClick)
-    } else {
-        base
-            .dashedBorder(outline, 20.dp)
-            .semantics(mergeDescendants = true) {
-                disabled()
-                contentDescription = "$label, $soon"
-            }
-    }
-    val content = if (available) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    Box(modifier = styled.padding(12.dp)) {
-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
-        if (!available) {
-            Text(
-                text = soon,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = content,
-                modifier = Modifier.align(Alignment.TopEnd)
-            )
-        }
+            .padding(14.dp)
+    ) {
+        Icon(OrsikIcons.Chat, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
         Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = if (available) FontWeight.SemiBold else FontWeight.Normal,
+            text = stringResource(R.string.home_quick_chat),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
             color = content,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(top = 32.dp)
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -548,6 +511,7 @@ fun QuickActionTile(
 @Composable
 fun RecentSessionRow(
     session: HermesSession,
+    position: GroupPosition,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     clock: Clock = Clock.systemDefaultZone()
@@ -558,15 +522,15 @@ fun RecentSessionRow(
     val showTimeOnly = session.lastActiveEpochSeconds?.let {
         Instant.ofEpochSecond(it).atZone(zone).toLocalDate() == today
     } ?: false
-    Box(modifier = modifier.testTag(HomeTags.RECENT_ROW)) {
-        SessionRow(
-            session = session,
-            locale = locale,
-            zone = zone,
-            showTimeOnly = showTimeOnly,
-            onClick = onClick
-        )
-    }
+    SessionListItem(
+        session = session,
+        position = position,
+        locale = locale,
+        zone = zone,
+        showTimeOnly = showTimeOnly,
+        onClick = onClick,
+        modifier = modifier.testTag(HomeTags.RECENT_ROW)
+    )
 }
 
 @Composable
@@ -578,7 +542,7 @@ fun OfflineCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = CardShape,
+        shape = OrsikShapes.card,
         color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f),
         contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = modifier
@@ -638,7 +602,7 @@ private fun ConnectionFailureReason.textRes(): Int = when (this) {
 /** Placeholder blocks while the connection is checked. */
 @Composable
 fun HomeSkeleton(modifier: Modifier = Modifier) {
-    val block = MaterialTheme.colorScheme.surfaceContainer
+    val block = MaterialTheme.colorScheme.surfaceContainerLow
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
@@ -648,19 +612,9 @@ fun HomeSkeleton(modifier: Modifier = Modifier) {
             .clearAndSetSemantics {}
     ) {
         Box(Modifier.width(120.dp).height(20.dp).clip(RoundedCornerShape(8.dp)).background(block))
-        Box(Modifier.fillMaxWidth().height(72.dp).clip(CardShape).background(block))
+        Box(Modifier.fillMaxWidth().height(72.dp).clip(OrsikShapes.card).background(block))
         Box(Modifier.width(80.dp).height(20.dp).clip(RoundedCornerShape(8.dp)).background(block))
-        Box(Modifier.fillMaxWidth().height(96.dp).clip(CardShape).background(block))
+        Box(Modifier.fillMaxWidth().height(96.dp).clip(OrsikShapes.card).background(block))
     }
 }
 
-/** A spring-based press scale for the round dock buttons. */
-@Composable
-internal fun pressScale(pressed: Boolean): Float =
-    animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "pressScale"
-    ).value
-
-internal fun Modifier.scaled(scale: Float): Modifier = this.scale(scale)

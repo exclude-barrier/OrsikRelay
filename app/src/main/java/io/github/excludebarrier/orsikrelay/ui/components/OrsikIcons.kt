@@ -1,0 +1,110 @@
+package io.github.excludebarrier.orsikrelay.ui.components
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.unit.dp
+
+/**
+ * The line icons of design v2 (24 viewport units, round caps and joins).
+ * The design draws them as strokes; [androidx.compose.material3.Icon] tints
+ * strokes and fills alike, so they behave like any Material icon.
+ */
+object OrsikIcons {
+    val Home by lazy { stroke("Home", 2f, "M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z") }
+    val Agents by lazy {
+        stroke("Agents", 1.8f, rect(5f, 8f, 14f, 11f, 3f), "M12 4v4M9.5 13h.01M14.5 13h.01M2 13v2M22 13v2")
+    }
+    val Server by lazy {
+        stroke("Server", 1.8f, rect(3f, 4f, 18f, 7f, 2f), rect(3f, 13f, 18f, 7f, 2f), "M7 7.5h.01M7 16.5h.01")
+    }
+    val Activity by lazy { stroke("Activity", 1.8f, "M3 12h4l3-7 4 14 3-7h4") }
+    val Relay by lazy {
+        stroke("Relay", 2.2f, "M11 7.5a6.5 6.5 0 0 1 0 9", "M15 4a11 11 0 0 1 0 16", fills = listOf(circle(6f, 12f, 2.5f)))
+    }
+    val ChevronDown by lazy { stroke("ChevronDown", 2.2f, "m7 10 5 5 5-5") }
+    val ChevronRight by lazy { stroke("ChevronRight", 2f, "m9 6 6 6-6 6") }
+    val Tune by lazy {
+        stroke("Tune", 1.9f, "M4 7h10M18 7h2M4 17h4M12 17h8", circle(16f, 7f, 2f), circle(10f, 17f, 2f))
+    }
+    val Shield by lazy { stroke("Shield", 2.2f, "M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z", "M12 8v5M12 16.5v.01") }
+    val Check by lazy { stroke("Check", 2.6f, "m5 12 5 5 9-10") }
+    val Plus by lazy { stroke("Plus", 2f, "M12 5v14M5 12h14") }
+    val ArrowUp by lazy { stroke("ArrowUp", 2.4f, "M12 19V5M6 11l6-6 6 6") }
+    val ArrowBack by lazy { stroke("ArrowBack", 2f, "M19 12H5M11 6l-6 6 6 6", autoMirror = true) }
+    val Chat by lazy { stroke("Chat", 2.2f, "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z") }
+    val Terminal by lazy { stroke("Terminal", 1.9f, "m5 8 4 4-4 4M12 17h7") }
+    val TerminalBox by lazy { stroke("TerminalBox", 2f, rect(3f, 4f, 18f, 16f, 3f), "m7 9 3 3-3 3M13 15h4") }
+    val Folder by lazy { stroke("Folder", 1.9f, "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z") }
+    val Container by lazy { stroke("Container", 1.9f, "m12 3 8 4.5v9L12 21l-8-4.5v-9z", "m4 7.5 8 4.5 8-4.5M12 12v9") }
+    val Code by lazy { stroke("Code", 1.9f, "m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14") }
+    val Send by lazy { stroke("Send", 2f, "M4 12 20 4l-4 16-4-7z", "m12 13 8-9") }
+    val Calendar by lazy { stroke("Calendar", 2f, rect(3f, 5f, 18f, 16f, 2f), "M3 10h18M8 3v4M16 3v4") }
+    val Search by lazy { stroke("Search", 1.9f, circle(11f, 11f, 6.5f), "m20 20-4.2-4.2") }
+    val Pin by lazy { stroke("Pin", 1.8f, "M9 4h6l-1 6 3 3H7l3-3zM12 13v7") }
+    val Wrench by lazy {
+        stroke("Wrench", 2f, "M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z")
+    }
+    val Copy by lazy {
+        stroke("Copy", 2f, rect(8f, 8f, 12f, 12f, 2f), "M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2")
+    }
+    val Globe by lazy { stroke("Globe", 1.9f, circle(12f, 12f, 9f), "M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18") }
+    val Palette by lazy {
+        stroke(
+            "Palette", 1.9f,
+            "M12 3a9 9 0 1 0 0 18c1.2 0 1.6-1 1-2-.7-1.2 0-2.5 1.4-2.5H17a4 4 0 0 0 4-4C21 7 17 3 12 3z",
+            circle(7.5f, 11f, 1f), circle(10f, 7.5f, 1f), circle(14.5f, 7.5f, 1f)
+        )
+    }
+    val Wallpaper by lazy { stroke("Wallpaper", 1.9f, rect(3f, 4f, 18f, 16f, 2f), "m3 16 5-5 4 4 3-3 6 6") }
+    val TextSize by lazy { stroke("TextSize", 1.9f, "M4 7V5h10v2M9 5v14M14 13v-2h6v2M17 11v8") }
+    val Lock by lazy { stroke("Lock", 1.9f, rect(5f, 11f, 14f, 10f, 2f), "M8 11V8a4 4 0 0 1 8 0v3") }
+    val Eye by lazy { stroke("Eye", 1.9f, "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", circle(12f, 12f, 3f)) }
+    val Scan by lazy {
+        stroke("Scan", 2.2f, "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8")
+    }
+    val Key by lazy { stroke("Key", 2f, circle(8f, 15f, 4f), "m11 12 9-9M17 6l3 3M15 8l2 2") }
+    val MoreVert by lazy {
+        stroke("MoreVert", 1.9f, fills = listOf(circle(12f, 5f, 1.4f), circle(12f, 12f, 1.4f), circle(12f, 19f, 1.4f)))
+    }
+}
+
+private fun rect(x: Float, y: Float, w: Float, h: Float, r: Float): String =
+    "M${x + r} ${y}h${w - 2 * r}a$r $r 0 0 1 $r ${r}v${h - 2 * r}a$r $r 0 0 1 -$r ${r}" +
+        "h-${w - 2 * r}a$r $r 0 0 1 -$r -${r}v-${h - 2 * r}a$r $r 0 0 1 $r -${r}z"
+
+private fun circle(cx: Float, cy: Float, r: Float): String =
+    "M${cx - r} ${cy}a$r $r 0 1 0 ${2 * r} 0a$r $r 0 1 0 -${2 * r} 0z"
+
+private fun stroke(
+    name: String,
+    width: Float,
+    vararg paths: String,
+    fills: List<String> = emptyList(),
+    autoMirror: Boolean = false
+): ImageVector {
+    val builder = ImageVector.Builder(
+        name = "Orsik.$name",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+        autoMirror = autoMirror
+    )
+    paths.forEach { data ->
+        builder.addPath(
+            pathData = addPathNodes(data),
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = width,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        )
+    }
+    fills.forEach { data ->
+        builder.addPath(pathData = addPathNodes(data), fill = SolidColor(Color.Black))
+    }
+    return builder.build()
+}

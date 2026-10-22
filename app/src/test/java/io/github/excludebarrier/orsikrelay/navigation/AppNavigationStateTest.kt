@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -105,5 +106,27 @@ class AppNavigationStateTest {
         val next = state.goBack()
 
         assertEquals(AppNavigationState(AppScreen.Home), next)
+    }
+
+    @Test
+    fun `without a saved server the app starts on welcome`() {
+        assertEquals(AppScreen.Welcome, startScreenFor(StartupProfile.None, pairingDeepLink = false))
+    }
+
+    @Test
+    fun `a pairing deep link skips welcome and opens the onboarding form`() {
+        assertEquals(AppScreen.Onboarding, startScreenFor(StartupProfile.None, pairingDeepLink = true))
+    }
+
+    @Test
+    fun `a saved or unreadable server starts on home and never on welcome`() {
+        assertEquals(AppScreen.Home, startScreenFor(StartupProfile.Ready("profile"), pairingDeepLink = false))
+        assertEquals(AppScreen.Home, startScreenFor(StartupProfile.Ready("profile"), pairingDeepLink = true))
+        assertEquals(AppScreen.Home, startScreenFor(StartupProfile.Unavailable, pairingDeepLink = false))
+    }
+
+    @Test
+    fun `back on welcome stays on welcome`() {
+        assertEquals(AppScreen.Welcome, AppNavigationState(AppScreen.Welcome).goBack().current)
     }
 }

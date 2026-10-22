@@ -1,5 +1,22 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WelcomeScreen
+import io.github.excludebarrier.orsikrelay.ui.home.HomeUiState
+import io.github.excludebarrier.orsikrelay.ui.home.HomeScreen
+import io.github.excludebarrier.orsikrelay.ui.home.HomeRunItem
+import io.github.excludebarrier.orsikrelay.ui.home.HomeRecent
+import io.github.excludebarrier.orsikrelay.ui.home.HomeConnection
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
+import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
+import io.github.excludebarrier.orsikrelay.navigation.AppScreen
+import io.github.excludebarrier.orsikrelay.navigation.AppBottomBar
+import androidx.compose.ui.Modifier
+import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.WindowInsets
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Environment
@@ -140,6 +157,90 @@ class ReadmeScreenshotsTest {
         }
         waitForText(context.getString(R.string.onboarding_title))
         capture("onboarding")
+    }
+
+    @CaptureOnly
+    @Test
+    fun home() = renderHome(dark = false, name = "home")
+
+    @CaptureOnly
+    @Test
+    fun homeDark() = renderHome(dark = true, name = "home-dark")
+
+    @CaptureOnly
+    @Test
+    fun server() {
+        prepareWindow()
+        setScreen(dark = false) {
+            WithBottomBar(AppScreen.Server) { modifier ->
+                ProfilesScreen(
+                    admin = readmeProfileAdmin,
+                    onBack = null,
+                    activeProfileId = "fixture-home",
+                    activeReachable = true,
+                    modifier = modifier
+                )
+            }
+        }
+        waitForText("Office server")
+        capture("server")
+    }
+
+    @CaptureOnly
+    @Test
+    fun welcome() {
+        prepareWindow()
+        setScreen(dark = false) {
+            WelcomeScreen(onScan = {}, onEnterCode = {}, cameraAvailable = true)
+        }
+        waitForText(context.getString(R.string.welcome_title))
+        capture("welcome")
+    }
+
+    private fun renderHome(dark: Boolean, name: String) {
+        val now = System.currentTimeMillis() / 1_000
+        prepareWindow()
+        setScreen(dark = dark) {
+            WithBottomBar(AppScreen.Home) { modifier ->
+                HomeScreen(
+                    state = HomeUiState(
+                        serverName = "Home server",
+                        connection = HomeConnection.Connected,
+                        runs = listOf(
+                            HomeRunItem("fixture-docker", "Docker updates", awaitingApproval = true, uncertain = false),
+                            HomeRunItem("fixture-backup", "Check backup", awaitingApproval = false, uncertain = false)
+                        ),
+                        recent = HomeRecent.Ready(sessionFixtures().take(3).map { it.copy(lastActiveEpochSeconds = now - 600) })
+                    ),
+                    onDraftChange = {}, onSend = {}, onAttach = {}, onRemoveAttachment = {},
+                    onOpenRun = {}, onOpenSession = {}, onOpenAllSessions = {}, onSwitchServer = {},
+                    onOpenSettings = {}, onRetry = {},
+                    modifier = modifier
+                )
+            }
+        }
+        waitForText("Home server")
+        capture(name)
+    }
+
+    /** The app shell around a tab: the bottom bar as HermesNavHost shows it. */
+    @Composable
+    private fun WithBottomBar(tab: AppScreen, content: @Composable (Modifier) -> Unit) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            bottomBar = { AppBottomBar(current = tab, approvalPending = tab == AppScreen.Home, onSelect = {}) }
+        ) { inner -> content(Modifier.padding(inner).consumeWindowInsets(inner)) }
+    }
+
+    private val readmeProfileAdmin = object : ProfileAdmin {
+        override fun listProfiles() = listOf(
+            ServerProfile.create("fixture-home", "Home server", "https://hermes.example.ts.net:8443"),
+            ServerProfile.create("fixture-office", "Office server", "https://office.example.ts.net:8443")
+        )
+        override fun deleteProfile(profileId: String) = Unit
+        override fun selectActiveServer(profileId: String) = Unit
+        override fun credentialKind(profileId: String) =
+            if (profileId == "fixture-home") ProfileCredentialKind.API_KEY else ProfileCredentialKind.DEVICE_CREDENTIAL
     }
 
     // ------------------------------------------------------------------

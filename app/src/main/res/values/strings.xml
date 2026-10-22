@@ -58,7 +58,7 @@
     <string name="onboarding_scan_open_settings">Open app settings</string>
     <string name="onboarding_scan_camera_unavailable">Camera unavailable.</string>
     <string name="error_pairing_code_local_invalid">Enter a valid pairing code.</string>
-    <string name="sessions_title">Sessions</string>
+    <string name="sessions_title">Agents</string>
     <string name="sessions_loading">Loading sessions…</string>
     <string name="sessions_empty">No sessions available.</string>
     <string name="sessions_refresh">Refresh</string>
@@ -108,7 +108,7 @@
     <string name="settings_chat_text_large">Large</string>
     <string name="settings_notifications_label">Notifications</string>
     <string name="settings_notifications_description">Choose in the Android settings which alerts the app shows.</string>
-    <string name="settings_privacy_section">Privacy</string>
+    <string name="settings_privacy_section">Security</string>
     <string name="settings_screen_protection_label">Screen protection</string>
     <string name="settings_screen_protection_description">No screenshots and no preview in the app switcher.</string>
     <string name="settings_app_lock_label">App lock</string>
@@ -167,7 +167,7 @@
     <string name="chat_attachment_error_size">The attachment is too large. Maximum 5 MiB per image.</string>
     <string name="chat_attachment_error_unreadable">The attachment could not be read.</string>
     <string name="chat_send">Send</string>
-    <string name="chat_input_label">Message</string>
+    <string name="chat_input_label">Message Hermes</string>
     <string name="chat_tool_activity">Tool is active…</string>
     <string name="chat_tool_activity_named">Tool active: %1$s</string>
     <string name="chat_refresh_history">Refresh history</string>
@@ -322,8 +322,25 @@
     <string name="nav_server">Server</string>
     <string name="nav_activity">Activity</string>
     <string name="nav_activity_approval">Activity, approval required</string>
-    <string name="placeholder_server_title">Server</string>
-    <string name="placeholder_server_text">System values, services and files of the server follow in a later version.</string>
     <string name="placeholder_activity_title">Activity</string>
     <string name="placeholder_activity_text">A history of everything your agents did follows in a later version.</string>
+    <string name="sessions_running">running</string>
+    <string name="sessions_pinned">Pinned</string>
+    <string name="chat_header_subtitle">Hermes · %1$s</string>
+    <string name="chat_tool_done">done</string>
+    <string name="profiles_status_not_connected">Not connected</string>
+    <string name="profiles_management">Management</string>
+    <string name="profiles_tile_monitoring">Monitoring</string>
+    <string name="settings_group_general">General</string>
+    <string name="settings_theme_label">Design</string>
+    <string name="welcome_title">Connect your server</string>
+    <string name="welcome_text">Orsik Relay runs agents on your own server – through the Orsik bridge.</string>
+    <string name="welcome_step1_title">Start the bridge on the server</string>
+    <string name="welcome_step1_text">It shows a pairing code and a QR code.</string>
+    <string name="welcome_step2_title">Scan the QR code</string>
+    <string name="welcome_step2_text">The device gets paired. Credentials stay on this device.</string>
+    <string name="welcome_step3_title">Give Hermes a first task</string>
+    <string name="welcome_step3_text">More agents will follow later.</string>
+    <string name="welcome_scan">Scan QR code</string>
+    <string name="welcome_enter_code">Enter pairing code or API key</string>
 </resources>

@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.ui.sessions.SESSIONS_LIST_TAG
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,7 +13,6 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -178,7 +178,7 @@ class AccessibilityLargeFontUiTest {
 
     private fun assertSessionEntry(title: String, scrollable: Boolean) {
         if (scrollable) {
-            composeRule.onNode(hasScrollAction())
+            composeRule.onNodeWithTag(SESSIONS_LIST_TAG)
                 .performScrollToNode(hasText(title) and hasClickAction())
         }
         val entry = composeRule.onNode(hasText(title) and hasClickAction())

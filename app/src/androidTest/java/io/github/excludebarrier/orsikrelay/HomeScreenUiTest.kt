@@ -2,6 +2,8 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -24,6 +26,7 @@ import io.github.excludebarrier.orsikrelay.ui.home.HomeRunItem
 import io.github.excludebarrier.orsikrelay.ui.home.HomeScreen
 import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
 import io.github.excludebarrier.orsikrelay.ui.home.HomeUiState
+import io.github.excludebarrier.orsikrelay.ui.components.TAG_LOADING_INDICATOR
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -179,6 +182,50 @@ class HomeScreenUiTest {
         composeRule.onNodeWithText("hp-server").assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.COMPOSER_INPUT).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.COMPOSER_SEND).assertIsDisplayed()
+    }
+
+    /** Enough recent sessions that the list always scrolls, on any display. */
+    private fun connectedLongList() = connected().copy(
+        recent = HomeRecent.Ready((1..12).map { HermesSession("r$it", "Fixture $it", null, null, it.toLong(), false) })
+    )
+
+    private fun scrollToTheEnd() {
+        composeRule.onNodeWithTag(HomeTags.LIST).performScrollToNode(hasText("Fixture 12"))
+    }
+
+    @Test
+    fun suggestionsScrollWithTheContentAndNotWithTheDock() {
+        show(connectedLongList())
+
+        val chip = hasTestTag(HomeTags.SUGGESTION_PREFIX + "storage")
+        composeRule.onNode(chip and hasAnyAncestor(hasTestTag(HomeTags.LIST))).assertIsDisplayed()
+        composeRule.onAllNodes(chip and hasAnyAncestor(hasTestTag(HomeTags.DOCK))).assertCountEquals(0)
+
+        scrollToTheEnd()
+
+        composeRule.onAllNodesWithTag(HomeTags.SUGGESTIONS).assertCountEquals(0)
+        composeRule.onNodeWithTag(HomeTags.COMPOSER_INPUT).assertIsDisplayed()
+    }
+
+    @Test
+    fun theHeaderCollapsesIntoACompactBarWhileScrolling() {
+        show(connectedLongList())
+
+        composeRule.onAllNodesWithTag(HomeTags.COMPACT_HEADER).assertCountEquals(0)
+        scrollToTheEnd()
+
+        composeRule.onNodeWithTag(HomeTags.COMPACT_HEADER).assertIsDisplayed()
+        composeRule.onNodeWithTag(HomeTags.COMPACT_SETTINGS).assertIsDisplayed().assertHasClickAction()
+    }
+
+    @Test
+    fun aRunningTaskShowsTheLoadingStar() {
+        show(connected(runs = listOf(HomeRunItem("s7", "Check backup", awaitingApproval = false, uncertain = false))))
+
+        composeRule.onNode(
+            hasTestTag(TAG_LOADING_INDICATOR) and hasAnyAncestor(hasTestTag(HomeTags.RUN_ROW)),
+            useUnmergedTree = true
+        ).assertExists()
     }
 
     private fun scrollTo(tag: String) {

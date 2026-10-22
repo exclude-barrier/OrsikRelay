@@ -58,7 +58,7 @@
     <string name="onboarding_scan_open_settings">App-Einstellungen öffnen</string>
     <string name="onboarding_scan_camera_unavailable">Kamera nicht verfügbar.</string>
     <string name="error_pairing_code_local_invalid">Bitte einen gültigen Pairing-Code eingeben.</string>
-    <string name="sessions_title">Sessions</string>
+    <string name="sessions_title">Agenten</string>
     <string name="sessions_loading">Sessions werden geladen…</string>
     <string name="sessions_empty">Keine Sessions vorhanden.</string>
     <string name="sessions_refresh">Aktualisieren</string>
@@ -72,7 +72,7 @@
     <string name="theme_mode_dark">Dunkel</string>
     <string name="sessions_retry">Erneut versuchen</string>
     <string name="sessions_load_more">Mehr laden</string>
-    <string name="sessions_group_pinned">Angepinnt</string>
+    <string name="sessions_group_pinned">Angeheftet</string>
     <string name="sessions_group_today">Heute</string>
     <string name="sessions_group_yesterday">Gestern</string>
     <string name="sessions_group_last_7_days">Letzte 7 Tage</string>
@@ -108,7 +108,7 @@
     <string name="settings_chat_text_large">Groß</string>
     <string name="settings_notifications_label">Benachrichtigungen</string>
     <string name="settings_notifications_description">In den Android-Einstellungen festlegen, welche Hinweise die App zeigt.</string>
-    <string name="settings_privacy_section">Datenschutz</string>
+    <string name="settings_privacy_section">Sicherheit</string>
     <string name="settings_screen_protection_label">Bildschirmschutz</string>
     <string name="settings_screen_protection_description">Keine Screenshots und keine Vorschau im App-Wechsler.</string>
     <string name="settings_app_lock_label">App-Sperre</string>
@@ -166,7 +166,7 @@
     <string name="chat_attachment_error_size">Der Anhang ist zu groß. Maximal 5 MiB pro Bild.</string>
     <string name="chat_attachment_error_unreadable">Der Anhang konnte nicht gelesen werden.</string>
     <string name="chat_send">Senden</string>
-    <string name="chat_input_label">Nachricht</string>
+    <string name="chat_input_label">Nachricht an Hermes</string>
     <string name="chat_tool_activity">Tool ist aktiv…</string>
     <string name="chat_tool_activity_named">Tool aktiv: %1$s</string>
     <string name="chat_refresh_history">Verlauf aktualisieren</string>
@@ -321,8 +321,25 @@
     <string name="nav_server">Server</string>
     <string name="nav_activity">Aktivität</string>
     <string name="nav_activity_approval">Aktivität, Freigabe erforderlich</string>
-    <string name="placeholder_server_title">Server</string>
-    <string name="placeholder_server_text">Systemwerte, Dienste und Dateien des Servers folgen in einer späteren Version.</string>
     <string name="placeholder_activity_title">Aktivität</string>
     <string name="placeholder_activity_text">Ein Verlauf über alles, was deine Agenten getan haben, folgt in einer späteren Version.</string>
+    <string name="sessions_running">läuft</string>
+    <string name="sessions_pinned">Angeheftet</string>
+    <string name="chat_header_subtitle">Hermes · %1$s</string>
+    <string name="chat_tool_done">fertig</string>
+    <string name="profiles_status_not_connected">Nicht verbunden</string>
+    <string name="profiles_management">Verwaltung</string>
+    <string name="profiles_tile_monitoring">Monitoring</string>
+    <string name="settings_group_general">Allgemein</string>
+    <string name="settings_theme_label">Design</string>
+    <string name="welcome_title">Verbinde deinen Server</string>
+    <string name="welcome_text">Orsik Relay steuert Agenten auf deinem eigenen Server – über die Orsik-Bridge.</string>
+    <string name="welcome_step1_title">Bridge auf dem Server starten</string>
+    <string name="welcome_step1_text">Sie zeigt einen Pairing-Code und QR-Code an.</string>
+    <string name="welcome_step2_title">QR-Code scannen</string>
+    <string name="welcome_step2_text">Das Gerät wird gekoppelt. Zugangsdaten bleiben auf diesem Gerät.</string>
+    <string name="welcome_step3_title">Erste Aufgabe an Hermes geben</string>
+    <string name="welcome_step3_text">Weitere Agenten folgen später.</string>
+    <string name="welcome_scan">QR-Code scannen</string>
+    <string name="welcome_enter_code">Pairing-Code oder API-Key eingeben</string>
 </resources>

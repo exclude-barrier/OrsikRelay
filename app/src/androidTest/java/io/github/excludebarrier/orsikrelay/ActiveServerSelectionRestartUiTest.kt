@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onAllNodesWithTag
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WELCOME_SCREEN_TAG
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -11,7 +13,6 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
-import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionProbe
 import io.github.excludebarrier.orsikrelay.domain.connection.HermesConnectionResult
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
@@ -179,15 +180,17 @@ class ActiveServerSelectionRestartUiTest {
     }
 
     @Test
-    fun restartWithADeletedOrUnknownSelectionFallsBackToOnboarding() {
+    fun restartWithADeletedOrUnknownSelectionFallsBackToWelcome() {
         // A selection pointing at a profile that no longer exists is
         // deterministically invalid; with no other profile stored, the
-        // existing safe startup state is onboarding.
+        // safe startup state is Welcome (the way into onboarding).
         selectionStore.write("ghost-profile-id")
 
         setHost()
 
-        waitForText(context.getString(R.string.onboarding_title))
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag(WELCOME_SCREEN_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test
@@ -250,7 +253,9 @@ class ActiveServerSelectionRestartUiTest {
         // the single active row, and Beta is still selectable.
         assertEquals(
             1,
-            composeRule.onAllNodesWithText(context.getString(R.string.profiles_chip_active)).fetchSemanticsNodes().size
+            composeRule.onAllNodesWithText(
+                context.getString(R.string.profiles_chip_active).uppercase(context.resources.configuration.locales[0])
+            ).fetchSemanticsNodes().size
         )
         composeRule.onNodeWithTag(rowTag(BETA_ID)).assertExists()
     }

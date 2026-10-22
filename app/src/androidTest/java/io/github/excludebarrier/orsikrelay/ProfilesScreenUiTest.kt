@@ -1,5 +1,10 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.ui.profiles.MANAGEMENT_TILE_PREFIX
+import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -184,17 +189,61 @@ class ProfilesScreenUiTest {
         composeRule.onNodeWithTag("addServerButton").assertIsDisplayed()
     }
 
+    @Test
+    fun asATabTheScreenHasNoBackArrowAndShowsTheRealReachability() {
+        val admin = FakeProfileAdmin(
+            profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local"), profile(API_ID, "Api", "https://api.local")),
+            kinds = mapOf(PAIRED_ID to ProfileCredentialKind.DEVICE_CREDENTIAL, API_ID to ProfileCredentialKind.API_KEY)
+        )
+        setContent(admin, activeProfileId = PAIRED_ID, onBack = null, activeReachable = true)
+        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+
+        composeRule.onAllNodesWithTag("settings_back").assertCountEquals(0)
+        assertEquals(1, count(context.getString(R.string.home_server_reachable)))
+        assertEquals(1, count(context.getString(R.string.profiles_status_not_connected)))
+    }
+
+    @Test
+    fun anUnreachableActiveServerSaysSoAndAnUnknownStateShowsNothing() {
+        val admin = FakeProfileAdmin(
+            profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")),
+            kinds = mapOf(PAIRED_ID to ProfileCredentialKind.DEVICE_CREDENTIAL)
+        )
+        setContent(admin, activeProfileId = PAIRED_ID, activeReachable = false)
+        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+
+        assertEquals(1, count(context.getString(R.string.home_status_unreachable)))
+        assertEquals(0, count(context.getString(R.string.home_server_reachable)))
+    }
+
+    @Test
+    fun theManagementToolsAreOnlyAPreview() {
+        val admin = FakeProfileAdmin(profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")), kinds = emptyMap())
+        setContent(admin, activeProfileId = PAIRED_ID)
+        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+
+        listOf("monitoring", "docker", "terminal", "files").forEach { key ->
+            composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + key)
+                .performScrollTo()
+                .assertIsNotEnabled()
+                .assertHasNoClickAction()
+        }
+    }
+
     private fun setContent(
         admin: ProfileAdmin,
         activeProfileId: String?,
-        onServerSelected: (String) -> Unit = {}
+        onServerSelected: (String) -> Unit = {},
+        onBack: (() -> Unit)? = {},
+        activeReachable: Boolean? = null
     ) {
         composeRule.setContent {
             HermesTheme {
                 ProfilesScreen(
                     admin = admin,
-                    onBack = {},
+                    onBack = onBack,
                     activeProfileId = activeProfileId,
+                    activeReachable = activeReachable,
                     onServerSelected = onServerSelected
                 )
             }
@@ -216,9 +265,11 @@ class ProfilesScreenUiTest {
     private fun count(text: String) =
         composeRule.onAllNodesWithText(text).fetchSemanticsNodes().size
 
-    private fun profiles_chip_active() = context.getString(R.string.profiles_chip_active)
-    private fun profiles_chip_paired() = context.getString(R.string.profiles_chip_paired)
-    private fun profiles_chip_api_key() = context.getString(R.string.profiles_chip_api_key)
+    // Design v2 shows the badges in capitals.
+    private fun badge(res: Int) = context.getString(res).uppercase(context.resources.configuration.locales[0])
+    private fun profiles_chip_active() = badge(R.string.profiles_chip_active)
+    private fun profiles_chip_paired() = badge(R.string.profiles_chip_paired)
+    private fun profiles_chip_api_key() = badge(R.string.profiles_chip_api_key)
 
     private fun rowTag(id: String) = "serverRow:$id"
     private fun actionsTag(id: String) = "serverActions:$id"

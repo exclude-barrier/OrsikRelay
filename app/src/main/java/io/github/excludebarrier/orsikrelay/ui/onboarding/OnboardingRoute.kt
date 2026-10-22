@@ -51,7 +51,9 @@ fun OnboardingRoute(
     // Non-null only when onboarding was pushed from the server management
     // screen; the screen then shows a "Zurück" action that returns without
     // saving anything.
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    // Opened from Welcome's "QR-Code scannen": show the scanner at once.
+    startWithScanner: Boolean = false
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -68,6 +70,7 @@ fun OnboardingRoute(
         initialPairingCode = pairingBootstrap?.pairingCode.orEmpty(),
         connectionState = connectionState,
         onBack = onBack,
+        startWithScanner = startWithScanner && cameraAvailable,
         cameraAvailable = cameraAvailable,
         onInputChanged = {
             if (connectionState is OnboardingConnectionState.Failure) {

@@ -22,9 +22,10 @@ import org.junit.Test
 /**
  * Brand palette contract for the user-facing "Orsik Relay" client.
  *
- * Light: GitHub-chrome neutrals (#FFFFFF background, #F6F8FA card) with
- * Nous blue #0053FD as primary. Dark: #0D1117 background, #010409 card,
- * lifted blue #4A84FE as primary (AA on near-black). The palette is an
+ * Design v2 (2026-10-22): the page is background = surface (#FFFFFF /
+ * #0D1117), cards sit on surfaceContainerLow (#F6F8FA / #161B22). Light
+ * uses Nous blue #0053FD as primary, dark the lifted #5B8FFF (AA on
+ * near-black). The palette is an
  * inspiration, not an official Hermes/Nous identity: no logo and no
  * affiliation claim anywhere in the UI.
  *
@@ -42,10 +43,10 @@ class ThemePaletteUiTest {
     fun lightSchemeUsesWhiteBackgroundAndNousBlue() {
         val capture = readPalette(darkTheme = false)
         assertEquals(Color(0xFFFFFFFF), capture.background)
-        assertEquals(Color(0xFFF6F8FA), capture.surface)
+        assertEquals(Color(0xFFFFFFFF), capture.surface)
         assertEquals(Color(0xFF0053FD), capture.primary)
         assertEquals(Color(0xFFFFFFFF), capture.onPrimary)
-        assertEquals(Color(0xFFE3EDFF), capture.surfaceVariant)
+        assertEquals(Color(0xFFE1E6EB), capture.surfaceVariant)
         assertEquals(Color(0xFF7D8590), capture.outline)
         assertEquals(Color(0xFFCF222E), capture.error)
     }
@@ -54,10 +55,10 @@ class ThemePaletteUiTest {
     fun darkSchemeUsesGithubDarkNeutralsAndLiftedBlue() {
         val capture = readPalette(darkTheme = true)
         assertEquals(Color(0xFF0D1117), capture.background)
-        assertEquals(Color(0xFF010409), capture.surface)
-        assertEquals(Color(0xFF4A84FE), capture.primary)
-        assertEquals(Color(0xFF161616), capture.onPrimary)
-        assertEquals(Color(0xFF17243A), capture.surfaceVariant)
+        assertEquals(Color(0xFF0D1117), capture.surface)
+        assertEquals(Color(0xFF5B8FFF), capture.primary)
+        assertEquals(Color(0xFF06122E), capture.onPrimary)
+        assertEquals(Color(0xFF2D333B), capture.surfaceVariant)
         assertEquals(Color(0xFF6E7681), capture.outline)
         assertEquals(Color(0xFFF85149), capture.error)
     }

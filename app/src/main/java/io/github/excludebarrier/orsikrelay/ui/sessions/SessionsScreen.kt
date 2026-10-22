@@ -1,18 +1,15 @@
 package io.github.excludebarrier.orsikrelay.ui.sessions
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -22,11 +19,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -52,17 +47,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
-import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import io.github.excludebarrier.orsikrelay.ui.components.GroupGap
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
+import io.github.excludebarrier.orsikrelay.ui.components.PreviewBadge
+import io.github.excludebarrier.orsikrelay.ui.components.dashedBorder
+import io.github.excludebarrier.orsikrelay.ui.components.groupPosition
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
@@ -71,8 +76,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Clock
-import java.time.ZoneId
-import java.util.Locale
 
 /**
  * Real session list screen.
@@ -126,6 +129,7 @@ fun SessionsScreen(
     onOpenProfileManagement: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
+    runningSessionId: String? = null,
     clock: Clock = Clock.systemDefaultZone()
 ) {
     val configuration = LocalConfiguration.current
@@ -198,30 +202,20 @@ fun SessionsScreen(
         modifier = modifier
             .fillMaxSize()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
+        Column(modifier = Modifier.fillMaxSize()) {
+        OrsikLargeHeader(
+            title = stringResource(R.string.sessions_title),
+            modifier = Modifier.testTag(SESSIONS_HEADER_TAG)
         ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.sessions_title),
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Spacer(modifier = Modifier.weight(1f))
             Box {
                 IconButton(
                     onClick = { showOverflowMenu = true },
                     modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.MoreVert,
-                        contentDescription = stringResource(R.string.sessions_more_options)
+                        imageVector = OrsikIcons.MoreVert,
+                        contentDescription = stringResource(R.string.sessions_more_options),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 DropdownMenu(
@@ -271,6 +265,11 @@ fun SessionsScreen(
                 }
             }
         }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
         // Refreshing stays reachable for screen readers through the
         // overflow menu; the visible control is pull-to-refresh.
         // Searching only makes sense with sessions to search: the field is
@@ -286,13 +285,13 @@ fun SessionsScreen(
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
                     .testTag("sessionsSearchField"),
-                placeholder = { Text(text = stringResource(R.string.sessions_search_placeholder)) },
+                placeholder = { Text(text = stringResource(R.string.sessions_search_placeholder), fontSize = 16.sp) },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = null
+                        imageVector = OrsikIcons.Search,
+                        contentDescription = null,
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 },
                 trailingIcon = if (searchQuery.isNotEmpty()) {
@@ -315,6 +314,9 @@ fun SessionsScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(percent = 50),
                 colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
@@ -326,6 +328,7 @@ fun SessionsScreen(
                 )
             )
         }
+        AgentFilterChips(modifier = Modifier.padding(top = 12.dp))
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = { loadPage(offset = 0, append = false, pullRefresh = true) },
@@ -420,7 +423,9 @@ fun SessionsScreen(
                         }
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag(SESSIONS_LIST_TAG),
                             // Bottom padding clears the floating 56dp FAB
                             // (56 + 16 margin) so the last session or the
                             // "load more" button is never hidden underneath.
@@ -459,9 +464,10 @@ fun SessionsScreen(
                                 itemsIndexed(
                                     items = section.sessions,
                                     key = { _, session -> "session-${session.id}" }
-                                ) { _, session ->
-                                    SessionRow(
+                                ) { index, session ->
+                                    SessionListItem(
                                         session = session,
+                                        position = groupPosition(index, section.sessions.size),
                                         locale = locale,
                                         zone = clock.zone,
                                         showTimeOnly = SessionGrouping.dayGroupOf(
@@ -473,7 +479,10 @@ fun SessionsScreen(
                                         },
                                         onClick = {
                                             onSessionSelected(session.id, session.title)
-                                        }
+                                        },
+                                        running = session.id == runningSessionId,
+                                        showPin = true,
+                                        modifier = Modifier.padding(bottom = GroupGap)
                                     )
                                 }
                             }
@@ -496,17 +505,21 @@ fun SessionsScreen(
             }
         }
         }
+        }
 
         if (canCreateSession) {
             val newSessionLabel = stringResource(R.string.new_session_fab)
             ExtendedFloatingActionButton(
-                text = { Text(text = newSessionLabel) },
+                text = { Text(text = newSessionLabel, fontSize = 15.sp, fontWeight = FontWeight.Bold) },
                 icon = {
                     Icon(
-                        imageVector = Icons.Filled.Add,
+                        imageVector = OrsikIcons.Plus,
                         contentDescription = null
                     )
                 },
+                shape = RoundedCornerShape(18.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 onClick = { showNewSessionDialog = true },
                 expanded = listState.firstVisibleItemIndex == 0 &&
                     listState.firstVisibleItemScrollOffset == 0,
@@ -536,98 +549,13 @@ fun SessionsScreen(
 private fun SessionGroupHeader(group: SessionGroup) {
     Text(
         text = stringResource(group.titleRes()),
-        style = MaterialTheme.typography.labelLarge,
+        style = OrsikType.groupLabel,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp, bottom = 8.dp)
+            .padding(start = 6.dp, top = 14.dp, bottom = 8.dp)
             .semantics { heading() }
     )
-}
-
-@Composable
-internal fun SessionRow(
-    session: HermesSession,
-    locale: Locale,
-    zone: ZoneId,
-    showTimeOnly: Boolean,
-    onClick: () -> Unit
-) {
-    val title = session.title?.takeIf { it.isNotBlank() }
-        ?: stringResource(R.string.session_fallback_title)
-    val source = sessionSourceDescriptor(session.source)
-    val sourceName = source.displayName()
-    val sourceIcon = source.icon()
-    val lastActive = if (showTimeOnly) {
-        SessionListFormatter.formatLastActiveTime(
-            session.lastActiveEpochSeconds,
-            locale,
-            zone
-        )
-    } else {
-        SessionListFormatter.formatLastActiveDate(
-            session.lastActiveEpochSeconds,
-            locale,
-            zone
-        )
-    }
-    val messageCount = session.messageCount?.let { count ->
-        pluralStringResource(
-            R.plurals.session_message_count,
-            count.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
-            SessionListFormatter.formatMessageCount(count, locale).orEmpty()
-        )
-    }
-    val meta = buildMetaLine(sourceName, messageCount, lastActive)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (sourceIcon != null) {
-            Icon(
-                imageVector = sourceIcon,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp)
-            )
-        } else {
-            Spacer(modifier = Modifier.size(24.dp))
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (meta != null) {
-                Text(
-                    text = meta,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SessionSourceDescriptor.displayName(): String? = when (this) {
-    SessionSourceDescriptor.Missing -> null
-    SessionSourceDescriptor.Terminal -> stringResource(R.string.session_source_terminal)
-    SessionSourceDescriptor.Telegram -> stringResource(R.string.session_source_telegram)
-    SessionSourceDescriptor.Email -> stringResource(R.string.session_source_email)
-    SessionSourceDescriptor.Sms -> stringResource(R.string.session_source_sms)
-    SessionSourceDescriptor.WhatsApp -> stringResource(R.string.session_source_whatsapp)
-    SessionSourceDescriptor.Signal -> stringResource(R.string.session_source_signal)
-    SessionSourceDescriptor.Scheduled -> stringResource(R.string.session_source_scheduled)
-    is SessionSourceDescriptor.Other -> rawName
 }
 
 private fun SessionGroup.titleRes(): Int = when (this) {
@@ -657,13 +585,59 @@ private fun sessionErrorHint(error: SessionListError): String? = when (error) {
     SessionListError.Http -> null
 }
 
-private fun buildMetaLine(
-    sourceName: String?,
-    messageCount: String?,
-    lastActive: String?
-): String? {
-    val parts = listOfNotNull(sourceName, messageCount, lastActive)
-    return parts.joinToString(separator = " · ")
+internal const val SESSIONS_HEADER_TAG = "sessions_header"
+internal const val SESSIONS_LIST_TAG = "sessions_list"
+internal const val AGENT_FILTER_HERMES_TAG = "sessions_filter_hermes"
+internal const val AGENT_FILTER_PREVIEW_PREFIX = "sessions_filter_preview_"
+
+/**
+ * The agent filter of design v2. Hermes is the only agent today and stays
+ * selected; Claude Code and Codex mark their future place, dashed and not
+ * selectable.
+ */
+@Composable
+private fun AgentFilterChips(modifier: Modifier = Modifier) {
+    val soon = stringResource(R.string.home_soon_badge)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+    ) {
+        FilterChip(
+            selected = true,
+            onClick = {},
+            label = { Text("Hermes", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold) },
+            leadingIcon = { Icon(OrsikIcons.Check, contentDescription = null, modifier = Modifier.size(16.dp)) },
+            shape = RoundedCornerShape(10.dp),
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ),
+            border = null,
+            modifier = Modifier.testTag(AGENT_FILTER_HERMES_TAG)
+        )
+        listOf("claude_code" to "Claude Code", "codex" to "Codex").forEach { (key, name) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .heightIn(min = 34.dp)
+                    .dashedBorder(MaterialTheme.colorScheme.outlineVariant, 10.dp)
+                    .padding(horizontal = 12.dp)
+                    .semantics(mergeDescendants = true) {
+                        disabled()
+                        contentDescription = "$name, $soon"
+                    }
+                    .testTag(AGENT_FILTER_PREVIEW_PREFIX + key)
+            ) {
+                Text(name, fontSize = 13.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                PreviewBadge(text = soon)
+            }
+        }
+    }
 }
 
 private const val PAGE_SIZE = 50

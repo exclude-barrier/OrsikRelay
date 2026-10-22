@@ -1,5 +1,11 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.ui.components.TAG_LOADING_INDICATOR
+import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_PREVIEW_PREFIX
+import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_HERMES_TAG
+import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -582,6 +588,34 @@ class SessionsScreenUiTest {
         )
     }
 
+    @Test
+    fun onlyHermesCanBeFilteredTheOtherAgentsAreComingSoon() {
+        setScreen(SessionPageSource { _, _, _ -> success(listOf(session(id = "fixture-a", title = "Fixture A")), false) })
+        waitForText("Fixture A")
+
+        composeRule.onNodeWithTag(AGENT_FILTER_HERMES_TAG).assertIsSelected()
+        listOf("claude_code", "codex").forEach { key ->
+            composeRule.onNodeWithTag(AGENT_FILTER_PREVIEW_PREFIX + key)
+                .assertIsNotEnabled()
+                .assertHasNoClickAction()
+        }
+    }
+
+    @Test
+    fun theRunningSessionShowsTheLoadingStarAndRunningLabel() {
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                success(listOf(session(id = "fixture-run", title = "Fixture Run"), session(id = "fixture-idle", title = "Fixture Idle")), false)
+            },
+            runningSessionId = "fixture-run"
+        )
+        waitForText("Fixture Run")
+
+        composeRule.onNodeWithText("Fixture Run").assert(hasText(context.getString(R.string.sessions_running), substring = true))
+        composeRule.onNodeWithText("Fixture Idle").assert(hasText(context.getString(R.string.sessions_running), substring = true).not())
+        composeRule.onAllNodesWithTag(TAG_LOADING_INDICATOR, useUnmergedTree = true).assertCountEquals(1)
+    }
+
     private fun setScreen(
         source: SessionPageSource,
         onOpenProfileManagement: () -> Unit = {},
@@ -589,7 +623,8 @@ class SessionsScreenUiTest {
         onOpenAbout: () -> Unit = {},
         onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
         clock: Clock = Clock.systemDefaultZone(),
-        creator: SessionCreator? = null
+        creator: SessionCreator? = null,
+        runningSessionId: String? = null
     ) {
         composeRule.setContent {
             HermesTheme {
@@ -601,6 +636,7 @@ class SessionsScreenUiTest {
                     onOpenProfileManagement = onOpenProfileManagement,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout,
+                    runningSessionId = runningSessionId,
                     clock = clock
                 )
             }

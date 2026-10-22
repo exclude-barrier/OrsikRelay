@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -41,6 +42,7 @@ import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesMateri
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.di.AppDependenciesHolder
+import io.github.excludebarrier.orsikrelay.domain.connection.HermesConnectionResult
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
@@ -59,6 +61,7 @@ import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
 import io.github.excludebarrier.orsikrelay.security.applock.AppLockHolder
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.onboarding.OnboardingRoute
+import io.github.excludebarrier.orsikrelay.ui.onboarding.WelcomeScreen
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionsScreen
 import io.github.excludebarrier.orsikrelay.ui.settings.AboutScreen
@@ -164,6 +167,9 @@ fun HermesNavHost(
     var resolvedStart by remember(startDestination) { mutableStateOf<AppScreen?>(null) }
     var activeProfileId by remember { mutableStateOf<String?>(null) }
     var pendingCreatedSessionId by remember { mutableStateOf<String?>(null) }
+    // Set by the Welcome screen: open the onboarding form with its QR
+    // scanner already showing. A plain UI hint; pairing itself is unchanged.
+    var onboardingOpensScanner by remember { mutableStateOf(false) }
     // The session list already knows the title of the tapped session. Keep it
     // here so the chat header can show it without a second list/history read;
     // a notification tap or a direct chat route starts with the generic
@@ -228,7 +234,8 @@ fun HermesNavHost(
             StartupProfile.Unavailable
         }
         when (startupProfile) {
-            StartupProfile.None -> resolvedStart = AppScreen.Onboarding
+            StartupProfile.None ->
+                resolvedStart = startScreenFor(startupProfile, pairingDeepLink = pairingBootstrap != null)
             is StartupProfile.Ready -> {
                 activeProfileId = startupProfile.profileId
                 resolvedStart = AppScreen.Home
@@ -299,6 +306,52 @@ fun HermesNavHost(
         }
     }
 
+    // Server management, shown as the Server tab and as the Profiles route
+    // (opened from settings or the Home server switcher, with a back arrow).
+    @Composable
+    fun ServerManagement(onBack: (() -> Unit)?) {
+        val admin = profileAdmin ?: productionDependencies.value.profileAdmin
+        val check = serverConnectionCheck ?: productionDependencies.value.serverConnectionCheck
+        // Reachability of the active server: the same read-only probe as
+        // Home, never retried automatically.
+        val activeReachable by produceState<Boolean?>(null, activeProfileId) {
+            val profileId = activeProfileId?.takeIf { it.isNotBlank() } ?: return@produceState
+            value = try {
+                withContext(Dispatchers.IO) { check.check(profileId) } is HermesConnectionResult.Success
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                false
+            }
+        }
+        ProfilesScreen(
+            admin = admin,
+            activeProfileId = activeProfileId,
+            activeReachable = activeReachable,
+            onBack = onBack,
+            onProfileDeleted = { profileId ->
+                navHostCoroutineScope.launch { profileDeleted(profileId) }
+            },
+            onServerSelected = { profileId ->
+                navHostCoroutineScope.launch { serverSelected(profileId) }
+            },
+            onAddServer = {
+                navController.navigate(routeOf(AppScreen.Onboarding))
+            },
+            // A confirmed, server-acknowledged disconnect
+            // removes the local profile connection; the navigation is
+            // exactly the verified profile-deletion path, so no chat or
+            // session can keep living under the disconnected profile.
+            onDeviceDisconnected = { profileId ->
+                navHostCoroutineScope.launch { profileDeleted(profileId) }
+            },
+            disconnect = { profileId ->
+                productionDependencies.value.deviceDisconnectCoordinator
+                    .disconnect(profileId)
+            }
+        )
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val currentTab = BottomTabs.firstOrNull { routeOf(it) == currentRoute }
@@ -351,19 +404,17 @@ fun HermesNavHost(
                         }
                     },
                     onNoServer = {
-                        navController.navigate(routeOf(AppScreen.Onboarding)) {
+                        navController.navigate(routeOf(AppScreen.Welcome)) {
                             popUpTo(navController.graph.id) { inclusive = true }
                             launchSingleTop = true
                         }
                     }
                 )
             }
+            // The Server tab is the server management itself, without a
+            // way back (back from a tab returns to Home).
             composable(routeOf(AppScreen.Server)) {
-                PreviewPlaceholderScreen(
-                    title = stringResource(R.string.placeholder_server_title),
-                    text = stringResource(R.string.placeholder_server_text),
-                    testTag = SERVER_PLACEHOLDER_TAG
-                )
+                ServerManagement(onBack = null)
             }
             composable(routeOf(AppScreen.Activity)) {
                 PreviewPlaceholderScreen(
@@ -372,12 +423,25 @@ fun HermesNavHost(
                     testTag = ACTIVITY_PLACEHOLDER_TAG
                 )
             }
+            composable(routeOf(AppScreen.Welcome)) {
+                WelcomeScreen(
+                    onScan = {
+                        onboardingOpensScanner = true
+                        navController.navigate(routeOf(AppScreen.Onboarding)) { launchSingleTop = true }
+                    },
+                    onEnterCode = {
+                        onboardingOpensScanner = false
+                        navController.navigate(routeOf(AppScreen.Onboarding)) { launchSingleTop = true }
+                    }
+                )
+            }
             composable(routeOf(AppScreen.Onboarding)) {
                 OnboardingRoute(
                     pairingBootstrap = pairingBootstrap,
-                    // Only an onboarding opened FROM the server management
-                    // screen has a destination to return to. The first start
-                    // and the pairing deep link keep their header unchanged.
+                    startWithScanner = onboardingOpensScanner,
+                    // Only an onboarding opened from Welcome or the server
+                    // management screen has a destination to return to. The
+                    // pairing deep link keeps its header unchanged.
                     onBack = navController.previousBackStackEntry?.let {
                         { navController.popBackStack() }
                     },
@@ -461,7 +525,10 @@ fun HermesNavHost(
                 )
             }
             composable(routeOf(AppScreen.Sessions)) {
+                val activeRun by (runController ?: productionDependencies.value.runController)
+                    .activeRun.collectAsState()
                 SessionsScreen(
+                    runningSessionId = activeRun?.takeIf { it.profileId == activeProfileId }?.sessionId,
                     pageSource = sessionPageSource
                         ?: productionDependencies.value.sessionPageSource,
                     profileId = activeProfileId.orEmpty(),
@@ -513,10 +580,7 @@ fun HermesNavHost(
                 )
             }
             composable(routeOf(AppScreen.Profiles)) {
-                ProfilesScreen(
-                    admin = profileAdmin
-                        ?: productionDependencies.value.profileAdmin,
-                    activeProfileId = activeProfileId,
+                ServerManagement(
                     // Guard against popping the back stack empty, exactly like the
                     // Chat back handler below: a fast double tap on "Zurück" must
                     // never pop the root entry and leave the NavHost without a
@@ -525,26 +589,6 @@ fun HermesNavHost(
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()
                         }
-                    },
-                    onProfileDeleted = { profileId ->
-                        navHostCoroutineScope.launch { profileDeleted(profileId) }
-                    },
-                    onServerSelected = { profileId ->
-                        navHostCoroutineScope.launch { serverSelected(profileId) }
-                    },
-                    onAddServer = {
-                        navController.navigate(routeOf(AppScreen.Onboarding))
-                    },
-                    // A confirmed, server-acknowledged disconnect
-                    // removes the local profile connection; the navigation is
-                    // exactly the verified profile-deletion path, so no chat or
-                    // session can keep living under the disconnected profile.
-                    onDeviceDisconnected = { profileId ->
-                        navHostCoroutineScope.launch { profileDeleted(profileId) }
-                    },
-                    disconnect = { profileId ->
-                        productionDependencies.value.deviceDisconnectCoordinator
-                            .disconnect(profileId)
                     }
                 )
             }
@@ -554,7 +598,24 @@ fun HermesNavHost(
             ) { entry ->
                 val encodedSessionId = entry.arguments?.getString(CHAT_ARGUMENT).orEmpty()
                 val decodedSessionId = decodeRouteArgument(encodedSessionId)
+                // Presentation only: the header's "Hermes · <server>" line.
+                // Metadata read (no credential); a failure just hides it.
+                val chatServerName by produceState<String?>(null, activeProfileId) {
+                    value = try {
+                        withContext(Dispatchers.IO) {
+                            (profileAdmin ?: productionDependencies.value.profileAdmin)
+                                .listProfiles()
+                                .firstOrNull { it.id == activeProfileId }
+                                ?.profileName
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
                 ChatScreen(
+                    serverName = chatServerName,
                     historySource = messageHistorySource
                         ?: productionDependencies.value.messageHistorySource,
                     runController = runController
@@ -598,10 +659,10 @@ fun HermesNavHost(
     }
 }
 
-internal const val SERVER_PLACEHOLDER_TAG = "server_placeholder"
 internal const val ACTIVITY_PLACEHOLDER_TAG = "activity_placeholder"
 
 internal fun routeOf(screen: AppScreen): String = when (screen) {
+    AppScreen.Welcome -> "welcome"
     AppScreen.Onboarding -> "onboarding"
     AppScreen.Home -> "home"
     AppScreen.Server -> "server"

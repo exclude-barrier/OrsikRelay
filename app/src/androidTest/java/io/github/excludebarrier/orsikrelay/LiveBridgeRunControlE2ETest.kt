@@ -159,7 +159,7 @@ class LiveBridgeRunControlE2ETest {
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(SESSIONS_TITLE)
+        composeRule.waitForAgents(UI_TIMEOUT_MS)
         composeRule.onNodeWithContentDescription(NEW_SESSION_FAB).performClick()
         waitForText(NEW_SESSION_TITLE)
         composeRule.onNodeWithText(NEW_SESSION_CREATE).performClick()
@@ -521,7 +521,6 @@ class LiveBridgeRunControlE2ETest {
 
     private companion object {
         const val PROFILE_NAME = "OR-08b Live Bridge"
-        val SESSIONS_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sessions_title) }
         val NEW_SESSION_FAB: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_fab) }
         val NEW_SESSION_TITLE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_title) }
         val NEW_SESSION_CREATE: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.new_session_create) }

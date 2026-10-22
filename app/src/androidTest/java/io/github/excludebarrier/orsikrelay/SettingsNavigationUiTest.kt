@@ -37,7 +37,7 @@ class SettingsNavigationUiTest {
         setHost()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         openOverflowMenu()
         composeRule.onNodeWithText(context.getString(R.string.settings_entry)).performClick()
 
@@ -60,7 +60,7 @@ class SettingsNavigationUiTest {
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back)).performClick()
 
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().let {
             org.junit.Assert.assertTrue("settings screen must be gone", it.isEmpty())
         }
@@ -71,7 +71,7 @@ class SettingsNavigationUiTest {
         setHost()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         openOverflowMenu()
         composeRule.onNodeWithText(context.getString(R.string.settings_about_section)).performClick()
 
@@ -91,7 +91,7 @@ class SettingsNavigationUiTest {
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back)).performClick()
 
-        waitForText(context.getString(R.string.sessions_title))
+        composeRule.waitForAgents()
         composeRule.onAllNodesWithTag("about_screen").fetchSemanticsNodes().let {
             org.junit.Assert.assertTrue("about screen must be gone", it.isEmpty())
         }

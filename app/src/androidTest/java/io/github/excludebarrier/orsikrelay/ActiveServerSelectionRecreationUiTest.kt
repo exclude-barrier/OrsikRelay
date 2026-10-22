@@ -3,6 +3,9 @@ package io.github.excludebarrier.orsikrelay
 import android.content.Context
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -18,6 +21,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
 import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
+import io.github.excludebarrier.orsikrelay.ui.sessions.SESSIONS_HEADER_TAG
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -147,7 +151,8 @@ class ActiveServerSelectionRecreationUiTest {
         // The Sessions screen (not onboarding) is the visible start screen.
         assertEquals(
             1,
-            composeRule.onAllNodesWithText(SESSIONS_TITLE).fetchSemanticsNodes().size
+            composeRule.onAllNodes(hasText(SESSIONS_TITLE) and hasAnyAncestor(hasTestTag(SESSIONS_HEADER_TAG)))
+                .fetchSemanticsNodes().size
         )
     }
 

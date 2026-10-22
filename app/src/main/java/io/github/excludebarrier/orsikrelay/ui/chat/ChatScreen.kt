@@ -2,7 +2,6 @@ package io.github.excludebarrier.orsikrelay.ui.chat
 
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -34,10 +33,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,13 +42,10 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -78,6 +72,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.offset
+import androidx.compose.ui.unit.sp
+import io.github.excludebarrier.orsikrelay.ui.components.AgentComposerDock
+import io.github.excludebarrier.orsikrelay.ui.components.AgentMark
+import io.github.excludebarrier.orsikrelay.ui.components.BottomDockArea
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import io.github.excludebarrier.orsikrelay.data.notification.NotificationPermissionStore
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
@@ -156,6 +162,7 @@ fun ChatScreen(
     // session list; when neither is available (notification tap, process
     // recreation) the header falls back to the generic chat title.
     sessionTitle: String? = null,
+    serverName: String? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -278,8 +285,11 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
         ChatHeader(
             title = sessionTitle?.takeIf { it.isNotBlank() }
                 ?: stringResource(R.string.chat_title),
+            subtitle = serverName?.takeIf { it.isNotBlank() }
+                ?.let { stringResource(R.string.chat_header_subtitle, it) },
             onBack = { viewModel.handleBack() },
-            compact = compactComposer
+            compact = compactComposer,
+            modifier = Modifier.bleed(16.dp)
         )
 
         when (val current = state.history) {
@@ -560,6 +570,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     Spacer(modifier = Modifier.weight(1f))
                 }
                 ComposerBar(
+                    modifier = Modifier.bleed(16.dp),
                     draft = state.draft,
                     onDraftChange = { viewModel.onDraftChange(it) },
                     sendEnabled = state.sendEnabled,
@@ -670,49 +681,74 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
 }
 
 /**
- * The chat header: a Material 3 [TopAppBar] with the back navigation icon,
- * the session title (single line, ellipsized) and - only when the caller can
- * supply it - the server name as a small second line.
- *
- * The app root already applies the safe-drawing insets, so the bar must not
- * add the status-bar inset a second time: its [WindowInsets] are zeroed. The
- * title and subtitle share the title slot; two short lines fit the standard
- * 64 dp bar.
+ * The chat header of design v2: back arrow, the session title (20 sp, one
+ * line) and - when the caller knows it - "Hermes · <server>" below, with a
+ * hairline at the bottom. The app root already applies the safe-drawing
+ * insets, so the header adds no status-bar inset of its own.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ChatHeader(
     title: String,
     onBack: () -> Unit,
-    compact: Boolean
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null
 ) {
-    TopAppBar(
-        title = {
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val stroke = 1.dp.toPx()
+                drawLine(line, Offset(0f, size.height - stroke / 2), Offset(size.width, size.height - stroke / 2), stroke)
+            }
+            .padding(start = 4.dp, end = 8.dp, top = if (compact) 0.dp else 6.dp, bottom = if (compact) 0.dp else 8.dp)
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(
+                imageVector = OrsikIcons.ArrowBack,
+                contentDescription = stringResource(R.string.chat_back)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 4.dp)
+        ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = OrsikType.detailTitle,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(TAG_CHAT_TITLE)
             )
-        },
-        navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.chat_back)
+            if (subtitle != null && !compact) {
+                Text(
+                    text = subtitle,
+                    fontSize = 12.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-        },
-        windowInsets = WindowInsets(0, 0, 0, 0),
-        // The screen background shows through, so the bar does not sit as a
-        // grey box inside the padded column.
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-        modifier = Modifier.padding(top = if (compact) 0.dp else 4.dp)
-    )
+        }
+    }
+}
+
+/**
+ * Lets a full-width bar (header, composer area) run to the screen edges
+ * although the chat column keeps a [horizontal] content padding.
+ */
+internal fun Modifier.bleed(horizontal: Dp): Modifier = layout { measurable, constraints ->
+    val extra = horizontal.roundToPx()
+    val placeable = measurable.measure(constraints.offset(horizontal = extra * 2))
+    layout(placeable.width - extra * 2, placeable.height) {
+        placeable.place(-extra, 0)
+    }
 }
 
 /**
@@ -1081,56 +1117,23 @@ internal fun ComposerBar(
     attachmentBusyLabel: String,
     onPickAttachment: () -> Unit,
     onRemoveAttachment: () -> Unit,
+    modifier: Modifier = Modifier,
     compact: Boolean = false,
     runControls: RunComposerControls? = null,
     conflictNotice: Boolean = false,
     uncertainNotice: Boolean = false,
     compactRunControls: (@Composable RowScope.() -> Unit)? = null
 ) {
-    Column(
-        modifier = Modifier
-            // The tag wraps the whole bar including its own bottom padding, so
-            // tests can compare the bar's bottom edge with the content area.
-            .testTag(TAG_COMPOSER_BAR)
-            .fillMaxWidth()
-            .padding(
-                top = if (compact) 0.dp else 8.dp,
-                bottom = if (compact) 0.dp else 12.dp
-            )
-    ) {
-        if (compact) {
-            // Compact regime (height-constrained window, e.g. landscape with
-            // the keyboard open): ONE dense row instead of chip row + input
-            // row. Two rows cannot fit below the header there, and a row that
-            // is squeezed below 48 dp would shrink the touch targets of
-            // "Anhang", "Entfernen" and "Senden". The row keeps the Material
-            // minimum height, so every control in it keeps a full 48 dp
-            // touch target; only secondary information (the size line, the
-            // paddings, the visible draft lines) is reduced.
-            //
-            // The middle region (timeline, status blocks) is not composed in
-            // this regime, so the run-conflict notice is surfaced here instead:
-            // exactly ONE bounded line above the row, the same slot and style
-            // the attachment error already uses, so no new height class and
-            // no IME regression is introduced. The conflict takes precedence
-            // over the attachment error (it is the reason the send was
-            // rejected); both can never be shown as two lines.
-            val compactStatusLabel = when {
-                uncertainNotice -> stringResource(R.string.chat_run_uncertain_title)
-                conflictNotice -> stringResource(R.string.chat_run_conflict)
-                else -> attachmentErrorLabel
-            }
-            if (compactStatusLabel != null) {
-                Text(
-                    text = compactStatusLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 2.dp)
-                )
-            }
-            CompactComposerRow(
+    // The tag wraps the whole bar including its own bottom padding, so
+    // tests can compare the bar's bottom edge with the content area.
+    if (compact) {
+        Column(
+            modifier = modifier
+                .testTag(TAG_COMPOSER_BAR)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            CompactComposerContent(
                 draft = draft,
                 onDraftChange = onDraftChange,
                 sendEnabled = sendEnabled,
@@ -1139,15 +1142,24 @@ internal fun ComposerBar(
                 attachment = attachment,
                 attachmentThumbnail = attachmentThumbnail,
                 attachmentBusy = attachmentBusy,
+                attachmentErrorLabel = attachmentErrorLabel,
                 attachmentAddLabel = attachmentAddLabel,
                 attachmentRemoveLabel = attachmentRemoveLabel,
                 attachmentBusyLabel = attachmentBusyLabel,
                 onPickAttachment = onPickAttachment,
                 onRemoveAttachment = onRemoveAttachment,
-                runControls = compactRunControls
+                conflictNotice = conflictNotice,
+                uncertainNotice = uncertainNotice,
+                compactRunControls = compactRunControls
             )
-            return@Column
         }
+        return
+    }
+    BottomDockArea(
+        modifier = modifier
+            .testTag(TAG_COMPOSER_BAR)
+            .padding(top = 8.dp)
+    ) {
         // Compact attachment chip above the input row. Local-only data:
         // the file name and size the provider reported, plus a bounded decoded
         // thumbnail; no path, no URI and no provider text is ever rendered.
@@ -1225,44 +1237,27 @@ internal fun ComposerBar(
         // draft row stays only when it holds text (e.g. a recovered steer
         // moved into the composer), so that text never disappears.
         if (runControls == null || draft.isNotBlank()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onPickAttachment,
-                    enabled = !turnActive && !attachmentBusy,
-                    modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = attachmentAddLabel
-                    )
-                }
-                ChatInputField(
-                    draft = draft,
-                    onDraftChange = onDraftChange,
-                    enabled = !turnActive,
-                    maxLines = Int.MAX_VALUE,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp)
-                        .testTag(TAG_COMPOSER_FIELD)
-                )
-                FilledIconButton(
-                    onClick = onSend,
-                    enabled = sendEnabled,
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .size(COMPOSER_ACTION_SIZE)
-                        .testTag(TAG_COMPOSER_SEND)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = stringResource(R.string.chat_send)
-                    )
-                }
-            }
+            AgentComposerDock(
+                draft = draft,
+                onDraftChange = onDraftChange,
+                hint = stringResource(R.string.chat_input_label),
+                enabled = !turnActive,
+                canSend = sendEnabled,
+                sending = false,
+                onSend = onSend,
+                agentSelector = false,
+                attachEnabled = !turnActive && !attachmentBusy,
+                onAttach = onPickAttachment,
+                attachLabel = attachmentAddLabel,
+                sendLabel = stringResource(R.string.chat_send),
+                maxLines = Int.MAX_VALUE,
+                inputTestTag = TAG_COMPOSER_FIELD,
+                sendTestTag = TAG_COMPOSER_SEND,
+                attachTestTag = TAG_ATTACHMENT_ADD
+            )
         }
         if (runControls != null) {
-            RunComposerRow(runControls)
+            RunComposerRow(runControls, modifier = Modifier.padding(top = if (draft.isNotBlank()) 8.dp else 0.dp))
         }
     }
 }
@@ -1306,52 +1301,55 @@ private fun ChatInputField(
  * until a stop request is in flight; it then shows a spinner.
  */
 @Composable
-private fun RunComposerRow(controls: RunComposerControls) {
+private fun RunComposerRow(controls: RunComposerControls, modifier: Modifier = Modifier) {
     val stopLabel = stringResource(
         if (controls.stopInFlight) R.string.chat_stopping else R.string.chat_stop
     )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        ChatInputField(
-            draft = controls.steerDraft,
-            onDraftChange = controls.onSteerDraftChange,
-            enabled = !controls.steerInFlight,
-            maxLines = Int.MAX_VALUE,
-            label = stringResource(R.string.chat_steer_input_label),
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 4.dp)
-                .testTag("chatSteerInput")
-        )
-        IconButton(
-            onClick = controls.onSteer,
-            enabled = !controls.steerInFlight,
-            modifier = Modifier.testTag("chatSteerSend")
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.Send,
-                contentDescription = stringResource(R.string.chat_steer)
-            )
-        }
-        FilledIconButton(
-            onClick = controls.onStop,
-            enabled = !controls.stopInFlight,
-            shape = CircleShape,
-            modifier = Modifier
-                .size(COMPOSER_ACTION_SIZE)
-                .semantics { contentDescription = stopLabel }
-                .testTag(TAG_RUN_STOP)
-        ) {
-            if (controls.stopInFlight) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(14.dp)
-                        .background(LocalContentColor.current, RoundedCornerShape(2.dp))
+    AgentComposerDock(
+        draft = controls.steerDraft,
+        onDraftChange = controls.onSteerDraftChange,
+        hint = stringResource(R.string.chat_steer_input_label),
+        enabled = !controls.steerInFlight,
+        canSend = !controls.steerInFlight,
+        sending = false,
+        onSend = controls.onSteer,
+        agentSelector = false,
+        maxLines = Int.MAX_VALUE,
+        inputTestTag = "chatSteerInput",
+        modifier = modifier,
+        trailing = {
+            IconButton(
+                onClick = controls.onSteer,
+                enabled = !controls.steerInFlight,
+                modifier = Modifier.testTag("chatSteerSend")
+            ) {
+                Icon(
+                    imageVector = OrsikIcons.Send,
+                    contentDescription = stringResource(R.string.chat_steer),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            FilledIconButton(
+                onClick = controls.onStop,
+                enabled = !controls.stopInFlight,
+                shape = CircleShape,
+                modifier = Modifier
+                    .size(COMPOSER_ACTION_SIZE)
+                    .semantics { contentDescription = stopLabel }
+                    .testTag(TAG_RUN_STOP)
+            ) {
+                if (controls.stopInFlight) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .background(LocalContentColor.current, RoundedCornerShape(2.dp))
+                    )
+                }
+            }
         }
-    }
+    )
 }
 
 /**
@@ -1484,6 +1482,80 @@ private fun CompactComposerRow(
             }
         }
     }
+}
+
+
+/**
+ * Content of the compact composer (height-constrained window): the status
+ * line and the single dense [CompactComposerRow].
+ */
+@Composable
+private fun CompactComposerContent(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    sendEnabled: Boolean,
+    onSend: () -> Unit,
+    turnActive: Boolean,
+    attachment: ChatAttachmentDraft?,
+    attachmentThumbnail: ImageBitmap?,
+    attachmentBusy: Boolean,
+    attachmentErrorLabel: String?,
+    attachmentAddLabel: String,
+    attachmentRemoveLabel: String,
+    attachmentBusyLabel: String,
+    onPickAttachment: () -> Unit,
+    onRemoveAttachment: () -> Unit,
+    conflictNotice: Boolean,
+    uncertainNotice: Boolean,
+    compactRunControls: (@Composable RowScope.() -> Unit)?
+) {
+        // Compact regime (height-constrained window, e.g. landscape with
+        // the keyboard open): ONE dense row instead of chip row + input
+        // row. Two rows cannot fit below the header there, and a row that
+        // is squeezed below 48 dp would shrink the touch targets of
+        // "Anhang", "Entfernen" and "Senden". The row keeps the Material
+        // minimum height, so every control in it keeps a full 48 dp
+        // touch target; only secondary information (the size line, the
+        // paddings, the visible draft lines) is reduced.
+        //
+        // The middle region (timeline, status blocks) is not composed in
+        // this regime, so the run-conflict notice is surfaced here instead:
+        // exactly ONE bounded line above the row, the same slot and style
+        // the attachment error already uses, so no new height class and
+        // no IME regression is introduced. The conflict takes precedence
+        // over the attachment error (it is the reason the send was
+        // rejected); both can never be shown as two lines.
+        val compactStatusLabel = when {
+            uncertainNotice -> stringResource(R.string.chat_run_uncertain_title)
+            conflictNotice -> stringResource(R.string.chat_run_conflict)
+            else -> attachmentErrorLabel
+        }
+        if (compactStatusLabel != null) {
+            Text(
+                text = compactStatusLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
+        }
+        CompactComposerRow(
+            draft = draft,
+            onDraftChange = onDraftChange,
+            sendEnabled = sendEnabled,
+            onSend = onSend,
+            turnActive = turnActive,
+            attachment = attachment,
+            attachmentThumbnail = attachmentThumbnail,
+            attachmentBusy = attachmentBusy,
+            attachmentAddLabel = attachmentAddLabel,
+            attachmentRemoveLabel = attachmentRemoveLabel,
+            attachmentBusyLabel = attachmentBusyLabel,
+            onPickAttachment = onPickAttachment,
+            onRemoveAttachment = onRemoveAttachment,
+            runControls = compactRunControls
+        )
 }
 
 /** Display-only size text of the attachment chip (no path, no provider text). */
@@ -1623,17 +1695,17 @@ private fun StatusText(text: String) {
 }
 
 /** Width caps of the user bubbles, relative to the content width. */
-private const val USER_BUBBLE_MAX_WIDTH_FRACTION = 0.85f
+private const val USER_BUBBLE_MAX_WIDTH_FRACTION = 0.82f
 
 /** Gap between two timeline messages; split as half above and below. */
 private val MESSAGE_VERTICAL_GAP = 12.dp
 
 /** Tail corner on the sender side, rounded everywhere else. */
 private val USER_BUBBLE_SHAPE = RoundedCornerShape(
-    topStart = 18.dp,
-    topEnd = 18.dp,
-    bottomEnd = 4.dp,
-    bottomStart = 18.dp
+    topStart = 22.dp,
+    topEnd = 22.dp,
+    bottomEnd = 6.dp,
+    bottomStart = 22.dp
 )
 
 private val NEUTRAL_BUBBLE_SHAPE = RoundedCornerShape(
@@ -1718,26 +1790,31 @@ private fun MessageRow(message: TimelineRow) {
             when {
                 isHistoryTool -> ToolActivityChip(
                     label = role,
+                    status = stringResource(R.string.chat_tool_done),
                     modifier = Modifier.testTag("chatToolChip:${message.key}")
                 )
                 isLiveTool -> ToolActivityChip(
                     label = message.content,
                     modifier = Modifier.testTag("chatToolChip:${message.key}")
                 )
-                isAssistant -> ChatTextScaledContent(chatTextScale) {
-                    // Full content width, normal padding, no background and no
-                    // bubble: the Markdown body reads like a document.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("chatAssistantBody:${message.key}")
-                    ) {
-                        AssistantMarkdownMessage(
-                            content = message.content,
+                isAssistant -> Row(modifier = Modifier.fillMaxWidth()) {
+                    // Hermes' sunny "H" marks the answer; the Markdown body
+                    // itself has no bubble and reads like a document.
+                    AgentMark(size = 30, modifier = Modifier.clearAndSetSemantics {})
+                    Spacer(Modifier.width(10.dp))
+                    ChatTextScaledContent(chatTextScale) {
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("chatMessageText:${message.key}")
-                        )
+                                .testTag("chatAssistantBody:${message.key}")
+                        ) {
+                            AssistantMarkdownMessage(
+                                content = message.content,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("chatMessageText:${message.key}")
+                            )
+                        }
                     }
                 }
                 else -> ChatTextScaledContent(chatTextScale) {
@@ -1752,7 +1829,7 @@ private fun MessageRow(message: TimelineRow) {
                                     MaterialTheme.colorScheme.surfaceContainerLow
                                 }
                             )
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
                         Column {
                             if (message.imageCount > 0) {
@@ -1793,38 +1870,45 @@ private fun MessageRow(message: TimelineRow) {
     }
 }
 
-/** Compact, static tool-activity chip with the tool icon and its safe label. */
+/**
+ * Compact, static tool-activity chip: wrench, the safe label and - for a
+ * finished history tool - its [status] ("fertig").
+ */
 @Composable
 internal fun ToolActivityChip(
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    status: String? = null
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier
-    ) {
-        ToolChipContent(label = label)
-    }
-}
-
-@Composable
-private fun ToolChipContent(label: String) {
     Row(
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .heightIn(min = 30.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Icon(
-            imageVector = Icons.Filled.Build,
+            imageVector = OrsikIcons.Wrench,
             contentDescription = null,
-            modifier = Modifier.size(18.dp)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(15.dp)
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (status != null) {
+            Text(
+                text = " · $status",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
