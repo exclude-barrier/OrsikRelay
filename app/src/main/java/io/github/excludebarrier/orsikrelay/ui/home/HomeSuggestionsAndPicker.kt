@@ -2,8 +2,6 @@ package io.github.excludebarrier.orsikrelay.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,27 +17,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Surface
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,17 +34,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
 import io.github.excludebarrier.orsikrelay.ui.components.ExpressiveShape
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewBadge
 
-private val DockShape = RoundedCornerShape(32.dp)
 
 /** The fixed suggestion prompts; a tap only fills the input. */
 internal val HomeSuggestions = listOf(
@@ -78,141 +64,20 @@ fun SuggestionChips(enabled: Boolean, onSuggestion: (String) -> Unit, modifier: 
             SuggestionChip(
                 onClick = { onSuggestion(text) },
                 enabled = enabled,
-                label = { Text(text) },
-                modifier = Modifier.testTag(HomeTags.SUGGESTION_PREFIX + key)
-            )
-        }
-    }
-}
-
-@Composable
-fun AgentComposerDock(
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    hint: String,
-    enabled: Boolean,
-    canSend: Boolean,
-    sending: Boolean,
-    attachmentName: String?,
-    attachmentBusy: Boolean,
-    onAttach: () -> Unit,
-    onRemoveAttachment: () -> Unit,
-    onOpenAgentPicker: () -> Unit,
-    onSend: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = DockShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        Column(Modifier.padding(6.dp)) {
-            if (attachmentName != null) {
-                InputChip(
-                    selected = false,
-                    onClick = onRemoveAttachment,
-                    label = { Text(attachmentName, maxLines = 1) },
-                    trailingIcon = {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.home_composer_remove_attachment, attachmentName),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    },
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AgentAvatar(
+                label = { Text(text, fontSize = 13.5.sp, fontWeight = FontWeight.Medium) },
+                shape = OrsikShapes.chip,
+                colors = SuggestionChipDefaults.suggestionChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    labelColor = MaterialTheme.colorScheme.onSurface
+                ),
+                border = SuggestionChipDefaults.suggestionChipBorder(
                     enabled = enabled,
-                    onClick = onOpenAgentPicker,
-                    modifier = Modifier.testTag(HomeTags.COMPOSER_AGENT)
-                )
-                TextField(
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    enabled = enabled,
-                    placeholder = { Text(hint, maxLines = 1) },
-                    maxLines = 4,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(HomeTags.COMPOSER_INPUT)
-                )
-                IconButton(
-                    onClick = onAttach,
-                    enabled = enabled && !attachmentBusy && attachmentName == null,
-                    modifier = Modifier.testTag(HomeTags.COMPOSER_ATTACH)
-                ) {
-                    if (attachmentBusy) {
-                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                    } else {
-                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.home_composer_attach))
-                    }
-                }
-                SendButton(enabled = canSend, sending = sending, onClick = onSend)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AgentAvatar(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val description = stringResource(R.string.home_composer_agent)
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(48.dp)
-            .clip(ExpressiveShape.Cookie.shape)
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = description }
-    ) {
-        Text(
-            text = "H",
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    }
-}
-
-@Composable
-private fun SendButton(enabled: Boolean, sending: Boolean, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val container = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
-    val content = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    val description = stringResource(R.string.home_composer_send)
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(52.dp)
-            .scaled(pressScale(pressed))
-            .clip(ExpressiveShape.Cookie.shape)
-            .background(container)
-            .clickable(
-                enabled = enabled,
-                role = Role.Button,
-                interactionSource = interaction,
-                indication = null,
-                onClick = onClick
+                    borderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier
+                    .heightIn(min = 36.dp)
+                    .testTag(HomeTags.SUGGESTION_PREFIX + key)
             )
-            .semantics { contentDescription = description }
-            .testTag(HomeTags.COMPOSER_SEND)
-    ) {
-        if (sending) {
-            CircularProgressIndicator(strokeWidth = 2.dp, color = content, modifier = Modifier.size(20.dp))
-        } else {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = content)
         }
     }
 }

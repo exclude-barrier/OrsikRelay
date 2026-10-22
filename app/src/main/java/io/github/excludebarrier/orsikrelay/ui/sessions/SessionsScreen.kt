@@ -617,19 +617,6 @@ internal fun SessionRow(
     }
 }
 
-@Composable
-private fun SessionSourceDescriptor.displayName(): String? = when (this) {
-    SessionSourceDescriptor.Missing -> null
-    SessionSourceDescriptor.Terminal -> stringResource(R.string.session_source_terminal)
-    SessionSourceDescriptor.Telegram -> stringResource(R.string.session_source_telegram)
-    SessionSourceDescriptor.Email -> stringResource(R.string.session_source_email)
-    SessionSourceDescriptor.Sms -> stringResource(R.string.session_source_sms)
-    SessionSourceDescriptor.WhatsApp -> stringResource(R.string.session_source_whatsapp)
-    SessionSourceDescriptor.Signal -> stringResource(R.string.session_source_signal)
-    SessionSourceDescriptor.Scheduled -> stringResource(R.string.session_source_scheduled)
-    is SessionSourceDescriptor.Other -> rawName
-}
-
 private fun SessionGroup.titleRes(): Int = when (this) {
     SessionGroup.Pinned -> R.string.sessions_group_pinned
     SessionGroup.Today -> R.string.sessions_group_today
@@ -655,15 +642,6 @@ private fun sessionErrorHint(error: SessionListError): String? = when (error) {
         stringResource(R.string.sessions_error_hint_incompatible_api)
     SessionListError.InvalidInput,
     SessionListError.Http -> null
-}
-
-private fun buildMetaLine(
-    sourceName: String?,
-    messageCount: String?,
-    lastActive: String?
-): String? {
-    val parts = listOfNotNull(sourceName, messageCount, lastActive)
-    return parts.joinToString(separator = " · ")
 }
 
 private const val PAGE_SIZE = 50

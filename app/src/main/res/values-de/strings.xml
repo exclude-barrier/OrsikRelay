@@ -325,4 +325,6 @@
     <string name="placeholder_server_text">Systemwerte, Dienste und Dateien des Servers folgen in einer späteren Version.</string>
     <string name="placeholder_activity_title">Aktivität</string>
     <string name="placeholder_activity_text">Ein Verlauf über alles, was deine Agenten getan haben, folgt in einer späteren Version.</string>
+    <string name="sessions_running">läuft</string>
+    <string name="sessions_pinned">Angeheftet</string>
 </resources>

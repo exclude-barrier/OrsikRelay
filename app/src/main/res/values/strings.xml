@@ -326,4 +326,6 @@
     <string name="placeholder_server_text">System values, services and files of the server follow in a later version.</string>
     <string name="placeholder_activity_title">Activity</string>
     <string name="placeholder_activity_text">A history of everything your agents did follows in a later version.</string>
+    <string name="sessions_running">running</string>
+    <string name="sessions_pinned">Pinned</string>
 </resources>
