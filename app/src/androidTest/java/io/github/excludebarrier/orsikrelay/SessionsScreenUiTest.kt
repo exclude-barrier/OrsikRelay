@@ -597,10 +597,14 @@ class SessionsScreenUiTest {
         waitForText("Fixture A")
 
         composeRule.onNodeWithTag(AGENT_FILTER_HERMES_TAG).assertIsSelected()
-        listOf("claude_code", "codex").forEach { key ->
+        // Same agents under the same names as the Home picker.
+        listOf("claude_code" to "Claude Code", "codex" to "Codex", "omp" to "OMP").forEach { (key, name) ->
             composeRule.onNodeWithTag(AGENT_FILTER_PREVIEW_PREFIX + key)
                 .assertIsNotEnabled()
                 .assertHasNoClickAction()
+                .assert(SemanticsMatcher("named $name") { node ->
+                    node.config.getOrElseNullable(SemanticsProperties.ContentDescription) { null }?.firstOrNull()?.startsWith("$name,") == true
+                })
         }
     }
 
