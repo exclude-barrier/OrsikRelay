@@ -25,6 +25,8 @@ import io.github.excludebarrier.orsikrelay.ui.chat.markdown.TAG_CODE_COPY
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.TAG_CODE_HEADER
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikMono
+import io.github.excludebarrier.orsikrelay.ui.chat.markdown.TAG_CODE_BODY
 import kotlin.math.abs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -91,6 +93,23 @@ class ChatMarkdownUiTest {
         layouts.forEach { layout ->
             assertEquals(titleLargeSize, layout.layoutInput.style.fontSize)
         }
+    }
+
+    @Test
+    fun codeBlocksAndInlineCodeUseRobotoMono() {
+        renderMarkdown("Nutze `df -h` hier.\n\n```bash\ndf -h /srv\n```")
+        waitForText("df -h /srv")
+
+        fun families(node: androidx.compose.ui.semantics.SemanticsNode) =
+            ArrayList<TextLayoutResult>().also { node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(it) }
+                .map { it.layoutInput.style.fontFamily }
+        assertEquals(listOf(OrsikMono), families(composeRule.onNodeWithTag(TAG_CODE_BODY).fetchSemanticsNode()))
+        // Inline code is a span inside the paragraph.
+        val paragraph = ArrayList<TextLayoutResult>().also {
+            composeRule.onNodeWithText("Nutze", substring = true, useUnmergedTree = true).fetchSemanticsNode()
+                .config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(it)
+        }.first()
+        assertTrue(paragraph.layoutInput.text.spanStyles.any { it.item.fontFamily == OrsikMono })
     }
 
     @Test

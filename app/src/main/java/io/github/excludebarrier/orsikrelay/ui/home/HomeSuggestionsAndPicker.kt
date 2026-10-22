@@ -82,12 +82,16 @@ fun SuggestionChips(enabled: Boolean, onSuggestion: (String) -> Unit, modifier: 
     }
 }
 
-/** The harnesses the picker lists; only Hermes can be chosen today. */
-private class PreviewHarness(val key: String, val name: String, val initial: String)
+/** A future agent next to Hermes; shown as "Bald", not selectable yet. */
+internal class PreviewHarness(val key: String, val name: String, val initial: String)
 
-private val PreviewHarnesses = listOf(
+/**
+ * The one list of future agents, used by the Home picker and the Agents
+ * filter so both always show the same agents under the same names.
+ */
+internal val PreviewHarnesses = listOf(
     PreviewHarness("claude_code", "Claude Code", "C"),
-    PreviewHarness("codex", "OpenAI Codex", "X"),
+    PreviewHarness("codex", "Codex", "X"),
     PreviewHarness("omp", "OMP", "O")
 )
 

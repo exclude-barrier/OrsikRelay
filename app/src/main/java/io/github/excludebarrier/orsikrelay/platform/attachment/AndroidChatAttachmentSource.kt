@@ -110,7 +110,7 @@ class AndroidChatAttachmentSource(context: Context) : ChatAttachmentSource {
 /**
  * Decodes a small square-ish preview of one picked image for the attachment
  * chip. Purely cosmetic and bounded: the returned bitmap is at most
- * [maxPixels] on its longer edge, and every failure (unreadable URI, undecodable
+ * [THUMBNAIL_MAX_PIXELS] on its longer edge, and every failure (unreadable URI, undecodable
  * bytes, out-of-memory) yields `null` so the UI falls back to a generic icon.
  * No new image dependency is introduced for this.
  */
@@ -121,8 +121,7 @@ object ChatAttachmentThumbnails {
 
     fun decode(
         context: Context,
-        contentUri: String,
-        maxPixels: Int = THUMBNAIL_MAX_PIXELS
+        contentUri: String
     ): Bitmap? {
         val resolver = context.applicationContext.contentResolver
         val uri = runCatching { Uri.parse(contentUri) }.getOrNull() ?: return null
@@ -132,7 +131,7 @@ object ChatAttachmentThumbnails {
             resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             val options = BitmapFactory.Options().apply {
-                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxPixels)
+                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, THUMBNAIL_MAX_PIXELS)
             }
             resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
         } catch (_: Exception) {

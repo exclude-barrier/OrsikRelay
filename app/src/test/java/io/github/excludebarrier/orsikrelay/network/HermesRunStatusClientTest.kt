@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
+import io.github.excludebarrier.orsikrelay.domain.run.LostRun
 import io.github.excludebarrier.orsikrelay.domain.run.RunServerStatus
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
@@ -120,6 +121,23 @@ class HermesRunStatusClientTest {
             assertEquals(RunStatusResult.Known(status), read())
         }
         assertEquals(8, server.requestCount)
+    }
+
+    @Test
+    fun aLostRunCarriesItsAcknowledgementKeyAndIsNotTerminal() {
+        server.enqueue(jsonResponse(
+            "{\"run_id\":\"$RUN_ID\",\"status\":\"unknown\",\"admission_id\":\"adm_1\",\"execution_generation\":4}"
+        ))
+        // Missing or unsafe key: still UNKNOWN, but nothing to acknowledge with.
+        server.enqueue(jsonResponse(statusBody(RUN_ID, "unknown")))
+        server.enqueue(jsonResponse(
+            "{\"run_id\":\"$RUN_ID\",\"status\":\"unknown\",\"admission_id\":\"adm_1\",\"execution_generation\":\"4\"}"
+        ))
+
+        assertEquals(RunStatusResult.Known(RunServerStatus.UNKNOWN, LostRun("adm_1", 4)), read())
+        assertEquals(RunStatusResult.Known(RunServerStatus.UNKNOWN, null), read())
+        assertEquals(RunStatusResult.Known(RunServerStatus.UNKNOWN, null), read())
+        assertFalse(RunServerStatus.UNKNOWN.isTerminal)
     }
 
     @Test

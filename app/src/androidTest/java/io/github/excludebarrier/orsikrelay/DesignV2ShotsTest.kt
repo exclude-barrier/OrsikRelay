@@ -268,6 +268,32 @@ class DesignV2ShotsTest {
         }
     }
 
+    /** The relay mid hand-off: animations on, the test clock stopped at a fixed moment. */
+    @CaptureOnly @Test fun workingRelayMovingDark() {
+        fun scale(value: String) {
+            val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("settings put global animator_duration_scale $value")
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes() }
+        }
+        scale("1")
+        try {
+            composeRule.mainClock.autoAdvance = false
+            shot("04e-staffel-bewegt-dark", { composeRule.mainClock.advanceTimeBy(560) }) {
+                HermesTheme(darkTheme = true) {
+                    Surface(Modifier.fillMaxSize()) {
+                        Column(Modifier.padding(24.dp)) {
+                            TurnActivityRow(TurnActivity.Working, SystemClock.elapsedRealtime() - 12_000, null)
+                            TurnActivityRow(TurnActivity.Thinking, SystemClock.elapsedRealtime() - 75_000, null)
+                            TurnActivityRow(TurnActivity.Tool, SystemClock.elapsedRealtime() - 4_000, "terminal")
+                        }
+                    }
+                }
+            }
+        } finally {
+            scale("0")
+        }
+    }
+
     @CaptureOnly @Test fun chatDark() = shot("04-chat-dark", ::waitForChat) { App(true, null) { Chat(it) } }
     @CaptureOnly @Test fun chatLight() = shot("04-chat-light", ::waitForChat) { App(false, null) { Chat(it) } }
 

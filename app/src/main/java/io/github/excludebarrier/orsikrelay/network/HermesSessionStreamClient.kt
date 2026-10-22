@@ -384,7 +384,7 @@ class HermesSessionStreamClient(
             // limit fails closed with [StreamLimitException] if any
             // byte remains; an exactly exhausted body ends with a
             // regular EOF at the limit.
-            val limited = LimitingInputStream(response.body!!.byteStream(), MAX_STREAM_BYTES)
+            val limited = LimitingInputStream(response.body.byteStream(), MAX_STREAM_BYTES)
             // Strict UTF-8: malformed or unmappable bytes must fail
             // closed with a [CharacterCodingException], never be
             // replaced by U+FFFD.

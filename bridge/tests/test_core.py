@@ -266,6 +266,39 @@ class SessionManagementTest(unittest.TestCase):
             caps["endpoints"]["session_delete"], {"method": "DELETE", "path": "/api/sessions/{session_id}"})
 
 
+class UnknownRunResolutionTest(unittest.TestCase):
+    def test_route_matches_only_the_run_itself(self):
+        m = core.match_proxy_route("POST", "/v1/runs/run_9/resolve-unknown")
+        assert m is not None
+        self.assertEqual(m.upstream_path, "/v1/runs/run_9/resolve-unknown")
+        self.assertIsNone(core.match_proxy_route("GET", "/v1/runs/run_9/resolve-unknown"))
+        self.assertIsNone(core.match_proxy_route("POST", "/v1/runs/../resolve-unknown"))
+
+    def test_body_is_exactly_admission_and_generation(self):
+        ok = {"admission_id": "adm_1", "execution_generation": 3}
+        self.assertEqual(core.validate_resolve_unknown_body(ok), (True, ""))
+        for body in ({"admission_id": "adm_1"}, {"execution_generation": 3}, {},
+                     {"admission_id": "adm_1", "execution_generation": 3, "outcome": "completed"}):
+            self.assertEqual(core.validate_resolve_unknown_body(body), (False, "invalid_fields"), body)
+        for generation in (True, "3", 3.0, None, -1):
+            self.assertEqual(
+                core.validate_resolve_unknown_body({"admission_id": "adm_1", "execution_generation": generation}),
+                (False, "invalid_generation"), generation)
+        for admission in ("", "  ", 7, "a" * 257, "a\x00b"):
+            self.assertEqual(
+                core.validate_resolve_unknown_body({"admission_id": admission, "execution_generation": 1}),
+                (False, "invalid_admission_id"), admission)
+        for body in (None, [], "x"):
+            self.assertEqual(core.validate_resolve_unknown_body(body), (False, "invalid_json"))
+
+    def test_capabilities_advertise_the_resolution(self):
+        caps = core.build_capabilities()
+        self.assertIs(caps["features"]["run_unknown_resolution"], True)
+        self.assertEqual(
+            caps["endpoints"]["run_unknown_resolution"],
+            {"method": "POST", "path": "/v1/runs/{run_id}/resolve-unknown"})
+
+
 class RunIdTest(unittest.TestCase):
     def test_safe_run_ids(self):
         for value in ("run_abc123", "run_9c88525f29e4453ba10de886ad3da165", "a" * 256):

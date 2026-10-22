@@ -90,6 +90,16 @@ negotiable mobile contract.
      exactly `{ "archived": <bool> }` and DELETE only without a body; a running
      turn answers `409 session_active_turn`, a confirmed absent chat `404`.
 
+4. Lost-run resolution (newer Hermes cores, Orsik bridge)
+   - `features.run_unknown_resolution == true`,
+     `endpoints.run_unknown_resolution`: `{ method:"POST", path:"/v1/runs/{run_id}/resolve-unknown" }`.
+   - Used only after the manual status read of the chat's own uncertain run
+     returned `status:"unknown"` with `admission_id` (string) and
+     `execution_generation` (int); the chat then offers "close as cancelled".
+     One tap sends exactly those two fields once; success (200 for the same
+     `run_id`) frees the chat, `stale_generation` drops the offer. A core
+     without the `unknown` status never triggers it.
+
 > **Field strictness:** The soft contract objects are checked against **exactly
 > the expected field set** (missing **or** additional field → closed).
 > This is deliberately conservative: the client enables a mobile capability only

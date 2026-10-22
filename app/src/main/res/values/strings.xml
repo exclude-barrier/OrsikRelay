@@ -97,7 +97,6 @@
     <string name="settings_entry">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
-    <string name="settings_language_section">Language</string>
     <string name="settings_language_system">System</string>
     <string name="settings_language_field">Language</string>
     <string name="settings_appearance_section">Appearance</string>
@@ -377,4 +376,7 @@
     <string name="sessions_delete_cancel">Cancel</string>
     <string name="sessions_manage_active">This chat is running. Stop it first.</string>
     <string name="sessions_manage_failed">That did not work. Please try again.</string>
+    <string name="chat_run_lost">Hermes lost this run, for example after a server restart. The chat stays blocked until you close the run as cancelled. It is not run again.</string>
+    <string name="chat_run_lost_resolve">Close as cancelled</string>
+    <string name="chat_run_lost_resolving">Closing…</string>
 </resources>

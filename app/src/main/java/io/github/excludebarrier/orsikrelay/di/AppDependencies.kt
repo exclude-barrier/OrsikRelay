@@ -25,6 +25,7 @@ import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerP
 import io.github.excludebarrier.orsikrelay.data.run.RunApprovalCapabilityRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunApprovalRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunStatusRepository
+import io.github.excludebarrier.orsikrelay.data.run.RunUnknownResolveRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunStopRepository
 import io.github.excludebarrier.orsikrelay.data.run.RunSteerRepository
 import io.github.excludebarrier.orsikrelay.data.run.SharedPreferencesRunLeaseStore
@@ -43,6 +44,7 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunUnknownResolver
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
@@ -90,6 +92,8 @@ internal data class AppDependencies(
     val runApprovalRequester: RunApprovalRequester,
     /** Reads `GET /v1/runs/{run_id}` for the manual uncertain-run recovery. */
     val runStatusRequester: RunStatusRequester,
+    /** Closes a run the core lost (`POST /v1/runs/{id}/resolve-unknown`). */
+    val runUnknownResolver: RunUnknownResolver,
     val serverConnectionCheck: ServerConnectionCheck,
     val notificationCoordinator: NotificationCoordinator,
     val notificationPermissionStore: NotificationPermissionStore,
@@ -304,6 +308,10 @@ internal fun buildAppDependencies(
             profileRepository = profileRepository,
             credentialStore = credentialStore,
             runStatusTransport = HermesRunStatusClient()
+        ),
+        runUnknownResolver = RunUnknownResolveRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore
         ),
         serverConnectionCheck = StoredProfileConnectionCheck(
             profileRepository = profileRepository,

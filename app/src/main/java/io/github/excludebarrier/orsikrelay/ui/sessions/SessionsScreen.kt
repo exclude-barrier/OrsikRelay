@@ -65,6 +65,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionManageResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionManageError
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.home.PreviewHarnesses
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -733,8 +734,8 @@ internal const val AGENT_FILTER_PREVIEW_PREFIX = "sessions_filter_preview_"
 
 /**
  * The agent filter of design v2. Hermes is the only agent today and stays
- * selected; Claude Code and Codex mark their future place, dashed and not
- * selectable.
+ * selected; the future agents ([PreviewHarnesses], same list as the Home
+ * picker) mark their place, dashed and not selectable.
  */
 @Composable
 private fun AgentFilterChips(modifier: Modifier = Modifier) {
@@ -760,7 +761,9 @@ private fun AgentFilterChips(modifier: Modifier = Modifier) {
             border = null,
             modifier = Modifier.testTag(AGENT_FILTER_HERMES_TAG)
         )
-        listOf("claude_code" to "Claude Code", "codex" to "Codex").forEach { (key, name) ->
+        PreviewHarnesses.forEach { harness ->
+            val key = harness.key
+            val name = harness.name
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -807,9 +810,9 @@ private fun SessionActionsMenu(
     }
 }
 
-/** Irreversible: deleting needs an explicit confirmation naming the chat. */
+/** Irreversible: deleting needs an explicit confirmation naming the chat (list and chat). */
 @Composable
-private fun DeleteSessionDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun DeleteSessionDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = OrsikDialog.shape,

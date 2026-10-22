@@ -24,7 +24,7 @@ your private network.
 The user interface is available in English and German; choose the language
 under **⋮ → Settings → Language**.*
 
-> **Early alpha (`0.1.0-alpha.12`).** For technical testing on your own setup.
+> **Early alpha (`0.1.0-alpha.13`).** For technical testing on your own setup.
 > No Play Store build yet – install the APK from the [releases](https://github.com/exclude-barrier/OrsikRelay/releases) or [build from source](#building-from-source).
 > Not affiliated with or endorsed by Nous Research.
 
@@ -352,3 +352,8 @@ security issues privately as described in [SECURITY.md](SECURITY.md).
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+The app bundles the Roboto Mono font (Copyright 2015 The Roboto Mono Project
+Authors, [googlefonts/RobotoMono](https://github.com/googlefonts/RobotoMono))
+under the SIL Open Font License 1.1; the license text ships in the app as
+[`assets/licenses/roboto-mono-OFL.txt`](app/src/main/assets/licenses/roboto-mono-OFL.txt).

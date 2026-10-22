@@ -5,7 +5,7 @@ import org.junit.Test
 
 /**
  * The thumbnail bound is one constant, used both as the documented limit and
- * as the default of [ChatAttachmentThumbnails.decode].
+ * as the bound of [ChatAttachmentThumbnails.decode].
  */
 class ChatAttachmentThumbnailsTest {
 

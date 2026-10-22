@@ -120,7 +120,7 @@ Hermes home behind the bridge sets `approvals.mode: manual` (see
 
 **Auditability.** Every state-changing device request creates an
 audit line (logger `orsik_mobile_bridge.audit`):
-`audit action=<chat|approval|stop|steer|session_create|session_archive|session_delete|pair|revoke>
+`audit action=<chat|approval|stop|steer|session_create|session_archive|session_delete|resolve_unknown|pair|revoke>
 device=<device_id|-> [run=/session=<id>] [choice=<once|deny|rejected>]
 [status=<http>]`. Rejected choices are recorded as
 `rejected` (raw value = client input, never logged); tokens,

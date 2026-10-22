@@ -7,7 +7,10 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -59,6 +62,13 @@ object OrsikTheme {
 }
 
 /** Text styles of the design; colours are applied at the call site. */
+/**
+ * Roboto Mono (design v2) for code: bundled as res/font/roboto_mono.ttf from
+ * github.com/googlefonts/RobotoMono, SIL Open Font License 1.1 (text in
+ * assets/licenses/roboto-mono-OFL.txt).
+ */
+val OrsikMono = FontFamily(Font(R.font.roboto_mono, FontWeight.Normal))
+
 object OrsikType {
     val screenTitle = TextStyle(fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.02).em)
     val compactTitle = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold)

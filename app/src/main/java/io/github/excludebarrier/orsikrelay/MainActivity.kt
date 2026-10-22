@@ -46,7 +46,7 @@ import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 
 /**
  * Single entry point of the app. Hosts the Compose navigation shell;
- * all navigation logic lives in [HermesNavHost] and [io.github.excludebarrier.orsikrelay.navigation.AppNavigationState].
+ * all navigation logic lives in [HermesNavHost].
  *
  * A [FragmentActivity] because the app lock hosts [androidx.biometric.BiometricPrompt].
  */

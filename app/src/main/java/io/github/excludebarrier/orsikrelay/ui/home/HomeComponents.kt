@@ -43,13 +43,13 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikMono
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.ui.components.ComposerDockTags
@@ -59,8 +59,6 @@ import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewNote
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewTile
-import io.github.excludebarrier.orsikrelay.ui.components.StatusChip
-import io.github.excludebarrier.orsikrelay.ui.components.StatusKind
 import io.github.excludebarrier.orsikrelay.ui.components.dashedBorder
 import io.github.excludebarrier.orsikrelay.ui.sessions.SessionListItem
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
@@ -95,7 +93,6 @@ object HomeTags {
     const val SKELETON = "home_skeleton"
     const val COMPOSER_INPUT = ComposerDockTags.INPUT
     const val COMPOSER_SEND = ComposerDockTags.SEND
-    const val COMPOSER_ATTACH = ComposerDockTags.ATTACH
     const val COMPOSER_AGENT = ComposerDockTags.AGENT
     const val SUGGESTION_PREFIX = "home_suggestion_"
     const val NOTICE = "home_notice"
@@ -424,11 +421,11 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-fun ServerStatusStrip(connected: Boolean, modifier: Modifier = Modifier) {
+fun ServerStatusStrip(modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
-        SectionTitle(text = stringResource(R.string.home_section_server)) {
-            if (connected) StatusChip(stringResource(R.string.home_server_reachable), StatusKind.Ok)
-        }
+        // No status chip here: the server card above already says whether
+        // the server is connected.
+        SectionTitle(text = stringResource(R.string.home_section_server))
         val noValue = stringResource(R.string.home_server_no_value)
         val dash = MaterialTheme.colorScheme.outline
         Column(
@@ -455,7 +452,7 @@ fun ServerStatusStrip(connected: Boolean, modifier: Modifier = Modifier) {
                             .clearAndSetSemantics { contentDescription = "$label: $noValue" }
                     ) {
                         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("—", fontFamily = FontFamily.Monospace, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("—", fontFamily = OrsikMono, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Box(
                             Modifier
                                 .fillMaxWidth()
