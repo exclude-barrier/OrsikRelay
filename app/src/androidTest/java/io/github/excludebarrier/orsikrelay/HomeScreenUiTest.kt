@@ -192,7 +192,7 @@ class HomeScreenUiTest {
         composeRule.onNodeWithTag(HomeTags.SERVER_STRIP).assertIsDisplayed()
         composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_cpu)}: 28 %: " +
             context.getString(R.string.home_server_cores, 6)).assertExists()
-        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_ram)}: 15/30 GB").assertExists()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_ram)}: 50 %: 15/30 GB").assertExists()
         composeRule.onNodeWithContentDescription(
             "${context.getString(R.string.home_server_gpu)}: ${context.getString(R.string.home_server_gpu_none)}"
         ).assertExists()
@@ -219,6 +219,26 @@ class HomeScreenUiTest {
     fun beforeTheFirstReadThereIsNoLaterVersionClaim() {
         show(connected())
         assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_preview_text)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun atLargeFontsTheServerValuesStackTwoPerRow() {
+        val gib = 1024L * 1024 * 1024
+        show(
+            connected().copy(
+                hostMetrics = HostMetricsResult.Ready(
+                    HostMetrics(23.0, 6, 12 * gib, 32 * gib, null, listOf(ServiceState("hermes-gateway", true)))
+                )
+            ),
+            fontScale = 2f
+        )
+        val cpu = composeRule.onNodeWithContentDescription(
+            "${context.getString(R.string.home_server_cpu)}: 23 %: " + context.getString(R.string.home_server_cores, 6)
+        ).fetchSemanticsNode().positionInRoot
+        val gpu = composeRule.onNodeWithContentDescription(
+            "${context.getString(R.string.home_server_gpu)}: ${context.getString(R.string.home_server_gpu_none)}"
+        ).fetchSemanticsNode().positionInRoot
+        assertTrue("GPU must sit in the second row at 2x font", gpu.y > cpu.y)
     }
 
     @Test

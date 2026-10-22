@@ -1,5 +1,8 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.domain.host.ServiceState
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetrics
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
@@ -105,6 +108,13 @@ class DesignV2ShotsTest {
                 HermesSession("s2", "Docker-Updates", "telegram", now - 90_000, 8, false),
                 HermesSession("s3", "Server-Wartung", "cron", now - 600_000, 5, false)
             )
+        ),
+        hostMetrics = HostMetricsResult.Ready(
+            HostMetrics(
+                cpuPercent = 23.4, cores = 6, memoryUsedBytes = 12L * 1024 * 1024 * 1024,
+                memoryTotalBytes = 32L * 1024 * 1024 * 1024, gpu = null,
+                services = listOf(ServiceState("hermes-gateway", true), ServiceState("orsik-mobile-bridge", true))
+            )
         )
     )
 
@@ -153,6 +163,17 @@ class DesignV2ShotsTest {
 
     @CaptureOnly @Test fun homeDark() = shot("01-home-dark") { App(true, AppScreen.Home) { Home(it) } }
     @CaptureOnly @Test fun homeLight() = shot("01-home-light") { App(false, AppScreen.Home) { Home(it) } }
+    @CaptureOnly @Test fun homeServerCardDark() = shot("02b-home-serverwerte-dark", {
+        composeRule.onNodeWithTag(HomeTags.LIST).performScrollToNode(androidx.compose.ui.test.hasTestTag(HomeTags.SERVER_STRIP))
+    }) { App(true, AppScreen.Home) { Home(it) } }
+    @CaptureOnly @Test fun homeServerCardLargeFontDark() = shot("02c-home-serverwerte-grossschrift-dark", {
+        composeRule.onNodeWithTag(HomeTags.LIST).performScrollToNode(androidx.compose.ui.test.hasTestTag(HomeTags.SERVER_STRIP))
+    }) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)
+        ) { App(true, AppScreen.Home) { Home(it) } }
+    }
     @CaptureOnly @Test fun homeScrolledDark() = shot("02-home-gescrollt-dark", ::scrollHome) { App(true, AppScreen.Home) { Home(it) } }
     @CaptureOnly @Test fun homeScrolledLight() = shot("02-home-gescrollt-light", ::scrollHome) { App(false, AppScreen.Home) { Home(it) } }
 

@@ -441,8 +441,12 @@ fun ServerStatusStrip(metrics: HostMetricsResult?, modifier: Modifier = Modifier
                 .testTag(HomeTags.SERVER_STRIP)
         ) {
             val ready = (metrics as? HostMetricsResult.Ready)?.metrics
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                hostTiles(ready).forEach { tile -> HostTileView(tile, Modifier.weight(1f)) }
+            // From 1.3x font four columns no longer fit: two rows of two.
+            val columns = if (LocalDensity.current.fontScale >= LARGE_FONT_SCALE) 2 else 4
+            hostTiles(ready).chunked(columns).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { tile -> HostTileView(tile, Modifier.weight(1f)) }
+                }
             }
             when (metrics) {
                 is HostMetricsResult.Ready -> {
@@ -493,11 +497,17 @@ private fun hostTiles(metrics: HostMetrics?): List<HostTile> {
     val count = metrics.services.size
     return listOf(
         HostTile(cpu, metrics.cpuPercent?.let { "${it.roundToInt()} %" }, metrics.cpuPercent?.let { (it / 100).toFloat() }, detail = cores),
-        HostTile(
-            ram,
-            if (used != null && total != null) "${gibibytes(used, locale)}/${gibibytes(total, locale)} GB" else null,
-            if (used != null && total != null && total > 0) used.toFloat() / total else null
-        ),
+        // A percentage fits the narrow tile; the absolute values are the detail.
+        if (used != null && total != null && total > 0) {
+            HostTile(
+                ram,
+                "${(100.0 * used / total).roundToInt()} %",
+                used.toFloat() / total,
+                detail = "${gibibytes(used, locale)}/${gibibytes(total, locale)} GB"
+            )
+        } else {
+            HostTile(ram, null, null)
+        },
         metrics.gpu?.let { HostTile(gpu, "${it.utilizationPercent} %", it.utilizationPercent / 100f, detail = it.name) }
             ?: HostTile(gpu, gpuNone, null),
         HostTile(
@@ -764,3 +774,6 @@ fun HomeSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
+
+/** From this font scale the server card stacks its values two per row. */
+private const val LARGE_FONT_SCALE = 1.3f
