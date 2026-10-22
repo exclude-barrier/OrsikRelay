@@ -701,15 +701,14 @@ def run_revocation_checks(token_a: str | None, token_b: str | None) -> None:
             bad.append(f"{method} {path.split('?', 1)[0]}={status}")
     check("revoked_token_401_on_auth_routes", not bad, _join(bad))
 
-    # store.revoke_device looks the hash up without a revoked = 0 filter
-    # (store.py:315-321), so self-revoke is idempotent: 200 until the row is
-    # pruned, then 401. It never grants access either way.
+    # A repeated self-revoke is idempotent: 200 with revoked=false (contract
+    # 2.4) until the store prunes the row, then 401. It never grants access.
     status, body = request("POST", "/v1/devices/self/revoke", token=token_a,
                            label="revoked_self_revoke")
     idempotent = False
     if status == 200:
         try:
-            idempotent = json.loads(body).get("revoked") is True
+            idempotent = json.loads(body).get("revoked") is False
         except Exception:
             idempotent = False
     check("revoked_self_revoke_idempotent_or_401",
