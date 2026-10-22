@@ -93,7 +93,6 @@ object HomeTags {
     const val SKELETON = "home_skeleton"
     const val COMPOSER_INPUT = ComposerDockTags.INPUT
     const val COMPOSER_SEND = ComposerDockTags.SEND
-    const val COMPOSER_ATTACH = ComposerDockTags.ATTACH
     const val COMPOSER_AGENT = ComposerDockTags.AGENT
     const val SUGGESTION_PREFIX = "home_suggestion_"
     const val NOTICE = "home_notice"

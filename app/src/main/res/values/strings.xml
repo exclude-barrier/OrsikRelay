@@ -97,7 +97,6 @@
     <string name="settings_entry">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
-    <string name="settings_language_section">Language</string>
     <string name="settings_language_system">System</string>
     <string name="settings_language_field">Language</string>
     <string name="settings_appearance_section">Appearance</string>

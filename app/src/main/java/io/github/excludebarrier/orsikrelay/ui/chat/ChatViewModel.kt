@@ -1253,7 +1253,6 @@ private fun turnSettled() {
                     // Accepted only means the server took the stop. Nothing is
                     // set optimistically: the stream runs on until its own
                     // terminal event settles the turn.
-                    Unit
                 }
                 is RunStopResult.AlreadyTerminal -> {
                     // The run is already terminal: idempotent success. Trigger

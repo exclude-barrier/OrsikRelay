@@ -164,7 +164,7 @@ class ServerProfileRepository(
             false
         } else {
             try {
-                profileDraftClearer!!.clearProfile(profileId)
+                profileDraftClearer.clearProfile(profileId)
                 false
             } catch (_: Exception) {
                 // Best-effort cleanup (profile-deletion contract): the profile is
