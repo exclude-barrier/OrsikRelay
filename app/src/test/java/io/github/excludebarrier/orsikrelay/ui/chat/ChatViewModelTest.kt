@@ -913,6 +913,24 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun reconcileWithARunTheServerNoLongerKnowsReleasesAndReloadsHistory() = withStatusModel { model, chat, _, status ->
+        enterUncertainRun(model, chat)
+        // Hermes forgets finished runs after a while and sweeps orphaned ones:
+        // a confirmed 404 for our own run means it is no longer running.
+        status.result = RunStatusResult.Failure(RunStatusError.NotFound)
+        model.reconcileUncertainRun()
+        advanceUntilIdle()
+        assertEquals(1, status.calls.get())
+        assertFalse(model.state.value.turnUncertain)
+        assertFalse(model.state.value.turnActive)
+        assertFalse(model.state.value.reconcileFailed)
+        assertNull(model.state.value.boundRunId)
+        assertEquals("no second POST", 1, chat.calls.get())
+        model.onDraftChange("weiter")
+        assertTrue(model.state.value.sendEnabled)
+    }
+
+    @Test
     fun unconfirmedUncertainRunOffersNoReconcileAndNeverReadsStatus() = withStatusModel { model, chat, _, status ->
         model.onDraftChange("hi")
         model.send()

@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.domain.home
 
 import io.github.excludebarrier.orsikrelay.domain.run.RunServerStatus
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
+import io.github.excludebarrier.orsikrelay.domain.run.RunStatusError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
 import kotlinx.coroutines.CancellationException
@@ -39,12 +40,22 @@ data class TrackedRun(
  * The flow is cold; status polling runs only while it is collected. A run
  * that the server reports as terminal disappears from the list and is no
  * longer polled. Failed status reads are swallowed and retried on the next
- * interval; the controller itself is never modified.
+ * interval.
+ *
+ * An UNCERTAIN run (transport lost, e.g. after a bridge restart) is handed
+ * to [releaseUncertain] once the server proves it over: a terminal status,
+ * or a confirmed 404 - Hermes forgets finished runs after an hour and
+ * sweeps orphaned ones, so a run it no longer knows cannot be running.
+ * Without that release the slot would keep blocking every new task although
+ * Home no longer shows it. A live run is never released here; its stream
+ * stays authoritative.
  */
 class HomeRunTracker(
     private val activeRun: StateFlow<RunSessionController.ActiveRun?>,
     private val statusRequester: RunStatusRequester,
-    private val pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS
+    private val pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
+    /** [RunSessionController.confirmTerminalForUncertainRun]; a no-op unless the slot is that uncertain run. */
+    private val releaseUncertain: (profileId: String, sessionId: String, runId: String) -> Boolean = { _, _, _ -> false }
 ) {
     /** Cold flow; polling runs only while it is collected. */
     fun runs(): Flow<List<TrackedRun>> = channelFlow {
@@ -86,6 +97,7 @@ class HomeRunTracker(
             val runId = current?.runId
             if (current != null && runId != null && pollJob == null && !terminal) {
                 val profileId = current.profileId
+                val sessionId = current.sessionId
                 pollJob = launch {
                     while (true) {
                         val result = try {
@@ -98,6 +110,7 @@ class HomeRunTracker(
                         when (result) {
                             is RunStatusResult.Known -> {
                                 if (result.status.isTerminal) {
+                                    releaseUncertain(profileId, sessionId, runId)
                                     terminal = true
                                     send(emptyList())
                                     return@launch
@@ -110,7 +123,17 @@ class HomeRunTracker(
                                 }
                             }
 
-                            is RunStatusResult.Failure, null -> Unit
+                            is RunStatusResult.Failure -> {
+                                if (result.error == RunStatusError.NotFound &&
+                                    releaseUncertain(profileId, sessionId, runId)
+                                ) {
+                                    terminal = true
+                                    send(emptyList())
+                                    return@launch
+                                }
+                            }
+
+                            null -> Unit
                         }
                         delay(pollIntervalMs)
                     }
