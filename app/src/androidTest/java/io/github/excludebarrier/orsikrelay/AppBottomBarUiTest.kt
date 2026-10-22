@@ -59,4 +59,25 @@ class AppBottomBarUiTest {
 
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Sessions)).assertIsSelected()
     }
+
+    @Test
+    fun atDoubleFontTheLabelsStayOnOneLine() {
+        composeRule.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)
+            ) {
+                HermesTheme(darkTheme = true) {
+                    AppBottomBar(current = AppScreen.Home, approvalPending = false, onSelect = {})
+                }
+            }
+        }
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        listOf(R.string.nav_home, R.string.nav_agents, R.string.nav_server, R.string.nav_activity).forEach { res ->
+            val node = composeRule.onNode(androidx.compose.ui.test.hasText(context.getString(res)), useUnmergedTree = true).fetchSemanticsNode()
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            assertEquals("label ${context.getString(res)} must stay on one line", 1, layouts.first().lineCount)
+        }
+    }
 }

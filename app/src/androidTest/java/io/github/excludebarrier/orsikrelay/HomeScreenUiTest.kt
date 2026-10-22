@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import org.junit.Assert.assertTrue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
@@ -88,8 +89,10 @@ class HomeScreenUiTest {
         composeRule.onNodeWithTag(HomeTags.SERVER_STRIP).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.home_server_reachable)).assertIsDisplayed()
         scrollTo(HomeTags.QUICK_CHAT)
-        composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).assertIsEnabled()
-        listOf("server", "terminal", "files", "docker", "projects").forEach { key ->
+        composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).assertIsEnabled().assertHasClickAction()
+        // Server works today (it opens the Server tab); the rest is "Bald".
+        composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "server").assertIsEnabled().assertHasClickAction()
+        listOf("terminal", "files", "docker", "projects").forEach { key ->
             scrollTo(HomeTags.QUICK_TILE_PREFIX + key)
             composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + key).assertIsNotEnabled()
         }
@@ -226,6 +229,33 @@ class HomeScreenUiTest {
             hasTestTag(TAG_LOADING_INDICATOR) and hasAnyAncestor(hasTestTag(HomeTags.RUN_ROW)),
             useUnmergedTree = true
         ).assertExists()
+    }
+
+    @Test
+    fun atLargeFontsTheApprovalButtonSitsBelowItsText() {
+        show(connected(runs = listOf(HomeRunItem("s9", "Docker updates", awaitingApproval = true, uncertain = false))), fontScale = 2f)
+
+        // Unclipped positions: at 2x font the card may reach below the fold.
+        val titleNode = composeRule.onNode(
+            hasText(context.getString(R.string.home_approval_title)) and hasAnyAncestor(hasTestTag(HomeTags.APPROVAL)),
+            useUnmergedTree = true
+        ).fetchSemanticsNode()
+        val titleBottom = titleNode.positionInRoot.y + titleNode.size.height
+        val buttonTop = composeRule.onNodeWithTag(HomeTags.APPROVAL_REVIEW).fetchSemanticsNode().positionInRoot.y
+        assertTrue("button top $buttonTop must be below the title bottom $titleBottom", buttonTop >= titleBottom)
+        assertNoMidWordBreak(context.getString(R.string.home_approval_title))
+    }
+
+    /** Wrapping at a space is fine; a line may only end inside a word at the very end. */
+    private fun assertNoMidWordBreak(text: String) {
+        val node = composeRule.onNode(hasText(text) and hasAnyAncestor(hasTestTag(HomeTags.APPROVAL)), useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        val layout = layouts.first()
+        for (line in 0 until layout.lineCount - 1) {
+            val end = layout.getLineEnd(line)
+            assertTrue("'$text' breaks mid-word after '${text.substring(0, end)}'", text[end - 1] == ' ' || text[end] == ' ')
+        }
     }
 
     private fun scrollTo(tag: String) {

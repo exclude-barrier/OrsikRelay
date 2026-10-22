@@ -67,11 +67,14 @@ class OnboardingModeUiTest {
         setOnboarding(fontScale = 1.0f)
         assertCenteredLabel(
             context.getString(R.string.onboarding_mode_api_key),
-            segmentTag = "onboardingModeApiKey"
+            segmentTag = "onboardingModeApiKey",
+            selected = false
         )
+        // Pairing is the default mode: its segment shows the check mark.
         assertCenteredLabel(
             context.getString(R.string.onboarding_mode_pairing),
-            segmentTag = "onboardingModePairing"
+            segmentTag = "onboardingModePairing",
+            selected = true
         )
     }
 
@@ -150,25 +153,26 @@ class OnboardingModeUiTest {
     }
 
     /**
-     * The label sits in the middle of its segment: the text box's centre is
-     * at most [MAX_LABEL_OFFSET_DP] away from the segment's centre. A visible
-     * check mark or an empty icon slot would shift the label by about 16 dp;
-     * this tight bound therefore also proves the selected segment renders no
-     * icon. Wrapped lines share one centre.
+     * The segment content sits in the middle of its segment (design v2
+     * connected button group): an unselected label is centred; the selected
+     * one shares the centre with its check mark (16 dp icon + 6 dp gap), so
+     * its text box is shifted right by exactly half of that. Each offset is
+     * checked to within [MAX_LABEL_OFFSET_DP]. Wrapped lines share one centre.
      */
-    private fun assertCenteredLabel(label: String, segmentTag: String) {
+    private fun assertCenteredLabel(label: String, segmentTag: String, selected: Boolean) {
         val textNode = composeRule.onNode(
             hasText(label) and hasAnyAncestor(hasTestTag(segmentTag)),
             useUnmergedTree = true
         )
         val node = textNode.fetchSemanticsNode()
         val segment = composeRule.onNodeWithTag(segmentTag).fetchSemanticsNode().boundsInRoot
+        val expectedShiftDp = if (selected) CHECK_MARK_SHIFT_DP else 0f
         val offsetDp = with(composeRule.density) {
-            kotlin.math.abs(node.boundsInRoot.center.x - segment.center.x).toDp().value
+            (node.boundsInRoot.center.x - segment.center.x).toDp().value
         }
         assertTrue(
-            "'$label' is ${offsetDp}dp off the centre of its segment",
-            offsetDp <= MAX_LABEL_OFFSET_DP
+            "'$label' is ${offsetDp}dp off the centre of its segment (expected $expectedShiftDp)",
+            kotlin.math.abs(offsetDp - expectedShiftDp) <= MAX_LABEL_OFFSET_DP
         )
         val action = node.config[SemanticsActions.GetTextLayoutResult]
         val layouts = ArrayList<TextLayoutResult>()
@@ -259,5 +263,8 @@ class OnboardingModeUiTest {
          * mean the segment still reserves space for a check-mark icon.
          */
         const val MAX_LABEL_OFFSET_DP = 2f
+
+        /** Half of the selected segment's check mark (16 dp) plus its gap (6 dp). */
+        const val CHECK_MARK_SHIFT_DP = 11f
     }
 }

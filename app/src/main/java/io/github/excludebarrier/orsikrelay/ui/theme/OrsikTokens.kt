@@ -79,4 +79,15 @@ object OrsikShapes {
     val bottomArea = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     val badge = RoundedCornerShape(6.dp)
     val pill = RoundedCornerShape(percent = 50)
+    val dialog = RoundedCornerShape(24.dp)
+}
+
+/** Dialogs of design v2: card radius and the card surface, flat (no tonal tint). */
+object OrsikDialog {
+    val shape = OrsikShapes.dialog
+    val containerColor: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow
+    val tonalElevation = 0.dp
 }

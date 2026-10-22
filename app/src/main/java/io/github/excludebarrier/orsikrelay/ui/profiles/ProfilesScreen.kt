@@ -40,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.OutlinedButton
@@ -411,6 +412,9 @@ fun ProfilesScreen(
         val inFlight = removalStep != RemovalStep.Idle
         val fallback = removeFailure == RemoveFailure.RevokeFailed
         AlertDialog(
+            shape = OrsikDialog.shape,
+            containerColor = OrsikDialog.containerColor,
+            tonalElevation = OrsikDialog.tonalElevation,
             onDismissRequest = { if (!inFlight) deleteTarget = null },
             title = { Text(text = stringResource(R.string.profiles_delete_title)) },
             text = {

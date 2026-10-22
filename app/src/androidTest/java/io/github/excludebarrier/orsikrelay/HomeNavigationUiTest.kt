@@ -1,5 +1,10 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
@@ -34,7 +39,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPage
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
-import io.github.excludebarrier.orsikrelay.navigation.ACTIVITY_PLACEHOLDER_TAG
+import io.github.excludebarrier.orsikrelay.ui.activity.ActivityTags
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
 import io.github.excludebarrier.orsikrelay.ui.profiles.PROFILES_SCREEN_TAG
@@ -143,7 +148,7 @@ class HomeNavigationUiTest {
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Server)).assertIsDisplayed().assertIsSelected()
         composeRule.onAllNodesWithTag("settings_back").assertCountEquals(0)
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Activity)).performClick()
-        waitForTag(ACTIVITY_PLACEHOLDER_TAG)
+        waitForTag(ActivityTags.SCREEN)
 
         // Back from any tab returns to Home.
         Espresso.pressBack()
@@ -180,6 +185,80 @@ class HomeNavigationUiTest {
         assertEquals(1, createdSessions.get())
         assertEquals(NEW_SESSION_ID to "Check disk space", streamedTurn.get())
         controller.close()
+    }
+
+    @Test
+    fun aPendingApprovalIsListedInTheActivityTabAndOpensThatChat() {
+        show(status = statusOf(RunServerStatus.WAITING_FOR_APPROVAL))
+        composeRule.runOnIdle {
+            controller.startTurn(PROFILE_ID, SESSION_ID, "Docker updates")
+            events.trySend(ChatTurnEvent.RunStarted("run-1"))
+        }
+        waitForTag(HomeTags.APPROVAL)
+
+        composeRule.onNodeWithTag(bottomTabTag(AppScreen.Activity)).performClick()
+        waitForTag(ActivityTags.SCREEN)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasTestTag(HomeTags.APPROVAL) and hasAnyAncestor(hasTestTag(ActivityTags.SCREEN)))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(HomeTags.APPROVAL_REVIEW).performClick()
+
+        composeRule.waitUntil(5_000) { openedSession.get() == SESSION_ID }
+        controller.close()
+    }
+
+    @Test
+    fun withNothingRunningTheActivityTabSaysSo() {
+        show()
+        waitForText(context.getString(R.string.home_status_connected))
+
+        composeRule.onNodeWithTag(bottomTabTag(AppScreen.Activity)).performClick()
+
+        waitForTag(ActivityTags.EMPTY)
+        composeRule.onNodeWithText(context.getString(R.string.activity_empty_title)).assertIsDisplayed()
+        controller.close()
+    }
+
+    @Test
+    fun quickAccessChatCreatesOneEmptyChatAndOpensIt() {
+        show()
+        waitForText(context.getString(R.string.home_status_connected))
+
+        swipeHomeTo(HomeTags.QUICK_CHAT)
+        composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).performClick()
+
+        composeRule.waitUntil(5_000) { openedSession.get() == NEW_SESSION_ID }
+        assertEquals(1, createdSessions.get())
+        // A new chat starts empty: no turn is sent on its own.
+        assertEquals(null, streamedTurn.get())
+        controller.close()
+    }
+
+    @Test
+    fun quickAccessServerOpensTheServerTab() {
+        show()
+        waitForText(context.getString(R.string.home_status_connected))
+
+        swipeHomeTo(HomeTags.QUICK_TILE_PREFIX + "server")
+        composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "server").performClick()
+
+        waitForTag(PROFILES_SCREEN_TAG)
+        composeRule.onNodeWithTag(bottomTabTag(AppScreen.Server)).assertIsSelected()
+        controller.close()
+    }
+
+    /**
+     * Swipes Home up until [tag] is composed. performScrollToNode never
+     * reaches idle inside the full navigation host (it keeps re-measuring
+     * while the compact header slides in), a plain swipe does.
+     */
+    private fun swipeHomeTo(tag: String) {
+        repeat(6) {
+            if (composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()) return
+            composeRule.onNodeWithTag(HomeTags.LIST).performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
     }
 
     private fun waitForTag(tag: String) {

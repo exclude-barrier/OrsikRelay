@@ -70,7 +70,9 @@ fun HomeScreen(
     onSwitchServer: () -> Unit,
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNewChat: () -> Unit = {},
+    onOpenServer: () -> Unit = {}
 ) {
     var pickerOpen by rememberSaveable { mutableStateOf(false) }
     val serverName = state.serverName ?: stringResource(R.string.home_no_server_name)
@@ -136,7 +138,7 @@ fun HomeScreen(
                         item(key = "quick_title") {
                             SectionTitle(stringResource(R.string.home_section_quick), Modifier.gutter())
                         }
-                        item(key = "quick") { QuickActionGrid(onOpenChat = onOpenAllSessions, modifier = Modifier.gutter()) }
+                        item(key = "quick") { QuickActionGrid(onNewChat = onNewChat, onOpenServer = onOpenServer, modifier = Modifier.gutter()) }
                         item(key = "recent_title") {
                             SectionTitle(stringResource(R.string.home_section_recent), Modifier.gutter()) {
                                 TextButton(
@@ -288,4 +290,5 @@ private fun HomeNotice.textRes(): Int = when (this) {
     HomeNotice.AttachmentUnsupported -> R.string.chat_attachment_error_type
     HomeNotice.AttachmentTooLarge -> R.string.chat_attachment_error_size
     HomeNotice.AttachmentUnreadable -> R.string.chat_attachment_error_unreadable
+    HomeNotice.NewChatFailed -> R.string.new_session_error_generic
 }

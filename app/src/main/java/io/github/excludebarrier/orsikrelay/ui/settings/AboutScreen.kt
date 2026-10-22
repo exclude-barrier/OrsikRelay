@@ -15,7 +15,6 @@ import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -25,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
 import io.github.excludebarrier.orsikrelay.domain.crash.CrashReport
 import io.github.excludebarrier.orsikrelay.platform.crash.CrashReporter
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
@@ -37,7 +37,7 @@ internal const val PROJECT_SOURCE_URL = "https://github.com/exclude-barrier/Orsi
  * "report a bug" row that opens a prefilled GitHub issue (app version,
  * Android version and device model only).
  *
- * Same [SettingsTopBar] header and the same cards/rows as the settings
+ * Same large header (design v2) and the same cards/rows as the settings
  * screen; the version comes from `BuildConfig.VERSION_NAME`. The source row
  * opens the public project page through the same fail-closed HTTPS-only
  * handler as markdown links.
@@ -56,22 +56,15 @@ fun AboutScreen(
         context = LocalContext.current,
         onAllowedLinkOpen = onAllowedLinkOpen
     )
-    Scaffold(
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .testTag("about_screen"),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            SettingsTopBar(
-                title = stringResource(R.string.settings_about_section),
-                onBack = onBack
-            )
-        }
-    ) { innerPadding ->
+            .testTag("about_screen")
+    ) {
+        OrsikLargeHeader(title = stringResource(R.string.settings_about_section), onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {

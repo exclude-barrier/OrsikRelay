@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import io.github.excludebarrier.orsikrelay.domain.crash.CrashReport
 import io.github.excludebarrier.orsikrelay.platform.crash.CrashReporter
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
@@ -79,6 +80,9 @@ internal fun CrashReportDialog(
     onPostpone: () -> Unit
 ) {
     AlertDialog(
+        shape = OrsikDialog.shape,
+        containerColor = OrsikDialog.containerColor,
+        tonalElevation = OrsikDialog.tonalElevation,
         onDismissRequest = onPostpone,
         properties = DialogProperties(dismissOnClickOutside = false),
         modifier = Modifier.testTag("crash_report_dialog"),
