@@ -11,7 +11,6 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
-import io.github.excludebarrier.orsikrelay.data.session.StartupProfile
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionProbe
 import io.github.excludebarrier.orsikrelay.domain.connection.HermesConnectionResult
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
@@ -250,7 +249,9 @@ class ActiveServerSelectionRestartUiTest {
         // the single active row, and Beta is still selectable.
         assertEquals(
             1,
-            composeRule.onAllNodesWithText(context.getString(R.string.profiles_chip_active)).fetchSemanticsNodes().size
+            composeRule.onAllNodesWithText(
+                context.getString(R.string.profiles_chip_active).uppercase(context.resources.configuration.locales[0])
+            ).fetchSemanticsNodes().size
         )
         composeRule.onNodeWithTag(rowTag(BETA_ID)).assertExists()
     }

@@ -321,12 +321,13 @@
     <string name="nav_server">Server</string>
     <string name="nav_activity">Aktivität</string>
     <string name="nav_activity_approval">Aktivität, Freigabe erforderlich</string>
-    <string name="placeholder_server_title">Server</string>
-    <string name="placeholder_server_text">Systemwerte, Dienste und Dateien des Servers folgen in einer späteren Version.</string>
     <string name="placeholder_activity_title">Aktivität</string>
     <string name="placeholder_activity_text">Ein Verlauf über alles, was deine Agenten getan haben, folgt in einer späteren Version.</string>
     <string name="sessions_running">läuft</string>
     <string name="sessions_pinned">Angeheftet</string>
     <string name="chat_header_subtitle">Hermes · %1$s</string>
     <string name="chat_tool_done">fertig</string>
+    <string name="profiles_status_not_connected">Nicht verbunden</string>
+    <string name="profiles_management">Verwaltung</string>
+    <string name="profiles_tile_monitoring">Monitoring</string>
 </resources>

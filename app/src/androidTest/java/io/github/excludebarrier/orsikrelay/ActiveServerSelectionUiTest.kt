@@ -199,7 +199,10 @@ class ActiveServerSelectionUiTest {
     private fun assertExactlyOneActiveMarker() {
         assertEquals(
             1,
-            composeRule.onAllNodesWithText(context.getString(R.string.profiles_chip_active)).fetchSemanticsNodes().size
+            // Design v2 shows the badge in capitals.
+            composeRule.onAllNodesWithText(
+                context.getString(R.string.profiles_chip_active).uppercase(context.resources.configuration.locales[0])
+            ).fetchSemanticsNodes().size
         )
     }
 

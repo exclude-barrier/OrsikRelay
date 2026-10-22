@@ -29,6 +29,10 @@ import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import kotlinx.coroutines.flow.emptyFlow
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
+import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
+import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
@@ -204,4 +208,27 @@ class DesignV2ShotsTest {
 
     @CaptureOnly @Test fun chatDark() = shot("04-chat-dark", ::waitForChat) { App(true, null) { Chat(it) } }
     @CaptureOnly @Test fun chatLight() = shot("04-chat-light", ::waitForChat) { App(false, null) { Chat(it) } }
+
+    private val serverAdmin = object : ProfileAdmin {
+        override fun listProfiles() = listOf(
+            ServerProfile.create("p1", "Heimserver", "https://hermes.example.ts.net:8443"),
+            ServerProfile.create("p2", "Büro-Server", "https://office.example.ts.net:8443")
+        )
+        override fun deleteProfile(profileId: String) = Unit
+        override fun selectActiveServer(profileId: String) = Unit
+        override fun credentialKind(profileId: String) =
+            if (profileId == "p1") ProfileCredentialKind.API_KEY else ProfileCredentialKind.DEVICE_CREDENTIAL
+    }
+
+    @Composable
+    private fun Servers(modifier: Modifier) {
+        ProfilesScreen(admin = serverAdmin, onBack = null, activeProfileId = "p1", activeReachable = true, modifier = modifier)
+    }
+
+    private fun waitForServers() {
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Büro-Server").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @CaptureOnly @Test fun serverDark() = shot("05-server-dark", ::waitForServers) { App(true, AppScreen.Server) { Servers(it) } }
+    @CaptureOnly @Test fun serverLight() = shot("05-server-light", ::waitForServers) { App(false, AppScreen.Server) { Servers(it) } }
 }

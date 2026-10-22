@@ -83,7 +83,7 @@ fun PreviewTile(
     val soon = stringResource(R.string.home_soon_badge)
     val content = MaterialTheme.colorScheme.onSurfaceVariant
     val base = modifier
-        .dashedBorder(MaterialTheme.colorScheme.outlineVariant, 24.dp, 1.5.dp)
+        .dashedBorder(MaterialTheme.colorScheme.outlineVariant, if (stacked) 24.dp else 20.dp, 1.5.dp)
         .semantics(mergeDescendants = true) {
             disabled()
             contentDescription = "$label, $soon"
@@ -113,13 +113,13 @@ fun PreviewTile(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = base
-                .heightIn(min = 72.dp)
-                .padding(horizontal = 18.dp)
+                .heightIn(min = 64.dp)
+                .padding(horizontal = 14.dp)
         ) {
             Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
             Text(
                 text = label,
-                fontSize = 15.sp,
+                fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = content,
                 maxLines = 1,

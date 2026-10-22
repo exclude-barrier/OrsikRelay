@@ -322,12 +322,13 @@
     <string name="nav_server">Server</string>
     <string name="nav_activity">Activity</string>
     <string name="nav_activity_approval">Activity, approval required</string>
-    <string name="placeholder_server_title">Server</string>
-    <string name="placeholder_server_text">System values, services and files of the server follow in a later version.</string>
     <string name="placeholder_activity_title">Activity</string>
     <string name="placeholder_activity_text">A history of everything your agents did follows in a later version.</string>
     <string name="sessions_running">running</string>
     <string name="sessions_pinned">Pinned</string>
     <string name="chat_header_subtitle">Hermes · %1$s</string>
     <string name="chat_tool_done">done</string>
+    <string name="profiles_status_not_connected">Not connected</string>
+    <string name="profiles_management">Management</string>
+    <string name="profiles_tile_monitoring">Monitoring</string>
 </resources>

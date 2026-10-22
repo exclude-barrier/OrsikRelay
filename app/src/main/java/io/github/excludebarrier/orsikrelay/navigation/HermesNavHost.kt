@@ -42,6 +42,7 @@ import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesMateri
 import io.github.excludebarrier.orsikrelay.data.settings.SharedPreferencesScreenProtectionSettingStore
 import io.github.excludebarrier.orsikrelay.data.theme.SharedPreferencesThemeSettingStore
 import io.github.excludebarrier.orsikrelay.di.AppDependenciesHolder
+import io.github.excludebarrier.orsikrelay.domain.connection.HermesConnectionResult
 import io.github.excludebarrier.orsikrelay.domain.connection.ProfileConnectionCoordinator
 import io.github.excludebarrier.orsikrelay.domain.device.PairingBootstrap
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistorySource
@@ -300,6 +301,52 @@ fun HermesNavHost(
         }
     }
 
+    // Server management, shown as the Server tab and as the Profiles route
+    // (opened from settings or the Home server switcher, with a back arrow).
+    @Composable
+    fun ServerManagement(onBack: (() -> Unit)?) {
+        val admin = profileAdmin ?: productionDependencies.value.profileAdmin
+        val check = serverConnectionCheck ?: productionDependencies.value.serverConnectionCheck
+        // Reachability of the active server: the same read-only probe as
+        // Home, never retried automatically.
+        val activeReachable by produceState<Boolean?>(null, activeProfileId) {
+            val profileId = activeProfileId?.takeIf { it.isNotBlank() } ?: return@produceState
+            value = try {
+                withContext(Dispatchers.IO) { check.check(profileId) } is HermesConnectionResult.Success
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                false
+            }
+        }
+        ProfilesScreen(
+            admin = admin,
+            activeProfileId = activeProfileId,
+            activeReachable = activeReachable,
+            onBack = onBack,
+            onProfileDeleted = { profileId ->
+                navHostCoroutineScope.launch { profileDeleted(profileId) }
+            },
+            onServerSelected = { profileId ->
+                navHostCoroutineScope.launch { serverSelected(profileId) }
+            },
+            onAddServer = {
+                navController.navigate(routeOf(AppScreen.Onboarding))
+            },
+            // A confirmed, server-acknowledged disconnect
+            // removes the local profile connection; the navigation is
+            // exactly the verified profile-deletion path, so no chat or
+            // session can keep living under the disconnected profile.
+            onDeviceDisconnected = { profileId ->
+                navHostCoroutineScope.launch { profileDeleted(profileId) }
+            },
+            disconnect = { profileId ->
+                productionDependencies.value.deviceDisconnectCoordinator
+                    .disconnect(profileId)
+            }
+        )
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val currentTab = BottomTabs.firstOrNull { routeOf(it) == currentRoute }
@@ -359,12 +406,10 @@ fun HermesNavHost(
                     }
                 )
             }
+            // The Server tab is the server management itself, without a
+            // way back (back from a tab returns to Home).
             composable(routeOf(AppScreen.Server)) {
-                PreviewPlaceholderScreen(
-                    title = stringResource(R.string.placeholder_server_title),
-                    text = stringResource(R.string.placeholder_server_text),
-                    testTag = SERVER_PLACEHOLDER_TAG
-                )
+                ServerManagement(onBack = null)
             }
             composable(routeOf(AppScreen.Activity)) {
                 PreviewPlaceholderScreen(
@@ -517,10 +562,7 @@ fun HermesNavHost(
                 )
             }
             composable(routeOf(AppScreen.Profiles)) {
-                ProfilesScreen(
-                    admin = profileAdmin
-                        ?: productionDependencies.value.profileAdmin,
-                    activeProfileId = activeProfileId,
+                ServerManagement(
                     // Guard against popping the back stack empty, exactly like the
                     // Chat back handler below: a fast double tap on "Zurück" must
                     // never pop the root entry and leave the NavHost without a
@@ -529,26 +571,6 @@ fun HermesNavHost(
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()
                         }
-                    },
-                    onProfileDeleted = { profileId ->
-                        navHostCoroutineScope.launch { profileDeleted(profileId) }
-                    },
-                    onServerSelected = { profileId ->
-                        navHostCoroutineScope.launch { serverSelected(profileId) }
-                    },
-                    onAddServer = {
-                        navController.navigate(routeOf(AppScreen.Onboarding))
-                    },
-                    // A confirmed, server-acknowledged disconnect
-                    // removes the local profile connection; the navigation is
-                    // exactly the verified profile-deletion path, so no chat or
-                    // session can keep living under the disconnected profile.
-                    onDeviceDisconnected = { profileId ->
-                        navHostCoroutineScope.launch { profileDeleted(profileId) }
-                    },
-                    disconnect = { profileId ->
-                        productionDependencies.value.deviceDisconnectCoordinator
-                            .disconnect(profileId)
                     }
                 )
             }
@@ -619,7 +641,6 @@ fun HermesNavHost(
     }
 }
 
-internal const val SERVER_PLACEHOLDER_TAG = "server_placeholder"
 internal const val ACTIVITY_PLACEHOLDER_TAG = "activity_placeholder"
 
 internal fun routeOf(screen: AppScreen): String = when (screen) {

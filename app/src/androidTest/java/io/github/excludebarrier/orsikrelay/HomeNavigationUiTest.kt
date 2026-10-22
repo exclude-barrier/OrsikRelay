@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -7,7 +8,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.platform.app.InstrumentationRegistry
@@ -37,7 +37,7 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.navigation.ACTIVITY_PLACEHOLDER_TAG
 import io.github.excludebarrier.orsikrelay.navigation.AppScreen
 import io.github.excludebarrier.orsikrelay.navigation.HermesNavHost
-import io.github.excludebarrier.orsikrelay.navigation.SERVER_PLACEHOLDER_TAG
+import io.github.excludebarrier.orsikrelay.ui.profiles.PROFILES_SCREEN_TAG
 import io.github.excludebarrier.orsikrelay.navigation.bottomTabTag
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
@@ -138,7 +138,10 @@ class HomeNavigationUiTest {
         // The Agents tab keeps the navigation bar, with its own tab selected.
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Sessions)).assertIsDisplayed().assertIsSelected()
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Server)).performClick()
-        waitForTag(SERVER_PLACEHOLDER_TAG)
+        waitForTag(PROFILES_SCREEN_TAG)
+        // The Server tab is the server management, with the bar still shown.
+        composeRule.onNodeWithTag(bottomTabTag(AppScreen.Server)).assertIsDisplayed().assertIsSelected()
+        composeRule.onAllNodesWithTag("settings_back").assertCountEquals(0)
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Activity)).performClick()
         waitForTag(ACTIVITY_PLACEHOLDER_TAG)
 
