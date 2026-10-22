@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import android.content.Context
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
@@ -364,7 +365,9 @@ class LiveBridgeRunControlE2ETest {
 
     /** The assistant row is identified by its role label only; text is never checked. */
     private fun assistantRowPresent(): Boolean =
-        composeRule.onAllNodesWithText(ASSISTANT_ROLE).fetchSemanticsNodes().isNotEmpty()
+        // Design v2 shows no visible sender label; Hermes' rows carry it
+        // as their accessibility description.
+        composeRule.onAllNodesWithContentDescription(ASSISTANT_ROLE).fetchSemanticsNodes().isNotEmpty()
 
     /** True while the composer's input field is not disabled by an active turn. */
     private fun composerFieldEnabled(): Boolean =
