@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikFields
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
@@ -88,6 +90,12 @@ fun NewSessionDialog(
     }
 
     AlertDialog(
+
+        shape = OrsikDialog.shape,
+
+        containerColor = OrsikDialog.containerColor,
+
+        tonalElevation = OrsikDialog.tonalElevation,
         modifier = modifier,
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text(text = stringResource(R.string.new_session_title)) },
@@ -99,7 +107,9 @@ fun NewSessionDialog(
                         style = MaterialTheme.typography.bodyLarge
                     )
                 } else {
-                    OutlinedTextField(
+                    TextField(
+                        shape = OrsikFields.shape,
+                        colors = OrsikFields.colors(),
                         value = titleInput,
                         onValueChange = { titleInput = it.take(MAX_TITLE_CHARACTERS) },
                         label = {

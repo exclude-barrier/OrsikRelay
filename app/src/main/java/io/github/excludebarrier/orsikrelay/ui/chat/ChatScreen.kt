@@ -29,10 +29,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
@@ -41,7 +38,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -82,6 +78,7 @@ import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.ui.components.AgentComposerDock
 import io.github.excludebarrier.orsikrelay.ui.components.AgentMark
 import io.github.excludebarrier.orsikrelay.ui.components.BottomDockArea
+import io.github.excludebarrier.orsikrelay.ui.components.ExpressiveShape
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
@@ -633,17 +630,15 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                         }
                         state.controlsVisible -> {
                             {
-                                OutlinedButton(
-                                    onClick = { viewModel.stop() },
-                                    enabled = !state.stopInFlight,
-                                    modifier = Modifier.testTag(TAG_RUN_STOP)
-                                ) {
-                                    Text(if (state.stopInFlight) stoppingLabel else stopLabel)
-                                }
-                                OutlinedTextField(
-                                    value = state.steerDraft,
-                                    onValueChange = { viewModel.onSteerDraftChange(it) },
-                                    label = { Text(steerInputLabel) },
+                                StopButton(
+                                    stopInFlight = state.stopInFlight,
+                                    label = if (state.stopInFlight) stoppingLabel else stopLabel,
+                                    onStop = { viewModel.stop() }
+                                )
+                                ChatInputField(
+                                    draft = state.steerDraft,
+                                    onDraftChange = { viewModel.onSteerDraftChange(it) },
+                                    label = steerInputLabel,
                                     enabled = !state.steerInFlight,
                                     maxLines = COMPACT_DRAFT_MAX_LINES,
                                     modifier = Modifier
@@ -651,12 +646,12 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                                         .padding(horizontal = 8.dp)
                                         .testTag("chatSteerInput")
                                 )
-                                OutlinedButton(
+                                IconButton(
                                     onClick = { viewModel.steer() },
                                     enabled = !state.steerInFlight,
                                     modifier = Modifier.testTag("chatSteerSend")
                                 ) {
-                                    Text(steerLabel)
+                                    Icon(OrsikIcons.ArrowUp, contentDescription = steerLabel)
                                 }
                             }
                         }
@@ -1287,12 +1282,36 @@ private fun ChatInputField(
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
         modifier = modifier
     )
+}
+
+/** The round stop action of a running turn (cookie shape, like send); a spinner while stopping. */
+@Composable
+private fun StopButton(stopInFlight: Boolean, label: String, onStop: () -> Unit) {
+    FilledIconButton(
+        onClick = onStop,
+        enabled = !stopInFlight,
+        shape = ExpressiveShape.Cookie.shape,
+        modifier = Modifier
+            .size(COMPOSER_ACTION_SIZE)
+            .semantics { contentDescription = label }
+            .testTag(TAG_RUN_STOP)
+    ) {
+        if (stopInFlight) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .background(LocalContentColor.current, RoundedCornerShape(2.dp))
+            )
+        }
+    }
 }
 
 /**
@@ -1324,30 +1343,12 @@ private fun RunComposerRow(controls: RunComposerControls, modifier: Modifier = M
                 modifier = Modifier.testTag("chatSteerSend")
             ) {
                 Icon(
-                    imageVector = OrsikIcons.Send,
+                    imageVector = OrsikIcons.ArrowUp,
                     contentDescription = stringResource(R.string.chat_steer),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            FilledIconButton(
-                onClick = controls.onStop,
-                enabled = !controls.stopInFlight,
-                shape = CircleShape,
-                modifier = Modifier
-                    .size(COMPOSER_ACTION_SIZE)
-                    .semantics { contentDescription = stopLabel }
-                    .testTag(TAG_RUN_STOP)
-            ) {
-                if (controls.stopInFlight) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .background(LocalContentColor.current, RoundedCornerShape(2.dp))
-                    )
-                }
-            }
+            StopButton(stopInFlight = controls.stopInFlight, label = stopLabel, onStop = controls.onStop)
         }
     )
 }
@@ -1444,7 +1445,7 @@ private fun CompactComposerRow(
                     modifier = Modifier.testTag(TAG_ATTACHMENT_ADD)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Add,
+                        imageVector = OrsikIcons.Plus,
                         contentDescription = attachmentAddLabel
                     )
                 }
@@ -1470,13 +1471,13 @@ private fun CompactComposerRow(
             FilledIconButton(
                 onClick = onSend,
                 enabled = sendEnabled,
-                shape = CircleShape,
+                shape = ExpressiveShape.Cookie.shape,
                 modifier = Modifier
                     .size(COMPOSER_ACTION_SIZE)
                     .testTag(TAG_COMPOSER_SEND)
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    imageVector = OrsikIcons.ArrowUp,
                     contentDescription = stringResource(R.string.chat_send)
                 )
             }
@@ -1614,7 +1615,7 @@ internal val COMPACT_THUMBNAIL_SIZE = 24.dp
 private val COMPOSER_ACTION_SIZE = 48.dp
 
 /** Corner radius of the pill-shaped message field. */
-private val COMPOSER_INPUT_CORNER = 28.dp
+private val COMPOSER_INPUT_CORNER = 30.dp
 
 /**
  * Maximum distance from the end of the timeline that still counts as

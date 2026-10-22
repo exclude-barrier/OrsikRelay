@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
 import io.github.excludebarrier.orsikrelay.domain.home.ServerConnectionCheck
 import io.github.excludebarrier.orsikrelay.ui.home.HomeRoute
-import io.github.excludebarrier.orsikrelay.ui.home.PreviewPlaceholderScreen
+import io.github.excludebarrier.orsikrelay.ui.activity.ActivityRoute
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -397,6 +397,7 @@ fun HermesNavHost(
                     attachmentSource = dependencies.value.chatAttachmentSource,
                     onOpenChat = ::openChat,
                     onOpenAllSessions = { openTab(AppScreen.Sessions) },
+                    onOpenServer = { openTab(AppScreen.Server) },
                     onSwitchServer = { navController.navigate(routeOf(AppScreen.Profiles)) },
                     onOpenSettings = {
                         navController.navigate(routeOf(AppScreen.Settings)) {
@@ -417,10 +418,11 @@ fun HermesNavHost(
                 ServerManagement(onBack = null)
             }
             composable(routeOf(AppScreen.Activity)) {
-                PreviewPlaceholderScreen(
-                    title = stringResource(R.string.placeholder_activity_title),
-                    text = stringResource(R.string.placeholder_activity_text),
-                    testTag = ACTIVITY_PLACEHOLDER_TAG
+                ActivityRoute(
+                    profileId = activeProfileId.orEmpty(),
+                    runController = runController ?: productionDependencies.value.runController,
+                    runStatusRequester = runStatusRequester ?: productionDependencies.value.runStatusRequester,
+                    onOpenChat = ::openChat
                 )
             }
             composable(routeOf(AppScreen.Welcome)) {
@@ -659,7 +661,6 @@ fun HermesNavHost(
     }
 }
 
-internal const val ACTIVITY_PLACEHOLDER_TAG = "activity_placeholder"
 
 internal fun routeOf(screen: AppScreen): String = when (screen) {
     AppScreen.Welcome -> "welcome"

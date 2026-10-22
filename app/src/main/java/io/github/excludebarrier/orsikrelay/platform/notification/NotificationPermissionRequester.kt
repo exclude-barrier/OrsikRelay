@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import io.github.excludebarrier.orsikrelay.data.notification.NotificationPermissionStore
 
 /**
@@ -64,6 +65,9 @@ fun NotificationPermissionRequester(
 
     if (justificationVisible) {
         AlertDialog(
+            shape = OrsikDialog.shape,
+            containerColor = OrsikDialog.containerColor,
+            tonalElevation = OrsikDialog.tonalElevation,
             onDismissRequest = {
                 // Dismissing the justification is treated as "not now": the
                 // choice is recorded so the app never re-asks.

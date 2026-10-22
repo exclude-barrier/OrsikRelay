@@ -26,6 +26,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.draft.NoOpChatDraftRepository
+import io.github.excludebarrier.orsikrelay.ui.activity.ActivityScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import kotlinx.coroutines.flow.emptyFlow
@@ -291,4 +292,11 @@ class DesignV2ShotsTest {
 
     @CaptureOnly @Test fun welcomeDark() = shot("07-willkommen-dark") { App(true, null) { WelcomeScreen(onScan = {}, onEnterCode = {}, modifier = it, cameraAvailable = true) } }
     @CaptureOnly @Test fun welcomeLight() = shot("07-willkommen-light") { App(false, null) { WelcomeScreen(onScan = {}, onEnterCode = {}, modifier = it, cameraAvailable = true) } }
+
+    @CaptureOnly @Test fun activityDark() = shot("08-aktivitaet-dark") {
+        App(true, AppScreen.Activity) { ActivityScreen(runs = home.runs, onOpenRun = {}, modifier = it) }
+    }
+    @CaptureOnly @Test fun activityEmptyLight() = shot("08-aktivitaet-leer-light") {
+        App(false, AppScreen.Activity, approvalPending = false) { ActivityScreen(runs = emptyList(), onOpenRun = {}, modifier = it) }
+    }
 }

@@ -52,7 +52,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.foundation.horizontalScroll
@@ -62,6 +61,10 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.ui.components.GroupGap
+import io.github.excludebarrier.orsikrelay.ui.components.EmptyState
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
+import androidx.compose.material.icons.filled.Warning
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewBadge
@@ -344,13 +347,12 @@ fun SessionsScreen(
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
                     ) {
-                        Text(
-                            text = stringResource(R.string.sessions_loading),
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
+                        EmptyState(
+                            title = stringResource(R.string.sessions_loading),
+                            leading = { OrsikLoadingIndicator(size = 56.dp) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 24.dp)
+                                .padding(top = 48.dp)
                         )
                     }
                 }
@@ -367,32 +369,30 @@ fun SessionsScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(top = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                            .padding(top = 48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center
+                        EmptyState(
+                            title = message,
+                            hint = hint,
+                            hintTestTag = "sessionsErrorHint",
+                            leading = {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            },
+                            action = {
+                                Button(
+                                    onClick = { loadPage(offset = 0, append = false) },
+                                    shape = OrsikShapes.pill
+                                ) {
+                                    Text(text = stringResource(R.string.sessions_retry))
+                                }
+                            }
                         )
-                        if (hint != null) {
-                            Text(
-                                text = hint,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .padding(top = 8.dp)
-                                    .testTag("sessionsErrorHint")
-                            )
-                        }
-                        Button(
-                            onClick = { loadPage(offset = 0, append = false) },
-                            modifier = Modifier.padding(top = 16.dp)
-                        ) {
-                            Text(text = stringResource(R.string.sessions_retry))
-                        }
                     }
                 }
 
@@ -433,8 +433,8 @@ fun SessionsScreen(
                         ) {
                             if (filteredSessions.isEmpty()) {
                                 item(key = "empty") {
-                                    Text(
-                                        text = if (searching) {
+                                    EmptyState(
+                                        title = if (searching) {
                                             stringResource(
                                                 R.string.sessions_search_no_results,
                                                 SessionSearch.displayQuery(searchQuery)
@@ -442,18 +442,20 @@ fun SessionsScreen(
                                         } else {
                                             stringResource(R.string.sessions_empty)
                                         },
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        textAlign = TextAlign.Center,
+                                        icon = if (searching) OrsikIcons.Search else OrsikIcons.Chat,
+                                        hint = if (searching || !canCreateSession) {
+                                            null
+                                        } else {
+                                            stringResource(R.string.sessions_empty_hint)
+                                        },
+                                        titleTestTag = if (searching) {
+                                            "sessionsSearchNoResults"
+                                        } else {
+                                            "sessionsEmpty"
+                                        },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(top = 24.dp)
-                                            .testTag(
-                                                if (searching) {
-                                                    "sessionsSearchNoResults"
-                                                } else {
-                                                    "sessionsEmpty"
-                                                }
-                                            )
+                                            .padding(top = 40.dp)
                                     )
                                 }
                             }

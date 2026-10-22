@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -132,7 +134,7 @@ private fun SettingsButton(onClick: () -> Unit, filled: Boolean, testTag: String
             .testTag(testTag)
     ) {
         Icon(
-            OrsikIcons.Tune,
+            Icons.Outlined.Settings,
             contentDescription = stringResource(R.string.home_open_settings),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(22.dp)
@@ -306,47 +308,16 @@ fun SectionTitle(
     }
 }
 
+/** From this font scale on, the approval card stacks "Prüfen" below its text. */
+private const val STACKED_FONT_SCALE = 1.3f
+
 @Composable
 fun ApprovalBanner(title: String?, onReview: () -> Unit, modifier: Modifier = Modifier) {
     val colors = OrsikTheme.statusColors
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(OrsikShapes.card)
-            .background(colors.warnContainer)
-            .padding(14.dp)
-            .testTag(HomeTags.APPROVAL)
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(44.dp)
-                .clip(ExpressiveShape.Sunny.shape)
-                .background(colors.warn)
-        ) {
-            Icon(OrsikIcons.Shield, contentDescription = null, tint = colors.onWarn, modifier = Modifier.size(20.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.home_approval_title),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.onWarnContainer
-            )
-            Text(
-                text = stringResource(
-                    R.string.home_approval_subtitle,
-                    title ?: stringResource(R.string.home_run_untitled)
-                ),
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                color = colors.onWarnContainer,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+    // Side by side the button squeezes the text column; at large font sizes
+    // that broke words mid-word, so the button moves below the text.
+    val stacked = LocalDensity.current.fontScale >= STACKED_FONT_SCALE
+    val review: @Composable () -> Unit = {
         Button(
             onClick = onReview,
             shape = OrsikShapes.pill,
@@ -354,6 +325,54 @@ fun ApprovalBanner(title: String?, onReview: () -> Unit, modifier: Modifier = Mo
             modifier = Modifier.testTag(HomeTags.APPROVAL_REVIEW)
         ) {
             Text(stringResource(R.string.home_approval_review), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(OrsikShapes.card)
+            .background(colors.warnContainer)
+            .padding(14.dp)
+            .testTag(HomeTags.APPROVAL)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(ExpressiveShape.Sunny.shape)
+                    .background(colors.warn)
+            ) {
+                Icon(OrsikIcons.Shield, contentDescription = null, tint = colors.onWarn, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_approval_title),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onWarnContainer
+                )
+                Text(
+                    text = stringResource(
+                        R.string.home_approval_subtitle,
+                        title ?: stringResource(R.string.home_run_untitled)
+                    ),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = colors.onWarnContainer,
+                    maxLines = if (stacked) 3 else 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (!stacked) review()
+        }
+        if (stacked) {
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.CenterEnd) {
+                review()
+            }
         }
     }
 }
@@ -452,29 +471,29 @@ fun ServerStatusStrip(connected: Boolean, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun QuickActionGrid(onOpenChat: () -> Unit, modifier: Modifier = Modifier) {
-    val tiles = listOf(
-        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server),
+fun QuickActionGrid(onNewChat: () -> Unit, onOpenServer: () -> Unit, modifier: Modifier = Modifier) {
+    // Live tiles first (KI-Chat starts a new chat, Server opens the Server
+    // tab), then the tools that only mark their future place.
+    val cells = listOf(
+        QuickTile("chat", R.string.home_quick_chat, OrsikIcons.Chat, onClick = onNewChat, filled = true),
+        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server, onClick = onOpenServer),
         QuickTile("terminal", R.string.home_quick_terminal, OrsikIcons.Terminal),
         QuickTile("files", R.string.home_quick_files, OrsikIcons.Folder),
         QuickTile("docker", R.string.home_quick_docker, OrsikIcons.Container),
         QuickTile("projects", R.string.home_quick_projects, OrsikIcons.Code)
     )
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val cells: List<QuickTile?> = listOf(null) + tiles
         cells.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { tile ->
-                    if (tile == null) {
-                        ChatTile(onClick = onOpenChat, modifier = Modifier.weight(1f).testTag(HomeTags.QUICK_CHAT))
+                    val tileModifier = Modifier
+                        .weight(1f)
+                        .testTag(HomeTags.QUICK_TILE_PREFIX + tile.key)
+                    val onClick = tile.onClick
+                    if (onClick != null) {
+                        LiveTile(stringResource(tile.labelRes), tile.icon, tile.filled, onClick, tileModifier)
                     } else {
-                        PreviewTile(
-                            label = stringResource(tile.labelRes),
-                            icon = tile.icon,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag(HomeTags.QUICK_TILE_PREFIX + tile.key)
-                        )
+                        PreviewTile(label = stringResource(tile.labelRes), icon = tile.icon, modifier = tileModifier)
                     }
                 }
             }
@@ -482,23 +501,40 @@ fun QuickActionGrid(onOpenChat: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-private class QuickTile(val key: String, val labelRes: Int, val icon: ImageVector)
+/** One quick-access tile; without [onClick] it is a disabled "Bald" preview. */
+private class QuickTile(
+    val key: String,
+    val labelRes: Int,
+    val icon: ImageVector,
+    val onClick: (() -> Unit)? = null,
+    val filled: Boolean = false
+)
 
+/**
+ * A quick-access tile that works today: [filled] is the primary "KI-Chat"
+ * tile, otherwise a card-coloured tile (Server).
+ */
 @Composable
-private fun ChatTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val content = MaterialTheme.colorScheme.onPrimary
+private fun LiveTile(
+    label: String,
+    icon: ImageVector,
+    filled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val content = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
         modifier = modifier
             .height(92.dp)
             .clip(OrsikShapes.card)
-            .background(MaterialTheme.colorScheme.primary)
+            .background(if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(onClick = onClick)
             .padding(14.dp)
     ) {
-        Icon(OrsikIcons.Chat, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = if (filled) content else MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
         Text(
-            text = stringResource(R.string.home_quick_chat),
+            text = label,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = content,

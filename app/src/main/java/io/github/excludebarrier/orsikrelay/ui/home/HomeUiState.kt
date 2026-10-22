@@ -31,7 +31,8 @@ enum class HomeNotice {
     Busy,
     AttachmentUnsupported,
     AttachmentTooLarge,
-    AttachmentUnreadable
+    AttachmentUnreadable,
+    NewChatFailed
 }
 
 /** Everything the stateless [HomeScreen] renders. */

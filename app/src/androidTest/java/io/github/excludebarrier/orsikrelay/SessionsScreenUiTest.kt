@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.ui.components.TAG_LOADING_INDICATOR
 import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_PREVIEW_PREFIX
 import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_HERMES_TAG
@@ -614,6 +615,24 @@ class SessionsScreenUiTest {
         composeRule.onNodeWithText("Fixture Run").assert(hasText(context.getString(R.string.sessions_running), substring = true))
         composeRule.onNodeWithText("Fixture Idle").assert(hasText(context.getString(R.string.sessions_running), substring = true).not())
         composeRule.onAllNodesWithTag(TAG_LOADING_INDICATOR, useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun loadingShowsTheLoadingStarAndAnEmptyListOffersAHint() {
+        val release = CountDownLatch(1)
+        setScreen(
+            SessionPageSource { _, _, _ ->
+                release.await(3, TimeUnit.SECONDS)
+                success(emptyList(), false)
+            },
+            creator = SessionCreator { _, _ -> SessionCreateResult.Failure(SessionCreateError.Network) }
+        )
+        composeRule.waitUntil(3_000) {
+            composeRule.onAllNodesWithTag(TAG_LOADING_INDICATOR, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        release.countDown()
+        waitForText(context.getString(R.string.sessions_empty))
+        composeRule.onNodeWithText(context.getString(R.string.sessions_empty_hint)).assertIsDisplayed()
     }
 
     private fun setScreen(

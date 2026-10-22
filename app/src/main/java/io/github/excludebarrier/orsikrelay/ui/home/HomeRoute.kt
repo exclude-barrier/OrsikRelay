@@ -24,6 +24,7 @@ import io.github.excludebarrier.orsikrelay.domain.home.ServerConnectionCheck
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
@@ -67,6 +68,8 @@ fun HomeRoute(
     attachmentSource: ChatAttachmentSource,
     onOpenChat: (sessionId: String, title: String?) -> Unit,
     onOpenAllSessions: () -> Unit,
+    /** The bottom bar's Server tab (quick access "Server"). */
+    onOpenServer: () -> Unit,
     onSwitchServer: () -> Unit,
     onOpenSettings: () -> Unit,
     /** No server is saved at all (e.g. the last one was deleted). */
@@ -135,31 +138,14 @@ fun HomeRoute(
         HomeMemory.recent[profileId] = recent
     }
 
-    // Polls GET /v1/runs/{id} only while Home is at least STARTED.
-    val tracker = remember(runController, runStatusRequester) {
-        HomeRunTracker(
-            activeRun = runController.activeRun,
-            statusRequester = runStatusRequester,
-            releaseUncertain = runController::confirmTerminalForUncertainRun
-        )
-    }
-    val trackedFlow = remember(tracker) { tracker.runs() }
-    val tracked by trackedFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-    val activeRun by runController.activeRun.collectAsState()
     val readyRecent = (recent as? HomeRecent.Ready)?.sessions.orEmpty()
-    val runs = tracked
-        .filter { it.profileId == profileId }
-        .map { run ->
-            val title = readyRecent.firstOrNull { it.id == run.sessionId }?.title?.takeIf { it.isNotBlank() }
-                ?: activeRun?.takeIf { it.sessionId == run.sessionId }?.userMessage
-                    ?.lineSequence()?.firstOrNull()?.take(80)?.takeIf { it.isNotBlank() }
-            HomeRunItem(run.sessionId, title, run.awaitingApproval, run.uncertain)
-        }
+    val runs = rememberRunItems(profileId, runController, runStatusRequester, readyRecent)
 
     var draft by rememberSaveable(profileId) { mutableStateOf("") }
     var attachment by remember(profileId) { mutableStateOf<ChatAttachmentDraft?>(null) }
     var attachmentBusy by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
+    var creatingChat by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<HomeNotice?>(null) }
 
     val pickImage = rememberImagePicker { uri ->
@@ -265,6 +251,29 @@ fun HomeRoute(
         }
     }
 
+    // Quick access "KI-Chat": a fresh, empty chat, opened right away.
+    fun newChat() {
+        if (creatingChat) return
+        creatingChat = true
+        notice = null
+        scope.launch {
+            try {
+                val created = withContext(ioDispatcher) { sessionCreator.createSession(profileId, null) }
+                if (created is SessionCreateResult.Success) {
+                    onOpenChat(created.sessionId, created.title)
+                } else {
+                    notice = HomeNotice.NewChatFailed
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                notice = HomeNotice.NewChatFailed
+            } finally {
+                creatingChat = false
+            }
+        }
+    }
+
     HomeScreen(
         state = HomeUiState(
             serverName = serverName,
@@ -289,8 +298,43 @@ fun HomeRoute(
         },
         onOpenSession = { session -> onOpenChat(session.id, session.title) },
         onOpenAllSessions = onOpenAllSessions,
+        onNewChat = ::newChat,
+        onOpenServer = onOpenServer,
         onSwitchServer = onSwitchServer,
         onOpenSettings = onOpenSettings,
         onRetry = { retryCount += 1 }
     )
+}
+
+/**
+ * The runs this app started on [profileId], as Home and the Activity tab
+ * show them: [HomeRunTracker] projects and reconciles the single run slot
+ * (polling only while the screen is at least STARTED); the title comes from
+ * [knownSessions] or, failing that, the first line of the user's message.
+ */
+@Composable
+internal fun rememberRunItems(
+    profileId: String,
+    runController: RunSessionController,
+    runStatusRequester: RunStatusRequester,
+    knownSessions: List<HermesSession> = emptyList()
+): List<HomeRunItem> {
+    val tracker = remember(runController, runStatusRequester) {
+        HomeRunTracker(
+            activeRun = runController.activeRun,
+            statusRequester = runStatusRequester,
+            releaseUncertain = runController::confirmTerminalForUncertainRun
+        )
+    }
+    val trackedFlow = remember(tracker) { tracker.runs() }
+    val tracked by trackedFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val activeRun by runController.activeRun.collectAsState()
+    return tracked
+        .filter { it.profileId == profileId }
+        .map { run ->
+            val title = knownSessions.firstOrNull { it.id == run.sessionId }?.title?.takeIf { it.isNotBlank() }
+                ?: activeRun?.takeIf { it.sessionId == run.sessionId }?.userMessage
+                    ?.lineSequence()?.firstOrNull()?.take(80)?.takeIf { it.isNotBlank() }
+            HomeRunItem(run.sessionId, title, run.awaitingApproval, run.uncertain)
+        }
 }

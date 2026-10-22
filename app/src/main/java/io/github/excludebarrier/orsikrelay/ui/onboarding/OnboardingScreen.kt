@@ -3,10 +3,8 @@ package io.github.excludebarrier.orsikrelay.ui.onboarding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,10 +25,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.password
@@ -54,9 +46,17 @@ import androidx.compose.ui.semantics.testTag as semanticsTestTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.components.ConnectedButtonGroup
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikFields
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
+import androidx.compose.material3.TextField
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.unit.sp
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import io.github.excludebarrier.orsikrelay.domain.device.DevicePairCode
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileFormValidator
@@ -64,7 +64,6 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeCard
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
 import io.github.excludebarrier.orsikrelay.ui.pairing.PairingQrScannerScreen
-import io.github.excludebarrier.orsikrelay.ui.settings.SettingsTopBar
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -212,38 +211,27 @@ fun OnboardingScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        if (onBack != null) {
-            SettingsTopBar(
-                title = stringResource(R.string.onboarding_title),
-                onBack = onBack,
-                backButtonTestTag = "onboardingBack"
-            )
-        }
+        // Design v2: the large screen title; the back arrow only when there
+        // is somewhere to return to (Welcome, server management).
+        OrsikLargeHeader(
+            title = stringResource(R.string.onboarding_title),
+            onBack = onBack,
+            backTestTag = "onboardingBack"
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(
-                    horizontal = 24.dp,
-                    vertical = if (onBack != null) 16.dp else 32.dp
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.Top
         ) {
-            if (onBack == null) {
-                Text(
-                    text = stringResource(R.string.onboarding_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    textAlign = TextAlign.Center
-                )
-            }
             Text(
                 text = stringResource(R.string.onboarding_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 16.sp,
+                lineHeight = 24.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp)
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
 
             Column(
@@ -257,51 +245,24 @@ fun OnboardingScreen(
                     // target), and each segment fills it. The pairing label is
                     // deliberately just "Pairing code" so it stays on one line;
                     // the recommendation moved to a badge below the segment.
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp)
-                            .height(IntrinsicSize.Min)
-                    ) {
-                        SegmentedButton(
-                            selected = mode == OnboardingMode.Pairing,
-                            onClick = { switchMode(OnboardingMode.Pairing) },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .testTag("onboardingModePairing"),
-                            icon = {}
-                        ) {
-                            Text(
-                                text = stringResource(R.string.onboarding_mode_pairing),
-                                textAlign = TextAlign.Center,
-                                fontWeight = if (mode == OnboardingMode.Pairing) {
-                                    FontWeight.SemiBold
+                    ConnectedButtonGroup(
+                        options = listOf(OnboardingMode.Pairing, OnboardingMode.ApiKey),
+                        selected = mode,
+                        label = { option ->
+                            stringResource(
+                                if (option == OnboardingMode.Pairing) {
+                                    R.string.onboarding_mode_pairing
                                 } else {
-                                    FontWeight.Normal
+                                    R.string.onboarding_mode_api_key
                                 }
                             )
-                        }
-                        SegmentedButton(
-                            selected = mode == OnboardingMode.ApiKey,
-                            onClick = { switchMode(OnboardingMode.ApiKey) },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .testTag("onboardingModeApiKey"),
-                            icon = {}
-                        ) {
-                            Text(
-                                text = stringResource(R.string.onboarding_mode_api_key),
-                                textAlign = TextAlign.Center,
-                                fontWeight = if (mode == OnboardingMode.ApiKey) {
-                                    FontWeight.SemiBold
-                                } else {
-                                    FontWeight.Normal
-                                }
-                            )
-                        }
-                    }
+                        },
+                        onSelect = { switchMode(it) },
+                        testTag = { option ->
+                            if (option == OnboardingMode.Pairing) "onboardingModePairing" else "onboardingModeApiKey"
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                     IconButton(
                         onClick = { showModeInfo = true },
                         modifier = Modifier
@@ -326,9 +287,9 @@ fun OnboardingScreen(
                     ) {
                         if (mode == OnboardingMode.Pairing) {
                             Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                shape = CircleShape
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                shape = OrsikShapes.badge
                             ) {
                                 Text(
                                     text = stringResource(R.string.onboarding_mode_pairing_recommended),
@@ -349,17 +310,25 @@ fun OnboardingScreen(
                 FilledTonalButton(
                     onClick = { showScanner = true },
                     enabled = !isConnecting,
+                    shape = OrsikShapes.pill,
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 24.dp)
+                        .heightIn(min = 52.dp)
+                        .padding(top = 20.dp)
                         .testTag("onboardingScanQr")
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_qr_code_scanner),
-                        contentDescription = null
+                        imageVector = OrsikIcons.Scan,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
                     )
                     Text(
                         text = stringResource(R.string.onboarding_scan_qr),
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 }
@@ -371,7 +340,9 @@ fun OnboardingScreen(
                     .fillMaxWidth()
                     .padding(top = 16.dp)
             ) {
-                OutlinedTextField(
+                TextField(
+                    shape = OrsikFields.shape,
+                    colors = OrsikFields.colors(),
                     value = profileName,
                     onValueChange = {
                         profileName = it
@@ -389,7 +360,9 @@ fun OnboardingScreen(
                         .testTag("onboardingProfileName")
                 )
 
-                OutlinedTextField(
+                TextField(
+                    shape = OrsikFields.shape,
+                    colors = OrsikFields.colors(),
                     value = baseUrl,
                     onValueChange = {
                         baseUrl = it
@@ -413,7 +386,9 @@ fun OnboardingScreen(
                     // secret. It is rendered with password semantics and
                     // validated locally; the API-key field is not present
                     // in this mode at all.
-                    OutlinedTextField(
+                    TextField(
+                        shape = OrsikFields.shape,
+                        colors = OrsikFields.colors(),
                         value = pairingCode,
                         onValueChange = {
                             pairingCode = it
@@ -440,7 +415,9 @@ fun OnboardingScreen(
                             }
                     )
                 } else {
-                    OutlinedTextField(
+                    TextField(
+                        shape = OrsikFields.shape,
+                        colors = OrsikFields.colors(),
                         value = apiKey,
                         onValueChange = {
                             apiKey = it
@@ -481,8 +458,10 @@ fun OnboardingScreen(
             Button(
                 onClick = { submit() },
                 enabled = !isConnecting,
+                shape = OrsikShapes.pill,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 56.dp)
                     .padding(top = 24.dp)
                     .testTag("onboardingSubmitButton")
             ) {
@@ -504,6 +483,9 @@ fun OnboardingScreen(
 
     if (showModeInfo) {
         AlertDialog(
+            shape = OrsikDialog.shape,
+            containerColor = OrsikDialog.containerColor,
+            tonalElevation = OrsikDialog.tonalElevation,
             onDismissRequest = { showModeInfo = false },
             confirmButton = {
                 TextButton(onClick = { showModeInfo = false }) {

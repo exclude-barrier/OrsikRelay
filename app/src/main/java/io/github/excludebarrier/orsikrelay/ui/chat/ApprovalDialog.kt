@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,6 +33,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalChoice
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
@@ -161,9 +161,9 @@ fun ApprovalDialog(
         // BasicAlertDialog draws no container of its own: without this
         // surface the dialog text would sit transparently over the chat.
         Surface(
-            shape = AlertDialogDefaults.shape,
-            color = AlertDialogDefaults.containerColor,
-            tonalElevation = AlertDialogDefaults.TonalElevation,
+            shape = OrsikDialog.shape,
+            color = OrsikDialog.containerColor,
+            tonalElevation = OrsikDialog.tonalElevation,
             modifier = Modifier.testTag(TAG_SURFACE)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
