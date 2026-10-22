@@ -109,8 +109,12 @@ class HomeRunTracker(
                         }
                         when (result) {
                             is RunStatusResult.Known -> {
-                                if (result.status.isTerminal) {
+                                // Hidden and no longer polled only once the slot
+                                // was really released; a live run whose stream
+                                // has not ended yet stays visible and polled.
+                                if (result.status.isTerminal &&
                                     releaseUncertain(profileId, sessionId, runId)
+                                ) {
                                     terminal = true
                                     send(emptyList())
                                     return@launch

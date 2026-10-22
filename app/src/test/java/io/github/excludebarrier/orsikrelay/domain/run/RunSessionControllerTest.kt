@@ -1165,6 +1165,56 @@ class RunSessionControllerTest {
     }
 
     @Test
+    fun anUnreadableLeaseIsKeptNotCleared() = runTest {
+        val store = FakeLeaseStore(initial = lease, failLoad = true)
+        val built = build(this.testScheduler, leaseStore = store)
+        testScheduler.advanceUntilIdle()
+        // Unreadable now is not "no lease": a later start may still read it.
+        assertEquals(lease, store.current)
+        built.controller.close()
+    }
+
+    @Test
+    fun theUserCanReleaseAnUnconfirmedUncertainRunOnlyForItsOwnChat() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        testScheduler.advanceUntilIdle()
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
+
+        assertFalse(built.controller.releaseUncertainByUser(profileId, "other-session"))
+        assertNotNull(built.controller.activeRun.value)
+        assertTrue(built.controller.releaseUncertainByUser(profileId, sessionId))
+        assertNull(built.controller.activeRun.value)
+        built.controller.close()
+    }
+
+    @Test
+    fun aLiveRunCannotBeReleasedByTheUser() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        assertTrue(built.source.opened.await(1, TimeUnit.SECONDS))
+        assertFalse(built.controller.releaseUncertainByUser(profileId, sessionId))
+        assertNotNull(built.controller.activeRun.value)
+        built.controller.close()
+    }
+
+    @Test
+    fun aLateStopAnswerForAnotherRunNeverCancelsTheCurrentOne() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted("run_current"))
+        testScheduler.advanceUntilIdle()
+
+        built.controller.cancelTurn("run_old")
+        assertNotNull("a foreign run id is a no-op", built.controller.activeRun.value)
+        built.controller.cancelTurn("run_current")
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
+        built.controller.close()
+    }
+
+    @Test
     fun startIsRefusedUntilTheLeaseRestoreFinished() = runTest {
         val store = FakeLeaseStore(lease)
         val built = build(

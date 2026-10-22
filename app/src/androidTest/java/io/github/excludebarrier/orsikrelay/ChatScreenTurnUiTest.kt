@@ -84,6 +84,11 @@ class ChatScreenTurnUiTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    @org.junit.Before
+    fun resetAttemptedApprovals() {
+        io.github.excludebarrier.orsikrelay.ui.chat.AttemptedApprovals.reset()
+    }
+
     @Test
     fun composerAppearsAfterHistoryLoadAndBlankInputIsDisabled() {
         val source = FakeTurnSource()

@@ -186,6 +186,15 @@ internal data class ChatUiState(
         get() = turnUncertain && boundRunId?.isNotBlank() == true
 
     /**
+     * The uncertain run can no longer be proven over (no confirmed run ID,
+     * the status read failed, or a lost run without its key): the user may
+     * release it in the app. Never while a status read or close runs.
+     */
+    val releaseVisible: Boolean
+        get() = turnUncertain && !reconcileInFlight && !resolveInFlight && lostRun == null &&
+            (boundRunId.isNullOrBlank() || reconcileFailed || lostRunWithoutKey)
+
+    /**
      * The composer send action is enabled only when no turn is active, no
      * post-start failure is shown, and the draft is locally valid. A failure
      * BEFORE the confirmed start does not block a new, deliberate submit;

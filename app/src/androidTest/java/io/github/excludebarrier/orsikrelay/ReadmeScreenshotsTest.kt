@@ -94,6 +94,11 @@ class ReadmeScreenshotsTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>(StandardTestDispatcher())
 
+    @org.junit.Before
+    fun resetAttemptedApprovals() {
+        io.github.excludebarrier.orsikrelay.ui.chat.AttemptedApprovals.reset()
+    }
+
     @CaptureOnly
     @Test
     fun chatLight() {

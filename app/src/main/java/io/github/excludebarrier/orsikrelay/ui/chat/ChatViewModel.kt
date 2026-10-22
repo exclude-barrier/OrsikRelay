@@ -249,8 +249,10 @@ internal class ChatViewModel(
                     // finished adopts the restored UNCERTAIN run of its own
                     // session, so the manual reconciliation is offered and
                     // the composer stays blocked (no second POST).
+                    // An uncertain run without a confirmed ID (the send
+                    // failed before the server confirmed it) is adopted too,
+                    // so this chat can offer the release in the app.
                     active.uncertain &&
-                    active.runId != null &&
                     active.profileId == profileId &&
                     active.sessionId == sessionId &&
                     !_state.value.turnActive
@@ -258,7 +260,7 @@ internal class ChatViewModel(
                     _state.update {
                         it.copy(
                             turnActive = true,
-                            runStarted = true,
+                            runStarted = active.runId != null,
                             boundRunId = active.runId,
                             turnUncertain = true,
                             startConflict = false
@@ -655,6 +657,19 @@ internal class ChatViewModel(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * The user's confirmed "release in the app" for an uncertain run that
+     * can no longer be proven over. Local only (see
+     * [RunSessionController.releaseUncertainByUser]); the history is read
+     * again and the draft is kept.
+     */
+    fun releaseUncertainLocally() {
+        if (!_state.value.releaseVisible) return
+        if (runController.releaseUncertainByUser(profileId, sessionId)) {
+            releaseUncertainRun()
         }
     }
 
@@ -1285,7 +1300,7 @@ private fun turnSettled() {
                     // The history read is launched BEFORE the turn settles:
                     // settling cancels this in-flight stop job itself.
                     loadHistory()
-                    runController.cancelTurn()
+                    runController.cancelTurn(runId)
                     turnSettled()
                 }
                 is RunStopResult.Failure -> {

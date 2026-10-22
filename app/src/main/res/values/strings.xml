@@ -385,4 +385,9 @@
     <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
     <string name="home_task_projects_prompt">Which projects (Git repositories) are in my home directory on the server? Show name, branch and last commit for each.</string>
     <string name="chat_run_lost_no_key">Hermes reports this run as lost but gives the app nothing to close it with. Please check the run on the server.</string>
+    <string name="chat_run_release">Release in the app</string>
+    <string name="chat_run_release_title">Release the run in the app?</string>
+    <string name="chat_run_release_text">The app frees the chat without asking the server. If the run is still alive there, the server may reject a new message. Nothing is sent again.</string>
+    <string name="approval_close">Close</string>
+    <string name="approval_already_sent">A decision was already sent for this request.</string>
 </resources>
