@@ -30,6 +30,11 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.RunServerStatus
+import io.github.excludebarrier.orsikrelay.domain.run.RunResolveError
+import io.github.excludebarrier.orsikrelay.domain.run.RunResolveResult
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunUnknownResolver
+import io.github.excludebarrier.orsikrelay.domain.run.RunUnknownResolver
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -82,6 +87,8 @@ internal class ChatViewModel(
     private val runSteerRequester: RunSteerRequester,
     /** Reads the server-side status of a confirmed uncertain run (manual recovery). */
     private val runStatusRequester: RunStatusRequester = NoOpRunStatusRequester,
+    /** Closes a run the core lost, on the user's explicit tap only. */
+    private val runUnknownResolver: RunUnknownResolver = NoOpRunUnknownResolver,
     private val chatDraftRepository: ChatDraftRepository,
     /** Reads the picked attachment's metadata/bytes; no-op when unwired. */
     private val attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
@@ -593,7 +600,8 @@ internal class ChatViewModel(
             it.copy(
                 reconcileInFlight = true,
                 reconcileFailed = false,
-                reconcileStillActive = false
+                reconcileStillActive = false,
+                lostRun = null
             )
         }
         scope.launch {
@@ -626,6 +634,12 @@ internal class ChatViewModel(
                         _state.update { it.copy(reconcileInFlight = false) }
                     }
                 }
+                result is RunStatusResult.Known && result.status == RunServerStatus.UNKNOWN &&
+                    result.lostRun != null -> {
+                    // The core lost the run and blocks the chat until the
+                    // user closes it explicitly; nothing happens on its own.
+                    _state.update { it.copy(reconcileInFlight = false, lostRun = result.lostRun) }
+                }
                 result is RunStatusResult.Known -> {
                     _state.update {
                         it.copy(reconcileInFlight = false, reconcileStillActive = true)
@@ -635,6 +649,46 @@ internal class ChatViewModel(
                     _state.update {
                         it.copy(reconcileInFlight = false, reconcileFailed = true)
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * The user's explicit "close as cancelled" for a run the core lost:
+     * one `resolve-unknown` POST (never repeated). On success the core has
+     * ended the turn as interrupted, so it settles like a terminal status.
+     * A stale key (the run moved on) drops the offer; the user can check the
+     * status again.
+     */
+    fun resolveLostRun() {
+        val current = _state.value
+        val lostRun = current.lostRun ?: return
+        if (!current.turnUncertain || current.resolveInFlight) return
+        val runId = current.boundRunId?.takeIf { it.isNotBlank() } ?: return
+        _state.update { it.copy(resolveInFlight = true, reconcileFailed = false) }
+        scope.launch {
+            val result = try {
+                runUnknownResolver.resolve(profileId, runId, lostRun)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                RunResolveResult.Failure(RunResolveError.Failed)
+            }
+            if (coroutineContext[Job]?.isCancelled == true) return@launch
+            when (result) {
+                RunResolveResult.Resolved ->
+                    if (runController.confirmTerminalForUncertainRun(profileId, sessionId, runId)) {
+                        releaseUncertainRun()
+                    } else {
+                        _state.update { it.copy(resolveInFlight = false) }
+                    }
+                is RunResolveResult.Failure -> _state.update {
+                    it.copy(
+                        resolveInFlight = false,
+                        lostRun = null,
+                        reconcileFailed = result.error == RunResolveError.Failed
+                    )
                 }
             }
         }
@@ -655,6 +709,8 @@ internal class ChatViewModel(
                 reconcileInFlight = false,
                 reconcileFailed = false,
                 reconcileStillActive = false,
+                lostRun = null,
+                resolveInFlight = false,
                 runStarted = false,
                 boundRunId = null,
                 localLines = emptyList()

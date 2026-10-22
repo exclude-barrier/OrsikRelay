@@ -377,4 +377,7 @@
     <string name="sessions_delete_cancel">Cancel</string>
     <string name="sessions_manage_active">This chat is running. Stop it first.</string>
     <string name="sessions_manage_failed">That did not work. Please try again.</string>
+    <string name="chat_run_lost">Hermes lost this run, for example after a server restart. The chat stays blocked until you close the run as cancelled. It is not run again.</string>
+    <string name="chat_run_lost_resolve">Close as cancelled</string>
+    <string name="chat_run_lost_resolving">Closing…</string>
 </resources>

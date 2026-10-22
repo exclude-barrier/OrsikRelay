@@ -18,7 +18,14 @@ enum class RunServerStatus {
     COMPLETED,
     FAILED,
     CANCELLED,
-    INTERRUPTED;
+    INTERRUPTED,
+
+    /**
+     * Newer cores only: the core lost the run (e.g. after a crash) and
+     * blocks later turns of the chat until the user acknowledges it with
+     * `POST /v1/runs/{id}/resolve-unknown`. Not terminal.
+     */
+    UNKNOWN;
 
     /**
      * A terminal run can never become active again, so the ownership may
@@ -68,8 +75,18 @@ sealed interface RunStatusError {
  */
 sealed interface RunStatusResult {
     /** The server returned the pollable status of exactly the requested run. */
-    data class Known(val status: RunServerStatus) : RunStatusResult
+    data class Known(
+        val status: RunServerStatus,
+        /** Set only for [RunServerStatus.UNKNOWN] with a valid acknowledgement key. */
+        val lostRun: LostRun? = null
+    ) : RunStatusResult
 
     /** The status read failed; [error] is closed and generic. */
     data class Failure(val error: RunStatusError) : RunStatusResult
 }
+
+/**
+ * What the core needs to close a lost run: the admission it belongs to and
+ * the execution generation it was started in (both from the status read).
+ */
+data class LostRun(val admissionId: String, val generation: Int)

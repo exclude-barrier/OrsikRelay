@@ -30,6 +30,11 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopResult
 import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunServerStatus
+import io.github.excludebarrier.orsikrelay.domain.run.LostRun
+import io.github.excludebarrier.orsikrelay.domain.run.RunResolveError
+import io.github.excludebarrier.orsikrelay.domain.run.RunResolveResult
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunUnknownResolver
+import io.github.excludebarrier.orsikrelay.domain.run.RunUnknownResolver
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
@@ -114,6 +119,7 @@ class ChatViewModelTest {
         stop: RunStopRequester = FakeStopRequester(),
         steer: RunSteerRequester = FakeSteerRequester(),
         status: RunStatusRequester = NoOpRunStatusRequester,
+        resolver: RunUnknownResolver = NoOpRunUnknownResolver,
         draft: ChatDraftRepository = FakeDraftRepository(),
         serviceStarter: RunForegroundServiceStarter = FakeRunServiceStarter(),
         attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
@@ -138,6 +144,7 @@ class ChatViewModelTest {
             runStopRequester = stop,
             runSteerRequester = steer,
             runStatusRequester = status,
+            runUnknownResolver = resolver,
             chatDraftRepository = draft,
             attachmentSource = attachmentSource,
             profileId = profileId,
@@ -928,6 +935,105 @@ class ChatViewModelTest {
         assertEquals("no second POST", 1, chat.calls.get())
         model.onDraftChange("weiter")
         assertTrue(model.state.value.sendEnabled)
+    }
+
+    /** Records every resolve-unknown call and answers with [result]. */
+    private class FakeResolver(var result: RunResolveResult = RunResolveResult.Resolved) : RunUnknownResolver {
+        val calls = mutableListOf<Pair<String, LostRun>>()
+        override suspend fun resolve(profileId: String, runId: String, lostRun: LostRun): RunResolveResult {
+            calls += runId to lostRun
+            return result
+        }
+    }
+
+    private fun withResolverModel(
+        resolver: FakeResolver,
+        status: FakeRunStatusRequester = FakeRunStatusRequester(),
+        block: suspend kotlinx.coroutines.test.TestScope.(ChatViewModel, FakeTurnSource, FakeRunStatusRequester) -> Unit
+    ) = kotlinx.coroutines.test.runTest {
+        val chat = FakeTurnSource()
+        val model = build(this.testScheduler, chat = chat, status = status, resolver = resolver)
+        model.loadHistory()
+        testScheduler.advanceUntilIdle()
+        block(model, chat, status)
+        model.close()
+        lastController?.close()
+        lastController = null
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun aLostRunIsOfferedForClosingAndNothingHappensWithoutTheTap() {
+        val resolver = FakeResolver()
+        withResolverModel(resolver) { model, chat, status ->
+            enterUncertainRun(model, chat)
+            status.result = RunStatusResult.Known(RunServerStatus.UNKNOWN, LostRun("adm_1", 3))
+            model.reconcileUncertainRun()
+            advanceUntilIdle()
+
+            assertEquals(LostRun("adm_1", 3), model.state.value.lostRun)
+            assertFalse(model.state.value.reconcileStillActive)
+            assertTrue("still blocked", model.state.value.turnUncertain)
+            assertTrue("no acknowledgement on its own", resolver.calls.isEmpty())
+        }
+    }
+
+    @Test
+    fun closingALostRunFreesTheChatWithoutANewMessage() {
+        val resolver = FakeResolver()
+        withResolverModel(resolver) { model, chat, status ->
+            enterUncertainRun(model, chat)
+            status.result = RunStatusResult.Known(RunServerStatus.UNKNOWN, LostRun("adm_1", 3))
+            model.reconcileUncertainRun()
+            advanceUntilIdle()
+            model.resolveLostRun()
+            advanceUntilIdle()
+
+            assertEquals(listOf(runId to LostRun("adm_1", 3)), resolver.calls)
+            assertFalse(model.state.value.turnUncertain)
+            assertFalse(model.state.value.turnActive)
+            assertNull(model.state.value.lostRun)
+            assertEquals("no second POST", 1, chat.calls.get())
+            model.onDraftChange("weiter")
+            assertTrue(model.state.value.sendEnabled)
+        }
+    }
+
+    @Test
+    fun aStaleOrFailedCloseKeepsTheChatBlocked() {
+        val resolver = FakeResolver(RunResolveResult.Failure(RunResolveError.Stale))
+        withResolverModel(resolver) { model, chat, status ->
+            enterUncertainRun(model, chat)
+            status.result = RunStatusResult.Known(RunServerStatus.UNKNOWN, LostRun("adm_1", 3))
+            model.reconcileUncertainRun()
+            advanceUntilIdle()
+            model.resolveLostRun()
+            advanceUntilIdle()
+            assertTrue(model.state.value.turnUncertain)
+            assertNull("the stale key is dropped; check again", model.state.value.lostRun)
+            assertFalse(model.state.value.reconcileFailed)
+
+            resolver.result = RunResolveResult.Failure(RunResolveError.Failed)
+            model.reconcileUncertainRun()
+            advanceUntilIdle()
+            model.resolveLostRun()
+            advanceUntilIdle()
+            assertTrue(model.state.value.turnUncertain)
+            assertTrue(model.state.value.reconcileFailed)
+            assertEquals("one tap, one request", 2, resolver.calls.size)
+        }
+    }
+
+    @Test
+    fun anUnknownStatusWithoutAKeyStaysAStillActiveRun() {
+        withResolverModel(FakeResolver()) { model, chat, status ->
+            enterUncertainRun(model, chat)
+            status.result = RunStatusResult.Known(RunServerStatus.UNKNOWN, null)
+            model.reconcileUncertainRun()
+            advanceUntilIdle()
+            assertNull(model.state.value.lostRun)
+            assertTrue(model.state.value.reconcileStillActive)
+        }
     }
 
     @Test

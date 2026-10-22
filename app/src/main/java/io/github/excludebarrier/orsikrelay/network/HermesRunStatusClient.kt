@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileBaseUrlValidator
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
+import io.github.excludebarrier.orsikrelay.domain.run.LostRun
 import io.github.excludebarrier.orsikrelay.domain.run.RunServerStatus
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusError
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusResult
@@ -152,6 +153,9 @@ class HermesRunStatusClient(
         }
         val status = root.opt(STATUS_FIELD) as? String
             ?: throw StatusFailure(RunStatusError.IncompatibleApi)
+        if (status == UNKNOWN_STATUS) {
+            return RunStatusResult.Known(RunServerStatus.UNKNOWN, lostRun(root))
+        }
         return RunStatusResult.Known(
             when (status) {
                 QUEUED_STATUS -> RunServerStatus.QUEUED
@@ -165,6 +169,14 @@ class HermesRunStatusClient(
                 else -> throw StatusFailure(RunStatusError.IncompatibleApi)
             }
         )
+    }
+
+    /** The acknowledgement key of a lost run, or `null` when it is missing or unsafe. */
+    private fun lostRun(root: JSONObject): LostRun? {
+        val admissionId = root.opt(ADMISSION_ID_FIELD) as? String ?: return null
+        val generation = root.opt(GENERATION_FIELD) as? Int ?: return null
+        if (!isSafeOpaqueId(admissionId) || generation < 0) return null
+        return LostRun(admissionId, generation)
     }
 
     private class StatusFailure(val reason: RunStatusError) : Exception()
@@ -187,6 +199,9 @@ class HermesRunStatusClient(
         const val FAILED_STATUS = "failed"
         const val CANCELLED_STATUS = "cancelled"
         const val INTERRUPTED_STATUS = "interrupted"
+        const val UNKNOWN_STATUS = "unknown"
+        const val ADMISSION_ID_FIELD = "admission_id"
+        const val GENERATION_FIELD = "execution_generation"
         const val OK_CODE = 200
         const val NOT_FOUND_CODE = 404
         const val CONFLICT_CODE = 409

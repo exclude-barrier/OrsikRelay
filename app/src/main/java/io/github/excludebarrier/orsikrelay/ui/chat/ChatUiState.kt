@@ -9,6 +9,7 @@ import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
+import io.github.excludebarrier.orsikrelay.domain.run.LostRun
 
 /**
  * Closed UI timeline row: the small, separate UI-only type that unifies
@@ -126,6 +127,13 @@ internal data class ChatUiState(
     val reconcileFailed: Boolean = false,
     /** The last reconciliation proved the run still active server-side. */
     val reconcileStillActive: Boolean = false,
+    /**
+     * The last reconciliation found a run the core lost (status `unknown`):
+     * the key the user's explicit "close as cancelled" sends back.
+     */
+    val lostRun: LostRun? = null,
+    /** That acknowledgement is in flight. */
+    val resolveInFlight: Boolean = false,
     val runStarted: Boolean = false,
     val boundRunId: String? = null,
     val pendingApproval: ApprovalRequest? = null,

@@ -1,5 +1,9 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_RUN_RESOLVE_LOST
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.SemanticsActions
@@ -155,6 +159,34 @@ class ChatNoticeUiTest {
         composeRule.onNodeWithTag(TAG_RUN_RECONCILE)
             .assertIsDisplayed()
             .assertIsEnabled()
+    }
+
+    @Test
+    fun aLostRunOffersOnlyTheExplicitCloseAction() {
+        var resolves = 0
+        var reconciles = 0
+        render {
+            RunUncertainBlock(
+                inFlight = false,
+                canReconcile = true,
+                stillActive = false,
+                unavailable = false,
+                onReconcile = { reconciles++ },
+                lost = true,
+                resolving = false,
+                onResolve = { resolves++ }
+            )
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.chat_run_lost)).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(TAG_RUN_RECONCILE).assertCountEquals(0)
+        composeRule.onNodeWithTag(TAG_RUN_RESOLVE_LOST)
+            .assertTextEquals(context.getString(R.string.chat_run_lost_resolve))
+            .performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, resolves)
+            assertEquals(0, reconciles)
+        }
     }
 
     @Test

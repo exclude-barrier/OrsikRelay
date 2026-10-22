@@ -100,6 +100,8 @@ import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
+import io.github.excludebarrier.orsikrelay.domain.run.NoOpRunUnknownResolver
+import io.github.excludebarrier.orsikrelay.domain.run.RunUnknownResolver
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
@@ -157,6 +159,7 @@ fun ChatScreen(
     chatDraftRepository: ChatDraftRepository,
     runApprovalRequester: RunApprovalRequester = NoOpRunApprovalRequester,
     runStatusRequester: RunStatusRequester = NoOpRunStatusRequester,
+    runUnknownResolver: RunUnknownResolver = NoOpRunUnknownResolver,
     attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
     notificationPermissionStore: NotificationPermissionStore = NoOpNotificationPermissionStore,
     chatTextSizeController: ChatTextSizeController? = null,
@@ -200,6 +203,7 @@ fun ChatScreen(
             runStopRequester = runStopRequester,
             runSteerRequester = runSteerRequester,
             runStatusRequester = runStatusRequester,
+            runUnknownResolver = runUnknownResolver,
             chatDraftRepository = chatDraftRepository,
             attachmentSource = attachmentSource,
             profileId = profileId,
@@ -532,7 +536,10 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                         canReconcile = state.recoveryVisible,
                         stillActive = state.reconcileStillActive,
                         unavailable = state.reconcileFailed,
-                        onReconcile = { viewModel.reconcileUncertainRun() }
+                        onReconcile = { viewModel.reconcileUncertainRun() },
+                        lost = state.lostRun != null,
+                        resolving = state.resolveInFlight,
+                        onResolve = { viewModel.resolveLostRun() }
                     )
                 } else if (failure != null) {
                     TurnFailureBlock(
@@ -1003,17 +1010,35 @@ internal fun RunUncertainBlock(
     canReconcile: Boolean,
     stillActive: Boolean,
     unavailable: Boolean,
-    onReconcile: () -> Unit
+    onReconcile: () -> Unit,
+    lost: Boolean = false,
+    resolving: Boolean = false,
+    onResolve: () -> Unit = {}
 ) {
     NoticeCard(
         tone = NoticeTone.Error,
         title = stringResource(R.string.chat_run_uncertain_title),
         text = when {
+            lost -> stringResource(R.string.chat_run_lost)
             stillActive -> stringResource(R.string.chat_run_uncertain_still_active)
             unavailable -> stringResource(R.string.chat_run_uncertain_unavailable)
             else -> stringResource(R.string.chat_run_uncertain)
         },
-        actions = if (canReconcile) {
+        actions = if (lost) {
+            // The only way out of a lost run: an explicit acknowledgement.
+            listOf(
+                NoticeAction(
+                    label = if (resolving) {
+                        stringResource(R.string.chat_run_lost_resolving)
+                    } else {
+                        stringResource(R.string.chat_run_lost_resolve)
+                    },
+                    onClick = onResolve,
+                    enabled = !resolving,
+                    testTag = TAG_RUN_RESOLVE_LOST
+                )
+            )
+        } else if (canReconcile) {
             listOf(
                 NoticeAction(
                     label = if (inFlight) {
@@ -1728,6 +1753,7 @@ private suspend fun LazyListState.scrollToTail() {
 
 internal const val TAG_CHAT_TITLE = "chat_header_title"
 internal const val TAG_RUN_STOP = "composer_run_stop"
+internal const val TAG_RUN_RESOLVE_LOST = "chat_run_resolve_lost"
 internal const val TAG_COMPOSER_BAR = "composer_bar"
 internal const val TAG_RUN_CONFLICT = "chat_run_conflict"
 internal const val TAG_RUN_UNCERTAIN = "chat_run_uncertain"

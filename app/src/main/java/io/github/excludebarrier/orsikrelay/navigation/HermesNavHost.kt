@@ -636,6 +636,7 @@ fun HermesNavHost(
                         ?: productionDependencies.value.runApprovalRequester,
                     runStatusRequester = runStatusRequester
                         ?: productionDependencies.value.runStatusRequester,
+                    runUnknownResolver = productionDependencies.value.runUnknownResolver,
                     notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
                     attachmentSource = productionDependencies.value.chatAttachmentSource,
                     chatTextSizeController = resolvedChatTextSizeController,
