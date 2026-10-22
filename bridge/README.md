@@ -33,6 +33,12 @@ URL unchanged.
 
 ## Security hardening
 
+- **Lost-run resolution least-privilege.** `POST /v1/runs/{id}/resolve-unknown`
+  (newer Hermes cores report a run they lost, e.g. after a crash, as
+  `unknown`) accepts exactly `{"admission_id": <string>, "execution_generation":
+  <int>}` and re-serialises it; any other field is refused with `400`. The core
+  closes the lost turn as interrupted and never re-runs it. Audited as
+  `resolve_unknown`, advertised as `run_unknown_resolution`.
 - **Chat management least-privilege.** `PATCH /api/sessions/{id}` accepts
   exactly `{"archived": <bool>}` and re-serialises it; title, pin, hidden,
   unread and `end_reason` are refused with a closed `400` and never reach

@@ -336,3 +336,9 @@ ends at the bridge with a valid device token with **403**. Using it
 (potentially relevant for the run-discovery limit 11.4/2) requires a
 deliberate extension of the bridge allowlist, capability envelope and
 client contract; not part of this compatibility matrix.
+
+**Update (alpha.13):** the bridge now proxies `POST /v1/runs/{id}/resolve-unknown`
+with exactly `{admission_id, execution_generation}` and advertises
+`run_unknown_resolution`; the app offers it only after a status read of its own
+run returned `unknown`. Cores without the status (such as the 2026-10-15 base)
+never trigger it.

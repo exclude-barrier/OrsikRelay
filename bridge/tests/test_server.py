@@ -83,6 +83,11 @@ def _upstream_app():
     async def run_stop(_):
         return web.json_response({"object": "hermes.run", "status": "stopping"})
 
+    async def resolve_unknown(request):
+        UPSTREAM["resolve_posts"] = int(UPSTREAM.get("resolve_posts", 0)) + 1
+        UPSTREAM["resolve_body"] = await request.read()
+        return web.json_response({"run_id": request.match_info["rid"], "status": "terminal", "outcome": "interrupted"})
+
     async def session_patch(request):
         UPSTREAM["session_patches"] = int(UPSTREAM.get("session_patches", 0)) + 1
         UPSTREAM["session_patch_body"] = await request.read()
@@ -107,6 +112,7 @@ def _upstream_app():
     app.router.add_post("/v1/runs/{rid}/approval", approval)
     app.router.add_post("/v1/runs/{rid}/stop", run_stop)
     app.router.add_patch("/api/sessions/{sid}", session_patch)
+    app.router.add_post("/v1/runs/{rid}/resolve-unknown", resolve_unknown)
     app.router.add_delete("/api/sessions/{sid}", session_delete)
     return app
 
@@ -415,6 +421,29 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.delete("/api/sessions/s1")).status, 401)
         self.assertEqual(int(UPSTREAM.get("session_patches", 0)), 0)
         self.assertEqual(int(UPSTREAM.get("session_deletes", 0)), 0)
+
+    # --- resolve an unknown (lost) run: exactly admission + generation -------
+    async def test_resolve_unknown_forwards_exactly_the_two_fields_and_is_audited(self):
+        cred = await self._pair()
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            resp = await self.client.post(
+                "/v1/runs/run_a/resolve-unknown", headers=self._bearer(cred["device_key"]),
+                json={"admission_id": "adm_1", "execution_generation": 2})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(json.loads(UPSTREAM["resolve_body"]), {"admission_id": "adm_1", "execution_generation": 2})
+        lines = [record.getMessage() for record in logs.records]
+        self.assertIn(f"audit action=resolve_unknown device={cred['device_id']} run=run_a status=200", lines)
+
+    async def test_resolve_unknown_with_other_fields_never_reaches_upstream(self):
+        cred = await self._pair()
+        for body in ({"admission_id": "adm_1"}, {"admission_id": "adm_1", "execution_generation": 2, "outcome": "completed"},
+                     {"admission_id": "adm_1", "execution_generation": "2"}):
+            resp = await self.client.post(
+                "/v1/runs/run_a/resolve-unknown", headers=self._bearer(cred["device_key"]), json=body)
+            self.assertEqual(resp.status, 400, body)
+        resp = await self.client.post("/v1/runs/run_a/resolve-unknown", json={"admission_id": "a", "execution_generation": 1})
+        self.assertEqual(resp.status, 401)
+        self.assertEqual(int(UPSTREAM.get("resolve_posts", 0)), 0)
 
     async def test_pair_session_create_and_revoke_are_audited(self):
         with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:

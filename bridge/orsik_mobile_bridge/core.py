@@ -54,6 +54,10 @@ PROXIED_ROUTES: tuple[tuple[str, str], ...] = (
     ("POST", "/v1/runs/{run_id}/steer"),
     # Chat management from the session list. PATCH carries ONLY the archived
     # flag (validate_session_patch_body); DELETE carries no body.
+    # Explicit acknowledgement of a run the core lost (status "unknown"):
+    # body exactly {admission_id, execution_generation}, see
+    # validate_resolve_unknown_body.
+    ("POST", "/v1/runs/{run_id}/resolve-unknown"),
     ("PATCH", "/api/sessions/{session_id}"),
     ("DELETE", "/api/sessions/{session_id}"),
 )
@@ -132,6 +136,30 @@ def validate_session_patch_body(body: object) -> tuple[bool, str]:
         return False, "invalid_fields"
     if not isinstance(body["archived"], bool):
         return False, "invalid_archived"
+    return True, ""
+
+
+# --- Unknown-run resolution (least privilege) --------------------------------
+RESOLVE_UNKNOWN_BODY_FIELDS = frozenset({"admission_id", "execution_generation"})
+
+
+def validate_resolve_unknown_body(body: object) -> tuple[bool, str]:
+    """Returns ``(ok, error_code)``; on failure no upstream request is made."""
+    if not isinstance(body, dict):
+        return False, "invalid_json"
+    if set(body.keys()) != RESOLVE_UNKNOWN_BODY_FIELDS:
+        return False, "invalid_fields"
+    admission_id = body["admission_id"]
+    if (
+        not isinstance(admission_id, str)
+        or not admission_id.strip()
+        or len(admission_id) > MAX_REQUEST_ID_LENGTH
+        or not _is_control_free(admission_id)
+    ):
+        return False, "invalid_admission_id"
+    generation = body["execution_generation"]
+    if type(generation) is not int or generation < 0:
+        return False, "invalid_generation"
     return True, ""
 
 
@@ -387,6 +415,7 @@ def build_capabilities() -> dict:
             "run_status": True,
             "run_stop": True,
             "run_steer": True,
+            "run_unknown_resolution": True,
             "session_archive": True,
             "session_delete": True,
             "session_chat_interactive_approvals": build_interactive_approvals_contract(),
@@ -399,6 +428,7 @@ def build_capabilities() -> dict:
             "session_detail": {"method": "GET", "path": "/api/sessions/{session_id}"},
             "session_messages": {"method": "GET", "path": "/api/sessions/{session_id}/messages"},
             "session_chat_stream": {"method": "POST", "path": "/api/sessions/{session_id}/chat/stream"},
+            "run_unknown_resolution": {"method": "POST", "path": "/v1/runs/{run_id}/resolve-unknown"},
             "session_update": {"method": "PATCH", "path": "/api/sessions/{session_id}"},
             "session_delete": {"method": "DELETE", "path": "/api/sessions/{session_id}"},
             "run_status": {"method": "GET", "path": "/v1/runs/{run_id}"},
