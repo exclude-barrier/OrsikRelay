@@ -2,7 +2,6 @@ package io.github.excludebarrier.orsikrelay.ui.settings
 
 import android.content.Context
 import android.os.Build
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,25 +16,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,11 +35,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.sp
+import io.github.excludebarrier.orsikrelay.ui.components.ConnectedButtonGroup
+import io.github.excludebarrier.orsikrelay.ui.components.GroupGap
+import io.github.excludebarrier.orsikrelay.ui.components.GroupPosition
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
+import io.github.excludebarrier.orsikrelay.ui.components.shape
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 import io.github.excludebarrier.orsikrelay.domain.language.SupportedLanguages
 import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
 import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
@@ -60,19 +65,20 @@ import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
 import io.github.excludebarrier.orsikrelay.ui.theme.ThemeModeController
 
 /**
- * Settings screen with language, appearance, chat text size, notifications
- * and privacy.
+ * Settings screen of design v2: a large title under the back arrow and
+ * grouped cards under primary labels - Allgemein (language), Darstellung
+ * (design, Material You), Chat (text size), Benachrichtigungen and
+ * Sicherheit (app lock, screen protection). Rows of one group are separate
+ * blocks with 24 dp outer and 6 dp inner corners. Design and text size are
+ * connected button groups.
  *
- * Each section is a headline plus one rounded [Card] of [SettingsRow]s, as in
- * the Android 16 settings. Language options come exclusively from
- * [SupportedLanguages]; "System" is the leading option and means the device
- * language. Appearance is a single-choice segmented control, like the chat
- * text size. The screen header is a [SettingsTopBar] with a back arrow.
+ * Language options come exclusively from [SupportedLanguages]; "System" is
+ * the leading option and means the device language. Every controller is
+ * wired exactly as before; this screen only changes the look.
  *
  * [sdkInt] is injectable so the API-31 rule for the Material You switch can
  * be exercised without an older device.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     languageController: LanguageController,
@@ -87,262 +93,260 @@ fun SettingsScreen(
     sdkInt: Int = Build.VERSION.SDK_INT,
     openNotificationSettings: (Context) -> Unit = { openAppNotificationSettings(it) }
 ) {
-    Scaffold(
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .testTag("settings_screen"),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            SettingsTopBar(
-                title = stringResource(R.string.settings_title),
-                onBack = onBack
-            )
-        }
-    ) { innerPadding ->
+            .testTag("settings_screen")
+    ) {
+        OrsikLargeHeader(title = stringResource(R.string.settings_title), onBack = onBack)
         Column(
+            verticalArrangement = Arrangement.spacedBy(GroupGap),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
         ) {
-            SectionTitle(stringResource(R.string.settings_language_section))
-            SettingsCard {
-                SettingsRow(
-                    leadingIcon = { SettingsVectorIcon(R.drawable.ic_language) }
-                ) {
-                    LanguageDropdown(languageController = languageController)
-                }
+            GroupLabel(stringResource(R.string.settings_group_general))
+            LanguageRow(languageController = languageController)
+
+            GroupLabel(stringResource(R.string.settings_appearance_section))
+            val materialYouAvailable = isMaterialYouAvailable(sdkInt)
+            SettingsBlock(
+                position = if (materialYouAvailable) GroupPosition.First else GroupPosition.Single,
+                icon = OrsikIcons.Palette,
+                title = stringResource(R.string.settings_theme_label)
+            ) {
+                ConnectedButtonGroup(
+                    options = ThemeMode.entries,
+                    selected = themeController.mode,
+                    label = { themeModeLabel(it) },
+                    onSelect = { themeController.select(it) },
+                    testTag = { "settings_theme_${it.name}" }
+                )
+            }
+            if (materialYouAvailable) {
+                val materialYou = materialYouController.enabled
+                SettingsBlock(
+                    position = GroupPosition.Last,
+                    icon = OrsikIcons.Wallpaper,
+                    title = stringResource(R.string.settings_material_you_label),
+                    description = stringResource(R.string.settings_material_you_description),
+                    modifier = Modifier
+                        .testTag("settings_material_you")
+                        .toggleable(
+                            value = materialYou,
+                            role = Role.Switch,
+                            onValueChange = { materialYouController.setEnabled(it) }
+                        ),
+                    trailing = { Switch(checked = materialYou, onCheckedChange = null) }
+                )
             }
 
-            SectionTitle(stringResource(R.string.settings_appearance_section))
-            SettingsCard {
-                SettingsRow(
-                    leadingIcon = { SettingsVectorIcon(R.drawable.ic_palette) }
-                ) {
-                    ThemeModeSegments(themeController = themeController)
-                }
-                if (isMaterialYouAvailable(sdkInt)) {
-                    SettingsDivider()
-                    val materialYou = materialYouController.enabled
-                    SettingsRow(
-                        modifier = Modifier
-                            .testTag("settings_material_you")
-                            .toggleable(
-                                value = materialYou,
-                                role = Role.Switch,
-                                onValueChange = { materialYouController.setEnabled(it) }
-                            ),
-                        leadingIcon = { SettingsVectorIcon(R.drawable.ic_wallpaper) },
-                        trailing = {
-                            Switch(
-                                checked = materialYou,
-                                onCheckedChange = null,
-                                modifier = Modifier.padding(start = 12.dp)
-                            )
-                        }
-                    ) {
-                        Text(
-                            text = stringResource(R.string.settings_material_you_label),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_material_you_description),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
-            }
-
-            SectionTitle(stringResource(R.string.settings_chat_section))
-            SettingsCard {
-                SettingsRow(
-                    leadingIcon = { SettingsVectorIcon(R.drawable.ic_format_size) }
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_chat_text_size),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    ChatTextSizeSegments(controller = chatTextSizeController)
-                }
+            GroupLabel(stringResource(R.string.settings_chat_section))
+            SettingsBlock(
+                position = GroupPosition.Single,
+                icon = OrsikIcons.TextSize,
+                title = stringResource(R.string.settings_chat_text_size)
+            ) {
+                ConnectedButtonGroup(
+                    options = ChatTextSize.entries,
+                    selected = chatTextSizeController.size,
+                    label = { chatTextSizeLabel(it) },
+                    onSelect = { chatTextSizeController.select(it) },
+                    testTag = { "settings_chat_text_${it.name.lowercase()}" }
+                )
             }
 
             val context = LocalContext.current
-            SectionTitle(stringResource(R.string.settings_notifications_label))
-            SettingsCard {
-                SettingsRow(
-                    modifier = Modifier
-                        .testTag("settings_notifications")
-                        .clickable(
-                            role = Role.Button,
-                            onClick = { openNotificationSettings(context) }
-                        ),
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Notifications,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailing = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_notifications_row_label),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = stringResource(R.string.settings_notifications_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
+            GroupLabel(stringResource(R.string.settings_notifications_label))
+            SettingsBlock(
+                position = GroupPosition.Single,
+                icon = Icons.Outlined.Notifications,
+                title = stringResource(R.string.settings_notifications_row_label),
+                description = stringResource(R.string.settings_notifications_description),
+                modifier = Modifier
+                    .testTag("settings_notifications")
+                    .clickable(
+                        role = Role.Button,
+                        onClick = { openNotificationSettings(context) }
+                    ),
+                trailing = {
+                    Icon(
+                        imageVector = OrsikIcons.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-            }
+            )
 
-            SectionTitle(stringResource(R.string.settings_privacy_section))
-            SettingsCard {
-                val screenProtection = screenProtectionController.enabled
-                SettingsRow(
-                    modifier = Modifier
-                        .testTag("settings_screen_protection")
-                        .toggleable(
-                            value = screenProtection,
-                            role = Role.Switch,
-                            onValueChange = { screenProtectionController.setEnabled(it) }
-                        ),
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Lock,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailing = {
-                        Switch(
-                            checked = screenProtection,
-                            onCheckedChange = null,
-                            modifier = Modifier.padding(start = 12.dp)
-                        )
-                    }
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_screen_protection_label),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = stringResource(R.string.settings_screen_protection_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-
-                SettingsDivider()
-
-                val appLockEnabled = appLockController.enabled
-                val canUseAppLock = appAuthenticator?.canAuthenticate() == true
-                var appLockAuthPending by remember { mutableStateOf(false) }
-                SettingsRow(
-                    modifier = Modifier
-                        .testTag("settings_app_lock")
-                        .toggleable(
-                            value = appLockEnabled,
-                            enabled = canUseAppLock && !appLockAuthPending,
-                            role = Role.Switch,
-                            onValueChange = { wantsEnabled ->
-                                val authenticator = appAuthenticator ?: return@toggleable
-                                appLockAuthPending = true
-                                authenticator.authenticate { success ->
-                                    appLockAuthPending = false
-                                    if (success) appLockController.setEnabled(wantsEnabled)
-                                }
+            GroupLabel(stringResource(R.string.settings_privacy_section))
+            val appLockEnabled = appLockController.enabled
+            val canUseAppLock = appAuthenticator?.canAuthenticate() == true
+            var appLockAuthPending by remember { mutableStateOf(false) }
+            SettingsBlock(
+                position = GroupPosition.First,
+                icon = OrsikIcons.Lock,
+                title = stringResource(R.string.settings_app_lock_label),
+                description = stringResource(R.string.settings_app_lock_description),
+                modifier = Modifier
+                    .testTag("settings_app_lock")
+                    .toggleable(
+                        value = appLockEnabled,
+                        enabled = canUseAppLock && !appLockAuthPending,
+                        role = Role.Switch,
+                        onValueChange = { wantsEnabled ->
+                            val authenticator = appAuthenticator ?: return@toggleable
+                            appLockAuthPending = true
+                            authenticator.authenticate { success ->
+                                appLockAuthPending = false
+                                if (success) appLockController.setEnabled(wantsEnabled)
                             }
-                        ),
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Face,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailing = {
-                        Switch(
-                            checked = appLockEnabled,
-                            onCheckedChange = null,
-                            enabled = canUseAppLock && !appLockAuthPending,
-                            modifier = Modifier.padding(start = 12.dp)
-                        )
-                    }
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_app_lock_label),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = stringResource(R.string.settings_app_lock_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
+                        }
+                    ),
+                trailing = {
+                    Switch(
+                        checked = appLockEnabled,
+                        onCheckedChange = null,
+                        enabled = canUseAppLock && !appLockAuthPending
                     )
                 }
+            ) {
                 if (!canUseAppLock) {
                     Text(
                         text = stringResource(R.string.settings_app_lock_unavailable),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = OrsikType.meta,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
-                            .padding(start = 56.dp, end = 16.dp, bottom = 12.dp)
+                            .padding(start = 38.dp)
                             .testTag("settings_app_lock_unavailable")
                     )
                 }
             }
+            val screenProtection = screenProtectionController.enabled
+            SettingsBlock(
+                position = GroupPosition.Last,
+                icon = OrsikIcons.Eye,
+                title = stringResource(R.string.settings_screen_protection_label),
+                description = stringResource(R.string.settings_screen_protection_description),
+                modifier = Modifier
+                    .testTag("settings_screen_protection")
+                    .toggleable(
+                        value = screenProtection,
+                        role = Role.Switch,
+                        onValueChange = { screenProtectionController.setEnabled(it) }
+                    ),
+                trailing = { Switch(checked = screenProtection, onCheckedChange = null) }
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** A 13 sp primary group label above a block of settings. */
 @Composable
-private fun LanguageDropdown(languageController: LanguageController) {
+private fun GroupLabel(text: String) {
+    Text(
+        text = text,
+        style = OrsikType.groupLabel,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .padding(start = 8.dp, top = 18.dp, bottom = 8.dp)
+            .semantics { heading() }
+    )
+}
+
+/**
+ * One settings block of a group: icon, title, optional description and a
+ * trailing control in the first line; [content] (a button group, a hint)
+ * below. The toggle/click semantics in [modifier] cover that first line
+ * only, so [content] keeps its own semantics (a hint stays readable on its
+ * own, a button group keeps its own buttons).
+ */
+@Composable
+private fun SettingsBlock(
+    position: GroupPosition,
+    icon: ImageVector,
+    title: String,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    content: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    val shape = position.shape(outer = 24.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = if (content != null) 6.dp else 14.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 14.dp, end = if (trailing != null) 12.dp else 0.dp)
+            ) {
+                Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                if (description != null) {
+                    Text(text = description, style = OrsikType.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            trailing?.invoke()
+        }
+        if (content != null) {
+            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 14.dp), content = content)
+        }
+    }
+}
+
+/**
+ * The language row: shows the current choice and opens the list of
+ * [SupportedLanguages] with "System" first.
+ */
+@Composable
+private fun LanguageRow(languageController: LanguageController) {
     var expanded by remember { mutableStateOf(false) }
     val systemLabel = stringResource(R.string.settings_language_system)
     val currentLabel = languageController.selectedTag
         ?.let { tag -> SupportedLanguages.all.firstOrNull { it.tag == tag }?.displayName }
         ?: systemLabel
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("settings_language_box")
-    ) {
-        OutlinedTextField(
-            value = currentLabel,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text(stringResource(R.string.settings_language_field)) },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-            },
+    Box(modifier = Modifier.testTag("settings_language_box")) {
+        SettingsBlock(
+            position = GroupPosition.Single,
+            icon = OrsikIcons.Globe,
+            title = stringResource(R.string.settings_language_field),
             modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth()
                 .testTag("settings_language_field")
+                .clickable(role = Role.DropdownList) { expanded = true },
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = currentLabel, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(
+                        imageVector = OrsikIcons.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(start = 2.dp)
+                            .size(18.dp)
+                    )
+                }
+            }
         )
-        ExposedDropdownMenu(
+        DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            offset = DpOffset(x = 16.dp, y = 0.dp)
         ) {
             DropdownMenuItem(
                 text = { Text(systemLabel) },
@@ -366,60 +370,6 @@ private fun LanguageDropdown(languageController: LanguageController) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ThemeModeSegments(themeController: ThemeModeController) {
-    SingleChoiceSegmentedButtonRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-    ) {
-        ThemeMode.entries.forEachIndexed { index, mode ->
-            SegmentedButton(
-                selected = themeController.mode == mode,
-                onClick = { themeController.select(mode) },
-                shape = SegmentedButtonDefaults.itemShape(
-                    index = index,
-                    count = ThemeMode.entries.size
-                ),
-                icon = {},
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("settings_theme_${mode.name}")
-            ) {
-                Text(text = themeModeLabel(mode))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ChatTextSizeSegments(controller: ChatTextSizeController) {
-    SingleChoiceSegmentedButtonRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-    ) {
-        ChatTextSize.entries.forEachIndexed { index, size ->
-            SegmentedButton(
-                selected = controller.size == size,
-                onClick = { controller.select(size) },
-                shape = SegmentedButtonDefaults.itemShape(
-                    index = index,
-                    count = ChatTextSize.entries.size
-                ),
-                icon = {},
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("settings_chat_text_${size.name.lowercase()}")
-            ) {
-                Text(text = chatTextSizeLabel(size))
-            }
-        }
-    }
-}
-
 @Composable
 private fun chatTextSizeLabel(size: ChatTextSize): String = when (size) {
     ChatTextSize.Small -> stringResource(R.string.settings_chat_text_small)
@@ -435,21 +385,12 @@ private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
-    )
-}
-
-@Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(content = content)
@@ -498,11 +439,3 @@ internal fun SettingsDivider() {
     )
 }
 
-@Composable
-private fun SettingsVectorIcon(@DrawableRes drawable: Int) {
-    Icon(
-        painter = painterResource(drawable),
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}

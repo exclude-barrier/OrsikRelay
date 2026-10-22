@@ -33,6 +33,21 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileAdmin
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
+import io.github.excludebarrier.orsikrelay.data.settings.ChatTextSizeSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.LanguageSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.MaterialYouSettingStore
+import io.github.excludebarrier.orsikrelay.data.settings.ScreenProtectionSettingStore
+import io.github.excludebarrier.orsikrelay.data.theme.ThemeSettingStore
+import io.github.excludebarrier.orsikrelay.domain.settings.ChatTextSize
+import io.github.excludebarrier.orsikrelay.security.applock.AppAuthenticator
+import io.github.excludebarrier.orsikrelay.security.applock.AppLockController
+import io.github.excludebarrier.orsikrelay.ui.settings.SettingsScreen
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberChatTextSizeController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberLanguageController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberMaterialYouController
+import io.github.excludebarrier.orsikrelay.ui.settings.rememberScreenProtectionController
+import io.github.excludebarrier.orsikrelay.ui.theme.ThemeMode
+import io.github.excludebarrier.orsikrelay.ui.theme.rememberThemeModeController
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
@@ -231,4 +246,45 @@ class DesignV2ShotsTest {
 
     @CaptureOnly @Test fun serverDark() = shot("05-server-dark", ::waitForServers) { App(true, AppScreen.Server) { Servers(it) } }
     @CaptureOnly @Test fun serverLight() = shot("05-server-light", ::waitForServers) { App(false, AppScreen.Server) { Servers(it) } }
+
+    @Composable
+    private fun Settings(modifier: Modifier) {
+        val language = rememberLanguageController(object : LanguageSettingStore {
+            override fun read(): String? = null
+            override fun write(tag: String?) = Unit
+        }) { }
+        val theme = rememberThemeModeController(object : ThemeSettingStore {
+            override fun read() = ThemeMode.System
+            override fun write(mode: ThemeMode) = Unit
+        })
+        val textSize = rememberChatTextSizeController(object : ChatTextSizeSettingStore {
+            override fun read() = ChatTextSize.Normal
+            override fun write(size: ChatTextSize) = Unit
+        })
+        val protection = rememberScreenProtectionController(object : ScreenProtectionSettingStore {
+            override fun read() = true
+            override fun write(enabled: Boolean) = Unit
+        })
+        val materialYou = rememberMaterialYouController(object : MaterialYouSettingStore {
+            override fun read() = false
+            override fun write(enabled: Boolean) = Unit
+        })
+        SettingsScreen(
+            languageController = language,
+            themeController = theme,
+            chatTextSizeController = textSize,
+            screenProtectionController = protection,
+            appLockController = AppLockController(initiallyEnabled = true, persist = {}),
+            materialYouController = materialYou,
+            appAuthenticator = object : AppAuthenticator {
+                override fun canAuthenticate() = true
+                override fun authenticate(onResult: (Boolean) -> Unit) = onResult(false)
+            },
+            onBack = {},
+            modifier = modifier
+        )
+    }
+
+    @CaptureOnly @Test fun settingsDark() = shot("06-einstellungen-dark") { App(true, null) { Settings(it) } }
+    @CaptureOnly @Test fun settingsLight() = shot("06-einstellungen-light") { App(false, null) { Settings(it) } }
 }

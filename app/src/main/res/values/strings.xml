@@ -108,7 +108,7 @@
     <string name="settings_chat_text_large">Large</string>
     <string name="settings_notifications_label">Notifications</string>
     <string name="settings_notifications_description">Choose in the Android settings which alerts the app shows.</string>
-    <string name="settings_privacy_section">Privacy</string>
+    <string name="settings_privacy_section">Security</string>
     <string name="settings_screen_protection_label">Screen protection</string>
     <string name="settings_screen_protection_description">No screenshots and no preview in the app switcher.</string>
     <string name="settings_app_lock_label">App lock</string>
@@ -331,4 +331,6 @@
     <string name="profiles_status_not_connected">Not connected</string>
     <string name="profiles_management">Management</string>
     <string name="profiles_tile_monitoring">Monitoring</string>
+    <string name="settings_group_general">General</string>
+    <string name="settings_theme_label">Design</string>
 </resources>
