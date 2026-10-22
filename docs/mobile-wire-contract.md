@@ -81,6 +81,15 @@ negotiable mobile contract.
    - `endpoints.device_self_revoke`: `{ method:"POST", "path": "/v1/devices/self/revoke" }`.
    - Result `Success.deviceCredentialsSupported`.
 
+3. Chat management (archive / delete, Orsik bridge)
+   - `features.session_archive == true` and `features.session_delete == true`.
+   - `endpoints.session_update`: `{ method:"PATCH", path:"/api/sessions/{session_id}" }`,
+     `endpoints.session_delete`: `{ method:"DELETE", path:"/api/sessions/{session_id}" }`.
+   - Read by the Agents list when it opens (not persisted); only then does a
+     long press offer archive and delete. The bridge forwards PATCH only with
+     exactly `{ "archived": <bool> }` and DELETE only without a body; a running
+     turn answers `409 session_active_turn`, a confirmed absent chat `404`.
+
 > **Field strictness:** The soft contract objects are checked against **exactly
 > the expected field set** (missing **or** additional field → closed).
 > This is deliberately conservative: the client enables a mobile capability only

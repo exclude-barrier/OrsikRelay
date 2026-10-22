@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +64,8 @@ fun GroupedListItem(
     supporting: String? = null,
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null
 ) {
@@ -75,7 +78,18 @@ fun GroupedListItem(
             .heightIn(min = 68.dp)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
+            .then(
+                when {
+                    onClick != null && onLongClick != null -> Modifier.combinedClickable(
+                        onClickLabel = onClickLabel,
+                        onLongClickLabel = onLongClickLabel,
+                        onLongClick = onLongClick,
+                        onClick = onClick
+                    )
+                    onClick != null -> Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick)
+                    else -> Modifier
+                }
+            )
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         leading?.invoke()

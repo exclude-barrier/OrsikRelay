@@ -364,4 +364,16 @@
     </string-array>
     <string name="chat_turn_tool_named">Hermes nutzt %1$s…</string>
     <string name="chat_turn_tool">Hermes nutzt ein Tool…</string>
+    <string name="sessions_actions">Chat-Aktionen</string>
+    <string name="sessions_archive">Archivieren</string>
+    <string name="sessions_delete">Löschen</string>
+    <string name="sessions_archived">Chat archiviert</string>
+    <string name="sessions_undo">Rückgängig</string>
+    <string name="sessions_deleted">Chat gelöscht</string>
+    <string name="sessions_delete_title">Chat löschen?</string>
+    <string name="sessions_delete_text">„%1$s“ wird auf dem Server endgültig gelöscht. Das lässt sich nicht rückgängig machen.</string>
+    <string name="sessions_delete_confirm">Löschen</string>
+    <string name="sessions_delete_cancel">Abbrechen</string>
+    <string name="sessions_manage_active">Der Chat läuft gerade. Stoppe ihn zuerst.</string>
+    <string name="sessions_manage_failed">Das hat nicht geklappt. Bitte versuche es erneut.</string>
 </resources>

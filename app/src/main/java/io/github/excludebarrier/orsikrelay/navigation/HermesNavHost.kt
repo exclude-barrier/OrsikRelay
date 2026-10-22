@@ -53,6 +53,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
+import io.github.excludebarrier.orsikrelay.domain.session.SessionManager
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 import io.github.excludebarrier.orsikrelay.security.applock.AndroidAppAuthenticator
@@ -91,6 +92,7 @@ fun HermesNavHost(
     sessionPageSource: SessionPageSource? = null,
     messageHistorySource: MessageHistorySource? = null,
     sessionCreator: SessionCreator? = null,
+    sessionManager: SessionManager? = null,
     runController: RunSessionController? = null,
     runStopRequester: RunStopRequester? = null,
     runSteerRequester: RunSteerRequester? = null,
@@ -536,6 +538,8 @@ fun HermesNavHost(
                     profileId = activeProfileId.orEmpty(),
                     creator = sessionCreator
                         ?: productionDependencies.value.sessionCreator,
+                    manager = sessionManager
+                        ?: productionDependencies.value.sessionManager,
                     onSessionSelected = ::openChat,
                     onSessionCreated = { sessionId ->
                         pendingCreatedSessionId = sessionId
