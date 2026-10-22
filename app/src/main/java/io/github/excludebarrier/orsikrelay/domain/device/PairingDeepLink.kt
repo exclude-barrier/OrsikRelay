@@ -134,7 +134,10 @@ object PairingDeepLink {
             if (pair.isEmpty()) continue
             val eq = pair.indexOf('=')
             if (eq <= 0) return null
-            map[urlDecode(pair.substring(0, eq))] = urlDecode(pair.substring(eq + 1))
+            val key = urlDecode(pair.substring(0, eq))
+            // A repeated parameter is ambiguous (which server?): fail closed.
+            if (key in map) return null
+            map[key] = urlDecode(pair.substring(eq + 1))
         }
         return map
     }

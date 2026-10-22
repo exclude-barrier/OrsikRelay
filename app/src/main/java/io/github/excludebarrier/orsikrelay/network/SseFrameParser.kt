@@ -51,6 +51,7 @@ class SseFrameParser(
     private val terminalEventName: String? = null
 ) {
     private val line = StringBuilder()
+    private var streamStarted = false
     private var lineCodeUnits = 0
     private var eventName: String? = null
     private var eventNameSet = false
@@ -96,6 +97,14 @@ class SseFrameParser(
         }
         while (index < chunk.length) {
             val character = chunk[index]
+            if (!streamStarted) {
+                // SSE: one leading U+FEFF byte order mark is ignored.
+                streamStarted = true
+                if (character == '\uFEFF') {
+                    index += 1
+                    continue
+                }
+            }
             if (character == '\n') {
                 index += 1
                 processLine()?.let { frames += it }
