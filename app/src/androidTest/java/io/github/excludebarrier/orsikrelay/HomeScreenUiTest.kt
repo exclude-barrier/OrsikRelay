@@ -98,11 +98,12 @@ class HomeScreenUiTest {
         assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_reachable)).fetchSemanticsNodes().size)
         scrollTo(HomeTags.QUICK_CHAT)
         composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).assertIsEnabled().assertHasClickAction()
-        // Server works today (it opens the Server tab); the rest is "Bald".
+        // Every quick tile works: Server opens the Server tab, the tool tiles
+        // start a chat with a prepared request.
         composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "server").assertIsEnabled().assertHasClickAction()
         listOf("terminal", "files", "docker", "projects").forEach { key ->
             scrollTo(HomeTags.QUICK_TILE_PREFIX + key)
-            composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + key).assertIsNotEnabled()
+            composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + key).assertIsEnabled().assertHasClickAction()
         }
         scrollTo(HomeTags.RECENT_ROW)
         assertEquals(2, composeRule.onAllNodesWithTag(HomeTags.RECENT_ROW).fetchSemanticsNodes().size)

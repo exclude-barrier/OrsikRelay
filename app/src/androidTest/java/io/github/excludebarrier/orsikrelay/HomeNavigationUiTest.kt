@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.performSemanticsAction
+import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onNodeWithText
@@ -77,9 +79,24 @@ class HomeNavigationUiTest {
         }
     }
     private val createdSessions = AtomicInteger()
-    private val creator = SessionCreator { _, _ ->
+    private val createdTitle = AtomicReference<String?>()
+    private val creator = SessionCreator { _, title ->
         createdSessions.incrementAndGet()
+        createdTitle.set(title)
         SessionCreateResult.Success(NEW_SESSION_ID, null)
+    }
+    /** In-memory drafts, so a tool tile's prepared request can be observed. */
+    private val drafts = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val draftRepository = object : ChatDraftRepository {
+        override suspend fun loadDraft(profileId: String, sessionId: String) = drafts["$profileId/$sessionId"]
+        override fun persistDraft(profileId: String, sessionId: String, text: String) {
+            drafts["$profileId/$sessionId"] = text
+        }
+        override fun clearDraft(profileId: String, sessionId: String) {
+            drafts.remove("$profileId/$sessionId")
+        }
+        override fun flushPendingDraft() = Unit
+        override fun clearProfile(profileId: String) = Unit
     }
     private val controller = RunSessionController(
         chatSource = source,
@@ -124,6 +141,7 @@ class HomeNavigationUiTest {
                     runStatusRequester = status,
                     serverConnectionCheck = connected,
                     sessionCreator = creator,
+                    chatDraftRepository = draftRepository,
                     profileAdmin = admin,
                     startupProfileResolver = { StartupProfile.Ready(PROFILE_ID) }
                 )
@@ -231,6 +249,30 @@ class HomeNavigationUiTest {
         composeRule.waitUntil(5_000) { openedSession.get() == NEW_SESSION_ID }
         assertEquals(1, createdSessions.get())
         // A new chat starts empty: no turn is sent on its own.
+        assertEquals(null, streamedTurn.get())
+        controller.close()
+    }
+
+    @Test
+    fun aToolTileOpensANewChatWithItsPreparedRequestUnsent() {
+        show()
+        waitForText(context.getString(R.string.home_status_connected))
+
+        swipeHomeTo(HomeTags.QUICK_TILE_PREFIX + "docker")
+        // The second tile row can sit under the docked composer, so the tap
+        // goes through the tile's click action instead of a screen position.
+        composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "docker")
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+
+        composeRule.waitUntil(5_000) { createdSessions.get() == 1 }
+        composeRule.waitUntil(5_000) { openedSession.get() == NEW_SESSION_ID }
+        val prompt = context.getString(R.string.home_task_docker_prompt)
+        assertEquals(1, createdSessions.get())
+        assertEquals(context.getString(R.string.home_quick_docker), createdTitle.get())
+        // The request waits in the composer; nothing is sent on its own.
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText(prompt, substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
         assertEquals(null, streamedTurn.get())
         controller.close()
     }

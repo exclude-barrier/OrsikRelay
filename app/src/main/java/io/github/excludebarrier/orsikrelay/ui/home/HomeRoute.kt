@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import androidx.compose.ui.platform.LocalContext
+import io.github.excludebarrier.orsikrelay.data.chat.ChatDraftRepository
 import kotlinx.coroutines.delay
 import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsSource
 import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
@@ -70,6 +72,8 @@ fun HomeRoute(
     runStatusRequester: RunStatusRequester,
     attachmentSource: ChatAttachmentSource,
     hostMetricsSource: HostMetricsSource,
+    /** Holds the prepared request of a tool tile for the new chat. */
+    chatDraftRepository: ChatDraftRepository,
     onOpenChat: (sessionId: String, title: String?) -> Unit,
     onOpenAllSessions: () -> Unit,
     /** The bottom bar's Server tab (quick access "Server"). */
@@ -81,6 +85,7 @@ fun HomeRoute(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var serverName by remember(profileId) { mutableStateOf<String?>(null) }
     // Live server values while Home is shown: one idempotent read every
     // HOST_METRICS_INTERVAL_MS, stopped when Home leaves the composition.
@@ -272,15 +277,25 @@ fun HomeRoute(
     }
 
     // Quick access "KI-Chat": a fresh, empty chat, opened right away.
-    fun newChat() {
+    /**
+     * Creates one chat (never retried) and opens it; with [prompt] the new
+     * chat's composer starts with that prepared request (a tool tile).
+     */
+    fun newChat(title: String? = null, prompt: String? = null) {
         if (creatingChat) return
         creatingChat = true
         notice = null
         scope.launch {
             try {
-                val created = withContext(ioDispatcher) { sessionCreator.createSession(profileId, null) }
+                val created = withContext(ioDispatcher) { sessionCreator.createSession(profileId, title) }
                 if (created is SessionCreateResult.Success) {
-                    onOpenChat(created.sessionId, created.title)
+                    if (prompt != null) {
+                        withContext(ioDispatcher) {
+                            chatDraftRepository.persistDraft(profileId, created.sessionId, prompt)
+                            chatDraftRepository.flushPendingDraft()
+                        }
+                    }
+                    onOpenChat(created.sessionId, created.title ?: title)
                 } else {
                     notice = HomeNotice.NewChatFailed
                 }
@@ -319,7 +334,8 @@ fun HomeRoute(
         },
         onOpenSession = { session -> onOpenChat(session.id, session.title) },
         onOpenAllSessions = onOpenAllSessions,
-        onNewChat = ::newChat,
+        onNewChat = { newChat() },
+        onQuickTask = { task -> newChat(title = context.getString(task.labelRes), prompt = context.getString(task.promptRes)) },
         onOpenServer = onOpenServer,
         onSwitchServer = onSwitchServer,
         onOpenSettings = onOpenSettings,

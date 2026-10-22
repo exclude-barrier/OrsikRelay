@@ -380,4 +380,8 @@
     <string name="home_server_unreadable">The values cannot be read right now.</string>
     <string name="home_server_services_down">not running: %1$s</string>
     <string name="home_server_cores">%1$d cores</string>
+    <string name="home_task_terminal_prompt">Run this command on the server and show me the output: </string>
+    <string name="home_task_files_prompt">Show me the files and folders in my home directory on the server, with size and modification date.</string>
+    <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
+    <string name="home_task_projects_prompt">Which projects (Git repositories) are in my home directory on the server? Show name, branch and last commit for each.</string>
 </resources>

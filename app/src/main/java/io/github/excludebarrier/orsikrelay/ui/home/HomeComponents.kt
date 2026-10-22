@@ -564,17 +564,19 @@ private fun HostTileView(tile: HostTile, modifier: Modifier) {
 }
 
 @Composable
-fun QuickActionGrid(onNewChat: () -> Unit, onOpenServer: () -> Unit, modifier: Modifier = Modifier) {
-    // Live tiles first (KI-Chat starts a new chat, Server opens the Server
-    // tab), then the tools that only mark their future place.
+fun QuickActionGrid(
+    onNewChat: () -> Unit,
+    onOpenServer: () -> Unit,
+    onQuickTask: (QuickTask) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // KI-Chat starts a new chat, Server opens the Server tab; the four tool
+    // tiles start a new chat with a prepared request in the composer (sent
+    // only when the user sends it, so Hermes' approvals apply as usual).
     val cells = listOf(
         QuickTile("chat", R.string.home_quick_chat, OrsikIcons.Chat, onClick = onNewChat, filled = true),
-        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server, onClick = onOpenServer),
-        QuickTile("terminal", R.string.home_quick_terminal, OrsikIcons.Terminal),
-        QuickTile("files", R.string.home_quick_files, OrsikIcons.Folder),
-        QuickTile("docker", R.string.home_quick_docker, OrsikIcons.Container),
-        QuickTile("projects", R.string.home_quick_projects, OrsikIcons.Code)
-    )
+        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server, onClick = onOpenServer)
+    ) + QuickTask.entries.map { task -> QuickTile(task.key, task.labelRes, task.icon, onClick = { onQuickTask(task) }) }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cells.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -592,6 +594,17 @@ fun QuickActionGrid(onNewChat: () -> Unit, onOpenServer: () -> Unit, modifier: M
             }
         }
     }
+}
+
+/**
+ * A tool tile: a new chat titled [labelRes] whose composer holds [promptRes],
+ * a prepared request for Hermes. Nothing is sent until the user sends it.
+ */
+enum class QuickTask(val key: String, val labelRes: Int, val promptRes: Int, val icon: ImageVector) {
+    Terminal("terminal", R.string.home_quick_terminal, R.string.home_task_terminal_prompt, OrsikIcons.Terminal),
+    Files("files", R.string.home_quick_files, R.string.home_task_files_prompt, OrsikIcons.Folder),
+    Docker("docker", R.string.home_quick_docker, R.string.home_task_docker_prompt, OrsikIcons.Container),
+    Projects("projects", R.string.home_quick_projects, R.string.home_task_projects_prompt, OrsikIcons.Code)
 }
 
 /** One quick-access tile; without [onClick] it is a disabled "Bald" preview. */
