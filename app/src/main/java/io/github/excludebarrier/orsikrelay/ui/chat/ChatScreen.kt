@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,6 +67,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
+import io.github.excludebarrier.orsikrelay.ui.components.rememberReducedMotion
 import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -505,7 +511,11 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                         }
                         state.turnActivity?.let { activity ->
                             item(key = "turn_activity") {
-                                TurnActivityRow(activity, turnStartedAt)
+                                TurnActivityRow(
+                                    activity = activity,
+                                    startedAt = turnStartedAt,
+                                    toolName = state.localLines.lastOrNull()?.takeIf { it.localTool }?.toolName
+                                )
                             }
                         }
                     }
@@ -767,15 +777,41 @@ internal fun Modifier.bleed(horizontal: Dp): Modifier = layout { measurable, con
 
 /**
  * Last timeline row while a turn runs without visible progress, so a long
- * tool call or reasoning phase never looks like a stalled chat.
+ * tool call or reasoning phase never looks like a stalled chat: Orsik's
+ * own [WorkingGlyph], a status line and the elapsed time.
+ *
+ * While Hermes works the line cycles through playful verbs ("tüftelt",
+ * "sortiert", ...) under a soft shimmer; "denkt nach" stays as it is (a real
+ * status), and a running tool names the tool ([toolName], redacted). With
+ * "Remove animations" the glyph rests, the shimmer is off and the first
+ * verb (the plain "Hermes arbeitet…") stays.
  */
 @Composable
-private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
+internal fun TurnActivityRow(activity: TurnActivity, startedAt: Long, toolName: String?) {
     val elapsedSeconds by produceState(0L, startedAt) {
         while (true) {
             value = (SystemClock.elapsedRealtime() - startedAt) / 1_000
             delay(1_000)
         }
+    }
+    val reducedMotion = rememberReducedMotion()
+    val verbs = stringArrayResource(R.array.chat_turn_working_verbs)
+    var verbIndex by remember(startedAt) { mutableIntStateOf(0) }
+    LaunchedEffect(activity, reducedMotion, startedAt) {
+        if (activity != TurnActivity.Working || reducedMotion) {
+            verbIndex = 0
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(VERB_INTERVAL_MS)
+            verbIndex = (verbIndex + 1) % verbs.size
+        }
+    }
+    val label = when (activity) {
+        TurnActivity.Working -> verbs[verbIndex]
+        TurnActivity.Thinking -> stringResource(R.string.chat_turn_thinking)
+        TurnActivity.Tool -> toolName?.let { stringResource(R.string.chat_turn_tool_named, it) }
+            ?: stringResource(R.string.chat_turn_tool)
     }
     Row(
         modifier = Modifier
@@ -783,22 +819,12 @@ private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        PulsingDots()
-        // Next to a running tool chip the chip already says what happens;
-        // the row then only adds the elapsed time.
-        val label = when (activity) {
-            TurnActivity.Working -> stringResource(R.string.chat_turn_working)
-            TurnActivity.Thinking -> stringResource(R.string.chat_turn_thinking)
-            TurnActivity.Tool -> null
-        }
-        if (label != null) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 10.dp)
-            )
-        }
+        WorkingGlyph()
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(brush = shimmerBrush(reducedMotion)),
+            modifier = Modifier.padding(start = 10.dp)
+        )
         Text(
             text = if (elapsedSeconds < 60) {
                 stringResource(R.string.chat_turn_elapsed_seconds, elapsedSeconds)
@@ -811,35 +837,34 @@ private fun TurnActivityRow(activity: TurnActivity, startedAt: Long) {
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = if (label != null) 6.dp else 10.dp)
+            modifier = Modifier.padding(start = 6.dp)
         )
     }
 }
 
-/** Three dots that fade in turn, the usual "is typing" signal. */
+/** A light band sweeping over the status text; plain text colour without animations. */
 @Composable
-private fun PulsingDots() {
-    val transition = rememberInfiniteTransition(label = "turnActivityDots")
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        repeat(3) { index ->
-            val alpha by transition.animateFloat(
-                initialValue = 0.25f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 600, delayMillis = index * 200),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "turnActivityDot$index"
-            )
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .graphicsLayer { this.alpha = alpha }
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-            )
-        }
-    }
+private fun shimmerBrush(reducedMotion: Boolean): Brush {
+    val base = MaterialTheme.colorScheme.onSurfaceVariant
+    if (reducedMotion) return SolidColor(base)
+    val highlight = MaterialTheme.colorScheme.primary
+    val transition = rememberInfiniteTransition(label = "turnShimmer")
+    val x by transition.animateFloat(
+        initialValue = -SHIMMER_WIDTH_PX,
+        targetValue = SHIMMER_TRAVEL_PX,
+        animationSpec = infiniteRepeatable(tween(1_800, easing = LinearEasing), RepeatMode.Restart),
+        label = "turnShimmerX"
+    )
+    return Brush.linearGradient(
+        colors = listOf(base, highlight, base),
+        start = Offset(x, 0f),
+        end = Offset(x + SHIMMER_WIDTH_PX, 0f)
+    )
 }
+
+private const val VERB_INTERVAL_MS = 2_800L
+private const val SHIMMER_WIDTH_PX = 220f
+private const val SHIMMER_TRAVEL_PX = 900f
 
 /**
  * First timeline row while the server has older history: a button that loads

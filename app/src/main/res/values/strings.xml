@@ -353,4 +353,16 @@
         <item quantity="one">%1$d tool</item>
         <item quantity="other">%1$d tools</item>
     </plurals>
+    <!-- First entry must equal chat_turn_working: it is shown first and whenever animations are off. -->
+    <string-array name="chat_turn_working_verbs">
+        <item>Hermes is working…</item>
+        <item>Hermes is tinkering…</item>
+        <item>Hermes is sorting things out…</item>
+        <item>Hermes is checking…</item>
+        <item>Hermes is crafting…</item>
+        <item>Hermes is connecting the dots…</item>
+        <item>Hermes is looking it up…</item>
+    </string-array>
+    <string name="chat_turn_tool_named">Hermes is using %1$s…</string>
+    <string name="chat_turn_tool">Hermes is using a tool…</string>
 </resources>
