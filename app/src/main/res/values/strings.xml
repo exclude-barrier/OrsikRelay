@@ -345,4 +345,12 @@
     <string name="activity_empty_hint">Running tasks and open approvals of this app show up here.</string>
     <string name="activity_section_approvals">Approvals</string>
     <string name="sessions_empty_hint">Start one with “New chat”.</string>
+    <string name="chat_tool_running">running</string>
+    <string name="chat_tool_group_expand">Show tool calls</string>
+    <string name="chat_tool_group_collapse">Hide tool calls</string>
+    <string name="chat_tool_group_more">+%1$d</string>
+    <plurals name="chat_tool_group_count">
+        <item quantity="one">%1$d tool</item>
+        <item quantity="other">%1$d tools</item>
+    </plurals>
 </resources>

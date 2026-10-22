@@ -344,4 +344,12 @@
     <string name="activity_empty_hint">Laufende Aufgaben und offene Freigaben dieser App erscheinen hier.</string>
     <string name="activity_section_approvals">Freigaben</string>
     <string name="sessions_empty_hint">Starte einen mit „Neuer Chat“.</string>
+    <string name="chat_tool_running">läuft</string>
+    <string name="chat_tool_group_expand">Tool-Aufrufe anzeigen</string>
+    <string name="chat_tool_group_collapse">Tool-Aufrufe ausblenden</string>
+    <string name="chat_tool_group_more">+%1$d</string>
+    <plurals name="chat_tool_group_count">
+        <item quantity="one">%1$d Tool</item>
+        <item quantity="other">%1$d Tools</item>
+    </plurals>
 </resources>

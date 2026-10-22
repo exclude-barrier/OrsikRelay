@@ -180,6 +180,7 @@ internal class ChatViewModel(
                     key = nextLocalKey(),
                     role = MessageRole.TOOL,
                     content = namedToolActivityLabel.format(toolName),
+                    toolName = toolName,
                     localTool = true
                 )
             }
@@ -1007,6 +1008,9 @@ replaceLastAssistantLine(s.localLines, event.finalText)
                             content = event.toolName?.let {
                                 namedToolActivityLabel.format(it)
                             } ?: toolActivityLabel,
+                            // The redacted name only (for the tool group
+                            // summary), never a payload.
+                            toolName = event.toolName,
                             localTool = true
                         )
                     )
