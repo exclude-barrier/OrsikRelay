@@ -18,6 +18,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 
+internal const val EMPTY_STATE_ICON_TAG = "empty_state_icon"
+
 /**
  * A calm empty, loading or error state: a [leading] mark (an icon in its
  * container by default, e.g. the loading star while loading), a short
@@ -40,6 +42,7 @@ fun EmptyState(
             icon != null -> Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
+                    .testTag(EMPTY_STATE_ICON_TAG)
                     .size(56.dp)
                     .clip(ExpressiveShape.Cookie.shape)
                     .background(MaterialTheme.colorScheme.surfaceContainer)

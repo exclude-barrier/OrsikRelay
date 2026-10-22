@@ -381,7 +381,9 @@ fun SessionsScreen(
                                     Icons.Filled.Warning,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(40.dp)
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .testTag("sessionsErrorIcon")
                                 )
                             },
                             action = {

@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.assertHasClickAction
+import io.github.excludebarrier.orsikrelay.ui.components.EMPTY_STATE_ICON_TAG
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.ui.components.TAG_LOADING_INDICATOR
 import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_PREVIEW_PREFIX
@@ -633,6 +635,17 @@ class SessionsScreenUiTest {
         release.countDown()
         waitForText(context.getString(R.string.sessions_empty))
         composeRule.onNodeWithText(context.getString(R.string.sessions_empty_hint)).assertIsDisplayed()
+        composeRule.onNodeWithTag(EMPTY_STATE_ICON_TAG, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun aFailedLoadShowsTheWarningSymbolHintAndRetry() {
+        setScreen(SessionPageSource { _, _, _ -> SessionListResult.Failure(SessionListError.Network) })
+        waitForText(context.getString(R.string.error_session_generic))
+
+        composeRule.onNodeWithTag("sessionsErrorIcon", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("sessionsErrorHint").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.sessions_retry)).assertIsDisplayed().assertHasClickAction()
     }
 
     private fun setScreen(
