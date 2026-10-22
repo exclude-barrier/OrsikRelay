@@ -393,4 +393,5 @@
     <string name="onboarding_link_offer_text">Ein Link möchte dieses Formular auf den Server %1$s setzen. Übernimm ihn nur, wenn du den Link selbst geöffnet hast.</string>
     <string name="onboarding_link_offer_apply">Übernehmen</string>
     <string name="onboarding_link_offer_discard">Verwerfen</string>
+    <string name="error_profile_name_invalid">Der Servername darf keine Steuerzeichen enthalten.</string>
 </resources>

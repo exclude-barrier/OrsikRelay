@@ -26,6 +26,7 @@ object ProfileFormValidator {
     object ErrorCodes {
         const val PROFILE_NAME_EMPTY = "profile_name_empty"
         const val PROFILE_NAME_TOO_LONG = "profile_name_too_long"
+        const val PROFILE_NAME_INVALID = "profile_name_invalid"
         const val BASE_URL_INVALID = "base_url_invalid"
         const val API_KEY_EMPTY = "api_key_empty"
     }
@@ -99,6 +100,9 @@ object ProfileFormValidator {
             nameError = ErrorCodes.PROFILE_NAME_EMPTY
         } else if (trimmedName.length > PROFILE_NAME_MAX_LENGTH) {
             nameError = ErrorCodes.PROFILE_NAME_TOO_LONG
+        } else if (trimmedName.any { it.isISOControl() }) {
+            // The name is shown in the UI and in notifications.
+            nameError = ErrorCodes.PROFILE_NAME_INVALID
         }
 
         val urlResult = ProfileBaseUrlValidator.validate(baseUrl)

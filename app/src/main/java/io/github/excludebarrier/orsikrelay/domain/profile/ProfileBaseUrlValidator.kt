@@ -64,12 +64,23 @@ object ProfileBaseUrlValidator {
                 IllegalArgumentException("base url must not contain a query or fragment")
             )
         }
+        // A usable TCP port only: no 0, nothing above 65535, no empty ":".
+        if ((uri.port != -1 && uri.port !in 1..65535) || uri.rawAuthority.orEmpty().endsWith(":")) {
+            return Result.failure(
+                IllegalArgumentException("base url has an invalid port")
+            )
+        }
         return Result.success(normalize(uri))
     }
 
+    /**
+     * Rebuilds the URL from the RAW authority and path, so percent-encoding
+     * survives (a %20 or %2F is never decoded into a space or a new segment)
+     * and the result validates again unchanged.
+     */
     private fun normalize(uri: URI): String {
-        val authority = uri.authority ?: return ""
-        val path = uri.path.orEmpty().trimEnd('/')
+        val authority = uri.rawAuthority ?: return ""
+        val path = uri.rawPath.orEmpty().trimEnd('/')
         return if (path.isEmpty()) {
             "https://$authority"
         } else {

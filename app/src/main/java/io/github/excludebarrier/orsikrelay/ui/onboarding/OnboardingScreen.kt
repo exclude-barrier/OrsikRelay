@@ -551,6 +551,7 @@ fun OnboardingScreen(
 private fun profileNameErrorMessage(code: String): Int = when (code) {
     ProfileFormValidator.ErrorCodes.PROFILE_NAME_EMPTY -> R.string.error_profile_name_empty
     ProfileFormValidator.ErrorCodes.PROFILE_NAME_TOO_LONG -> R.string.error_profile_name_too_long
+    ProfileFormValidator.ErrorCodes.PROFILE_NAME_INVALID -> R.string.error_profile_name_invalid
     else -> R.string.error_profile_name_generic
 }
 

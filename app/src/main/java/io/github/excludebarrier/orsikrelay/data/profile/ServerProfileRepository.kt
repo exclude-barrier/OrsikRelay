@@ -129,8 +129,11 @@ class ServerProfileRepository(
      * Returns true iff the profile exists AND a non-secret device
      * metadata record exists for it. It NEVER reads the credential:
      * the device key stays sealed in the credential store. A missing
-     * device metadata store (no pairing support wired) or any store
-     * failure reports false, so the UI simply offers no device action.
+     * device metadata store (no pairing support wired) reports false. A
+     * store FAILURE throws [ServerProfileRepositoryException] on purpose:
+     * reporting false would make a device profile look like an API key and
+     * delete it without revoking its device key, so the profile screen
+     * treats the failure as "kind unknown" and revokes first.
      */
     fun hasDeviceCredential(profileId: String): Boolean = repositoryCall {
         if (metadataStore.get(profileId) == null) return@repositoryCall false

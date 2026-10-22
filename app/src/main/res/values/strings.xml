@@ -394,4 +394,5 @@
     <string name="onboarding_link_offer_text">A link wants to point this form at the server %1$s. Use it only if you opened the link yourself.</string>
     <string name="onboarding_link_offer_apply">Use link</string>
     <string name="onboarding_link_offer_discard">Discard</string>
+    <string name="error_profile_name_invalid">The server name must not contain control characters.</string>
 </resources>
