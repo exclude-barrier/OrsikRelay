@@ -37,7 +37,11 @@ URL unchanged.
   locally: only `once`/`deny` are accepted, `request_id` must be a non-blank
   string ≤ 256 chars (control-free), and the body must contain exactly
   `{choice, request_id}`. `session`/`always`/unknown/missing/wrong-typed/extra
-  fields are refused with a closed `400` and **never reach Hermes**.
+  fields are refused with a closed `400` and **never reach Hermes**. A core
+  with the session authority (Hermes 0.22+) also requires the run's current
+  `execution_generation`; the bridge reads it with one `GET /v1/runs/{run_id}`
+  and adds it upstream. The device never sends it, and an older core gets the
+  plain `{choice, request_id}` body.
 - **No redirect following.** The upstream client never follows redirects
   (`allow_redirects=False`) and a `3xx` answer fails closed (`502
   upstream_redirect`) with the `Location` dropped.
@@ -195,6 +199,9 @@ usable `uv python find ${BRIDGE_PYTHON:-3.14}` is missing.
 ```sh
 python -m unittest discover -s tests -v         # core + HTTP-layer + store + reconnect
 python tests/acceptance_live.py ./bridge.env    # live end-to-end (needs a bridge)
+python tests/adversarial_live.py ./bridge.env   # live attack probe: auth, scope, bodies, revoke, leaks
+python tests/approval_live.py ./bridge.env 3    # live deny: a denied dangerous command never runs
+python tests/soak_live.py ./bridge.env 6 40     # live soak: parallel devices, disconnects, re-attach
 ```
 
 ## Rollback

@@ -65,12 +65,17 @@ def _upstream_app():
         return resp
 
     async def run(_):
+        UPSTREAM["run_gets"] = int(UPSTREAM.get("run_gets", 0)) + 1
         if UPSTREAM.get("run_404"):
             return web.json_response({"error": {"code": "run_not_found"}}, status=404)
-        return web.json_response({"status": "completed"})
+        body = {"status": "completed"}
+        if "run_generation" in UPSTREAM:
+            body = {"status": "waiting_for_approval", "execution_generation": UPSTREAM["run_generation"]}
+        return web.json_response(body)
 
     async def approval(request):
         UPSTREAM["approval_posts"] = int(UPSTREAM.get("approval_posts", 0)) + 1
+        UPSTREAM["approval_body"] = await request.json()
         return web.json_response(
             {"object": "hermes.run.approval_response", "run_id": "run_1", "choice": "once", "resolved": 1}
         )
@@ -286,6 +291,43 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             resp = await self._post_approval(cred["device_key"], {"choice": choice, "request_id": "r1"})
             self.assertEqual(resp.status, 200, choice)
         self.assertEqual(UPSTREAM.get("approval_posts"), 2)
+
+    async def test_approval_adds_the_execution_generation_of_the_session_authority(self):
+        # Hermes with the session authority (0.22+) accepts only
+        # {request_id, execution_generation, choice}; the generation comes from
+        # the run status, never from the device.
+        cred = await self._pair()
+        UPSTREAM["run_generation"] = 3
+        resp = await self._post_approval(cred["device_key"], {"choice": "deny", "request_id": "r1"})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(
+            UPSTREAM["approval_body"],
+            {"choice": "deny", "request_id": "r1", "execution_generation": 3},
+        )
+
+    async def test_approval_keeps_the_v1_body_without_a_generation(self):
+        cred = await self._pair()
+        resp = await self._post_approval(cred["device_key"], {"choice": "once", "request_id": "r1"})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(UPSTREAM["approval_body"], {"choice": "once", "request_id": "r1"})
+
+    async def test_approval_ignores_a_generation_that_is_not_an_integer(self):
+        cred = await self._pair()
+        for bad in (True, "3", 1.5, None, [3]):
+            UPSTREAM["run_generation"] = bad
+            await self._post_approval(cred["device_key"], {"choice": "deny", "request_id": "r1"})
+            self.assertEqual(UPSTREAM["approval_body"], {"choice": "deny", "request_id": "r1"}, bad)
+        UPSTREAM.pop("run_generation")
+        UPSTREAM["run_404"] = True
+        resp = await self._post_approval(cred["device_key"], {"choice": "deny", "request_id": "r1"})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(UPSTREAM["approval_body"], {"choice": "deny", "request_id": "r1"})
+
+    async def test_rejected_approval_never_reads_the_run(self):
+        cred = await self._pair()
+        await self._post_approval(cred["device_key"], {"choice": "always", "request_id": "r1"})
+        self.assertEqual(int(UPSTREAM.get("run_gets", 0)), 0)
+        self.assertEqual(int(UPSTREAM.get("approval_posts", 0)), 0)
 
     async def test_mutations_are_audited_per_device_without_secrets(self):
         # Every forwarded approval/stop is attributable to one device;
@@ -826,6 +868,13 @@ class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
         async def chat(request):
             UPSTREAM["chat_posts"] = int(UPSTREAM.get("chat_posts", 0)) + 1
             if self.mode == "error":
+                charset_header = getattr(self, "error_charset_header", None)
+                if charset_header:
+                    # aiohttp's json_response (the real core) adds "; charset=utf-8".
+                    return web.Response(
+                        status=self.error_status, body=self.error_body,
+                        headers={"Content-Type": charset_header},
+                    )
                 return web.Response(
                     status=self.error_status, body=self.error_body, content_type="application/json"
                 )
@@ -888,6 +937,20 @@ class BridgeStreamLimitsHttpTest(unittest.IsolatedAsyncioTestCase):
             bridge_server._MAX_UPSTREAM_ERROR_BODY_BYTES = original
         self.assertEqual(resp.status, 502)
         self.assertEqual((await resp.json())["error"]["code"], "upstream_error_too_large")
+
+    async def test_upstream_error_with_a_charset_keeps_its_status(self):
+        # The core answers with "application/json; charset=utf-8"; relaying that
+        # must not turn a refusal into a bridge 500.
+        self.mode = "error"
+        self.error_status = 429
+        self.error_body = b'{"error":{"code":"rate_limited"}}'
+        self.error_charset_header = "application/json; charset=utf-8"
+        resp = await self.client.post(
+            "/api/sessions/s1/chat/stream", headers=self._bearer(), json={"message": "hi"}
+        )
+        self.assertEqual(resp.status, 429)
+        self.assertEqual(resp.content_type, "application/json")
+        self.assertEqual((await resp.json())["error"]["code"], "rate_limited")
 
     async def test_upstream_error_body_never_reflects_master_key(self):
         self.mode = "error"
