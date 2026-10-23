@@ -74,6 +74,10 @@ class HermesTerminalClient(
         }
         val socket = try {
             socketClient.newWebSocket(request(url, apiKey), object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    if (!closed.get()) onEvent(TerminalEvent.Opened)
+                }
+
                 override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                     if (!closed.get()) onEvent(TerminalEvent.Output(bytes.toByteArray()))
                 }

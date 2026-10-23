@@ -1,11 +1,19 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult
+import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalFontStore
+import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalAvailability
@@ -133,43 +141,153 @@ class TerminalScreenUiTest {
         composeRule.onNodeWithText(text(R.string.terminal_unsupported_title)).assertIsDisplayed()
     }
 
-    @Test
-    fun afterTheUnlockThePageReportsItsSizeAndSendsTheKeyRowsInput() {
-        assumeTrue("WebView too old for the terminal", webViewSupported)
-        val source = FakeTerminalSource()
-        val auth = FakeAppAuthenticator(autoResult = true)
-        show(source, auth)
-        composeRule.onNodeWithTag(TerminalTags.VIEW).assertIsDisplayed()
-        composeRule.onNodeWithTag(TerminalTags.KEYS).assertIsDisplayed()
-        assertEquals(1, auth.callCount)
-        composeRule.waitUntil(5_000) { source.opens == 1 }
-        // The xterm.js page loaded from the app's assets and measured its
-        // final area (an early layout pass may report less first).
+    /** Unlocks, opens and waits until the page reported a real size. */
+    private fun connected(source: FakeTerminalSource, hermes: TerminalHermes? = null) {
+        composeRule.setContent {
+            TerminalRoute(
+                profileId = "p1", source = source, authenticator = FakeAppAuthenticator(autoResult = true),
+                onBack = {}, serverLabel = "testhost", hermes = hermes, fontStore = MemoryFontStore()
+            )
+        }
+        composeRule.waitUntil(5_000) { source.listener != null }
+        source.listener!!.invoke(TerminalEvent.Opened)
         composeRule.waitUntil(15_000) { source.sizes.any { (columns, rows) -> columns >= 20 && rows >= 5 } }
-        val (columns, rows) = source.sizes.last()
-        assertTrue("size $columns x $rows (all: ${source.sizes})", columns in 20..500 && rows in 5..300)
-        composeRule.onNodeWithTag("terminal_key_pipe").performScrollTo().performClick()
-        composeRule.waitUntil(5_000) { "|" in source.sent }
-        composeRule.onNodeWithTag("terminal_key_esc").performScrollTo().performClick()
-        composeRule.waitUntil(5_000) { "\u001b" in source.sent }
-        // Outside full-screen programs the arrows use the normal cursor mode.
-        composeRule.onNodeWithTag("terminal_key_up").performScrollTo().performClick()
-        composeRule.waitUntil(5_000) { "\u001b[A" in source.sent }
+    }
+
+    private fun key(name: String) = composeRule.onNodeWithTag("terminal_key_$name").performClick()
+
+    private fun awaitSent(expected: String) = composeRule.waitUntil(5_000) { expected in source().sent }
+
+    private var current: FakeTerminalSource? = null
+    private fun source() = current!!
+
+    private class MemoryFontStore(var size: Int = 12) : TerminalFontStore {
+        override fun fontSize() = size
+        override fun setFontSize(size: Int) {
+            this.size = size
+        }
     }
 
     @Test
-    fun aClosedTerminalNamesTheReasonAndReconnectAsksAgain() {
+    fun theConnectingCardShowsUntilTheSocketIsOpen() {
         assumeTrue("WebView too old for the terminal", webViewSupported)
-        val source = FakeTerminalSource()
-        val auth = FakeAppAuthenticator(autoResult = true)
-        show(source, auth)
+        val source = FakeTerminalSource().also { current = it }
+        composeRule.setContent {
+            TerminalRoute(profileId = "p1", source = source, authenticator = FakeAppAuthenticator(autoResult = true), onBack = {}, serverLabel = "testhost")
+        }
         composeRule.waitUntil(5_000) { source.listener != null }
-        source.listener!!.invoke(TerminalEvent.Closed(TerminalCloseReason.Exited))
-        composeRule.onNodeWithText(text(R.string.terminal_closed_exited)).assertIsDisplayed()
-        composeRule.onNodeWithText(text(R.string.terminal_session_kept)).assertIsDisplayed()
+        composeRule.onNodeWithTag(TerminalTags.CONNECTING).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.terminal_subtitle_connecting, "testhost")).assertIsDisplayed()
+        source.listener!!.invoke(TerminalEvent.Opened)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(TerminalTags.CONNECTING).fetchSemanticsNodes().isEmpty() }
+        composeRule.waitUntil(15_000) { source.sizes.any { it.second >= 5 } }
+        val (columns, rows) = source.sizes.last()
+        // The subtitle names host, tmux and the size the page reported to the PTY.
+        composeRule.onNodeWithText(context.getString(R.string.terminal_subtitle_connected, "testhost", "${columns}×$rows")).assertIsDisplayed()
+    }
+
+    @Test
+    fun arrowsEnterAndSymbolsSendTheirSequences() {
+        assumeTrue("WebView too old for the terminal", webViewSupported)
+        val source = FakeTerminalSource().also { current = it }
+        connected(source)
+        key("up"); awaitSent("\u001b[A")
+        key("left"); awaitSent("\u001b[D")
+        key("enter"); awaitSent("\r")
+        key("esc"); awaitSent("\u001b")
+        key("tab"); awaitSent("\t")
+        key("dollar"); awaitSent("$")
+        key("underscore"); awaitSent("_")
+    }
+
+    @Test
+    fun ctrlAndAltLatchForTheNextKeyOnly() {
+        assumeTrue("WebView too old for the terminal", webViewSupported)
+        val source = FakeTerminalSource().also { current = it }
+        connected(source)
+        key("ctrl")
+        composeRule.onNodeWithTag(TerminalTags.MODIFIER_HINT).assertIsDisplayed()
+        composeRule.onNodeWithTag("terminal_key_ctrl").assertIsSelected()
+        key("underscore")
+        awaitSent("\u001f")
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(TerminalTags.MODIFIER_HINT).fetchSemanticsNodes().isEmpty() }
+        composeRule.onNodeWithTag("terminal_key_ctrl").assertIsNotSelected()
+        key("alt")
+        key("slash")
+        awaitSent("\u001b/")
+        key("ctrl")
+        key("up")
+        awaitSent("\u001b[1;5A")
+        // Tapping a latched modifier again releases it.
+        key("alt")
+        key("alt")
+        key("pipe")
+        awaitSent("|")
+    }
+
+    @Test
+    fun aLostConnectionKeepsTheConsoleAndOffersAReconnect() {
+        assumeTrue("WebView too old for the terminal", webViewSupported)
+        val source = FakeTerminalSource().also { current = it }
+        val auth = FakeAppAuthenticator(autoResult = true)
+        composeRule.setContent {
+            TerminalRoute(profileId = "p1", source = source, authenticator = auth, onBack = {}, serverLabel = "testhost", fontStore = MemoryFontStore())
+        }
+        composeRule.waitUntil(5_000) { source.listener != null }
+        source.listener!!.invoke(TerminalEvent.Opened)
+        source.listener!!.invoke(TerminalEvent.Closed(TerminalCloseReason.Disconnected))
+        composeRule.onNodeWithTag(TerminalTags.DISCONNECTED).assertIsDisplayed()
+        composeRule.onNodeWithTag(TerminalTags.VIEW).assertExists()
+        composeRule.onNodeWithText(context.getString(R.string.terminal_subtitle_closed, "testhost")).assertIsDisplayed()
+        composeRule.onNodeWithTag("terminal_key_esc").assertHasNoClickAction()
         composeRule.onNodeWithTag(TerminalTags.RECONNECT).performClick()
         composeRule.waitUntil(5_000) { source.opens == 2 }
         assertEquals("a reconnect asks for the credential again", 2, auth.callCount)
+        composeRule.onNodeWithTag(TerminalTags.CONNECTING).assertIsDisplayed()
+    }
+
+    @Test
+    fun theLastOutputGoesToHermesAsContext() {
+        assumeTrue("WebView too old for the terminal", webViewSupported)
+        val source = FakeTerminalSource().also { current = it }
+        val asked = CopyOnWriteArrayList<Pair<String, String>>()
+        connected(source, hermes = TerminalHermes { output, question -> asked += output to question; FilesAskResult.Opened })
+        source.listener!!.invoke(TerminalEvent.Output("disk 88% voll\r\n".toByteArray()))
+        composeRule.waitForIdle()
+        Thread.sleep(500)
+        composeRule.onNodeWithTag(TerminalTags.LAST_OUTPUT).performClick()
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(TerminalTags.COMPOSER).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithText(context.getString(R.string.terminal_output_badge)).assertIsDisplayed()
+        composeRule.onNodeWithTag(TerminalTags.COMPOSER).performTextInput("Warum?")
+        composeRule.onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.components.ComposerDockTags.SEND).performClick()
+        composeRule.waitUntil(5_000) { asked.isNotEmpty() }
+        assertTrue(asked.single().first, asked.single().first.contains("disk 88% voll"))
+        assertEquals("Warum?", asked.single().second)
+    }
+
+    @Test
+    fun theFontSizeIsKept() {
+        assumeTrue("WebView too old for the terminal", webViewSupported)
+        val source = FakeTerminalSource().also { current = it }
+        val store = MemoryFontStore(12)
+        composeRule.setContent {
+            TerminalRoute(profileId = "p1", source = source, authenticator = FakeAppAuthenticator(autoResult = true), onBack = {}, fontStore = store)
+        }
+        composeRule.waitUntil(5_000) { source.listener != null }
+        source.listener!!.invoke(TerminalEvent.Opened)
+        composeRule.onNodeWithTag(TerminalTags.FONT).performClick()
+        composeRule.onNodeWithTag(TerminalTags.FONT_LARGER).performClick()
+        composeRule.runOnIdle { assertEquals(13, store.size) }
+    }
+
+    @Test
+    fun tmuxSessionsAreAPreviewOnly() {
+        assumeTrue("WebView too old for the terminal", webViewSupported)
+        val source = FakeTerminalSource().also { current = it }
+        connected(source)
+        composeRule.onNodeWithTag(TerminalTags.TABS).assertIsDisplayed()
+        composeRule.onNodeWithTag(TerminalTags.MORE).performClick()
+        composeRule.onNodeWithTag(TerminalTags.SESSIONS).assertIsNotEnabled()
     }
 
     @Test

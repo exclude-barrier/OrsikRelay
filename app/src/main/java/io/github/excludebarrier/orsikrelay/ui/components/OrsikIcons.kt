@@ -45,6 +45,7 @@ object OrsikIcons {
     val Grid by lazy { stroke("Grid", 1.9f, "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z") }
     val ListView by lazy { stroke("ListView", 1.9f, "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01") }
     val Sort by lazy { stroke("Sort", 1.9f, "m3 16 4 4 4-4M7 20V4", "m21 8-4-4-4 4M17 4v16") }
+    val Keyboard by lazy { stroke("Keyboard", 1.9f, "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z", "M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8") }
     val Close by lazy { stroke("Close", 1.9f, "M18 6 6 18M6 6l12 12") }
     val Download by lazy { stroke("Download", 1.9f, "M12 4v11", "m7 11 5 5 5-5", "M5 20h14") }
     val Folder by lazy { stroke("Folder", 1.9f, "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z") }

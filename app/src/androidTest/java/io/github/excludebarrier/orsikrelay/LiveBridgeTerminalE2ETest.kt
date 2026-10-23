@@ -104,13 +104,19 @@ class LiveBridgeTerminalE2ETest {
             }
         }
         composeRule.setContent {
-            TerminalRoute(profileId = "live", source = source, authenticator = FakeAppAuthenticator(autoResult = true), onBack = {})
+            io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme {
+                TerminalRoute(
+                    profileId = "live", source = source, authenticator = FakeAppAuthenticator(autoResult = true),
+                    onBack = {}, serverLabel = "Teststand", hermes = { _, _ -> io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult.Failed }
+                )
+            }
         }
         composeRule.waitUntil(30_000) { live != null && sizes.any { it.second >= 5 } }
         settle(1_500)
         val (columns, rows) = sizes.last()
-        live!!.send("clear; echo SCREEN_\$((6*7)); stty size; ls -la --color=always ~ | head -5\r".toByteArray())
-        composeRule.waitUntil(20_000) { output.contains("SCREEN_42") }
+        // The size check runs before a clear, so the screen shows only ls and df.
+        live!!.send("stty size; clear; ls -la --color=always ~ | head -6; df -h / | head -2\r".toByteArray())
+        composeRule.waitUntil(20_000) { Regex("""\d+ $columns""").containsMatchIn(output) }
         settle(1_500)
         // tmux keeps one row for its status line.
         assertTrue("page ${columns}x$rows, output: ${output.takeLast(300)}", output.contains("${rows - 1} $columns"))

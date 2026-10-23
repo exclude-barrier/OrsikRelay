@@ -132,6 +132,7 @@ class HermesTerminalClientTest {
         assertTrue("second event was $secondEvent", secondEvent is TerminalEvent.Output)
         assertArrayEquals(second, (secondEvent as TerminalEvent.Output).bytes)
         events.assertNoEvent()
+        assertTrue("the open was reported", events.opened)
 
         connection.close()
         socket.awaitClosed()
@@ -342,7 +343,11 @@ class HermesTerminalClientTest {
     private class Events {
         private val queue = LinkedBlockingQueue<TerminalEvent>()
 
-        val listener: (TerminalEvent) -> Unit = { queue.offer(it) }
+        /** The open notice is recorded apart; the queue holds output and the close. */
+        @Volatile
+        var opened = false
+
+        val listener: (TerminalEvent) -> Unit = { if (it == TerminalEvent.Opened) opened = true else queue.offer(it) }
 
         fun next(timeoutMillis: Long = 5_000): TerminalEvent {
             val event = queue.poll(timeoutMillis, TimeUnit.MILLISECONDS)

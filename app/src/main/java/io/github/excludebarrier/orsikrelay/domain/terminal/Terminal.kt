@@ -8,6 +8,9 @@ import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
  * on the server and bypasses Hermes approvals.
  */
 sealed interface TerminalEvent {
+    /** The WebSocket is open (the shell is attached). */
+    data object Opened : TerminalEvent
+
     /** Raw PTY output (UTF-8 and escape sequences, possibly split anywhere). */
     class Output(val bytes: ByteArray) : TerminalEvent
 

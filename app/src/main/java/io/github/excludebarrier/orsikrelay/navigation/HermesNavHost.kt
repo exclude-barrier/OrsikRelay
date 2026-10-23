@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
 import androidx.compose.ui.platform.LocalResources
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult
@@ -327,25 +328,30 @@ fun HermesNavHost(
     // "Hermes zu <Pfad> fragen": a new session whose first message names the
     // server path (sent, like Home's composer); "In neuer Hermes-Session
     // öffnen": a new session with the path prepared in its composer.
+    // A new session whose first message is [message], sent like Home's composer.
+    suspend fun askHermes(profileId: String, message: String): FilesAskResult {
+        val creator = sessionCreator ?: productionDependencies.value.sessionCreator
+        val controller = runController ?: productionDependencies.value.runController
+        if (controller.activeRun.value != null) return FilesAskResult.Busy
+        val outbound = ChatOutboundMessage.create(message) ?: return FilesAskResult.Failed
+        val created = withContext(Dispatchers.IO) { creator.createSession(profileId, null) }
+        if (created !is SessionCreateResult.Success) return FilesAskResult.Failed
+        return when (controller.startTurn(profileId = profileId, sessionId = created.sessionId, message = outbound.text)) {
+            RunSessionController.StartTurnResult.Started -> {
+                openChat(created.sessionId, created.title)
+                FilesAskResult.Opened
+            }
+            RunSessionController.StartTurnResult.ActiveRunConflict -> FilesAskResult.Busy
+        }
+    }
+
     fun filesHermes(profileId: String): FilesHermes? {
         if (profileId.isBlank()) return null
         val creator = sessionCreator ?: productionDependencies.value.sessionCreator
         val controller = runController ?: productionDependencies.value.runController
         return FilesHermes(
-            ask = ask@{ serverPath, question ->
-                if (controller.activeRun.value != null) return@ask FilesAskResult.Busy
-                val outbound = ChatOutboundMessage.create(
-                    screenResources.getString(R.string.files_ask_message, question, serverPath)
-                ) ?: return@ask FilesAskResult.Failed
-                val created = withContext(Dispatchers.IO) { creator.createSession(profileId, null) }
-                if (created !is SessionCreateResult.Success) return@ask FilesAskResult.Failed
-                when (controller.startTurn(profileId = profileId, sessionId = created.sessionId, message = outbound.text)) {
-                    RunSessionController.StartTurnResult.Started -> {
-                        openChat(created.sessionId, created.title)
-                        FilesAskResult.Opened
-                    }
-                    RunSessionController.StartTurnResult.ActiveRunConflict -> FilesAskResult.Busy
-                }
+            ask = { serverPath, question ->
+                askHermes(profileId, screenResources.getString(R.string.files_ask_message, question, serverPath))
             },
             openInSession = { title, serverPath ->
                 val created = withContext(Dispatchers.IO) {
@@ -648,10 +654,26 @@ fun HermesNavHost(
                 )
             }
             composable(routeOf(AppScreen.Terminal)) {
+                val profileId = activeProfileId.orEmpty()
+                val admin = profileAdmin ?: productionDependencies.value.profileAdmin
+                val serverLabel by produceState("", profileId) {
+                    value = try {
+                        withContext(Dispatchers.IO) { admin.listProfiles() }.firstOrNull { it.id == profileId }?.profileName.orEmpty()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        ""
+                    }
+                }
                 TerminalRoute(
-                    profileId = activeProfileId.orEmpty(),
+                    profileId = profileId,
                     source = terminalSource ?: productionDependencies.value.terminalSource,
                     authenticator = resolvedAppAuthenticator,
+                    serverLabel = serverLabel,
+                    // Selection or last output as a code block below the question.
+                    hermes = profileId.takeIf { it.isNotBlank() }?.let { id ->
+                        TerminalHermes { output, question -> askHermes(id, question + "\n\n" + codeBlock(output)) }
+                    },
                     onBack = {
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()
@@ -813,4 +835,11 @@ internal fun decodeRouteArgument(value: String): String = try {
     String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8)
 } catch (_: IllegalArgumentException) {
     ""
+}
+
+/** [text] as a Markdown code block whose fence is longer than any backtick run inside. */
+internal fun codeBlock(text: String): String {
+    val longest = Regex("`+").findAll(text).maxOfOrNull { it.value.length } ?: 0
+    val fence = "`".repeat(maxOf(3, longest + 1))
+    return "$fence\n${text.trimEnd('\n')}\n$fence"
 }

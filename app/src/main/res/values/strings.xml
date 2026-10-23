@@ -501,4 +501,39 @@
         <item quantity="one">%1$d file</item>
         <item quantity="other">%1$d files</item>
     </plurals>
+    <string name="terminal_server_fallback">Server</string>
+    <string name="terminal_subtitle_connected">%1$s · tmux · %2$s</string>
+    <string name="terminal_subtitle_closed">%1$s · disconnected</string>
+    <string name="terminal_subtitle_connecting">Connecting to %1$s …</string>
+    <string name="terminal_tabs_preview">tmux sessions: preview, the bridge offers no session list yet</string>
+    <string name="terminal_preview_badge">PREVIEW</string>
+    <string name="terminal_font_size">Font size %1$d</string>
+    <string name="terminal_font_larger">Larger</string>
+    <string name="terminal_font_smaller">Smaller</string>
+    <string name="terminal_font_reset">Default (%1$d)</string>
+    <string name="terminal_more">More actions</string>
+    <string name="terminal_sessions_preview">Sessions (preview)</string>
+    <string name="terminal_disconnect">Disconnect</string>
+    <string name="terminal_connecting_title">Connecting session “%1$s”</string>
+    <string name="terminal_connecting_text">Attaching tmux …</string>
+    <string name="terminal_cancel">Cancel</string>
+    <string name="terminal_disconnected_title">Connection lost</string>
+    <string name="terminal_disconnected_text">The tmux session keeps running on the server. Nothing is lost when you reconnect.</string>
+    <string name="terminal_close">Close</string>
+    <string name="terminal_ctrl_hint">Ctrl active · e.g. C = interrupt</string>
+    <string name="terminal_alt_hint">Alt active · next key with Alt</string>
+    <string name="terminal_copy">Copy</string>
+    <string name="terminal_paste">Paste</string>
+    <string name="terminal_to_hermes">To Hermes</string>
+    <string name="terminal_copied">Copied.</string>
+    <string name="terminal_key_alt">Alt</string>
+    <string name="terminal_key_enter">Enter</string>
+    <string name="terminal_last_output_to_hermes">Last output to Hermes</string>
+    <string name="terminal_output_to_hermes">Output to Hermes</string>
+    <string name="terminal_keyboard_show">Show keyboard</string>
+    <string name="terminal_keyboard_hide">Hide keyboard</string>
+    <string name="terminal_selection_badge">SELECTION</string>
+    <string name="terminal_output_badge">OUTPUT</string>
+    <string name="terminal_ask_dismiss">Do not send to Hermes</string>
+    <string name="terminal_ask_hint">What should Hermes do with it?</string>
 </resources>

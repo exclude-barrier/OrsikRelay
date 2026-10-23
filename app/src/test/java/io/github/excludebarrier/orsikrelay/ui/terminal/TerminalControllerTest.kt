@@ -110,9 +110,13 @@ class TerminalControllerTest {
         controller.connect()
         advanceUntilIdle()
 
-        assertEquals(TerminalUiState.Connected, controller.state.value)
+        // Connecting until the socket reports it is open.
+        assertEquals(TerminalUiState.Connecting, controller.state.value)
         assertEquals(1, source.openCalls)
         val onEvent = source.callbacks.single()
+        onEvent(TerminalEvent.Opened)
+        advanceUntilIdle()
+        assertEquals(TerminalUiState.Connected, controller.state.value)
         onEvent(TerminalEvent.Output(byteArrayOf(1)))
         onEvent(TerminalEvent.Output(byteArrayOf(2, 3)))
         advanceUntilIdle()
@@ -122,6 +126,20 @@ class TerminalControllerTest {
         assertArrayEquals(byteArrayOf(2, 3), received[1])
 
         controller.dispose()
+    }
+
+    @Test
+    fun cancelWhileConnectingClosesAndIgnoresTheLateOpen() = runTest {
+        val connection = FakeConnection()
+        val source = FakeSource(openResult = connection)
+        val controller = newController(source, mutableListOf())
+        controller.connect()
+        advanceUntilIdle()
+        controller.cancel()
+        source.callbacks.single()(TerminalEvent.Opened)
+        advanceUntilIdle()
+        assertEquals(TerminalUiState.Closed(TerminalCloseReason.Disconnected), controller.state.value)
+        assertEquals(1, connection.closeCalls)
     }
 
     @Test
@@ -205,7 +223,8 @@ class TerminalControllerTest {
         firstVisit(TerminalEvent.Closed(TerminalCloseReason.Exited))
         advanceUntilIdle()
 
-        assertEquals(TerminalUiState.Connected, controller.state.value)
+        // The old visit's events change nothing; the new one is still connecting.
+        assertEquals(TerminalUiState.Connecting, controller.state.value)
         assertTrue("old output must be ignored", received.isEmpty())
         assertEquals("old close must be ignored", 0, secondConnection.closeCalls)
 

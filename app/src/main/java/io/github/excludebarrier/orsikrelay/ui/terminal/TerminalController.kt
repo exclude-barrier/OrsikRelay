@@ -30,6 +30,9 @@ internal sealed interface TerminalUiState {
     data object NeedsUnlock : TerminalUiState
     data object UnlockUnavailable : TerminalUiState
     data object UnlockFailed : TerminalUiState
+
+    /** Unlocked; the socket is opening (tmux is being attached). */
+    data object Connecting : TerminalUiState
     data object Connected : TerminalUiState
     data class Closed(val reason: TerminalCloseReason) : TerminalUiState
 
@@ -94,7 +97,7 @@ internal class TerminalController(
         val visit = ++generation
         val channel = Channel<ByteArray>(OUTPUT_CHUNKS)
         outputChannel.value = channel
-        _state.value = TerminalUiState.Connected
+        _state.value = TerminalUiState.Connecting
         scope.launch {
             val opened = withContext(ioDispatcher) {
                 source.open(profileId) { event -> onEvent(visit, channel, event) }
@@ -108,7 +111,7 @@ internal class TerminalController(
                 return@launch
             }
             // A Closed may already have been handled while open() returned.
-            if (_state.value != TerminalUiState.Connected) {
+            if (_state.value != TerminalUiState.Connecting && _state.value != TerminalUiState.Connected) {
                 opened.close()
                 return@launch
             }
@@ -140,6 +143,13 @@ internal class TerminalController(
         _state.value = TerminalUiState.Paused
     }
 
+    /** "Abbrechen" while connecting: nothing stays open. */
+    fun cancel() {
+        disconnect()
+        ++generation
+        _state.value = TerminalUiState.Closed(TerminalCloseReason.Disconnected)
+    }
+
     fun dispose() {
         disconnect()
         ++generation
@@ -158,6 +168,9 @@ internal class TerminalController(
             // Blocks the socket reader while the page is behind; returns at
             // once when the channel was closed (the visit ended).
             is TerminalEvent.Output -> channel.trySendBlocking(event.bytes)
+            TerminalEvent.Opened -> scope.launch {
+                if (visit == generation && _state.value == TerminalUiState.Connecting) _state.value = TerminalUiState.Connected
+            }
             is TerminalEvent.Closed -> scope.launch { finish(visit, channel, event.reason) }
         }
     }

@@ -500,4 +500,39 @@
         <item quantity="one">%1$d Datei</item>
         <item quantity="other">%1$d Dateien</item>
     </plurals>
+    <string name="terminal_server_fallback">Server</string>
+    <string name="terminal_subtitle_connected">%1$s · tmux · %2$s</string>
+    <string name="terminal_subtitle_closed">%1$s · getrennt</string>
+    <string name="terminal_subtitle_connecting">Verbinde mit %1$s …</string>
+    <string name="terminal_tabs_preview">tmux-Sitzungen: Vorschau, die Bridge bietet noch keine Sitzungsliste</string>
+    <string name="terminal_preview_badge">VORSCHAU</string>
+    <string name="terminal_font_size">Schriftgröße %1$d</string>
+    <string name="terminal_font_larger">Größer</string>
+    <string name="terminal_font_smaller">Kleiner</string>
+    <string name="terminal_font_reset">Standard (%1$d)</string>
+    <string name="terminal_more">Weitere Aktionen</string>
+    <string name="terminal_sessions_preview">Sitzungen (Vorschau)</string>
+    <string name="terminal_disconnect">Trennen</string>
+    <string name="terminal_connecting_title">Sitzung „%1$s“ wird verbunden</string>
+    <string name="terminal_connecting_text">tmux wird angehängt …</string>
+    <string name="terminal_cancel">Abbrechen</string>
+    <string name="terminal_disconnected_title">Verbindung getrennt</string>
+    <string name="terminal_disconnected_text">Die tmux-Sitzung läuft auf dem Server weiter. Beim Neuverbinden geht nichts verloren.</string>
+    <string name="terminal_close">Schließen</string>
+    <string name="terminal_ctrl_hint">Ctrl aktiv · z. B. C = Abbruch</string>
+    <string name="terminal_alt_hint">Alt aktiv · nächste Taste mit Alt</string>
+    <string name="terminal_copy">Kopieren</string>
+    <string name="terminal_paste">Einfügen</string>
+    <string name="terminal_to_hermes">An Hermes</string>
+    <string name="terminal_copied">Kopiert.</string>
+    <string name="terminal_key_alt">Alt</string>
+    <string name="terminal_key_enter">Eingabe</string>
+    <string name="terminal_last_output_to_hermes">Letzte Ausgabe an Hermes</string>
+    <string name="terminal_output_to_hermes">Ausgabe an Hermes</string>
+    <string name="terminal_keyboard_show">Tastatur einblenden</string>
+    <string name="terminal_keyboard_hide">Tastatur ausblenden</string>
+    <string name="terminal_selection_badge">AUSWAHL</string>
+    <string name="terminal_output_badge">AUSGABE</string>
+    <string name="terminal_ask_dismiss">Nicht an Hermes senden</string>
+    <string name="terminal_ask_hint">Was soll Hermes damit tun?</string>
 </resources>
