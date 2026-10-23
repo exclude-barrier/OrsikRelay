@@ -135,6 +135,7 @@ fun ProfilesScreen(
     // values), the tools start a prepared Hermes request; null keeps the
     // tiles as previews.
     onOpenMonitoring: (() -> Unit)? = null,
+    onOpenTerminal: (() -> Unit)? = null,
     startTask: (suspend (title: String, prompt: String) -> Boolean)? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -412,7 +413,7 @@ fun ProfilesScreen(
                     Text(text = stringResource(R.string.onboarding_title), fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            item(key = "management") { Management(onOpenMonitoring, startTask) }
+            item(key = "management") { Management(onOpenMonitoring, onOpenTerminal, startTask) }
         }
     }
 
@@ -663,20 +664,22 @@ private fun ProfileRow(
 
 /**
  * "Verwaltung" of the active server: Monitoring opens Home's live values,
- * Docker/Terminal/Dateien start the same prepared Hermes requests as Home's
- * tiles. Without the callbacks (no active server) the tiles stay previews.
+ * Terminal the server shell, Docker/Dateien start the same prepared Hermes
+ * requests as Home's tiles. Without the callbacks (no active server) the
+ * tiles stay previews.
  */
 @Composable
 private fun Management(
     onOpenMonitoring: (() -> Unit)?,
+    onOpenTerminal: (() -> Unit)?,
     startTask: (suspend (title: String, prompt: String) -> Boolean)?
 ) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     val live = onOpenMonitoring != null && startTask != null
-    val tasks = listOf(QuickTask.Docker, QuickTask.Terminal, QuickTask.Files)
-    val taskTexts = tasks.associateWith { stringResource(it.labelRes) to stringResource(it.promptRes) }
+    val tasks = listOf(QuickTask.Docker, QuickTask.Files)
+    val taskTexts = tasks.associateWith { stringResource(it.labelRes) to stringResource(checkNotNull(it.promptRes)) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 14.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -692,7 +695,8 @@ private fun Management(
             if (!live) PreviewBadge()
         }
         val tiles: List<Triple<String, Int, Pair<ImageVector, (() -> Unit)?>>> = listOf(
-            Triple("monitoring", R.string.profiles_tile_monitoring, OrsikIcons.Activity to onOpenMonitoring)
+            Triple("monitoring", R.string.profiles_tile_monitoring, OrsikIcons.Activity to onOpenMonitoring),
+            Triple(QuickTask.Terminal.key, QuickTask.Terminal.labelRes, QuickTask.Terminal.icon to onOpenTerminal)
         ) + tasks.map { task ->
             Triple(task.key, task.labelRes, task.icon to startTask?.let { start ->
                 {
@@ -718,9 +722,11 @@ private fun Management(
                     if (action != null) {
                         LiveTile(
                             stringResource(label), icon, filled = false, onClick = action, modifier = tileModifier,
-                            onClickLabel = stringResource(
-                                if (key == "monitoring") R.string.profiles_monitoring_click_label else R.string.home_task_click_label
-                            )
+                            onClickLabel = when (key) {
+                                "monitoring" -> stringResource(R.string.profiles_monitoring_click_label)
+                                QuickTask.Terminal.key -> null
+                                else -> stringResource(R.string.home_task_click_label)
+                            }
                         )
                     } else {
                         PreviewTile(label = stringResource(label), icon = icon, stacked = false, modifier = tileModifier)

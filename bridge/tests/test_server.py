@@ -490,7 +490,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(collect.call_count, 2)
 
     def test_capabilities_advertise_host_metrics_and_services_come_from_the_env(self):
-        caps = core.build_capabilities()
+        caps = core.build_capabilities(terminal=False)
         self.assertIs(caps["features"]["host_metrics"], True)
         self.assertEqual(caps["endpoints"]["host_metrics"], {"method": "GET", "path": "/v1/host/metrics"})
         self.assertEqual(self.state.host_services, ("hermes-gateway", "orsik-mobile-bridge"))

@@ -379,7 +379,6 @@
     <string name="home_server_gpu_none">none</string>
     <string name="home_server_unreadable">The values cannot be read right now.</string>
     <string name="home_server_services_down">not running: %1$s</string>
-    <string name="home_task_terminal_prompt">Run `uptime` and `df -h` on the server and show me the output.</string>
     <string name="home_task_files_prompt">Show me the files and folders in my home directory on the server, with size and modification date.</string>
     <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
     <string name="home_task_projects_prompt">Which projects (Git repositories) are in my home directory on the server? Show name, branch and last commit for each.</string>
@@ -402,4 +401,29 @@
         <item quantity="one">%1$d core</item>
         <item quantity="other">%1$d cores</item>
     </plurals>
+    <string name="terminal_title">Terminal</string>
+    <string name="terminal_back">Back</string>
+    <string name="terminal_checking">Connecting to the server terminal …</string>
+    <string name="terminal_unsupported_title">The terminal is switched off on this server.</string>
+    <string name="terminal_unsupported_text">The server admin can switch it on with BRIDGE_TERMINAL=1 in bridge.env. It is a shell as the bridge user, without Hermes approvals.</string>
+    <string name="terminal_check_failed">The server cannot be reached right now.</string>
+    <string name="terminal_reconnect">Reconnect</string>
+    <string name="terminal_unlock_prompt">Open terminal</string>
+    <string name="terminal_unlock_unavailable">The terminal needs a screen lock on this device (fingerprint, PIN or pattern).</string>
+    <string name="terminal_unlock_failed">Not confirmed. Without confirmation no terminal opens.</string>
+    <string name="terminal_unlock_again">Confirm again</string>
+    <string name="terminal_session_kept">The tmux session keeps running on the server.</string>
+    <string name="terminal_closed_exited">The shell ended.</string>
+    <string name="terminal_closed_unauthorized">This device is no longer authorized on the server.</string>
+    <string name="terminal_closed_busy">Too many terminals are already open on the server.</string>
+    <string name="terminal_closed_disconnected">The connection to the terminal broke.</string>
+    <string name="terminal_webview_unsupported">This device\'s WebView is too old for the terminal. Update “Android System WebView”.</string>
+    <string name="terminal_view_description">Server terminal</string>
+    <string name="terminal_key_esc">Esc</string>
+    <string name="terminal_key_tab">Tab</string>
+    <string name="terminal_key_ctrl">Ctrl</string>
+    <string name="terminal_key_left">Arrow left</string>
+    <string name="terminal_key_down">Arrow down</string>
+    <string name="terminal_key_up">Arrow up</string>
+    <string name="terminal_key_right">Arrow right</string>
 </resources>

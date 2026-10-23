@@ -1,0 +1,2 @@
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg, #000); }
+#terminal { position: absolute; inset: 4px; }

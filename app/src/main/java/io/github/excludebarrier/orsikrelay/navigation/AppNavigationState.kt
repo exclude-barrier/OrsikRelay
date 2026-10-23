@@ -17,6 +17,7 @@ sealed interface AppScreen {
     data object Profiles : AppScreen
     data object Settings : AppScreen
     data object About : AppScreen
+    data object Terminal : AppScreen
 }
 
 /** The bottom-navigation tabs, in bar order. Every other screen hides the bar. */

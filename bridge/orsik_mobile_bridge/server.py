@@ -9,6 +9,7 @@ namespace the shipped client already speaks), so the client is a drop-in:
   GET  /health                              (proxied, unauthenticated)
   GET  /v1/capabilities                     (bridge-generated, device token)
   GET  /v1/host/metrics                     (bridge-generated, read-only, device token)
+  GET  /v1/terminal                         (WebSocket PTY, only with BRIDGE_TERMINAL=1, device token)
   POST /v1/devices/pair                     (bridge-generated, unauthenticated)
   POST /v1/devices/self/revoke              (bridge-generated, device token)
   POST /v1/runs/{run_id}/approval           (validated, device token)
@@ -61,6 +62,7 @@ from . import hostmetrics
 from . import pairing
 from . import runhub
 from . import store as store_mod
+from . import terminal
 from .sse import (
     MAX_FRAME_BYTES,
     Frame,
@@ -127,6 +129,7 @@ class BridgeState:
         master_key: str,
         store: store_mod.BridgeStore | None = None,
         host_services: tuple[str, ...] = hostmetrics.DEFAULT_SERVICES,
+        terminal_command: tuple[str, ...] | None = None,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.master_key = master_key
@@ -151,6 +154,10 @@ class BridgeState:
         # subprocesses in parallel.
         self.host_metrics_lock = asyncio.Lock()
         self.host_metrics_cache: tuple[float, dict] | None = None
+        # None: the terminal is off (BRIDGE_TERMINAL); otherwise the fixed
+        # argv of the tmux attach.
+        self.terminal_command = terminal_command
+        self.active_terminals = 0
 
 
 async def _db(state: BridgeState, fn, *args, **kwargs):
@@ -286,8 +293,12 @@ def build_state_from_env(env: dict[str, str]) -> BridgeState:
     if not master_key:
         raise SystemExit("Bridge needs the Hermes API key (BRIDGE_HERMES_ENV or HERMES_API_KEY)")
     host_services = hostmetrics.parse_services(env.get("BRIDGE_HOST_SERVICES"))
+    terminal_command = (
+        terminal.default_command() if terminal.parse_enabled(env.get("BRIDGE_TERMINAL")) else None)
     store = store_mod.BridgeStore(_state_db_path(env))
-    return BridgeState(upstream=upstream, master_key=master_key, store=store, host_services=host_services)
+    return BridgeState(
+        upstream=upstream, master_key=master_key, store=store,
+        host_services=host_services, terminal_command=terminal_command)
 
 
 def _device_token(request: web.Request) -> str | None:
@@ -341,6 +352,7 @@ def create_app(state: BridgeState) -> web.Application:
     app.router.add_get("/health", _handle_health)
     app.router.add_get("/v1/capabilities", _handle_capabilities)
     app.router.add_get(HOST_METRICS_PATH, _handle_host_metrics)
+    app.router.add_get(core.TERMINAL_PATH, _handle_terminal)
     app.router.add_post("/v1/devices/pair", _handle_pair)
     app.router.add_post("/v1/devices/self/revoke", _handle_self_revoke)
     # No HTTP admin surface: pairing codes are issued only via the local operator
@@ -381,7 +393,7 @@ async def _handle_capabilities(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
     if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
-    return web.json_response(core.build_capabilities())
+    return web.json_response(core.build_capabilities(terminal=state.terminal_command is not None))
 
 
 async def _handle_host_metrics(request: web.Request) -> web.Response:
@@ -408,6 +420,111 @@ async def _handle_host_metrics(request: web.Request) -> web.Response:
             state.host_metrics_cache = (time.monotonic(), snapshot)
             cached = state.host_metrics_cache
     return web.json_response(cached[1])
+
+
+# WebSocket close codes: 1000 the shell ended, 1008 a malformed control
+# message, 4401 the device was revoked while connected.
+_TERMINAL_CLOSE_CODES = {"exited": 1000, "protocol": 1008, "revoked": 4401}
+
+
+async def _handle_terminal(request: web.Request) -> web.StreamResponse:
+    """A PTY on the tmux session, over a WebSocket (binary: bytes both ways;
+    text: a resize). Off unless BRIDGE_TERMINAL=1; never retried by design."""
+    state: BridgeState = request.app[STATE_KEY]
+    token = _device_token(request)
+    record = await _db(state, state.tokens.lookup, token)
+    if record is None:
+        return _closed(401, "invalid_credentials")
+    if state.terminal_command is None:
+        return _closed(403, "endpoint_out_of_scope")
+    if request.query_string:
+        return _closed(403, "query_not_allowed")
+    # A browser always sends Origin on a WebSocket; the app never does. This
+    # closes cross-site WebSocket hijacking even if a token leaked into one.
+    if "Origin" in request.headers:
+        _audit("terminal", record, status=403)
+        return _closed(403, "origin_not_allowed")
+    ws = web.WebSocketResponse(
+        max_msg_size=terminal.MAX_INPUT_BYTES, heartbeat=30.0, autoping=True)
+    if not ws.can_prepare(request).ok:
+        return _closed(400, "websocket_required")
+    if state.active_terminals >= terminal.MAX_TERMINALS:
+        _audit("terminal", record, status=429)
+        return _closed(429, "terminal_limit")
+    state.active_terminals += 1
+    try:
+        try:
+            pty = await terminal.Pty.spawn(state.terminal_command)
+        except OSError:
+            logger.error("Terminal could not be started")
+            _audit("terminal", record, status=503)
+            return _closed(503, "terminal_unavailable")
+        # aiohttp cancels the handler when the connection drops; the client
+        # is then simply gone.
+        reason = "client"
+        try:
+            await ws.prepare(request)
+            _audit("terminal_open", record)
+            reason = await _pump_terminal(state, token, ws, pty)
+        finally:
+            # Shielded: a second cancellation must not leak the PTY or leave
+            # the tmux client running.
+            await asyncio.shield(pty.close())
+            _audit("terminal_close", record, reason=reason)
+        if not ws.closed:
+            await ws.close(
+                code=_TERMINAL_CLOSE_CODES.get(reason, 1011), message=reason.encode())
+        return ws
+    finally:
+        state.active_terminals -= 1
+
+
+async def _pump_terminal(
+    state: BridgeState, token: str | None, ws: web.WebSocketResponse, pty: terminal.Pty
+) -> str:
+    """Relays until the shell exits, the client leaves, sends garbage or is
+    revoked; returns which one (never input or output content)."""
+
+    async def output() -> str:
+        while True:
+            data = await pty.read()
+            if not data:
+                return "exited"
+            await ws.send_bytes(data)
+
+    async def input_() -> str:
+        async for msg in ws:
+            if msg.type == web.WSMsgType.BINARY:
+                await pty.write(msg.data)
+            elif msg.type == web.WSMsgType.TEXT:
+                try:
+                    size = terminal.parse_resize(json.loads(msg.data))
+                except (ValueError, RecursionError):
+                    size = None
+                if size is None:
+                    return "protocol"
+                pty.resize(*size)
+            else:
+                return "error"
+        return "client"
+
+    async def revocation() -> str:
+        while True:
+            await asyncio.sleep(_REVOKE_CHECK_INTERVAL)
+            if await _db(state, state.tokens.lookup, token) is None:
+                return "revoked"
+
+    tasks = [asyncio.create_task(job()) for job in (output, input_, revocation)]
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    first = next(task for task in tasks if task in done)
+    if first.cancelled() or first.exception() is not None:
+        return "error"
+    return first.result()
 
 
 async def _handle_pair(request: web.Request) -> web.Response:

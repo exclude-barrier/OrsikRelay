@@ -378,7 +378,6 @@
     <string name="home_server_gpu_none">keine</string>
     <string name="home_server_unreadable">Die Werte sind gerade nicht lesbar.</string>
     <string name="home_server_services_down">nicht aktiv: %1$s</string>
-    <string name="home_task_terminal_prompt">Führe auf dem Server `uptime` und `df -h` aus und zeig mir die Ausgabe.</string>
     <string name="home_task_files_prompt">Zeig mir die Dateien und Ordner in meinem Home-Verzeichnis auf dem Server, mit Größe und Änderungsdatum.</string>
     <string name="home_task_docker_prompt">Liste alle Docker-Container auf dem Server mit Name, Image, Status und Ports auf.</string>
     <string name="home_task_projects_prompt">Welche Projekte (Git-Repositories) liegen in meinem Home-Verzeichnis auf dem Server? Zeig mir je Name, Branch und letzten Commit.</string>
@@ -401,4 +400,29 @@
         <item quantity="one">%1$d Kern</item>
         <item quantity="other">%1$d Kerne</item>
     </plurals>
+    <string name="terminal_title">Terminal</string>
+    <string name="terminal_back">Zurück</string>
+    <string name="terminal_checking">Verbinde mit dem Server-Terminal …</string>
+    <string name="terminal_unsupported_title">Das Terminal ist auf diesem Server ausgeschaltet.</string>
+    <string name="terminal_unsupported_text">Der Server-Admin kann es mit BRIDGE_TERMINAL=1 in bridge.env einschalten. Es ist eine Shell als Bridge-Nutzer, ohne Hermes-Freigaben.</string>
+    <string name="terminal_check_failed">Der Server ist gerade nicht erreichbar.</string>
+    <string name="terminal_reconnect">Neu verbinden</string>
+    <string name="terminal_unlock_prompt">Terminal öffnen</string>
+    <string name="terminal_unlock_unavailable">Für das Terminal braucht dieses Gerät eine Bildschirmsperre (Fingerabdruck, PIN oder Muster).</string>
+    <string name="terminal_unlock_failed">Nicht bestätigt. Ohne Bestätigung öffnet sich kein Terminal.</string>
+    <string name="terminal_unlock_again">Erneut bestätigen</string>
+    <string name="terminal_session_kept">Die tmux-Sitzung läuft auf dem Server weiter.</string>
+    <string name="terminal_closed_exited">Die Shell wurde beendet.</string>
+    <string name="terminal_closed_unauthorized">Dieses Gerät ist am Server nicht mehr berechtigt.</string>
+    <string name="terminal_closed_busy">Auf dem Server sind schon zu viele Terminals offen.</string>
+    <string name="terminal_closed_disconnected">Die Verbindung zum Terminal ist abgebrochen.</string>
+    <string name="terminal_webview_unsupported">Die WebView dieses Geräts ist zu alt für das Terminal. Aktualisiere „Android System WebView“.</string>
+    <string name="terminal_view_description">Server-Terminal</string>
+    <string name="terminal_key_esc">Esc</string>
+    <string name="terminal_key_tab">Tab</string>
+    <string name="terminal_key_ctrl">Strg</string>
+    <string name="terminal_key_left">Pfeil links</string>
+    <string name="terminal_key_down">Pfeil runter</string>
+    <string name="terminal_key_up">Pfeil hoch</string>
+    <string name="terminal_key_right">Pfeil rechts</string>
 </resources>

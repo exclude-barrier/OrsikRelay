@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalRoute
+import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalSource
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
 import io.github.excludebarrier.orsikrelay.ui.home.createPreparedChat
 import androidx.activity.compose.LocalActivity
@@ -110,6 +112,7 @@ fun HermesNavHost(
     materialYouController: MaterialYouController? = null,
     appLockController: AppLockController? = null,
     appAuthenticator: AppAuthenticator? = null,
+    terminalSource: TerminalSource? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
     capabilityStore: RunApprovalCapabilityStore? = null,
@@ -310,6 +313,10 @@ fun HermesNavHost(
         }
     }
 
+    fun openTerminal() {
+        navController.navigate(routeOf(AppScreen.Terminal)) { launchSingleTop = true }
+    }
+
     // Server management, shown as the Server tab and as the Profiles route
     // (opened from settings or the Home server switcher, with a back arrow).
     @Composable
@@ -354,6 +361,7 @@ fun HermesNavHost(
                     .disconnect(profileId)
             },
             onOpenMonitoring = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openTab(AppScreen.Home) } },
+            onOpenTerminal = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openTerminal() } },
             startTask = activeProfileId?.takeIf { it.isNotBlank() }?.let { profileId ->
                 { title: String, prompt: String ->
                     val created = withContext(Dispatchers.IO) {
@@ -423,6 +431,7 @@ fun HermesNavHost(
                             launchSingleTop = true
                         }
                     },
+                    onOpenTerminal = ::openTerminal,
                     onNoServer = {
                         navController.navigate(routeOf(AppScreen.Welcome)) {
                             popUpTo(navController.graph.id) { inclusive = true }
@@ -584,6 +593,18 @@ fun HermesNavHost(
                     }
                 )
             }
+            composable(routeOf(AppScreen.Terminal)) {
+                TerminalRoute(
+                    profileId = activeProfileId.orEmpty(),
+                    source = terminalSource ?: productionDependencies.value.terminalSource,
+                    authenticator = resolvedAppAuthenticator,
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
+                )
+            }
             composable(routeOf(AppScreen.About)) {
                 AboutScreen(
                     versionName = BuildConfig.VERSION_NAME,
@@ -688,6 +709,7 @@ internal fun routeOf(screen: AppScreen): String = when (screen) {
     AppScreen.Profiles -> "profiles"
     AppScreen.Settings -> "settings"
     AppScreen.About -> "about"
+    AppScreen.Terminal -> "terminal"
 }
 
 internal const val CHAT_ARGUMENT = "sessionId"

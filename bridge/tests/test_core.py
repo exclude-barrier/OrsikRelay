@@ -118,7 +118,7 @@ class ProxyRouteTest(unittest.TestCase):
 
 class CapabilitiesTest(unittest.TestCase):
     def test_contract_envelope_exact(self):
-        caps = core.build_capabilities()
+        caps = core.build_capabilities(terminal=False)
         self.assertEqual(caps["object"], "hermes.api_server.capabilities")
         self.assertEqual(caps["platform"], "hermes-agent")
         self.assertEqual(caps["auth"], {"type": "bearer", "required": True})
@@ -128,20 +128,20 @@ class CapabilitiesTest(unittest.TestCase):
         self.assertTrue(caps["features"]["session_chat_streaming"])
 
     def test_device_credentials_contract_exact_four_fields(self):
-        contract = core.build_capabilities()["features"]["device_credentials"]
+        contract = core.build_capabilities(terminal=False)["features"]["device_credentials"]
         self.assertEqual(
             set(contract), {"enabled", "protocol_version", "pair_endpoint", "self_revoke_endpoint"}
         )
         self.assertTrue(contract["enabled"])
         self.assertEqual(contract["protocol_version"], 1)
-        endpoints = core.build_capabilities()["endpoints"]
+        endpoints = core.build_capabilities(terminal=False)["endpoints"]
         self.assertEqual(endpoints["device_pair"], {"method": "POST", "path": "/v1/devices/pair"})
         self.assertEqual(
             endpoints["device_self_revoke"], {"method": "POST", "path": "/v1/devices/self/revoke"}
         )
 
     def test_interactive_approvals_contract_exact(self):
-        features = core.build_capabilities()["features"]
+        features = core.build_capabilities(terminal=False)["features"]
         self.assertEqual(
             features["session_chat_interactive_approvals"],
             {
@@ -154,7 +154,7 @@ class CapabilitiesTest(unittest.TestCase):
         )
 
     def test_core_endpoints_paths_exact(self):
-        endpoints = core.build_capabilities()["endpoints"]
+        endpoints = core.build_capabilities(terminal=False)["endpoints"]
         self.assertEqual(endpoints["health"], {"method": "GET", "path": "/health"})
         self.assertEqual(endpoints["sessions"], {"method": "GET", "path": "/api/sessions"})
         self.assertEqual(
@@ -257,7 +257,7 @@ class SessionManagementTest(unittest.TestCase):
             self.assertEqual(core.validate_session_patch_body(body), (False, "invalid_json"))
 
     def test_capabilities_advertise_archive_and_delete(self):
-        caps = core.build_capabilities()
+        caps = core.build_capabilities(terminal=False)
         self.assertIs(caps["features"]["session_archive"], True)
         self.assertIs(caps["features"]["session_delete"], True)
         self.assertEqual(
@@ -292,7 +292,7 @@ class UnknownRunResolutionTest(unittest.TestCase):
             self.assertEqual(core.validate_resolve_unknown_body(body), (False, "invalid_json"))
 
     def test_capabilities_advertise_the_resolution(self):
-        caps = core.build_capabilities()
+        caps = core.build_capabilities(terminal=False)
         self.assertIs(caps["features"]["run_unknown_resolution"], True)
         self.assertEqual(
             caps["endpoints"]["run_unknown_resolution"],
