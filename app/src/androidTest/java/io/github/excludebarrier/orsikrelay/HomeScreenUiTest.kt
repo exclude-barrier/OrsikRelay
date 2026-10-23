@@ -190,13 +190,13 @@ class HomeScreenUiTest {
         )
 
         composeRule.onNodeWithTag(HomeTags.SERVER_STRIP).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_cpu)}: 28 %: " +
-            context.getString(R.string.home_server_cores, 6)).assertExists()
-        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_ram)}: 50 %: 15/30 GB").assertExists()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_cpu)}, 28 %, " +
+            context.resources.getQuantityString(R.plurals.home_server_cores, 6, 6)).assertExists()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_ram)}, 50 %, 15/30 GB").assertExists()
         composeRule.onNodeWithContentDescription(
-            "${context.getString(R.string.home_server_gpu)}: ${context.getString(R.string.home_server_gpu_none)}"
+            "${context.getString(R.string.home_server_gpu)}, ${context.getString(R.string.home_server_gpu_none)}"
         ).assertExists()
-        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}: 1/2").assertExists()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}, 1/2").assertExists()
         composeRule.onNodeWithTag(HomeTags.SERVER_SERVICES_DOWN)
             .assertTextEquals(context.getString(R.string.home_server_services_down, "orsik-mobile-bridge"))
         assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_preview_text)).fetchSemanticsNodes().size)
@@ -211,7 +211,7 @@ class HomeScreenUiTest {
                 )
             )
         )
-        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}: 1/2").assertExists()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}, 1/2").assertExists()
         assertEquals(0, composeRule.onAllNodesWithTag(HomeTags.SERVER_SERVICES_DOWN).fetchSemanticsNodes().size)
     }
 
@@ -233,10 +233,10 @@ class HomeScreenUiTest {
             fontScale = 2f
         )
         val cpu = composeRule.onNodeWithContentDescription(
-            "${context.getString(R.string.home_server_cpu)}: 23 %: " + context.getString(R.string.home_server_cores, 6)
+            "${context.getString(R.string.home_server_cpu)}, 23 %, " + context.resources.getQuantityString(R.plurals.home_server_cores, 6, 6)
         ).fetchSemanticsNode().positionInRoot
         val gpu = composeRule.onNodeWithContentDescription(
-            "${context.getString(R.string.home_server_gpu)}: ${context.getString(R.string.home_server_gpu_none)}"
+            "${context.getString(R.string.home_server_gpu)}, ${context.getString(R.string.home_server_gpu_none)}"
         ).fetchSemanticsNode().positionInRoot
         assertTrue("GPU must sit in the second row at 2x font", gpu.y > cpu.y)
     }
@@ -246,7 +246,7 @@ class HomeScreenUiTest {
         show(connected().copy(hostMetrics = HostMetricsResult.Failed))
         composeRule.onNodeWithText(context.getString(R.string.home_server_unreadable)).assertExists()
         composeRule.onNodeWithContentDescription(
-            "${context.getString(R.string.home_server_cpu)}: ${context.getString(R.string.home_server_no_value)}"
+            "${context.getString(R.string.home_server_cpu)}, ${context.getString(R.string.home_server_no_value)}"
         ).assertExists()
     }
 

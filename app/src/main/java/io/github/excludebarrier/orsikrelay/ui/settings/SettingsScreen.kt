@@ -240,7 +240,7 @@ fun SettingsScreen(
                 trailing = { Switch(checked = screenProtection, onCheckedChange = null) }
             )
 
-            GroupLabel(stringResource(R.string.settings_about_section))
+            GroupLabel(stringResource(R.string.settings_info_section))
             SettingsBlock(
                 position = GroupPosition.Single,
                 icon = OrsikIcons.Relay,

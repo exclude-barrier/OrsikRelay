@@ -379,8 +379,7 @@
     <string name="home_server_gpu_none">none</string>
     <string name="home_server_unreadable">The values cannot be read right now.</string>
     <string name="home_server_services_down">not running: %1$s</string>
-    <string name="home_server_cores">%1$d cores</string>
-    <string name="home_task_terminal_prompt">Run this command on the server and show me the output: </string>
+    <string name="home_task_terminal_prompt">Run `uptime` and `df -h` on the server and show me the output.</string>
     <string name="home_task_files_prompt">Show me the files and folders in my home directory on the server, with size and modification date.</string>
     <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
     <string name="home_task_projects_prompt">Which projects (Git repositories) are in my home directory on the server? Show name, branch and last commit for each.</string>
@@ -395,4 +394,12 @@
     <string name="onboarding_link_offer_apply">Use link</string>
     <string name="onboarding_link_offer_discard">Discard</string>
     <string name="error_profile_name_invalid">The server name must not contain control characters.</string>
+    <string name="home_task_click_label">Open a new chat with this request</string>
+    <string name="profiles_monitoring_click_label">Show the server values on Home</string>
+    <string name="settings_info_section">Info</string>
+    <string name="onboarding_link_offer_text_no_server">A link wants to replace the pairing code in this form. Use it only if you opened the link yourself.</string>
+    <plurals name="home_server_cores">
+        <item quantity="one">%1$d core</item>
+        <item quantity="other">%1$d cores</item>
+    </plurals>
 </resources>

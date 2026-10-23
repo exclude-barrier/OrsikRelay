@@ -157,7 +157,16 @@ fun OnboardingScreen(
             containerColor = OrsikDialog.containerColor,
             tonalElevation = OrsikDialog.tonalElevation,
             title = { Text(stringResource(R.string.onboarding_link_offer_title)) },
-            text = { Text(stringResource(R.string.onboarding_link_offer_text, url.ifEmpty { baseUrl })) },
+            text = {
+                val target = url.ifEmpty { baseUrl }
+                Text(
+                    if (target.isBlank()) {
+                        stringResource(R.string.onboarding_link_offer_text_no_server)
+                    } else {
+                        stringResource(R.string.onboarding_link_offer_text, target)
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

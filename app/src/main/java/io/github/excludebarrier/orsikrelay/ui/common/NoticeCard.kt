@@ -113,19 +113,21 @@ internal fun NoticeCard(
                     )
                 }
                 if (actions.isNotEmpty()) {
-                    Row(
+                    // Two actions stack (end-aligned) instead of sharing one
+                    // row: side by side the second one could shrink to
+                    // nothing at a large font.
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         actions.take(2).forEach { action ->
                             FilledTonalButton(
                                 onClick = action.onClick,
                                 enabled = action.enabled,
                                 modifier = Modifier
-                                    .padding(start = 8.dp)
                                     .heightIn(min = 48.dp)
                                     .then(
                                         if (action.testTag != null) {

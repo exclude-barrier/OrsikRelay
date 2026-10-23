@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.profiles
 
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.vector.ImageVector
 import io.github.excludebarrier.orsikrelay.ui.home.LiveTile
 import io.github.excludebarrier.orsikrelay.ui.home.QuickTask
@@ -714,7 +716,12 @@ private fun Management(
                         .weight(1f)
                         .testTag(MANAGEMENT_TILE_PREFIX + key)
                     if (action != null) {
-                        LiveTile(stringResource(label), icon, filled = false, onClick = action, modifier = tileModifier)
+                        LiveTile(
+                            stringResource(label), icon, filled = false, onClick = action, modifier = tileModifier,
+                            onClickLabel = stringResource(
+                                if (key == "monitoring") R.string.profiles_monitoring_click_label else R.string.home_task_click_label
+                            )
+                        )
                     } else {
                         PreviewTile(label = stringResource(label), icon = icon, stacked = false, modifier = tileModifier)
                     }
@@ -726,7 +733,9 @@ private fun Management(
                 text = stringResource(R.string.new_session_error_generic),
                 style = OrsikType.meta,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(start = 4.dp)
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
     }

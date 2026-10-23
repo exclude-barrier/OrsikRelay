@@ -44,7 +44,7 @@ class SettingsNavigationUiTest {
         composeRule.onAllNodesWithTag("sessions_overflow_menu").fetchSemanticsNodes().let {
             org.junit.Assert.assertTrue(it.isEmpty())
         }
-        composeRule.onNodeWithTag("sessionsPullToRefresh")
+        composeRule.onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.sessions.SESSIONS_HEADER_TAG)
             .assert(androidx.compose.ui.test.SemanticsMatcher("has the refresh action") { node ->
                 node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { null }
                     ?.any { it.label == context.getString(R.string.sessions_refresh) } == true

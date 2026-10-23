@@ -1,5 +1,8 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Column
@@ -200,21 +203,27 @@ fun ApprovalDialog(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.approval_error_generic),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            // Announced: the decision buttons just went disabled.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                     ApprovalOutcome.AlreadyResolved -> {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.approval_already_resolved),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            // Announced: the decision buttons just went disabled.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                     ApprovalOutcome.AlreadySent -> {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.approval_already_sent),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            // Announced: the decision buttons just went disabled.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                     null -> Unit
@@ -269,9 +278,10 @@ fun ApprovalDialog(
                         Text(text = stringResource(R.string.approval_allow))
                     }
                 }
-                // After a decided, failed or already-answered request the
-                // decision buttons stay disabled; this is the way out.
-                if (outcome != null) {
+                // After a decided, failed or already-answered request (and
+                // while one is in flight) the decision buttons stay disabled;
+                // this is the way out.
+                if (outcome != null || inFlight) {
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
                         onClick = onDismiss,

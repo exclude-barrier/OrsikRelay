@@ -369,7 +369,7 @@ class RunSessionController(
      * a contradictory event: those do not prove the server run ended.
      * Use [markTurnUncertain] for them.
      */
-    fun cancelTurn(runId: String? = null) {
+    fun cancelTurn(runId: String?) {
         synchronized(slotLock) {
             // With [runId] (a stop answer for exactly that run) a late answer
             // can never cancel a successor that owns the slot by now.

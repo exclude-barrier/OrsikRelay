@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import androidx.compose.ui.res.pluralStringResource
 import java.util.Locale
 import kotlin.math.roundToInt
 import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
@@ -460,7 +461,12 @@ fun ServerStatusStrip(metrics: HostMetricsResult?, modifier: Modifier = Modifier
                         )
                     }
                 }
-                HostMetricsResult.Failed -> PreviewNote(stringResource(R.string.home_server_unreadable))
+                // A failed read is not a "preview": plain text, no badge.
+                HostMetricsResult.Failed -> Text(
+                    text = stringResource(R.string.home_server_unreadable),
+                    style = OrsikType.meta,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 // An older bridge: the card keeps its preview.
                 HostMetricsResult.Unsupported -> PreviewNote(stringResource(R.string.home_server_preview_text))
                 // Not read yet (or the server is unreachable): placeholders only.
@@ -520,7 +526,7 @@ private fun hostTiles(metrics: HostMetrics?): List<HostTile> {
 }
 
 @Composable
-private fun pluralCores(cores: Int): String = stringResource(R.string.home_server_cores, cores)
+private fun pluralCores(cores: Int): String = pluralStringResource(R.plurals.home_server_cores, cores, cores)
 
 private fun gibibytes(bytes: Long, locale: Locale): String =
     String.format(locale, "%.0f", bytes / (1024.0 * 1024.0 * 1024.0))
@@ -533,7 +539,7 @@ private fun HostTileView(tile: HostTile, modifier: Modifier) {
     Column(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = modifier.clearAndSetSemantics {
-            contentDescription = listOfNotNull(tile.label, value ?: noValue, tile.detail).joinToString(": ")
+            contentDescription = listOfNotNull(tile.label, value ?: noValue, tile.detail).joinToString(", ")
         }
     ) {
         Text(tile.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -590,7 +596,9 @@ fun QuickActionGrid(
     val cells = listOf(
         QuickTile("chat", R.string.home_quick_chat, OrsikIcons.Chat, onClick = onNewChat, filled = true),
         QuickTile("server", R.string.home_quick_server, OrsikIcons.Server, onClick = onOpenServer)
-    ) + QuickTask.entries.map { task -> QuickTile(task.key, task.labelRes, task.icon, onClick = { onQuickTask(task) }) }
+    ) + QuickTask.entries.map { task ->
+        QuickTile(task.key, task.labelRes, task.icon, onClick = { onQuickTask(task) }, prepared = true)
+    }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cells.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -600,7 +608,10 @@ fun QuickActionGrid(
                         .testTag(HomeTags.QUICK_TILE_PREFIX + tile.key)
                     val onClick = tile.onClick
                     if (onClick != null) {
-                        LiveTile(stringResource(tile.labelRes), tile.icon, tile.filled, onClick, tileModifier)
+                        LiveTile(
+                            stringResource(tile.labelRes), tile.icon, tile.filled, onClick, tileModifier,
+                            onClickLabel = if (tile.prepared) stringResource(R.string.home_task_click_label) else null
+                        )
                     } else {
                         PreviewTile(label = stringResource(tile.labelRes), icon = tile.icon, modifier = tileModifier)
                     }
@@ -627,7 +638,9 @@ private class QuickTile(
     val labelRes: Int,
     val icon: ImageVector,
     val onClick: (() -> Unit)? = null,
-    val filled: Boolean = false
+    val filled: Boolean = false,
+    /** Starts a chat with a prepared request (named for TalkBack). */
+    val prepared: Boolean = false
 )
 
 /**
@@ -640,16 +653,18 @@ internal fun LiveTile(
     icon: ImageVector,
     filled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** What a tap does, for TalkBack (the label is only a noun). */
+    onClickLabel: String? = null
 ) {
     val content = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
         modifier = modifier
-            .height(92.dp)
+            .heightIn(min = 92.dp)
             .clip(OrsikShapes.card)
             .background(if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow)
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = onClickLabel, onClick = onClick)
             .padding(14.dp)
     ) {
         Icon(icon, contentDescription = null, tint = if (filled) content else MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
@@ -658,7 +673,8 @@ internal fun LiveTile(
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = content,
-            maxLines = 1,
+            // Two lines at a large font instead of "Term…".
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
     }

@@ -92,7 +92,7 @@ class ScreenProtectionUiTest {
             val screenProtectionController =
                 rememberScreenProtectionController(screenProtectionStore)
             val materialYouController = rememberMaterialYouController(EmptyMaterialYouStore)
-            ApplyScreenProtection(screenProtectionController)
+            ApplyScreenProtection(screenProtectionController, appLockEnabled = false)
             HermesTheme {
                 SettingsScreen(
                     languageController = languageController,

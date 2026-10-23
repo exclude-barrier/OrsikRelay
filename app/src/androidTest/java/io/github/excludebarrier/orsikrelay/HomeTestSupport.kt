@@ -45,12 +45,12 @@ fun ComposeTestRule.waitForAgents(timeoutMillis: Long = 5_000) {
 
 /**
  * Triggers the Agents list's refresh the way a screen reader does: through
- * its accessibility action (the visible control is pull-to-refresh).
+ * the accessibility action on the list heading (visible: pull-to-refresh).
  */
 fun ComposeTestRule.refreshAgentsList() {
     val label = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
         .getString(R.string.sessions_refresh)
-    val action = onNodeWithTag("sessionsPullToRefresh").fetchSemanticsNode()
+    val action = onNodeWithTag(SESSIONS_HEADER_TAG).fetchSemanticsNode()
         .config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
         .first { it.label == label }
     runOnIdle { action.action() }

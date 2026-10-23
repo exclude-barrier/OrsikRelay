@@ -8,8 +8,10 @@ import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
  * Creates one chat (never retried); with [prompt] its composer starts with
  * that prepared request, which only the user sends. Used by Home's tiles
  * and the Server tab's "Verwaltung". Blocking: call it on `Dispatchers.IO`.
+ * The request is stored before this returns, so the chat opened next
+ * always finds it.
  */
-internal fun createPreparedChat(
+internal suspend fun createPreparedChat(
     creator: SessionCreator,
     drafts: ChatDraftRepository,
     profileId: String,
@@ -18,8 +20,7 @@ internal fun createPreparedChat(
 ): SessionCreateResult {
     val created = creator.createSession(profileId, title)
     if (created is SessionCreateResult.Success && prompt != null) {
-        drafts.persistDraft(profileId, created.sessionId, prompt)
-        drafts.flushPendingDraft()
+        drafts.saveDraftNow(profileId, created.sessionId, prompt)
     }
     return created
 }

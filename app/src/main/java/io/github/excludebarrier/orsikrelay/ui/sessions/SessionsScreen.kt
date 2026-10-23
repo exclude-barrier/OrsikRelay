@@ -306,7 +306,18 @@ fun SessionsScreen(
         Column(modifier = Modifier.fillMaxSize()) {
         OrsikLargeHeader(
             title = stringResource(R.string.sessions_title),
-            modifier = Modifier.testTag(SESSIONS_HEADER_TAG)
+            // The screen reader's refresh: on the heading TalkBack focuses,
+            // and in place like pull-to-refresh (the list stays).
+            modifier = Modifier
+                .semantics(mergeDescendants = true) {
+                    customActions = listOf(
+                        CustomAccessibilityAction(refreshLabel) {
+                            loadPage(offset = 0, append = false, pullRefresh = true)
+                            true
+                        }
+                    )
+                }
+                .testTag(SESSIONS_HEADER_TAG)
         )
         Column(
             modifier = Modifier
@@ -314,7 +325,7 @@ fun SessionsScreen(
                 .padding(horizontal = 16.dp)
         ) {
         // Refreshing is pull-to-refresh; screen readers get the same
-        // refresh as an accessibility action on the list.
+        // refresh as an accessibility action on the header.
         // Searching only makes sense with sessions to search: the field is
         // hidden on an error, for an empty list and before the first page,
         // but stays during a refresh (no layout jump) and while a query is
@@ -378,14 +389,6 @@ fun SessionsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .semantics {
-                    customActions = listOf(
-                        CustomAccessibilityAction(refreshLabel) {
-                            loadPage(offset = 0, append = false)
-                            true
-                        }
-                    )
-                }
                 .testTag("sessionsPullToRefresh")
         ) {
             when (val current = state) {
