@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import android.content.Context
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
@@ -235,7 +236,9 @@ class LiveBridgeChatE2ETest {
      * (`chat_role_assistant` = "Hermes"); the message text is never inspected.
      */
     private fun assistantRowPresent(): Boolean =
-        composeRule.onAllNodesWithText(ASSISTANT_ROLE).fetchSemanticsNodes().isNotEmpty()
+        // Design v2 shows no visible sender label; Hermes' rows carry it
+        // as their accessibility description.
+        composeRule.onAllNodesWithContentDescription(ASSISTANT_ROLE).fetchSemanticsNodes().isNotEmpty()
 
     /** True while the composer's input field is not disabled by an active turn. */
     private fun composerFieldEnabled(): Boolean =

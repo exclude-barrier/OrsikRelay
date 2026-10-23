@@ -143,7 +143,8 @@ class AppLockSettingsUiTest {
                     materialYouController = materialYouController,
                     appLockController = appLockController,
                     appAuthenticator = appAuthenticator,
-                    onBack = {}
+                    onBack = {},
+                    onOpenAbout = {}
                 )
             }
         }

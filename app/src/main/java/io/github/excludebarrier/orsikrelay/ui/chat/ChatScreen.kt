@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
+import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
+import androidx.compose.material3.AlertDialog
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -281,9 +283,12 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
     // Archive/delete from the header, only when the server offers both.
     val snackbarHostState = remember { SnackbarHostState() }
     val manageScope = rememberCoroutineScope()
-    var canManage by remember(profileId, sessionManager) { mutableStateOf(false) }
-    var manageBusy by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
+    // Keyed to the chat: a reused Chat destination (notification for another
+    // chat) must never carry a pending delete or a busy flag over.
+    var canManage by remember(profileId, sessionId, sessionManager) { mutableStateOf(false) }
+    var manageBusy by remember(profileId, sessionId) { mutableStateOf(false) }
+    var confirmDelete by remember(profileId, sessionId) { mutableStateOf(false) }
+    var confirmRelease by remember(profileId, sessionId) { mutableStateOf(false) }
     val archivedLabel = stringResource(R.string.sessions_archived)
     val undoLabel = stringResource(R.string.sessions_undo)
     val activeLabel = stringResource(R.string.sessions_manage_active)
@@ -609,6 +614,9 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                         unavailable = state.reconcileFailed,
                         onReconcile = { viewModel.reconcileUncertainRun() },
                         lost = state.lostRun != null,
+                        lostWithoutKey = state.lostRunWithoutKey,
+                        canRelease = state.releaseVisible,
+                        onRelease = { confirmRelease = true },
                         resolving = state.resolveInFlight,
                         onResolve = { viewModel.resolveLostRun() }
                     )
@@ -719,6 +727,33 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     // while the outcome is uncertain, the single "check status"
                     // recovery action.
                     compactRunControls = when {
+                        // A lost run: the only way out is the explicit close,
+                        // also when the notice itself is not composed.
+                        state.lostRun != null -> {
+                            {
+                                OutlinedButton(
+                                    onClick = { viewModel.resolveLostRun() },
+                                    enabled = !state.resolveInFlight,
+                                    modifier = Modifier.testTag(TAG_RUN_RESOLVE_LOST)
+                                ) {
+                                    Text(
+                                        if (state.resolveInFlight) {
+                                            stringResource(R.string.chat_run_lost_resolving)
+                                        } else {
+                                            stringResource(R.string.chat_run_lost_resolve)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        state.releaseVisible && !state.recoveryVisible -> {
+                            {
+                                OutlinedButton(
+                                    onClick = { confirmRelease = true },
+                                    modifier = Modifier.testTag(TAG_RUN_RELEASE)
+                                ) { Text(stringResource(R.string.chat_run_release)) }
+                            }
+                        }
                         state.recoveryVisible -> {
                             {
                                 OutlinedButton(
@@ -774,6 +809,28 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 64.dp)
+        )
+    }
+    if (confirmRelease) {
+        AlertDialog(
+            onDismissRequest = { confirmRelease = false },
+            shape = OrsikDialog.shape,
+            containerColor = OrsikDialog.containerColor,
+            tonalElevation = OrsikDialog.tonalElevation,
+            title = { Text(stringResource(R.string.chat_run_release_title)) },
+            text = { Text(stringResource(R.string.chat_run_release_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmRelease = false
+                        viewModel.releaseUncertainLocally()
+                    },
+                    modifier = Modifier.testTag(TAG_RUN_RELEASE_CONFIRM)
+                ) { Text(stringResource(R.string.chat_run_release)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRelease = false }) { Text(stringResource(R.string.sessions_delete_cancel)) }
+            }
         )
     }
     if (confirmDelete) {
@@ -1138,14 +1195,18 @@ internal fun RunUncertainBlock(
     unavailable: Boolean,
     onReconcile: () -> Unit,
     lost: Boolean = false,
+    lostWithoutKey: Boolean = false,
     resolving: Boolean = false,
-    onResolve: () -> Unit = {}
+    onResolve: () -> Unit = {},
+    canRelease: Boolean = false,
+    onRelease: () -> Unit = {}
 ) {
     NoticeCard(
         tone = NoticeTone.Error,
         title = stringResource(R.string.chat_run_uncertain_title),
         text = when {
             lost -> stringResource(R.string.chat_run_lost)
+            lostWithoutKey -> stringResource(R.string.chat_run_lost_no_key)
             stillActive -> stringResource(R.string.chat_run_uncertain_still_active)
             unavailable -> stringResource(R.string.chat_run_uncertain_unavailable)
             else -> stringResource(R.string.chat_run_uncertain)
@@ -1164,9 +1225,9 @@ internal fun RunUncertainBlock(
                     testTag = TAG_RUN_RESOLVE_LOST
                 )
             )
-        } else if (canReconcile) {
-            listOf(
-                NoticeAction(
+        } else if (canReconcile || canRelease) {
+            listOfNotNull(
+                if (canReconcile) NoticeAction(
                     label = if (inFlight) {
                         stringResource(R.string.chat_run_uncertain_checking)
                     } else {
@@ -1175,7 +1236,14 @@ internal fun RunUncertainBlock(
                     onClick = onReconcile,
                     enabled = !inFlight,
                     testTag = TAG_RUN_RECONCILE
-                )
+                ) else null,
+                // The way out when the run can no longer be proven over.
+                if (canRelease) NoticeAction(
+                    label = stringResource(R.string.chat_run_release),
+                    onClick = onRelease,
+                    enabled = true,
+                    testTag = TAG_RUN_RELEASE
+                ) else null
             )
         } else {
             emptyList()
@@ -1880,6 +1948,8 @@ private suspend fun LazyListState.scrollToTail() {
 internal const val TAG_CHAT_TITLE = "chat_header_title"
 internal const val TAG_RUN_STOP = "composer_run_stop"
 internal const val TAG_RUN_RESOLVE_LOST = "chat_run_resolve_lost"
+internal const val TAG_RUN_RELEASE = "chat_run_release"
+internal const val TAG_RUN_RELEASE_CONFIRM = "chat_run_release_confirm"
 internal const val TAG_CHAT_MORE = "chat_more"
 internal const val TAG_CHAT_ARCHIVE = "chat_archive"
 internal const val TAG_CHAT_DELETE = "chat_delete"

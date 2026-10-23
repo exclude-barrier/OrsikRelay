@@ -176,7 +176,8 @@ private fun SettingsHarness(
             materialYouController = materialYouController,
             appLockController = AppLockController(initiallyEnabled = false, persist = {}),
             appAuthenticator = null,
-            onBack = {}
+            onBack = {},
+            onOpenAbout = {}
         )
         content()
     }

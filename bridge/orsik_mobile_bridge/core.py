@@ -204,7 +204,8 @@ def normalize_code(raw: object) -> str | None:
     """Trim, upper-case, drop '-'/'_'/whitespace, then enforce 24/length+alphabet."""
     if not isinstance(raw, str):
         return None
-    cleaned = "".join(ch for ch in raw.strip().upper() if ch not in "-_ \t\r\n")
+    # Every Unicode whitespace (NBSP, thin space from a rich-text copy) goes.
+    cleaned = "".join(ch for ch in raw.strip().upper() if ch not in "-_" and not ch.isspace())
     if len(cleaned) != CODE_LENGTH:
         return None
     if any(ch not in CODE_ALPHABET for ch in cleaned):
@@ -265,6 +266,8 @@ class DeviceRecord:
     profile: str
     permissions: tuple[str, ...] = DEVICE_PERMISSIONS
     revoked: bool = False
+    # Set on a self-revoke answer when the device was already revoked before.
+    already_revoked: bool = False
 
 
 class TokenStore:
@@ -306,10 +309,15 @@ class TokenStore:
         return record
 
     def revoke(self, token: str | None) -> DeviceRecord | None:
-        record = self.lookup(token)
-        if record is not None:
-            record.revoked = True
-        return record
+        if not token:
+            return None
+        record = self._by_hash.get(sha256_hex(token))
+        if record is None:
+            return None
+        already = record.revoked
+        record.revoked = True
+        return DeviceRecord(record.device_id, record.label, record.profile, record.permissions,
+                            revoked=True, already_revoked=already)
 
 
 @dataclass
@@ -416,6 +424,7 @@ def build_capabilities() -> dict:
             "run_stop": True,
             "run_steer": True,
             "run_unknown_resolution": True,
+            "host_metrics": True,
             "session_archive": True,
             "session_delete": True,
             "session_chat_interactive_approvals": build_interactive_approvals_contract(),
@@ -429,6 +438,7 @@ def build_capabilities() -> dict:
             "session_messages": {"method": "GET", "path": "/api/sessions/{session_id}/messages"},
             "session_chat_stream": {"method": "POST", "path": "/api/sessions/{session_id}/chat/stream"},
             "run_unknown_resolution": {"method": "POST", "path": "/v1/runs/{run_id}/resolve-unknown"},
+            "host_metrics": {"method": "GET", "path": "/v1/host/metrics"},
             "session_update": {"method": "PATCH", "path": "/api/sessions/{session_id}"},
             "session_delete": {"method": "DELETE", "path": "/api/sessions/{session_id}"},
             "run_status": {"method": "GET", "path": "/v1/runs/{run_id}"},

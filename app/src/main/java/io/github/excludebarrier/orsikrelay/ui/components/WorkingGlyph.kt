@@ -72,9 +72,10 @@ internal fun relayFrame(timeMs: Long, phase: RelayPhase, still: Boolean = false)
             starAngle = 0.31f
         )
     }
-    val theta = (-PI / 2 + 2 * PI * (timeMs % phase.spinMs) / phase.spinMs).toFloat()
-    val holder = ((timeMs / phase.handOffMs) % 3).toInt()
-    val progress = (timeMs % phase.handOffMs).toFloat() / phase.handOffMs
+    val theta = (-PI / 2 + 2 * PI * Math.floorMod(timeMs, phase.spinMs) / phase.spinMs).toFloat()
+    // floorMod: a negative clock (preview, replay) must stay in 0..2.
+    val holder = Math.floorMod(timeMs / phase.handOffMs, 3L).toInt()
+    val progress = Math.floorMod(timeMs, phase.handOffMs).toFloat() / phase.handOffMs
     val passing = progress > 1f - phase.arc
     val f = if (passing) (progress - (1f - phase.arc)) / phase.arc else 0f
     val glow = List(3) { k ->
@@ -92,7 +93,7 @@ internal fun relayFrame(timeMs: Long, phase: RelayPhase, still: Boolean = false)
         holder = holder,
         arcStart = angles[holder] + third * tail,
         arcSweep = if (passing) third * (f - tail) else 0f,
-        starAngle = (2 * PI * (timeMs % 9_000) / 9_000).toFloat()
+        starAngle = (2 * PI * Math.floorMod(timeMs, 9_000L) / 9_000).toFloat()
     )
 }
 

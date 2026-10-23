@@ -1,5 +1,10 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertTextEquals
+import io.github.excludebarrier.orsikrelay.domain.host.ServiceState
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetrics
 import org.junit.Assert.assertTrue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -93,11 +98,12 @@ class HomeScreenUiTest {
         assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_reachable)).fetchSemanticsNodes().size)
         scrollTo(HomeTags.QUICK_CHAT)
         composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).assertIsEnabled().assertHasClickAction()
-        // Server works today (it opens the Server tab); the rest is "Bald".
+        // Every quick tile works: Server opens the Server tab, the tool tiles
+        // start a chat with a prepared request.
         composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "server").assertIsEnabled().assertHasClickAction()
         listOf("terminal", "files", "docker", "projects").forEach { key ->
             scrollTo(HomeTags.QUICK_TILE_PREFIX + key)
-            composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + key).assertIsNotEnabled()
+            composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + key).assertIsEnabled().assertHasClickAction()
         }
         scrollTo(HomeTags.RECENT_ROW)
         assertEquals(2, composeRule.onAllNodesWithTag(HomeTags.RECENT_ROW).fetchSemanticsNodes().size)
@@ -167,6 +173,87 @@ class HomeScreenUiTest {
         composeRule.onNodeWithTag(HomeTags.RUN_ROW).performClick()
 
         assertEquals(listOf("s7"), openedRuns)
+    }
+
+    @Test
+    fun liveServerValuesFillTheCardAndAStoppedServiceIsNamed() {
+        val gib = 1024L * 1024 * 1024
+        show(
+            connected().copy(
+                hostMetrics = HostMetricsResult.Ready(
+                    HostMetrics(
+                        cpuPercent = 27.6, cores = 6, memoryUsedBytes = 15 * gib, memoryTotalBytes = 30 * gib, gpu = null,
+                        services = listOf(ServiceState("hermes-gateway", true), ServiceState("orsik-mobile-bridge", false))
+                    )
+                )
+            )
+        )
+
+        composeRule.onNodeWithTag(HomeTags.SERVER_STRIP).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_cpu)}, 28 %, " +
+            context.resources.getQuantityString(R.plurals.home_server_cores, 6, 6)).assertExists()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_ram)}, 50 %, 15/30 GB").assertExists()
+        composeRule.onNodeWithContentDescription(
+            "${context.getString(R.string.home_server_gpu)}, ${context.getString(R.string.home_server_gpu_none)}"
+        ).assertExists()
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}, 1/2").assertExists()
+        composeRule.onNodeWithTag(HomeTags.SERVER_SERVICES_DOWN)
+            .assertTextEquals(context.getString(R.string.home_server_services_down, "orsik-mobile-bridge"))
+        assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_preview_text)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun aServiceTheBridgeCouldNotAskAboutIsNotReportedAsStopped() {
+        show(
+            connected().copy(
+                hostMetrics = HostMetricsResult.Ready(
+                    HostMetrics(10.0, 2, 1, 2, null, listOf(ServiceState("hermes-gateway", true), ServiceState("docker", null)))
+                )
+            )
+        )
+        composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}, 1/2").assertExists()
+        assertEquals(0, composeRule.onAllNodesWithTag(HomeTags.SERVER_SERVICES_DOWN).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun beforeTheFirstReadThereIsNoLaterVersionClaim() {
+        show(connected())
+        assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_preview_text)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun atLargeFontsTheServerValuesStackTwoPerRow() {
+        val gib = 1024L * 1024 * 1024
+        show(
+            connected().copy(
+                hostMetrics = HostMetricsResult.Ready(
+                    HostMetrics(23.0, 6, 12 * gib, 32 * gib, null, listOf(ServiceState("hermes-gateway", true)))
+                )
+            ),
+            fontScale = 2f
+        )
+        val cpu = composeRule.onNodeWithContentDescription(
+            "${context.getString(R.string.home_server_cpu)}, 23 %, " + context.resources.getQuantityString(R.plurals.home_server_cores, 6, 6)
+        ).fetchSemanticsNode().positionInRoot
+        val gpu = composeRule.onNodeWithContentDescription(
+            "${context.getString(R.string.home_server_gpu)}, ${context.getString(R.string.home_server_gpu_none)}"
+        ).fetchSemanticsNode().positionInRoot
+        assertTrue("GPU must sit in the second row at 2x font", gpu.y > cpu.y)
+    }
+
+    @Test
+    fun anUnreadableOrUnsupportedServerKeepsThePlaceholders() {
+        show(connected().copy(hostMetrics = HostMetricsResult.Failed))
+        composeRule.onNodeWithText(context.getString(R.string.home_server_unreadable)).assertExists()
+        composeRule.onNodeWithContentDescription(
+            "${context.getString(R.string.home_server_cpu)}, ${context.getString(R.string.home_server_no_value)}"
+        ).assertExists()
+    }
+
+    @Test
+    fun anOlderBridgeShowsThePreviewNote() {
+        show(connected().copy(hostMetrics = HostMetricsResult.Unsupported))
+        composeRule.onNodeWithText(context.getString(R.string.home_server_preview_text)).assertExists()
     }
 
     @Test

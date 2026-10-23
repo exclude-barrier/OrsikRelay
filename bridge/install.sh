@@ -63,7 +63,18 @@ if [ "$CHECK" -eq 1 ]; then
       key="${line%%=*}"
       value="${line#*=}"
       key="${key%"${key##*[![:space:]]}"}"
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key#export }"
       if [ "$key" = "$want" ]; then
+        # Same value rules as the bridge (_env_value): trimmed, matching
+        # outer quotes removed, an unquoted value ends at " #".
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        case "$value" in
+          \"*\") value="${value:1:${#value}-2}" ;;
+          \'*\') value="${value:1:${#value}-2}" ;;
+          *" #"*) value="${value%% #*}"; value="${value%"${value##*[![:space:]]}"}" ;;
+        esac
         printf '%s\n' "$value"
         return 0
       fi
@@ -113,6 +124,11 @@ if [ "$CHECK" -eq 1 ]; then
 
   # 5. The upstream must be a plain-HTTP loopback IP with an explicit port.
   UPSTREAM="$(env_value BRIDGE_UPSTREAM)"
+  # A present but empty BRIDGE_UPSTREAM is refused by the bridge (the master
+  # key never goes to a guessed target); only a missing line means the default.
+  if [ -z "$UPSTREAM" ] && grep -qE '^[[:space:]]*(export[[:space:]]+)?BRIDGE_UPSTREAM=' "$ENV_FILE" 2>/dev/null; then
+    UPSTREAM="(empty)"
+  fi
   UPSTREAM="${UPSTREAM:-http://127.0.0.1:8642}"
   LOOPBACK_HTTP='^http://(127\.[0-9]+\.[0-9]+\.[0-9]+|\[::1\]):[0-9]+$'
   UPSTREAM_OK=0
@@ -176,7 +192,9 @@ if [ "$CHECK" -eq 1 ]; then
   # 8. A listener on the bridge port usually means the bridge is already up.
   PORT="$(env_value BRIDGE_PORT)"
   PORT="${PORT:-${BRIDGE_PORT:-9842}}"
-  if ! command -v ss >/dev/null 2>&1; then
+  if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+    chk_fail port "BRIDGE_PORT must be a number between 1 and 65535"
+  elif ! command -v ss >/dev/null 2>&1; then
     chk_warn port "ss not found, listeners unchecked"
   elif ss -H -ltn "sport = :$PORT" 2>/dev/null \
     | grep -qE "(^|[[:space:]])(127\.[0-9]+\.[0-9]+\.[0-9]+|\[::1\]|0\.0\.0\.0|\[::\]|\*):$PORT([[:space:]]|$)"; then
@@ -197,6 +215,34 @@ if [ "$CHECK" -eq 1 ]; then
     fi
   fi
 
+  # 10. The settings the bridge checks at start (state DB path, service list),
+  # validated by the installed bridge itself so both always agree.
+  if [ -x "$BRIDGE_HOME/venv/bin/python" ]; then
+    if cfg_error="$(BRIDGE_STATE_DB="$(env_value BRIDGE_STATE_DB)" \
+      BRIDGE_HOST_SERVICES="$(env_value BRIDGE_HOST_SERVICES)" \
+      DEFAULT_DB="$BRIDGE_HOME/state.db" \
+      "$BRIDGE_HOME/venv/bin/python" - 2>&1 <<'PYCHECK'
+import os, sys
+from orsik_mobile_bridge import hostmetrics
+try:
+    hostmetrics.parse_services(os.environ.get("BRIDGE_HOST_SERVICES") or None)
+except SystemExit as exc:
+    sys.exit(str(exc))
+db = os.environ.get("BRIDGE_STATE_DB") or os.environ["DEFAULT_DB"]
+parent = os.path.dirname(os.path.abspath(os.path.expanduser(db)))
+probe = parent
+while not os.path.exists(probe):
+    probe = os.path.dirname(probe)
+if not os.access(probe, os.W_OK | os.X_OK):
+    sys.exit("BRIDGE_STATE_DB is not writable: " + parent)
+PYCHECK
+)"; then
+      chk_ok config
+    else
+      chk_fail config "$cfg_error"
+    fi
+  fi
+
   if [ "$FAILED" -eq 0 ]; then
     echo "PREFLIGHT: PASS"
     exit 0
@@ -206,7 +252,9 @@ if [ "$CHECK" -eq 1 ]; then
 fi
 
 if [ "$UNINSTALL" -eq 1 ]; then
-  systemctl --user disable --now "$UNIT_NAME" 2>/dev/null || true
+  if [ -f "$UNIT_DIR/$UNIT_NAME" ] && ! systemctl --user disable --now "$UNIT_NAME" 2>/dev/null; then
+    echo "install.sh: could not stop $UNIT_NAME (no user session?); stop the bridge process yourself" >&2
+  fi
   rm -f "$UNIT_DIR/$UNIT_NAME"
   systemctl --user daemon-reload 2>/dev/null || true
   echo "Removed the systemd user unit. The venv/state remain under $BRIDGE_HOME;"
@@ -254,7 +302,26 @@ chmod 700 "$BRIDGE_HOME"
 # --update rebuilds the venv from scratch (uv refuses an existing one otherwise);
 # bridge.env and the state database live outside it and are kept.
 VENV_FLAGS=()
-[ "$UPDATE" -eq 1 ] && VENV_FLAGS=(--clear)
+if [ "$UPDATE" -eq 1 ]; then
+  VENV_FLAGS=(--clear)
+  # Keep the working venv until the new one is complete: a failed update
+  # (stale lock, network, disk full) restores it instead of leaving no CLI.
+  rm -rf "$BRIDGE_HOME/venv.previous"
+  if [ -d "$BRIDGE_HOME/venv" ]; then
+    # A failed copy aborts here, before anything touched the working venv.
+    cp -a "$BRIDGE_HOME/venv" "$BRIDGE_HOME/venv.previous"
+  fi
+  restore_venv() {
+    if [ -d "$BRIDGE_HOME/venv.previous" ]; then
+      rm -rf "$BRIDGE_HOME/venv"
+      mv "$BRIDGE_HOME/venv.previous" "$BRIDGE_HOME/venv"
+      echo "install.sh: update failed; the previous venv was restored" >&2
+    fi
+  }
+  # Armed only after the backup is complete; also on Ctrl-C/TERM.
+  trap restore_venv ERR
+  trap 'restore_venv; exit 130' INT TERM
+fi
 uv venv "${VENV_FLAGS[@]}" --python "${BRIDGE_PYTHON:-3.14}" "$BRIDGE_HOME/venv"
 
 # Dependencies come from the frozen lockfile, verified against its hashes
@@ -265,6 +332,8 @@ trap 'rm -f "$REQ"' EXIT
 uv export --project "$SRC" --frozen --no-dev --no-emit-project --format requirements.txt -o "$REQ"
 uv pip install --python "$BRIDGE_HOME/venv" --require-hashes -r "$REQ"
 uv pip install --python "$BRIDGE_HOME/venv" --no-deps "$SRC"
+trap - ERR INT TERM
+rm -rf "$BRIDGE_HOME/venv.previous"
 
 # bridge.env holds the master-key path, bind address and state DB. It is 0600.
 ENV="$BRIDGE_HOME/bridge.env"
@@ -276,11 +345,20 @@ BRIDGE_PORT=9842
 BRIDGE_UPSTREAM=http://127.0.0.1:8642
 # Path to the Hermes install env file that holds API_SERVER_KEY (0600).
 BRIDGE_HERMES_ENV=/home/USER/.hermes/.env
-# Persistent device/pairing store (created 0600). Defaults under BRIDGE_HOME.
-BRIDGE_STATE_DB=
+# Persistent device/pairing store (created 0600), inside BRIDGE_HOME.
+BRIDGE_STATE_DB=@STATE_DB@
 # HTTPS base URL used to print the orsik://pair deep link / QR.
 BRIDGE_PUBLIC_BASE_URL=
 ENVEOF
+  # The store lives in this install's BRIDGE_HOME (also with a custom one,
+  # which the systemd unit may write); the path is data, never sed syntax.
+  # index/substr, not sub(): an "&" in the path must stay literal.
+  STATE_DB="$BRIDGE_HOME/state.db" awk '{
+    i = index($0, "@STATE_DB@")
+    if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["STATE_DB"] substr($0, i + 10)
+    print
+  }' "$ENV" >"$ENV.tmp"
+  mv "$ENV.tmp" "$ENV"
   chmod 600 "$ENV"
   echo "Wrote $ENV (edit BRIDGE_HERMES_ENV / BRIDGE_PUBLIC_BASE_URL)"
 fi
@@ -317,8 +395,8 @@ echo
 echo "Installed into $BRIDGE_HOME."
 echo "Next steps:"
 echo "  1. Edit $ENV (Hermes env path, public base URL)."
-echo "  2. Issue a pairing code:  $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code --base-url https://<host>"
-echo "  3. Start the bridge:      $BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
+echo "  2. Issue a pairing code:  BRIDGE_ENV_FILE=$ENV $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code"
+echo "  3. Start the bridge:      BRIDGE_ENV_FILE=$ENV $BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
 echo "     or (with --systemd):   systemctl --user start $UNIT_NAME"
 echo "  4. Verify the setup:     $0 --check"
 echo "Rollback: $0 --uninstall && rm -rf $BRIDGE_HOME"

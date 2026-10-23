@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
+import io.github.excludebarrier.orsikrelay.ui.home.createPreparedChat
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -350,6 +352,19 @@ fun HermesNavHost(
             disconnect = { profileId ->
                 productionDependencies.value.deviceDisconnectCoordinator
                     .disconnect(profileId)
+            },
+            onOpenMonitoring = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openTab(AppScreen.Home) } },
+            startTask = activeProfileId?.takeIf { it.isNotBlank() }?.let { profileId ->
+                { title: String, prompt: String ->
+                    val created = withContext(Dispatchers.IO) {
+                        createPreparedChat(
+                            sessionCreator ?: productionDependencies.value.sessionCreator,
+                            chatDraftRepository ?: productionDependencies.value.chatDraftRepository,
+                            profileId, title, prompt
+                        )
+                    }
+                    (created as? SessionCreateResult.Success)?.let { openChat(it.sessionId, it.title ?: title) } != null
+                }
             }
         )
     }
@@ -397,6 +412,8 @@ fun HermesNavHost(
                     runController = runController ?: dependencies.value.runController,
                     runStatusRequester = runStatusRequester ?: dependencies.value.runStatusRequester,
                     attachmentSource = dependencies.value.chatAttachmentSource,
+                    hostMetricsSource = dependencies.value.hostMetricsSource,
+                    chatDraftRepository = chatDraftRepository ?: dependencies.value.chatDraftRepository,
                     onOpenChat = ::openChat,
                     onOpenAllSessions = { openTab(AppScreen.Sessions) },
                     onOpenServer = { openTab(AppScreen.Server) },
@@ -543,19 +560,6 @@ fun HermesNavHost(
                     onSessionSelected = ::openChat,
                     onSessionCreated = { sessionId ->
                         pendingCreatedSessionId = sessionId
-                    },
-                    onOpenProfileManagement = {
-                        navController.navigate(routeOf(AppScreen.Profiles))
-                    },
-                    onOpenSettings = {
-                        navController.navigate(routeOf(AppScreen.Settings)) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onOpenAbout = {
-                        navController.navigate(routeOf(AppScreen.About)) {
-                            launchSingleTop = true
-                        }
                     }
                 )
             }
@@ -568,6 +572,11 @@ fun HermesNavHost(
                     materialYouController = resolvedMaterialYouController,
                     appLockController = resolvedAppLockController,
                     appAuthenticator = resolvedAppAuthenticator,
+                    onOpenAbout = {
+                        navController.navigate(routeOf(AppScreen.About)) {
+                            launchSingleTop = true
+                        }
+                    },
                     onBack = {
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()

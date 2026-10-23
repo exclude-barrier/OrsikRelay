@@ -93,7 +93,7 @@ class ActiveServerSelectionUiTest {
         // Go to the management screen: the ACTIVE server (Alpha) is marked
         // with exactly one "Aktiver Server" marker, and only the NON-active
         // server (Beta) offers the "use as active server" action.
-        openProfilesFromOverflowMenu()
+        openServerTab()
         waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
         composeRule.onNodeWithTag(rowTag(ALPHA_ID)).assertIsNotEnabled()
@@ -117,7 +117,7 @@ class ActiveServerSelectionUiTest {
 
         // Re-open the management screen: the marker has MOVED to the chosen
         // server (Beta) and Beta now carries no select action.
-        openProfilesFromOverflowMenu()
+        openServerTab()
         waitForText(context.getString(R.string.profiles_title))
         assertExactlyOneActiveMarker()
         composeRule.onNodeWithTag(rowTag(BETA_ID)).assertIsNotEnabled()
@@ -144,12 +144,14 @@ class ActiveServerSelectionUiTest {
         waitForText("Session Alpha")
 
         // Open the management screen and return without selecting anything.
-        openProfilesFromOverflowMenu()
+        composeRule.openServerManagementFromHome()
         waitForText(context.getString(R.string.profiles_title))
         // Alpha is still the active, marked server; nothing was selected.
         assertExactlyOneActiveMarker()
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back))
             .performClick()
+        composeRule.waitForHome()
+        composeRule.openAgentsTab()
         waitForText("Session Alpha")
 
         // Still on Sessions, still under Alpha; no switch happened.
@@ -178,11 +180,9 @@ class ActiveServerSelectionUiTest {
         }
     }
 
-    private fun openProfilesFromOverflowMenu() {
-        composeRule.onNodeWithContentDescription(
-            context.getString(R.string.sessions_more_options)
-        ).performClick()
-        composeRule.onNodeWithText(context.getString(R.string.profiles_manage)).performClick()
+    /** Server management lives in the Server tab (the Agents list has no menu). */
+    private fun openServerTab() {
+        composeRule.onNodeWithTag("nav_tab_server").performClick()
     }
 
     private fun waitForText(text: String) {

@@ -13,7 +13,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -226,6 +225,10 @@ class RunSessionController(
      */
     private var leaseRestorePending: Boolean = leaseStore !== NoOpRunLeaseStore
 
+    /** The stored lease could not be read; it is kept instead of cleared. */
+    @Volatile
+    private var leaseUnreadable = false
+
     init {
         if (leaseRestorePending) {
             scope.launch {
@@ -366,12 +369,17 @@ class RunSessionController(
      * a contradictory event: those do not prove the server run ended.
      * Use [markTurnUncertain] for them.
      */
-    fun cancelTurn() {
-        val job = runJob
-        runJob = null
-        job?.cancel()
+    fun cancelTurn(runId: String?) {
+        synchronized(slotLock) {
+            // With [runId] (a stop answer for exactly that run) a late answer
+            // can never cancel a successor that owns the slot by now.
+            if (runId != null && _activeRun.value?.runId != runId) return
+            val job = runJob
+            runJob = null
+            job?.cancel()
+            _activeRun.value = null
+        }
         serviceStarter.stop()
-        _activeRun.value = null
     }
 
     /**
@@ -427,6 +435,32 @@ class RunSessionController(
                 current.profileId == profileId &&
                 current.sessionId == sessionId &&
                 current.runId == runId
+            if (!matches) return false
+            runJob?.cancel()
+            runJob = null
+            _activeRun.value = null
+        }
+        serviceStarter.stop()
+        return true
+    }
+
+    /**
+     * The user's explicit "release in the app" for an UNCERTAIN run that can
+     * no longer be proven terminal (no confirmed run ID, an unreadable
+     * status, or a lost run without its key). Local only: nothing is POSTed,
+     * stopped or retried server-side; the server still rejects a second
+     * message while its run is alive. Strictly correlated to the exact
+     * [profileId]/[sessionId] and only for an uncertain run.
+     *
+     * @return `true` when the run was released.
+     */
+    fun releaseUncertainByUser(profileId: String, sessionId: String): Boolean {
+        synchronized(slotLock) {
+            val current = _activeRun.value
+            val matches = current != null &&
+                current.uncertain &&
+                current.profileId == profileId &&
+                current.sessionId == sessionId
             if (!matches) return false
             runJob?.cancel()
             runJob = null
@@ -498,6 +532,9 @@ class RunSessionController(
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
+                // Unreadable now is not "no lease": keep the file so a later
+                // start can still recover the run (see persistLeaseChanges).
+                leaseUnreadable = true
                 null
             }
             stored?.takeIf {
@@ -538,7 +575,12 @@ class RunSessionController(
             .collect { lease ->
                 withContext(ioDispatcher) {
                     try {
-                        if (lease == null) leaseStore.clear() else leaseStore.save(lease)
+                        if (lease != null) leaseUnreadable = false
+                        if (lease == null) {
+                            if (!leaseUnreadable) leaseStore.clear()
+                        } else {
+                            leaseStore.save(lease)
+                        }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {

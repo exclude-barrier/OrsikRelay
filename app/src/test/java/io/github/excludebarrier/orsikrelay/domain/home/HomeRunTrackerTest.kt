@@ -170,12 +170,13 @@ class HomeRunTrackerTest {
     }
 
     @Test
-    fun terminalServerStatus_hidesRunAndStopsPolling() = runTest {
-        val active = MutableStateFlow<RunSessionController.ActiveRun?>(activeRun())
+    fun terminalServerStatus_ofAReleasedRun_hidesItAndStopsPolling() = runTest {
+        val active = MutableStateFlow<RunSessionController.ActiveRun?>(activeRun(uncertain = true))
         val requester = FakeStatusRequester().apply {
             result = { RunStatusResult.Known(RunServerStatus.COMPLETED) }
         }
-        val tracker = HomeRunTracker(active, requester)
+        val recorder = ReleaseRecorder(active)
+        val tracker = HomeRunTracker(active, requester, releaseUncertain = recorder::release)
         val emissions = mutableListOf<List<TrackedRun>>()
 
         startCollecting(tracker, emissions)
@@ -188,6 +189,28 @@ class HomeRunTrackerTest {
         runCurrent()
         assertEquals(1, requester.calls)
         assertEquals(emptyList<TrackedRun>(), emissions.last())
+    }
+
+    @Test
+    fun terminalServerStatus_ofALiveRunThatStillOwnsTheSlot_staysVisibleAndPolled() = runTest {
+        // The server may report COMPLETED before the stream's own terminal
+        // arrives; while the controller still owns the run, Home must not
+        // hide it and must keep checking (a later uncertain run is then
+        // still released from Home).
+        val active = MutableStateFlow<RunSessionController.ActiveRun?>(activeRun())
+        val requester = FakeStatusRequester().apply {
+            result = { RunStatusResult.Known(RunServerStatus.COMPLETED) }
+        }
+        val tracker = HomeRunTracker(active, requester)
+        val emissions = mutableListOf<List<TrackedRun>>()
+
+        startCollecting(tracker, emissions)
+        runCurrent()
+        advanceTimeBy(60_000)
+        runCurrent()
+
+        assertEquals(1, emissions.last().size)
+        assertTrue("still polled", requester.calls > 1)
     }
 
     @Test

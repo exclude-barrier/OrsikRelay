@@ -8,6 +8,7 @@ Public paths mirror the Orsik Mobile Protocol v1 contract (the api_server
 namespace the shipped client already speaks), so the client is a drop-in:
   GET  /health                              (proxied, unauthenticated)
   GET  /v1/capabilities                     (bridge-generated, device token)
+  GET  /v1/host/metrics                     (bridge-generated, read-only, device token)
   POST /v1/devices/pair                     (bridge-generated, unauthenticated)
   POST /v1/devices/self/revoke              (bridge-generated, device token)
   POST /v1/runs/{run_id}/approval           (validated, device token)
@@ -45,6 +46,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import stat
 import sys
 import time
@@ -55,6 +57,7 @@ from urllib.parse import urlsplit
 from aiohttp import ClientResponse, ClientSession, ClientTimeout, web
 
 from . import core
+from . import hostmetrics
 from . import pairing
 from . import runhub
 from . import store as store_mod
@@ -76,8 +79,19 @@ audit_logger = logging.getLogger("orsik_mobile_bridge.audit")
 _AUDITED_RUN_ACTIONS = ("stop", "steer")
 
 
+# A value shaped like a device key never reaches the log, even when a client
+# puts its own key into a path segment that is audited (session/run id).
+_DEVICE_KEY_SHAPE = re.compile(r"hd_[A-Za-z0-9_-]{20,}")
+
+
+def _audit_value(value: object) -> object:
+    if isinstance(value, str) and _DEVICE_KEY_SHAPE.search(value):
+        return "[redacted]"
+    return value
+
+
 def _audit_event(action: str, device_id: str, **fields: object) -> None:
-    detail = "".join(f" {key}={value}" for key, value in fields.items())
+    detail = "".join(f" {key}={_audit_value(value)}" for key, value in fields.items())
     audit_logger.info("audit action=%s device=%s%s", action, device_id, detail)
 
 
@@ -85,6 +99,7 @@ def _audit(action: str, record: core.DeviceRecord, **fields: object) -> None:
     _audit_event(action, record.device_id, **fields)
 
 APPROVAL_PATH = "/v1/runs/{run_id}/approval"
+HOST_METRICS_PATH = "/v1/host/metrics"
 # Match the official api_server request bound (10_000_000) so the bridge does
 # not silently reject the client's supported image bodies (<= 8 MiB encoded).
 _MAX_BODY_BYTES = 10_000_000
@@ -111,6 +126,7 @@ class BridgeState:
         upstream: str,
         master_key: str,
         store: store_mod.BridgeStore | None = None,
+        host_services: tuple[str, ...] = hostmetrics.DEFAULT_SERVICES,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.master_key = master_key
@@ -129,6 +145,12 @@ class BridgeState:
         self.runhub = runhub.RunHub()
         self.background: set[asyncio.Task] = set()
         self.pair_limiter = core.RateLimiter(_PAIR_PER_MINUTE, 60.0)
+        # Operator-fixed unit names for the Home card (BRIDGE_HOST_SERVICES).
+        self.host_services = host_services
+        # One snapshot at a time: a burst of requests never runs the
+        # subprocesses in parallel.
+        self.host_metrics_lock = asyncio.Lock()
+        self.host_metrics_cache: tuple[float, dict] | None = None
 
 
 async def _db(state: BridgeState, fn, *args, **kwargs):
@@ -163,18 +185,33 @@ def _check_secret_file(path: str) -> None:
         raise SystemExit(_SECRET_FILE_ERROR.format(path=path))
 
 
+def _env_value(raw: str) -> str:
+    """dotenv-style value: matching outer quotes are removed (their content is
+    taken verbatim); an unquoted value ends at a " #" comment."""
+    val = raw.strip()
+    if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+        return val[1:-1]
+    comment = val.find(" #")
+    return val[:comment].rstrip() if comment >= 0 else val
+
+
 def _load_env_file(path: str) -> dict[str, str]:
     _check_secret_file(path)
     values: dict[str, str] = {}
     try:
-        for line in Path(path).read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            values[key.strip()] = val.strip()
-    except OSError:
-        logger.error("Could not read env file: %s", path)
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        # Fail closed: a file that passed the checks but cannot be read must
+        # never fall back to other key sources.
+        raise SystemExit(f"Could not read env file: {path}") from None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        values[key.strip()] = _env_value(val)
     return values
 
 
@@ -188,6 +225,16 @@ def _state_db_path(env: dict[str, str]) -> str:
 
 _UPSTREAM_ERROR = "BRIDGE_UPSTREAM must be loopback HTTP, e.g. http://127.0.0.1:8642"
 _BIND_ERROR = "BRIDGE_BIND must be a literal loopback IP address (127.0.0.1 or ::1)"
+
+
+def _validate_port(raw: str) -> int:
+    try:
+        port = int(raw)
+    except ValueError:
+        port = 0
+    if not 1 <= port <= 65535:
+        raise SystemExit("BRIDGE_PORT must be a number between 1 and 65535")
+    return port
 
 
 def _validate_bind(bind: str) -> str:
@@ -238,8 +285,9 @@ def build_state_from_env(env: dict[str, str]) -> BridgeState:
     master_key = master_key or env.get("HERMES_API_KEY", "")
     if not master_key:
         raise SystemExit("Bridge needs the Hermes API key (BRIDGE_HERMES_ENV or HERMES_API_KEY)")
+    host_services = hostmetrics.parse_services(env.get("BRIDGE_HOST_SERVICES"))
     store = store_mod.BridgeStore(_state_db_path(env))
-    return BridgeState(upstream=upstream, master_key=master_key, store=store)
+    return BridgeState(upstream=upstream, master_key=master_key, store=store, host_services=host_services)
 
 
 def _device_token(request: web.Request) -> str | None:
@@ -292,6 +340,7 @@ def create_app(state: BridgeState) -> web.Application:
     app[STATE_KEY] = state
     app.router.add_get("/health", _handle_health)
     app.router.add_get("/v1/capabilities", _handle_capabilities)
+    app.router.add_get(HOST_METRICS_PATH, _handle_host_metrics)
     app.router.add_post("/v1/devices/pair", _handle_pair)
     app.router.add_post("/v1/devices/self/revoke", _handle_self_revoke)
     # No HTTP admin surface: pairing codes are issued only via the local operator
@@ -335,12 +384,41 @@ async def _handle_capabilities(request: web.Request) -> web.Response:
     return web.json_response(core.build_capabilities())
 
 
+async def _handle_host_metrics(request: web.Request) -> web.Response:
+    """Read-only CPU/RAM/GPU/service snapshot of the bridge host (bridge-generated)."""
+    state: BridgeState = request.app[STATE_KEY]
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+        return _closed(401, "invalid_credentials")
+    if request.query_string:
+        return _closed(403, "query_not_allowed")
+    try:
+        has_body = request.can_read_body and bool(await request.read())
+    except web.HTTPRequestEntityTooLarge:
+        return _closed(413, "body_too_large")
+    if has_body:
+        return _closed(400, "body_not_allowed")
+    async with state.host_metrics_lock:
+        # One snapshot serves every request within HOST_METRICS_MAX_AGE, so
+        # fast pollers never queue up subprocess work behind the lock.
+        now = time.monotonic()
+        cached = state.host_metrics_cache
+        if cached is None or now - cached[0] > hostmetrics.MAX_AGE_SECONDS:
+            loop = asyncio.get_running_loop()
+            snapshot = await loop.run_in_executor(None, hostmetrics.collect, state.host_services)
+            state.host_metrics_cache = (time.monotonic(), snapshot)
+            cached = state.host_metrics_cache
+    return web.json_response(cached[1])
+
+
 async def _handle_pair(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
     if not state.pair_limiter.allow():
         _audit_event("pair", "-", status=429)
         return _closed(429, "rate_limited")
     try:
+        # Contract: Content-Type application/json and exactly {"code": ...}.
+        if request.content_type != "application/json":
+            raise ValueError("not JSON")
         body = await request.json()
     except web.HTTPRequestEntityTooLarge:
         _audit_event("pair", "-", status=413)
@@ -348,6 +426,9 @@ async def _handle_pair(request: web.Request) -> web.Response:
     except Exception:
         _audit_event("pair", "-", status=400)
         return _closed(400, "invalid_json")
+    if isinstance(body, dict) and set(body) != {"code"}:
+        _audit_event("pair", "-", status=400)
+        return _closed(400, "invalid_fields")
     if not isinstance(body, dict) or not await _db(state, state.codes.redeem, body.get("code")):
         _audit_event("pair", "-", status=400)
         return _closed(400, "pairing_code_invalid")
@@ -362,12 +443,19 @@ async def _handle_pair(request: web.Request) -> web.Response:
 
 async def _handle_self_revoke(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
+    # Contract: exactly 0 bytes. The token is checked first, so an anonymous
+    # caller learns nothing from the body rule.
+    if request.can_read_body and await request.read():
+        if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+            return _closed(401, "invalid_credentials")
+        return _closed(400, "body_not_allowed")
     record = await _db(state, state.tokens.revoke, _device_token(request))
     if record is None:
         _audit_event("revoke", "-", status=401)
         return _closed(401, "invalid_credentials")
     _audit("revoke", record, status=200)
-    return web.json_response({"revoked": True, "device_id": record.device_id})
+    # true for the fresh revocation, false when it was already revoked.
+    return web.json_response({"revoked": not record.already_revoked, "device_id": record.device_id})
 
 
 async def _handle_approval(request: web.Request) -> web.StreamResponse:
@@ -434,7 +522,7 @@ async def _run_execution_generation(state: BridgeState, run_id: str) -> int | No
         return None
     try:
         run = json.loads(raw)
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
     generation = run.get("execution_generation") if isinstance(run, dict) else None
     # bool is an int subclass; a JSON true is not a generation.
@@ -616,6 +704,10 @@ async def _handle_run_reattach(request: web.Request) -> web.StreamResponse:
         return _closed(400, "invalid_after_seq")
     buf = state.runhub.lookup(session_id, run_id)
     if buf is None:
+        if state.runhub.belongs_to_other_session(session_id, run_id):
+            # A run of another session is "not found" for this one (contract
+            # section 8.2), never a resume gap of this session.
+            return _closed(404, "run_not_found")
         return await _indeterminate_run(state, run_id)
     return await _stream_buffer_to_client(request, buf, after_seq=after_seq)
 
@@ -775,16 +867,28 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
 async def _handle_resolve_unknown(
     request: web.Request, state: BridgeState, record: core.DeviceRecord, match: core.ProxyMatch
 ) -> web.StreamResponse:
-    """Acknowledge one lost run; the validated body is re-serialised."""
+    """Acknowledge one lost run; the validated body is re-serialised.
+
+    A local rejection is audited like an upstream answer, so an attempt to
+    smuggle other fields is visible to the operator.
+    """
     run_id = match.params["run_id"]
-    raw = await request.read() if request.can_read_body else b""
+
+    def rejected(status: int, code: str) -> web.Response:
+        _audit("resolve_unknown", record, run=run_id, status=status)
+        return _closed(status, code)
+
+    try:
+        raw = await request.read() if request.can_read_body else b""
+    except web.HTTPRequestEntityTooLarge:
+        return rejected(413, "body_too_large")
     try:
         parsed = json.loads(raw)
-    except (ValueError, UnicodeDecodeError):
-        return _closed(400, "invalid_json")
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        return rejected(400, "invalid_json")
     ok, code = core.validate_resolve_unknown_body(parsed)
     if not ok:
-        return _closed(400, code)
+        return rejected(400, code)
     body = json.dumps({
         "admission_id": parsed["admission_id"],
         "execution_generation": parsed["execution_generation"],
@@ -802,20 +906,30 @@ async def _handle_session_management(
     (title, pin, hidden, end_reason) can ever reach Hermes through the bridge.
     """
     session_id = match.params["session_id"]
-    raw = await request.read() if request.can_read_body else b""
+    action = "session_delete" if request.method == "DELETE" else "session_archive"
+
+    def rejected(status: int, code: str) -> web.Response:
+        # Local rejections are audited too (least-privilege attempts stay visible).
+        _audit(action, record, session=session_id, status=status)
+        return _closed(status, code)
+
+    try:
+        raw = await request.read() if request.can_read_body else b""
+    except web.HTTPRequestEntityTooLarge:
+        return rejected(413, "body_too_large")
     if request.method == "DELETE":
         if raw:
-            return _closed(400, "body_not_allowed")
-        action, body = "session_delete", b""
+            return rejected(400, "body_not_allowed")
+        body = b""
     else:
         try:
             parsed = json.loads(raw)
-        except (ValueError, UnicodeDecodeError):
-            return _closed(400, "invalid_json")
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return rejected(400, "invalid_json")
         ok, code = core.validate_session_patch_body(parsed)
         if not ok:
-            return _closed(400, code)
-        action, body = "session_archive", json.dumps({"archived": parsed["archived"]}).encode()
+            return rejected(400, code)
+        body = json.dumps({"archived": parsed["archived"]}).encode()
     on_status = lambda status: _audit(action, record, session=session_id, status=status)  # noqa: E731
     return await _proxy(request, state, match.upstream_path, body_override=body, on_status=on_status)
 
@@ -924,7 +1038,7 @@ def _admin_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="orsik-mobile-bridge admin")
     sub = parser.add_subparsers(dest="cmd", required=True)
     issue = sub.add_parser("pairing-code", help="issue a one-time pairing code")
-    issue.add_argument("--base-url", default=os.environ.get("BRIDGE_PUBLIC_BASE_URL", ""),
+    issue.add_argument("--base-url", default=None,
                        help="HTTPS base URL for the orsik://pair deep link/QR")
     sub.add_parser("list-devices", help="list paired devices (no secrets)")
     revoke = sub.add_parser("revoke-device", help="revoke a device by device_id")
@@ -937,14 +1051,23 @@ def _admin_main(argv: list[str]) -> int:
     state = build_state_from_env(env)
     try:
         if args.cmd == "pairing-code":
+            # The default comes from bridge.env too, not only the process env.
+            base_url = args.base_url if args.base_url is not None else env.get("BRIDGE_PUBLIC_BASE_URL", "")
+            if base_url:
+                try:
+                    pairing.pairing_uri(base_url, "A" * core.CODE_LENGTH)
+                except ValueError:
+                    print("error: BRIDGE_PUBLIC_BASE_URL / --base-url must be https://<host> without user info",
+                          file=sys.stderr)
+                    return 1
             issued = state.codes.issue()
             if issued is None:
                 print("error: pairing-code capacity reached", file=sys.stderr)
                 return 1
             code, ttl = issued
             print(f"Pairing code: {pairing.format_code(code)}  (valid {ttl}s, single-use)")
-            if args.base_url:
-                uri = pairing.pairing_uri(args.base_url, code)
+            if base_url:
+                uri = pairing.pairing_uri(base_url, code)
                 print(f"Deep link:    {uri}")
                 qr = pairing.render_ascii_qr(uri)
                 print(qr if qr else "(install 'qrencode' for an ASCII QR; deep link above is equivalent)")
@@ -986,8 +1109,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     env = _load_env()
     state = build_state_from_env(env)
-    bind = _validate_bind(env.get("BRIDGE_BIND", "127.0.0.1"))
-    port = int(env.get("BRIDGE_PORT", "9842"))
+    # An empty value means the default, exactly as install.sh --check reads it.
+    bind = _validate_bind(env.get("BRIDGE_BIND") or "127.0.0.1")
+    port = _validate_port(env.get("BRIDGE_PORT") or "9842")
     logger.info(
         "Orsik Mobile Bridge on http://%s:%d -> %s",
         bind, port, _safe_upstream_label(state.upstream),

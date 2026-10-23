@@ -16,10 +16,8 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.TextLayoutResult
@@ -200,17 +198,12 @@ class AccessibilityLargeFontUiTest {
         return "${resources.getString(R.string.session_source_terminal)} · $messageCount"
     }
 
+    /**
+     * Refresh is pull-to-refresh plus an accessibility action on the list
+     * (no header menu any more), so it does not depend on the font size.
+     */
     private fun assertRefreshControl() {
-        composeRule.onNodeWithContentDescription(
-            InstrumentationRegistry.getInstrumentation().targetContext
-                .getString(R.string.sessions_more_options)
-        ).performClick()
-        val refresh = composeRule.onNodeWithTag("sessions_menu_refresh")
-        refresh.assertIsDisplayed()
-        assertTouchTargetAtLeast48Dp(refresh, "sessions refresh")
-        assertLabelNotTruncated(REFRESH_LABEL)
-        refresh.performClick()
-        composeRule.waitForIdle()
+        composeRule.refreshAgentsList()
     }
 
     // ------------------------------------------------------------------
@@ -465,7 +458,6 @@ class AccessibilityLargeFontUiTest {
         const val NORMAL_FONT_SCALE = 1.0f
         const val MIN_TOUCH_TARGET_DP = 48f
         val ONBOARDING_SUBMIT_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.onboarding_submit) }
-        val REFRESH_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sessions_refresh) }
         val SEND_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_send) }
         val REFRESH_HISTORY_LABEL: String by lazy { InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.chat_refresh_history) }
         const val PROBE_LABEL = "Fixture-Probe-Label"

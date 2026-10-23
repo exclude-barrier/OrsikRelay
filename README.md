@@ -24,7 +24,7 @@ your private network.
 The user interface is available in English and German; choose the language
 under **⋮ → Settings → Language**.*
 
-> **Early alpha (`0.1.0-alpha.13`).** For technical testing on your own setup.
+> **Early alpha (`0.1.0-alpha.14`).** For technical testing on your own setup.
 > No Play Store build yet – install the APK from the [releases](https://github.com/exclude-barrier/OrsikRelay/releases) or [build from source](#building-from-source).
 > Not affiliated with or endorsed by Nous Research.
 
@@ -270,7 +270,7 @@ contract before it stores anything.
 | Chat text size | **Settings → Chat** |
 | Block screenshots | **Settings → Privacy → Screen protection** |
 | Lock the app | **Settings → Privacy → App lock** |
-| App version and license | **⋮ → About the app** on **Agents** |
+| App version and license | **⚙ → About the app** on **Home** |
 
 On the server, `admin list-devices` and `admin revoke-device <device_id>` list
 and immediately revoke paired phones.

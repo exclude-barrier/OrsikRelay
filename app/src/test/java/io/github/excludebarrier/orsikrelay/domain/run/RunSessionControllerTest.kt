@@ -220,7 +220,7 @@ class RunSessionControllerTest {
         built.source.enqueue(ChatTurnEvent.RunStarted(runId))
         built.source.enqueue(ChatTurnEvent.AssistantDelta("teil "))
         testScheduler.advanceUntilIdle()
-        built.controller.cancelTurn()
+        built.controller.cancelTurn(null)
         testScheduler.advanceUntilIdle()
         assertNull(built.controller.activeRun.value)
         built.controller.close()
@@ -305,7 +305,7 @@ class RunSessionControllerTest {
         val built = build(this.testScheduler)
         built.controller.startTurn(profileId, sessionId, "hi")
         assertTrue(built.source.opened.await(1, TimeUnit.SECONDS))
-        built.controller.cancelTurn()
+        built.controller.cancelTurn(null)
         testScheduler.advanceUntilIdle()
         assertTrue(built.source.canceled.get())
         assertTrue(built.starter.stops.get() >= 1)
@@ -425,7 +425,7 @@ class RunSessionControllerTest {
         testScheduler.advanceUntilIdle()
         // Run A is released explicitly (no replacement); a late "answer"
         // of run A arrives only after run B owns the slot.
-        built.controller.cancelTurn()
+        built.controller.cancelTurn(null)
         testScheduler.advanceUntilIdle()
         // Run B takes the freed slot and raises its own approval.
         val runB = "run_" + "e".repeat(32)
@@ -870,7 +870,7 @@ class RunSessionControllerTest {
         built.controller.startTurn(profileId, sessionId, "first")
         built.source.enqueue(ChatTurnEvent.RunStarted(runId))
         testScheduler.advanceUntilIdle()
-        built.controller.cancelTurn()
+        built.controller.cancelTurn(null)
         testScheduler.advanceUntilIdle()
         assertNull(built.controller.activeRun.value)
         val result = built.controller.startTurn(profileId, sessionId, "second")
@@ -888,7 +888,7 @@ class RunSessionControllerTest {
         testScheduler.advanceUntilIdle()
         // End run A explicitly and start run B: a late event of the finished
         // run A must never write into run B's slot.
-        built.controller.cancelTurn()
+        built.controller.cancelTurn(null)
         testScheduler.advanceUntilIdle()
         built.controller.startTurn(profileId, otherSessionId, "second")
         built.source.enqueue(ChatTurnEvent.RunStarted("run_" + "f".repeat(32)))
@@ -1161,6 +1161,56 @@ class RunSessionControllerTest {
             RunSessionController.StartTurnResult.Started,
             built.controller.startTurn(profileId, sessionId, "hi")
         )
+        built.controller.close()
+    }
+
+    @Test
+    fun anUnreadableLeaseIsKeptNotCleared() = runTest {
+        val store = FakeLeaseStore(initial = lease, failLoad = true)
+        val built = build(this.testScheduler, leaseStore = store)
+        testScheduler.advanceUntilIdle()
+        // Unreadable now is not "no lease": a later start may still read it.
+        assertEquals(lease, store.current)
+        built.controller.close()
+    }
+
+    @Test
+    fun theUserCanReleaseAnUnconfirmedUncertainRunOnlyForItsOwnChat() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        testScheduler.advanceUntilIdle()
+        assertTrue(built.controller.activeRun.value?.uncertain == true)
+
+        assertFalse(built.controller.releaseUncertainByUser(profileId, "other-session"))
+        assertNotNull(built.controller.activeRun.value)
+        assertTrue(built.controller.releaseUncertainByUser(profileId, sessionId))
+        assertNull(built.controller.activeRun.value)
+        built.controller.close()
+    }
+
+    @Test
+    fun aLiveRunCannotBeReleasedByTheUser() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        assertTrue(built.source.opened.await(1, TimeUnit.SECONDS))
+        assertFalse(built.controller.releaseUncertainByUser(profileId, sessionId))
+        assertNotNull(built.controller.activeRun.value)
+        built.controller.close()
+    }
+
+    @Test
+    fun aLateStopAnswerForAnotherRunNeverCancelsTheCurrentOne() = runTest {
+        val built = build(this.testScheduler)
+        built.controller.startTurn(profileId, sessionId, "hi")
+        built.source.enqueue(ChatTurnEvent.RunStarted("run_current"))
+        testScheduler.advanceUntilIdle()
+
+        built.controller.cancelTurn("run_old")
+        assertNotNull("a foreign run id is a no-op", built.controller.activeRun.value)
+        built.controller.cancelTurn("run_current")
+        testScheduler.advanceUntilIdle()
+        assertNull(built.controller.activeRun.value)
         built.controller.close()
     }
 

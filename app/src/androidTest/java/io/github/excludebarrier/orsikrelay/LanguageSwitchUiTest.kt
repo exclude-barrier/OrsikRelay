@@ -1,5 +1,8 @@
 package io.github.excludebarrier.orsikrelay
 
+import io.github.excludebarrier.orsikrelay.navigation.bottomTabTag
+import io.github.excludebarrier.orsikrelay.navigation.AppScreen
+import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
 import android.app.LocaleManager
 import android.content.Context
 import android.content.res.Resources
@@ -8,14 +11,11 @@ import android.os.Build
 import android.os.LocaleList
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.data.profile.ServerProfileRepository
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesActiveServerSelectionStore
 import io.github.excludebarrier.orsikrelay.data.profile.SharedPreferencesServerProfileMetadataStore
@@ -110,6 +110,7 @@ class LanguageSwitchUiTest {
         selectLanguage("settings_language_de")
         awaitSettingsIn("de")
         composeRule.onNodeWithContentDescription(localizedString("de", R.string.settings_back)).performClick()
+        composeRule.openAgentsTab()
         waitForText(localizedString("de", R.string.sessions_search_placeholder))
         assertEquals("de", SharedPreferencesLanguageSettingStore(context).read())
 
@@ -117,6 +118,7 @@ class LanguageSwitchUiTest {
         selectLanguage("settings_language_en")
         awaitSettingsIn("en")
         composeRule.onNodeWithContentDescription(localizedString("en", R.string.settings_back)).performClick()
+        composeRule.openAgentsTab()
         waitForText(localizedString("en", R.string.sessions_search_placeholder))
         assertEquals("en", SharedPreferencesLanguageSettingStore(context).read())
 
@@ -125,6 +127,7 @@ class LanguageSwitchUiTest {
         val system = systemLanguage()
         awaitSettingsIn(system)
         composeRule.onNodeWithContentDescription(localizedString(system, R.string.settings_back)).performClick()
+        composeRule.openAgentsTab()
         waitForText(localizedString(system, R.string.sessions_search_placeholder))
         assertNull(SharedPreferencesLanguageSettingStore(context).read())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -143,18 +146,13 @@ class LanguageSwitchUiTest {
         composeRule.waitForIdle()
     }
 
+    /** Settings open from the gear on Home (the Agents list has no menu). */
     private fun openSettings() {
-        val languageTag = currentLanguageTag()
-        val moreOptions = localizedString(languageTag, R.string.sessions_more_options)
+        composeRule.onNodeWithTag(bottomTabTag(AppScreen.Home)).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithContentDescription(moreOptions).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(HomeTags.SETTINGS).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithContentDescription(moreOptions).performClick()
-        val entry = localizedString(languageTag, R.string.settings_entry)
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText(entry).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText(entry).performClick()
+        composeRule.onNodeWithTag(HomeTags.SETTINGS).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().isNotEmpty()
         }

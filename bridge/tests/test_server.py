@@ -394,6 +394,19 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 400)
         self.assertEqual(int(UPSTREAM.get("session_patches", 0)), 0)
 
+    async def test_local_rejections_are_audited_too(self):
+        cred = await self._pair()
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            await self.client.patch("/api/sessions/s1", headers=self._bearer(cred["device_key"]), json={"title": "x"})
+            await self.client.delete("/api/sessions/s1", headers=self._bearer(cred["device_key"]), data=b"x")
+            await self.client.post("/v1/runs/run_a/resolve-unknown", headers=self._bearer(cred["device_key"]),
+                                   json={"admission_id": "a"})
+        lines = [record.getMessage() for record in logs.records]
+        device = cred["device_id"]
+        self.assertIn(f"audit action=session_archive device={device} session=s1 status=400", lines)
+        self.assertIn(f"audit action=session_delete device={device} session=s1 status=400", lines)
+        self.assertIn(f"audit action=resolve_unknown device={device} run=run_a status=400", lines)
+
     async def test_delete_is_relayed_without_a_body_and_audited(self):
         cred = await self._pair()
         with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
@@ -444,6 +457,43 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         resp = await self.client.post("/v1/runs/run_a/resolve-unknown", json={"admission_id": "a", "execution_generation": 1})
         self.assertEqual(resp.status, 401)
         self.assertEqual(int(UPSTREAM.get("resolve_posts", 0)), 0)
+
+    # --- host metrics (bridge-generated, read-only) -----------------------
+    async def test_host_metrics_need_a_device_token_and_never_reach_upstream(self):
+        self.assertEqual((await self.client.get("/v1/host/metrics")).status, 401)
+        cred = await self._pair()
+        fake = {"object": "orsik.host.metrics", "cpu": {"percent": 1.0, "cores": 2}, "memory": None,
+                "gpu": None, "services": [], "collected_at": 1.0}
+        with mock.patch.object(bridge_server.hostmetrics, "collect", return_value=fake) as collect:
+            resp = await self.client.get("/v1/host/metrics", headers=self._bearer(cred["device_key"]))
+            self.assertEqual(resp.status, 200)
+            self.assertEqual(await resp.json(), fake)
+            collect.assert_called_once_with(self.state.host_services)
+            self.assertEqual(
+                (await self.client.get("/v1/host/metrics?x=1", headers=self._bearer(cred["device_key"]))).status, 403)
+            self.assertEqual(
+                (await self.client.get("/v1/host/metrics", headers=self._bearer(cred["device_key"]), data=b"x")).status, 400)
+        self.assertEqual(int(UPSTREAM.get("sessions_gets", 0)), 0)
+
+    async def test_host_metrics_reuse_a_fresh_snapshot_and_measure_again_when_it_is_old(self):
+        cred = await self._pair()
+        fake = {"object": "orsik.host.metrics", "cpu": {"percent": 1.0, "cores": 2}, "memory": None,
+                "gpu": None, "services": [], "collected_at": 1.0}
+        with mock.patch.object(bridge_server.hostmetrics, "collect", return_value=fake) as collect:
+            for _ in range(3):
+                self.assertEqual(
+                    (await self.client.get("/v1/host/metrics", headers=self._bearer(cred["device_key"]))).status, 200)
+            self.assertEqual(collect.call_count, 1)
+            taken, snapshot = self.state.host_metrics_cache
+            self.state.host_metrics_cache = (taken - bridge_server.hostmetrics.MAX_AGE_SECONDS - 1, snapshot)
+            await self.client.get("/v1/host/metrics", headers=self._bearer(cred["device_key"]))
+            self.assertEqual(collect.call_count, 2)
+
+    def test_capabilities_advertise_host_metrics_and_services_come_from_the_env(self):
+        caps = core.build_capabilities()
+        self.assertIs(caps["features"]["host_metrics"], True)
+        self.assertEqual(caps["endpoints"]["host_metrics"], {"method": "GET", "path": "/v1/host/metrics"})
+        self.assertEqual(self.state.host_services, ("hermes-gateway", "orsik-mobile-bridge"))
 
     async def test_pair_session_create_and_revoke_are_audited(self):
         with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:

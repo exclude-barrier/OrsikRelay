@@ -42,3 +42,30 @@ fun ComposeTestRule.waitForAgents(timeoutMillis: Long = 5_000) {
     waitUntil(timeoutMillis) { onAllNodesWithTag(SESSIONS_HEADER_TAG).fetchSemanticsNodes().isNotEmpty() }
     waitForIdle()
 }
+
+/**
+ * Triggers the Agents list's refresh the way a screen reader does: through
+ * the accessibility action on the list heading (visible: pull-to-refresh).
+ */
+fun ComposeTestRule.refreshAgentsList() {
+    val label = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        .getString(R.string.sessions_refresh)
+    val action = onNodeWithTag(SESSIONS_HEADER_TAG).fetchSemanticsNode()
+        .config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
+        .first { it.label == label }
+    runOnIdle { action.action() }
+    waitForIdle()
+}
+
+/**
+ * Opens the pushed server management (with a back arrow) the way Home does:
+ * through the server name ("Server wechseln").
+ */
+fun ComposeTestRule.openServerManagementFromHome(timeoutMillis: Long = 5_000) {
+    onNodeWithTag(bottomTabTag(AppScreen.Home)).performClick()
+    waitUntil(timeoutMillis) {
+        onAllNodesWithTag(io.github.excludebarrier.orsikrelay.ui.home.HomeTags.SERVER_NAME).fetchSemanticsNodes().isNotEmpty()
+    }
+    onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.home.HomeTags.SERVER_NAME).performClick()
+    waitForIdle()
+}

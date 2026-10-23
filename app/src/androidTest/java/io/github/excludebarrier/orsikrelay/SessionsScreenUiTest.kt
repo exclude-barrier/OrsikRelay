@@ -23,8 +23,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onChildren
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -414,7 +412,7 @@ class SessionsScreenUiTest {
     }
 
     @Test
-    fun overflowRefreshActionReloadsTheListExactlyOnce() {
+    fun theRefreshAccessibilityActionReloadsTheListExactlyOnce() {
         val calls = AtomicInteger()
         setScreen(
             SessionPageSource { _, _, _ ->
@@ -425,8 +423,7 @@ class SessionsScreenUiTest {
         waitForText("Menü-Refresh")
         assertEquals(1, calls.get())
 
-        openOverflowMenu()
-        composeRule.onNodeWithTag("sessions_menu_refresh").performClick()
+        refreshThroughTheAccessibilityAction()
 
         composeRule.waitUntil(timeoutMillis = 5_000) { calls.get() == 2 }
         assertEquals(2, calls.get())
@@ -497,10 +494,8 @@ class SessionsScreenUiTest {
         )
 
         assertTrue(started.await(3, TimeUnit.SECONDS))
-        openOverflowMenu()
-        composeRule.onNodeWithTag("sessions_menu_refresh").performClick()
-        openOverflowMenu()
-        composeRule.onNodeWithTag("sessions_menu_refresh").performClick()
+        refreshThroughTheAccessibilityAction()
+        refreshThroughTheAccessibilityAction()
         assertEquals(1, calls.get())
         assertEquals(1, maxActive.get())
         release.countDown()
@@ -508,87 +503,19 @@ class SessionsScreenUiTest {
     }
 
     @Test
-    fun overflowMenuButtonIsVisibleWithAccessibleLabelAndTouchTarget() {
+    fun theHeaderHasNoMenuAnyMore() {
         setScreen(SessionPageSource { _, _, _ -> success(emptyList(), false) })
+        waitForText(context.getString(R.string.sessions_empty))
 
-        val button = composeRule.onNodeWithContentDescription(
-            context.getString(R.string.sessions_more_options)
-        )
-        button.assertIsDisplayed()
-        button.assertWidthIsAtLeast(48.dp)
-        button.assertHeightIsAtLeast(48.dp)
+        // Servers live in the Server tab, settings and "about" behind the
+        // gear on Home.
+        composeRule.onAllNodesWithTag("sessions_overflow_menu").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription(context.getString(R.string.sessions_actions))
+            .assertCountEquals(0)
     }
 
-    @Test
-    fun overflowMenuShowsExactlyTheFourEntriesInOrder() {
-        setScreen(SessionPageSource { _, _, _ -> success(emptyList(), false) })
-
-        openOverflowMenu()
-
-        composeRule.onNodeWithTag("sessions_overflow_menu")
-            .onChildren()
-            .assertCountEquals(4)
-        val tags = listOf(
-            "sessions_menu_refresh",
-            "sessions_menu_manage_servers",
-            "sessions_menu_settings",
-            "sessions_menu_about"
-        )
-        tags.forEach { tag -> composeRule.onNodeWithTag(tag).assertIsDisplayed() }
-        val tops = tags.map { tag ->
-            composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
-        }
-        assertEquals(tops.sorted(), tops)
-    }
-
-    @Test
-    fun everyOverflowEntryInvokesOnlyItsCallbackOnceAndClosesTheMenu() {
-        var manageServers = 0
-        var settings = 0
-        var about = 0
-        setScreen(
-            source = SessionPageSource { _, _, _ -> success(emptyList(), false) },
-            onOpenProfileManagement = { manageServers++ },
-            onOpenSettings = { settings++ },
-            onOpenAbout = { about++ }
-        )
-
-        openOverflowMenu()
-        composeRule.onNodeWithTag("sessions_menu_manage_servers").performClick()
-        assertEquals(1, manageServers)
-        assertEquals(0, settings)
-        assertEquals(0, about)
-        assertMenuClosed()
-
-        openOverflowMenu()
-        composeRule.onNodeWithTag("sessions_menu_settings").performClick()
-        assertEquals(1, manageServers)
-        assertEquals(1, settings)
-        assertEquals(0, about)
-        assertMenuClosed()
-
-        openOverflowMenu()
-        composeRule.onNodeWithTag("sessions_menu_about").performClick()
-        assertEquals(1, manageServers)
-        assertEquals(1, settings)
-        assertEquals(1, about)
-        assertMenuClosed()
-    }
-
-    private fun openOverflowMenu() {
-        composeRule.onNodeWithContentDescription(
-            context.getString(R.string.sessions_more_options)
-        ).performClick()
-        composeRule.waitForIdle()
-    }
-
-    private fun assertMenuClosed() {
-        composeRule.waitForIdle()
-        assertTrue(
-            "overflow menu must be closed",
-            composeRule.onAllNodesWithTag("sessions_overflow_menu")
-                .fetchSemanticsNodes().isEmpty()
-        )
+    private fun refreshThroughTheAccessibilityAction() {
+        composeRule.refreshAgentsList()
     }
 
     @Test
@@ -654,9 +581,6 @@ class SessionsScreenUiTest {
 
     private fun setScreen(
         source: SessionPageSource,
-        onOpenProfileManagement: () -> Unit = {},
-        onOpenSettings: () -> Unit = {},
-        onOpenAbout: () -> Unit = {},
         onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
         clock: Clock = Clock.systemDefaultZone(),
         creator: SessionCreator? = null,
@@ -669,9 +593,6 @@ class SessionsScreenUiTest {
                     profileId = PROFILE_ID,
                     creator = creator,
                     onSessionSelected = onSessionSelected,
-                    onOpenProfileManagement = onOpenProfileManagement,
-                    onOpenSettings = onOpenSettings,
-                    onOpenAbout = onOpenAbout,
                     runningSessionId = runningSessionId,
                     clock = clock
                 )

@@ -72,6 +72,7 @@ fun HomeScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     onNewChat: () -> Unit = {},
+    onQuickTask: (QuickTask) -> Unit = {},
     onOpenServer: () -> Unit = {}
 ) {
     var pickerOpen by rememberSaveable { mutableStateOf(false) }
@@ -134,11 +135,11 @@ fun HomeScreen(
                     }
                     HomeConnection.Connected -> {
                         runsSection(state.runs, onOpenRun)
-                        item(key = "server") { ServerStatusStrip(modifier = Modifier.gutter()) }
+                        item(key = "server") { ServerStatusStrip(metrics = state.hostMetrics, modifier = Modifier.gutter()) }
                         item(key = "quick_title") {
                             SectionTitle(stringResource(R.string.home_section_quick), Modifier.gutter())
                         }
-                        item(key = "quick") { QuickActionGrid(onNewChat = onNewChat, onOpenServer = onOpenServer, modifier = Modifier.gutter()) }
+                        item(key = "quick") { QuickActionGrid(onNewChat = onNewChat, onOpenServer = onOpenServer, onQuickTask = onQuickTask, modifier = Modifier.gutter()) }
                         item(key = "recent_title") {
                             SectionTitle(stringResource(R.string.home_section_recent), Modifier.gutter()) {
                                 TextButton(

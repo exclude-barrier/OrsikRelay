@@ -249,8 +249,10 @@ internal class ChatViewModel(
                     // finished adopts the restored UNCERTAIN run of its own
                     // session, so the manual reconciliation is offered and
                     // the composer stays blocked (no second POST).
+                    // An uncertain run without a confirmed ID (the send
+                    // failed before the server confirmed it) is adopted too,
+                    // so this chat can offer the release in the app.
                     active.uncertain &&
-                    active.runId != null &&
                     active.profileId == profileId &&
                     active.sessionId == sessionId &&
                     !_state.value.turnActive
@@ -258,7 +260,7 @@ internal class ChatViewModel(
                     _state.update {
                         it.copy(
                             turnActive = true,
-                            runStarted = true,
+                            runStarted = active.runId != null,
                             boundRunId = active.runId,
                             turnUncertain = true,
                             startConflict = false
@@ -601,7 +603,8 @@ internal class ChatViewModel(
                 reconcileInFlight = true,
                 reconcileFailed = false,
                 reconcileStillActive = false,
-                lostRun = null
+                lostRun = null,
+                lostRunWithoutKey = false
             )
         }
         scope.launch {
@@ -640,6 +643,9 @@ internal class ChatViewModel(
                     // user closes it explicitly; nothing happens on its own.
                     _state.update { it.copy(reconcileInFlight = false, lostRun = result.lostRun) }
                 }
+                result is RunStatusResult.Known && result.status == RunServerStatus.UNKNOWN -> {
+                    _state.update { it.copy(reconcileInFlight = false, lostRunWithoutKey = true) }
+                }
                 result is RunStatusResult.Known -> {
                     _state.update {
                         it.copy(reconcileInFlight = false, reconcileStillActive = true)
@@ -651,6 +657,19 @@ internal class ChatViewModel(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * The user's confirmed "release in the app" for an uncertain run that
+     * can no longer be proven over. Local only (see
+     * [RunSessionController.releaseUncertainByUser]); the history is read
+     * again and the draft is kept.
+     */
+    fun releaseUncertainLocally() {
+        if (!_state.value.releaseVisible) return
+        if (runController.releaseUncertainByUser(profileId, sessionId)) {
+            releaseUncertainRun()
         }
     }
 
@@ -711,6 +730,7 @@ internal class ChatViewModel(
                 reconcileStillActive = false,
                 lostRun = null,
                 resolveInFlight = false,
+                lostRunWithoutKey = false,
                 runStarted = false,
                 boundRunId = null,
                 localLines = emptyList()
@@ -1280,7 +1300,7 @@ private fun turnSettled() {
                     // The history read is launched BEFORE the turn settles:
                     // settling cancels this in-flight stop job itself.
                     loadHistory()
-                    runController.cancelTurn()
+                    runController.cancelTurn(runId)
                     turnSettled()
                 }
                 is RunStopResult.Failure -> {

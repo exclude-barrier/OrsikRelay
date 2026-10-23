@@ -107,7 +107,7 @@ class MainActivity : FragmentActivity() {
             }
             val screenProtectionController =
                 rememberScreenProtectionController(screenProtectionStore)
-            ApplyScreenProtection(screenProtectionController)
+            ApplyScreenProtection(screenProtectionController, appLockEnabled = appLockController.enabled)
             val materialYouStore = remember {
                 SharedPreferencesMaterialYouSettingStore(applicationContext)
             }

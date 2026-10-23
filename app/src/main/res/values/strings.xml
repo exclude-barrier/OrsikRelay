@@ -66,7 +66,6 @@
     <string name="sessions_search_clear">Clear search</string>
     <string name="sessions_search_no_results">No chat titled “%1$s”.</string>
     <string name="sessions_search_only_loaded_hint">Only loaded chats are searched. Load more to search further.</string>
-    <string name="sessions_more_options">More options</string>
     <string name="theme_mode_system">System</string>
     <string name="theme_mode_light">Light</string>
     <string name="theme_mode_dark">Dark</string>
@@ -94,7 +93,6 @@
         <item quantity="one">%1$s message</item>
         <item quantity="other">%1$s messages</item>
     </plurals>
-    <string name="settings_entry">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
     <string name="settings_language_system">System</string>
@@ -111,7 +109,7 @@
     <string name="settings_screen_protection_label">Screen protection</string>
     <string name="settings_screen_protection_description">No screenshots and no preview in the app switcher.</string>
     <string name="settings_app_lock_label">App lock</string>
-    <string name="settings_app_lock_description">Unlock with fingerprint, face or device PIN when opening the app and after 30 seconds in the background.</string>
+    <string name="settings_app_lock_description">Unlock with fingerprint, face or device PIN when opening the app and after 30 seconds in the background. Also hides the app from screenshots and the app switcher preview.</string>
     <string name="settings_app_lock_unavailable">Set up a screen lock on the device first.</string>
     <string name="app_lock_unlock">Unlock</string>
     <string name="app_lock_device_lock_missing">The device no longer has a screen lock, so the app lock has been turned off.</string>
@@ -204,7 +202,6 @@
     <string name="error_connection_timeout">The server did not respond in time.</string>
     <string name="error_connection_network">The Hermes server is currently unreachable.</string>
     <string name="error_connection_http">The server did not process the request successfully.</string>
-    <string name="profiles_manage">Manage servers</string>
     <string name="profiles_title">Servers</string>
     <string name="profiles_loading">Loading servers…</string>
     <string name="profiles_error_generic">The servers could not be loaded.</string>
@@ -379,4 +376,30 @@
     <string name="chat_run_lost">Hermes lost this run, for example after a server restart. The chat stays blocked until you close the run as cancelled. It is not run again.</string>
     <string name="chat_run_lost_resolve">Close as cancelled</string>
     <string name="chat_run_lost_resolving">Closing…</string>
+    <string name="home_server_gpu_none">none</string>
+    <string name="home_server_unreadable">The values cannot be read right now.</string>
+    <string name="home_server_services_down">not running: %1$s</string>
+    <string name="home_task_terminal_prompt">Run `uptime` and `df -h` on the server and show me the output.</string>
+    <string name="home_task_files_prompt">Show me the files and folders in my home directory on the server, with size and modification date.</string>
+    <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
+    <string name="home_task_projects_prompt">Which projects (Git repositories) are in my home directory on the server? Show name, branch and last commit for each.</string>
+    <string name="chat_run_lost_no_key">Hermes reports this run as lost but gives the app nothing to close it with. Please check the run on the server.</string>
+    <string name="chat_run_release">Release in the app</string>
+    <string name="chat_run_release_title">Release the run in the app?</string>
+    <string name="chat_run_release_text">The app frees the chat without asking the server. If the run is still alive there, the server may reject a new message. Nothing is sent again.</string>
+    <string name="approval_close">Close</string>
+    <string name="approval_already_sent">A decision was already sent for this request.</string>
+    <string name="onboarding_link_offer_title">Use the pairing link?</string>
+    <string name="onboarding_link_offer_text">A link wants to point this form at the server %1$s. Use it only if you opened the link yourself.</string>
+    <string name="onboarding_link_offer_apply">Use link</string>
+    <string name="onboarding_link_offer_discard">Discard</string>
+    <string name="error_profile_name_invalid">The server name must not contain control characters.</string>
+    <string name="home_task_click_label">Open a new chat with this request</string>
+    <string name="profiles_monitoring_click_label">Show the server values on Home</string>
+    <string name="settings_info_section">Info</string>
+    <string name="onboarding_link_offer_text_no_server">A link wants to replace the pairing code in this form. Use it only if you opened the link yourself.</string>
+    <plurals name="home_server_cores">
+        <item quantity="one">%1$d core</item>
+        <item quantity="other">%1$d cores</item>
+    </plurals>
 </resources>

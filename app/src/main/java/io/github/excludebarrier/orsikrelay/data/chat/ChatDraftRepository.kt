@@ -45,6 +45,16 @@ interface ChatDraftRepository : ProfileDraftClearer {
     fun persistDraft(profileId: String, sessionId: String, text: String)
     fun clearDraft(profileId: String, sessionId: String)
     fun flushPendingDraft()
+
+    /**
+     * Writes [text] for a chat that is not open yet and returns once it is
+     * stored, so the chat that opens next finds it (a tool tile's prepared
+     * request). Safe from any thread; never debounced.
+     */
+    suspend fun saveDraftNow(profileId: String, sessionId: String, text: String) {
+        persistDraft(profileId, sessionId, text)
+        flushPendingDraft()
+    }
 }
 
 /**
@@ -143,6 +153,10 @@ class SharedPreferencesChatDraftRepository(
             pending = null
         }
         scope.launch { deleteNow(profileId, sessionId) }
+    }
+
+    override suspend fun saveDraftNow(profileId: String, sessionId: String, text: String) {
+        saveNow(PendingWrite(chatDraftKey(profileId, sessionId), profileId, sessionId, text))
     }
 
     override fun flushPendingDraft() {

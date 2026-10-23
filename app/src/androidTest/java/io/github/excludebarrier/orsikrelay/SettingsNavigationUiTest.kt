@@ -1,5 +1,8 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.performScrollTo
+import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -22,9 +25,9 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The settings and about entries live in the session list's overflow menu;
- * each opens its screen and back returns to the list. Settings itself no
- * longer shows the app version.
+ * Settings open from the gear on Home and "Über die App" from the end of
+ * Settings; back returns step by step. Settings itself does not show the
+ * app version. The Agents list has no header menu any more.
  */
 class SettingsNavigationUiTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -33,13 +36,26 @@ class SettingsNavigationUiTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun settingsEntryOpensSettingsAndBackReturnsToSessions() {
+    fun theAgentsListHasNoHeaderMenu() {
         setHost()
         composeRule.waitForHome()
         composeRule.openAgentsTab()
         composeRule.waitForAgents()
-        openOverflowMenu()
-        composeRule.onNodeWithText(context.getString(R.string.settings_entry)).performClick()
+        composeRule.onAllNodesWithTag("sessions_overflow_menu").fetchSemanticsNodes().let {
+            org.junit.Assert.assertTrue(it.isEmpty())
+        }
+        composeRule.onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.sessions.SESSIONS_HEADER_TAG)
+            .assert(androidx.compose.ui.test.SemanticsMatcher("has the refresh action") { node ->
+                node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { null }
+                    ?.any { it.label == context.getString(R.string.sessions_refresh) } == true
+            })
+    }
+
+    @Test
+    fun theHomeGearOpensSettingsAndBackReturnsHome() {
+        setHost()
+        composeRule.waitForHome()
+        composeRule.onNodeWithTag(HomeTags.SETTINGS).performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().isNotEmpty()
@@ -60,20 +76,21 @@ class SettingsNavigationUiTest {
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back)).performClick()
 
-        composeRule.waitForAgents()
+        composeRule.waitForHome()
         composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().let {
             org.junit.Assert.assertTrue("settings screen must be gone", it.isEmpty())
         }
     }
 
     @Test
-    fun aboutEntryOpensAboutWithVersionAndLicenseAndBackReturnsToSessions() {
+    fun aboutAtTheEndOfSettingsShowsVersionAndLicenseAndBackReturnsToSettings() {
         setHost()
         composeRule.waitForHome()
-        composeRule.openAgentsTab()
-        composeRule.waitForAgents()
-        openOverflowMenu()
-        composeRule.onNodeWithText(context.getString(R.string.settings_about_section)).performClick()
+        composeRule.onNodeWithTag(HomeTags.SETTINGS).performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("settings_about").performScrollTo().performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("about_screen").fetchSemanticsNodes().isNotEmpty()
@@ -91,7 +108,9 @@ class SettingsNavigationUiTest {
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back)).performClick()
 
-        composeRule.waitForAgents()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("settings_screen").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onAllNodesWithTag("about_screen").fetchSemanticsNodes().let {
             org.junit.Assert.assertTrue("about screen must be gone", it.isEmpty())
         }
@@ -123,13 +142,6 @@ class SettingsNavigationUiTest {
                 )
             }
         }
-    }
-
-    private fun openOverflowMenu() {
-        composeRule.onNodeWithContentDescription(
-            context.getString(R.string.sessions_more_options)
-        ).performClick()
-        composeRule.waitForIdle()
     }
 
     private fun waitForText(text: String) {

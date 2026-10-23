@@ -1,5 +1,10 @@
 package io.github.excludebarrier.orsikrelay.ui.chat
 
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -105,14 +110,24 @@ fun ApprovalDialog(
     // True while exactly one decision request is in flight.
     var inFlight by remember { mutableStateOf(false) }
     // A closed terminal outcome after a completed request, or null while
-    // the dialog is still awaiting a decision.
-    var outcome by remember { mutableStateOf<ApprovalOutcome?>(null) }
+    // the dialog is still awaiting a decision. A request this process has
+    // already sent a decision for (the dialog was re-created by a rotation
+    // or by leaving and re-entering the chat) starts as "already sent", so
+    // a second, non-idempotent decision is impossible.
+    val attemptKey = request.runId + "/" + request.requestId
+    var outcome by remember {
+        mutableStateOf(if (AttemptedApprovals.contains(attemptKey)) ApprovalOutcome.AlreadySent else null)
+    }
 
     fun decide(choice: RunApprovalChoice) {
         // Any completed attempt is terminal. A transport failure is
         // ambiguous, so sending the same non-idempotent decision again is
         // forbidden just like an already-resolved response.
         if (inFlight || outcome != null) return
+        if (!AttemptedApprovals.mark(attemptKey)) {
+            outcome = ApprovalOutcome.AlreadySent
+            return
+        }
         inFlight = true
         outcome = null
         scope.launch {
@@ -188,14 +203,27 @@ fun ApprovalDialog(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.approval_error_generic),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            // Announced: the decision buttons just went disabled.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                     ApprovalOutcome.AlreadyResolved -> {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.approval_already_resolved),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            // Announced: the decision buttons just went disabled.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        )
+                    }
+                    ApprovalOutcome.AlreadySent -> {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.approval_already_sent),
+                            style = MaterialTheme.typography.bodyMedium,
+                            // Announced: the decision buttons just went disabled.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                     null -> Unit
@@ -250,20 +278,61 @@ fun ApprovalDialog(
                         Text(text = stringResource(R.string.approval_allow))
                     }
                 }
+                // After a decided, failed or already-answered request (and
+                // while one is in flight) the decision buttons stay disabled;
+                // this is the way out.
+                if (outcome != null || inFlight) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .testTag(TAG_CLOSE)
+                    ) {
+                        Text(text = stringResource(R.string.approval_close))
+                    }
+                }
             }
         }
+    }
+}
+
+/**
+ * The approval requests this process has sent a decision for, so a
+ * re-created dialog never offers a second one. Bounded; only opaque
+ * run/request IDs, nothing persisted.
+ */
+internal object AttemptedApprovals {
+    private const val MAX = 64
+    private val keys = LinkedHashSet<String>()
+
+    @Synchronized
+    fun contains(key: String): Boolean = key in keys
+
+    /** Tests share fixed request IDs across cases in one process. */
+    @Synchronized
+    internal fun reset() = keys.clear()
+
+    /** Records [key]; `false` when a decision was already sent for it. */
+    @Synchronized
+    fun mark(key: String): Boolean {
+        if (!keys.add(key)) return false
+        if (keys.size > MAX) keys.remove(keys.first())
+        return true
     }
 }
 
 /** Closed, non-serialised outcome states for the approval dialog. */
 private enum class ApprovalOutcome {
     Failed,
-    AlreadyResolved
+    AlreadyResolved,
+    AlreadySent
 }
 
 private const val TAG_SURFACE = "approval_surface"
 private const val TAG_DENY = "approval_deny"
 private const val TAG_ALLOW = "approval_allow"
+internal const val TAG_CLOSE = "approval_close"
 
 /**
  * Tapjacking guard for the window it is composed in: touches that arrive

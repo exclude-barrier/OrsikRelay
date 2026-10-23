@@ -17,6 +17,7 @@ data class ServerProfile private constructor(
                 profileName.isBlank() ||
                 profileName != profileName.trim() ||
                 profileName.length > ProfileFormValidator.PROFILE_NAME_MAX_LENGTH ||
+                profileName.any { it.isISOControl() } ||
                 normalizedUrl == null ||
                 normalizedUrl != baseUrl
             ) {

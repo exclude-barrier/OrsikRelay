@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -54,6 +55,11 @@ class ApprovalDialogUiTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    @org.junit.Before
+    fun resetAttemptedApprovals() {
+        io.github.excludebarrier.orsikrelay.ui.chat.AttemptedApprovals.reset()
+    }
 
     @Test
     fun rendersOnlyNeutralApprovalPromptNotIdsOrDynamicActionDetails() {
@@ -271,6 +277,37 @@ class ApprovalDialogUiTest {
         composeRule.onNodeWithTag(TAG_ALLOW).performClick()
         composeRule.waitForIdle()
         assertEquals(1, calls.get())
+    }
+
+    @Test
+    fun afterAFailureTheDialogCanBeClosed() {
+        var dismissed = 0
+        setDialog(
+            fake(requester = { _, _, _, _ -> RunApprovalResult.Failure(RunApprovalError.Network) }),
+            onDismiss = { dismissed++ }
+        )
+        composeRule.onNodeWithTag(TAG_DENY).performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(io.github.excludebarrier.orsikrelay.ui.chat.TAG_CLOSE).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.chat.TAG_CLOSE).performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, dismissed)
+    }
+
+    @Test
+    fun aRecreatedDialogForADecidedRequestOffersNoSecondDecision() {
+        // A decision for this request was already sent in this process
+        // (the dialog was disposed while the POST was in flight).
+        io.github.excludebarrier.orsikrelay.ui.chat.AttemptedApprovals.mark(REQUEST.runId + "/" + REQUEST.requestId)
+        val calls = AtomicInteger()
+        setDialog(fake(requester = { _, _, _, _ -> calls.incrementAndGet(); RunApprovalResult.Resolved(RUN_ID, io.github.excludebarrier.orsikrelay.domain.run.RunApprovalChoice.ONCE) }))
+
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_DENY).assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.approval_already_sent)).assertIsDisplayed()
+        composeRule.onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.chat.TAG_CLOSE).assertIsDisplayed()
+        assertEquals(0, calls.get())
     }
 
     @Test

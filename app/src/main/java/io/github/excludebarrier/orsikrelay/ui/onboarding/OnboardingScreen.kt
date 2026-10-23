@@ -124,13 +124,65 @@ fun OnboardingScreen(
     var showModeInfo by rememberSaveable { mutableStateOf(false) }
     var showScanner by rememberSaveable { mutableStateOf(startWithScanner) }
 
-    // Re-tap support: a deep link delivered after first composition (onNewIntent)
-    // updates the pre-filled fields. Only non-empty values override, so a
-    // bootstrap never wipes a field the user has since edited.
+    // Re-tap support: a deep link delivered after first composition
+    // (onNewIntent) is an offer, not an edit. An untouched form takes it;
+    // a form with a server or code already in it asks first and names the
+    // link's server, so another app can never silently re-point the form.
+    var linkOffer by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+    var initialValuesSeen by remember { mutableStateOf(false) }
+    fun applyLink(name: String, url: String, code: String) {
+        if (name.isNotEmpty()) profileName = name
+        if (url.isNotEmpty()) baseUrl = url
+        if (code.isNotEmpty()) pairingCode = code
+    }
     LaunchedEffect(initialProfileName, initialBaseUrl, initialPairingCode) {
-        if (initialProfileName.isNotEmpty()) profileName = initialProfileName
-        if (initialBaseUrl.isNotEmpty()) baseUrl = initialBaseUrl
-        if (initialPairingCode.isNotEmpty()) pairingCode = initialPairingCode
+        if (!initialValuesSeen) {
+            // The first values were applied by the field initialisers.
+            initialValuesSeen = true
+            return@LaunchedEffect
+        }
+        if (initialProfileName.isEmpty() && initialBaseUrl.isEmpty() && initialPairingCode.isEmpty()) {
+            return@LaunchedEffect
+        }
+        if (baseUrl.isBlank() && pairingCode.isBlank()) {
+            applyLink(initialProfileName, initialBaseUrl, initialPairingCode)
+        } else {
+            linkOffer = Triple(initialProfileName, initialBaseUrl, initialPairingCode)
+        }
+    }
+    linkOffer?.let { (name, url, code) ->
+        AlertDialog(
+            onDismissRequest = { linkOffer = null },
+            shape = OrsikDialog.shape,
+            containerColor = OrsikDialog.containerColor,
+            tonalElevation = OrsikDialog.tonalElevation,
+            title = { Text(stringResource(R.string.onboarding_link_offer_title)) },
+            text = {
+                val target = url.ifEmpty { baseUrl }
+                Text(
+                    if (target.isBlank()) {
+                        stringResource(R.string.onboarding_link_offer_text_no_server)
+                    } else {
+                        stringResource(R.string.onboarding_link_offer_text, target)
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        applyLink(name, url, code)
+                        linkOffer = null
+                    },
+                    modifier = Modifier.testTag("onboardingLinkOfferApply")
+                ) { Text(stringResource(R.string.onboarding_link_offer_apply)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { linkOffer = null },
+                    modifier = Modifier.testTag("onboardingLinkOfferDiscard")
+                ) { Text(stringResource(R.string.onboarding_link_offer_discard)) }
+            }
+        )
     }
     val apiKeyLabel = stringResource(R.string.onboarding_api_key_label)
     // Resolved in the composable scope: the semantics block below is not
@@ -508,6 +560,7 @@ fun OnboardingScreen(
 private fun profileNameErrorMessage(code: String): Int = when (code) {
     ProfileFormValidator.ErrorCodes.PROFILE_NAME_EMPTY -> R.string.error_profile_name_empty
     ProfileFormValidator.ErrorCodes.PROFILE_NAME_TOO_LONG -> R.string.error_profile_name_too_long
+    ProfileFormValidator.ErrorCodes.PROFILE_NAME_INVALID -> R.string.error_profile_name_invalid
     else -> R.string.error_profile_name_generic
 }
 

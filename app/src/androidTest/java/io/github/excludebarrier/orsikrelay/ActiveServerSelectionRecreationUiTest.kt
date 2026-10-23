@@ -3,7 +3,6 @@ package io.github.excludebarrier.orsikrelay
 import android.content.Context
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -148,10 +147,11 @@ class ActiveServerSelectionRecreationUiTest {
             profileIdsQueried.isNotEmpty() &&
                 profileIdsQueried.all { it == FIXED_ID }
         )
-        // The Sessions screen (not onboarding) is the visible start screen.
+        // The Sessions screen (not onboarding) is the visible start screen;
+        // its heading merges the title (it carries the refresh action).
         assertEquals(
             1,
-            composeRule.onAllNodes(hasText(SESSIONS_TITLE) and hasAnyAncestor(hasTestTag(SESSIONS_HEADER_TAG)))
+            composeRule.onAllNodes(hasText(SESSIONS_TITLE) and hasTestTag(SESSIONS_HEADER_TAG))
                 .fetchSemanticsNodes().size
         )
     }

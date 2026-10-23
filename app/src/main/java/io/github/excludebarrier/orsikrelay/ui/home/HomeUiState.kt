@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
+
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
 import io.github.excludebarrier.orsikrelay.domain.session.HermesSession
 
@@ -45,7 +47,9 @@ data class HomeUiState(
     val attachmentName: String? = null,
     val attachmentBusy: Boolean = false,
     val sending: Boolean = false,
-    val notice: HomeNotice? = null
+    val notice: HomeNotice? = null,
+    /** Live server values; `null` until the first read. */
+    val hostMetrics: HostMetricsResult? = null
 ) {
     /** The dock sends only to a reachable server and never twice. */
     val canSend: Boolean

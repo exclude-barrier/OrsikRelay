@@ -175,3 +175,71 @@ class StartupUmaskTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EnvFileValuesTest(unittest.TestCase):
+    """dotenv-style values (quotes, comments, export) as Hermes' .env uses them."""
+
+    def _write(self, text: str) -> str:
+        handle = tempfile.NamedTemporaryFile("w", delete=False, suffix=".env")
+        handle.write(text)
+        handle.close()
+        os.chmod(handle.name, 0o600)
+        self.addCleanup(os.unlink, handle.name)
+        return handle.name
+
+    def test_quotes_comments_and_export(self):
+        path = self._write(
+            'API_SERVER_KEY="quoted_key"\n'
+            "SINGLE='a b # not a comment'\n"
+            "BRIDGE_PORT=9842 # the port\n"
+            "export BRIDGE_BIND=127.0.0.1\n"
+            "HASH=abc#def\n"
+            "EQ=a=b\n"
+        )
+        values = bridge_server._load_env_file(path)
+        self.assertEqual(values["API_SERVER_KEY"], "quoted_key")
+        self.assertEqual(values["SINGLE"], "a b # not a comment")
+        self.assertEqual(values["BRIDGE_PORT"], "9842")
+        self.assertEqual(values["BRIDGE_BIND"], "127.0.0.1")
+        self.assertEqual(values["HASH"], "abc#def")
+        self.assertEqual(values["EQ"], "a=b")
+
+    def test_an_unreadable_file_stops_instead_of_falling_back(self):
+        path = self._write("API_SERVER_KEY=x\n")
+        with mock.patch.object(Path, "read_text", side_effect=PermissionError("denied")):
+            with self.assertRaises(SystemExit):
+                bridge_server._load_env_file(path)
+
+
+class PairingCodeBaseUrlTest(unittest.TestCase):
+    def test_the_deep_link_uses_the_public_url_from_bridge_env(self):
+        with tempfile.TemporaryDirectory() as home:
+            env_path = os.path.join(home, "bridge.env")
+            hermes_env = os.path.join(home, "hermes.env")
+            Path(hermes_env).write_text("API_SERVER_KEY=k\n")
+            os.chmod(hermes_env, 0o600)
+            Path(env_path).write_text(
+                f"BRIDGE_HERMES_ENV={hermes_env}\nBRIDGE_STATE_DB={home}/state.db\n"
+                "BRIDGE_PUBLIC_BASE_URL=https://bridge.example.invalid\n"
+            )
+            os.chmod(env_path, 0o600)
+            with mock.patch.dict(os.environ, {"BRIDGE_ENV_FILE": env_path}, clear=False), \
+                    mock.patch("builtins.print") as printed:
+                os.environ.pop("BRIDGE_PUBLIC_BASE_URL", None)
+                self.assertEqual(bridge_server._admin_main(["pairing-code"]), 0)
+            lines = " ".join(str(call.args[0]) for call in printed.call_args_list if call.args)
+            self.assertIn("orsik://pair", lines)
+
+    def test_a_public_url_with_user_info_is_a_clean_error(self):
+        with tempfile.TemporaryDirectory() as home:
+            env_path = os.path.join(home, "bridge.env")
+            hermes_env = os.path.join(home, "hermes.env")
+            Path(hermes_env).write_text("API_SERVER_KEY=k\n")
+            os.chmod(hermes_env, 0o600)
+            Path(env_path).write_text(f"BRIDGE_HERMES_ENV={hermes_env}\nBRIDGE_STATE_DB={home}/state.db\n")
+            os.chmod(env_path, 0o600)
+            with mock.patch.dict(os.environ, {"BRIDGE_ENV_FILE": env_path}, clear=False), \
+                    mock.patch("builtins.print"):
+                self.assertEqual(
+                    bridge_server._admin_main(["pairing-code", "--base-url", "https://user@host.invalid"]), 1)

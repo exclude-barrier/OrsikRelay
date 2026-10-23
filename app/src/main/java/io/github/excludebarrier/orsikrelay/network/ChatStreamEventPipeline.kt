@@ -594,9 +594,9 @@ class ChatStreamEventPipeline(
     private fun safePendingSteer(value: String?): String? {
         if (value == null || value.isBlank()) return null
         if (value.length > MAX_PENDING_STEER_LENGTH) return null
+        // Every ISO control (C0, DEL and C1) except the usual whitespace.
         val hasDisallowedControl = value.any { character ->
-            (character.code < 0x20 && character != '\n' && character != '\t' && character != '\r') ||
-                character.code == 0x7F
+            character.isISOControl() && character != '\n' && character != '\t' && character != '\r'
         }
         return if (hasDisallowedControl) null else value
     }

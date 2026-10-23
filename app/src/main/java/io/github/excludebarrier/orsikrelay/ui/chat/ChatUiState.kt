@@ -2,7 +2,6 @@ package io.github.excludebarrier.orsikrelay.ui.chat
 
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentError
-import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
@@ -134,6 +133,11 @@ internal data class ChatUiState(
     val lostRun: LostRun? = null,
     /** That acknowledgement is in flight. */
     val resolveInFlight: Boolean = false,
+    /**
+     * The core reports the run as lost but without the key to close it, so
+     * nothing can be acknowledged from the app (and it is not "still active").
+     */
+    val lostRunWithoutKey: Boolean = false,
     val runStarted: Boolean = false,
     val boundRunId: String? = null,
     val pendingApproval: ApprovalRequest? = null,
@@ -180,6 +184,15 @@ internal data class ChatUiState(
      */
     val recoveryVisible: Boolean
         get() = turnUncertain && boundRunId?.isNotBlank() == true
+
+    /**
+     * The uncertain run can no longer be proven over (no confirmed run ID,
+     * the status read failed, or a lost run without its key): the user may
+     * release it in the app. Never while a status read or close runs.
+     */
+    val releaseVisible: Boolean
+        get() = turnUncertain && !reconcileInFlight && !resolveInFlight && lostRun == null &&
+            (boundRunId.isNullOrBlank() || reconcileFailed || lostRunWithoutKey)
 
     /**
      * The composer send action is enabled only when no turn is active, no

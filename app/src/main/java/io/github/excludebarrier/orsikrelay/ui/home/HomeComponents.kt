@@ -1,5 +1,10 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import androidx.compose.ui.res.pluralStringResource
+import java.util.Locale
+import kotlin.math.roundToInt
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetrics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +88,7 @@ object HomeTags {
     const val APPROVAL_REVIEW = "home_approval_review"
     const val RUN_ROW = "home_run_row"
     const val SERVER_STRIP = "home_server_strip"
+    const val SERVER_SERVICES_DOWN = "home_server_services_down"
     const val QUICK_CHAT = "home_quick_chat"
     const val QUICK_TILE_PREFIX = "home_quick_"
     const val RECENT_ROW = "home_recent_row"
@@ -421,13 +427,11 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-fun ServerStatusStrip(modifier: Modifier = Modifier) {
+fun ServerStatusStrip(metrics: HostMetricsResult?, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
         // No status chip here: the server card above already says whether
         // the server is connected.
         SectionTitle(text = stringResource(R.string.home_section_server))
-        val noValue = stringResource(R.string.home_server_no_value)
-        val dash = MaterialTheme.colorScheme.outline
         Column(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
@@ -437,48 +441,164 @@ fun ServerStatusStrip(modifier: Modifier = Modifier) {
                 .padding(16.dp)
                 .testTag(HomeTags.SERVER_STRIP)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOf(
-                    R.string.home_server_cpu,
-                    R.string.home_server_ram,
-                    R.string.home_server_gpu,
-                    R.string.home_server_services
-                ).forEach { labelRes ->
-                    val label = stringResource(labelRes)
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clearAndSetSemantics { contentDescription = "$label: $noValue" }
-                    ) {
-                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("—", fontFamily = OrsikMono, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .dashedBorder(dash, 3.dp)
+            val ready = (metrics as? HostMetricsResult.Ready)?.metrics
+            // From 1.3x font four columns no longer fit: two rows of two.
+            val columns = if (LocalDensity.current.fontScale >= LARGE_FONT_SCALE) 2 else 4
+            hostTiles(ready).chunked(columns).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { tile -> HostTileView(tile, Modifier.weight(1f)) }
+                }
+            }
+            when (metrics) {
+                is HostMetricsResult.Ready -> {
+                    val down = metrics.metrics.services.filter { it.active == false }.map { it.name }
+                    if (down.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.home_server_services_down, down.joinToString(", ")),
+                            style = OrsikType.meta,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.testTag(HomeTags.SERVER_SERVICES_DOWN)
                         )
                     }
                 }
+                // A failed read is not a "preview": plain text, no badge.
+                HostMetricsResult.Failed -> Text(
+                    text = stringResource(R.string.home_server_unreadable),
+                    style = OrsikType.meta,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // An older bridge: the card keeps its preview.
+                HostMetricsResult.Unsupported -> PreviewNote(stringResource(R.string.home_server_preview_text))
+                // Not read yet (or the server is unreachable): placeholders only.
+                null -> Unit
             }
-            PreviewNote(stringResource(R.string.home_server_preview_text))
+        }
+    }
+}
+
+/** One value of the server card: label, value text, a fill (0..1) or none, and a warning tone. */
+private class HostTile(
+    val label: String,
+    val value: String?,
+    val fill: Float?,
+    val warn: Boolean = false,
+    val detail: String? = null
+)
+
+@Composable
+private fun hostTiles(metrics: HostMetrics?): List<HostTile> {
+    val locale = LocalConfiguration.current.locales[0]
+    val cpu = stringResource(R.string.home_server_cpu)
+    val ram = stringResource(R.string.home_server_ram)
+    val gpu = stringResource(R.string.home_server_gpu)
+    val services = stringResource(R.string.home_server_services)
+    val gpuNone = stringResource(R.string.home_server_gpu_none)
+    val cores = metrics?.cores?.let { pluralCores(it) }
+    if (metrics == null) return listOf(cpu, ram, gpu, services).map { HostTile(it, null, null) }
+    val used = metrics.memoryUsedBytes
+    val total = metrics.memoryTotalBytes
+    val active = metrics.services.count { it.active == true }
+    // Only a confirmed stop is a warning; "could not ask" is not.
+    val stopped = metrics.services.any { it.active == false }
+    val count = metrics.services.size
+    return listOf(
+        HostTile(cpu, metrics.cpuPercent?.let { "${it.roundToInt()} %" }, metrics.cpuPercent?.let { (it / 100).toFloat() }, detail = cores),
+        // A percentage fits the narrow tile; the absolute values are the detail.
+        if (used != null && total != null && total > 0) {
+            HostTile(
+                ram,
+                "${(100.0 * used / total).roundToInt()} %",
+                used.toFloat() / total,
+                detail = "${gibibytes(used, locale)}/${gibibytes(total, locale)} GB"
+            )
+        } else {
+            HostTile(ram, null, null)
+        },
+        metrics.gpu?.let { HostTile(gpu, "${it.utilizationPercent} %", it.utilizationPercent / 100f, detail = it.name) }
+            ?: HostTile(gpu, gpuNone, null),
+        HostTile(
+            services,
+            if (count == 0) null else "$active/$count",
+            if (count == 0) null else active.toFloat() / count,
+            warn = stopped
+        )
+    )
+}
+
+@Composable
+private fun pluralCores(cores: Int): String = pluralStringResource(R.plurals.home_server_cores, cores, cores)
+
+private fun gibibytes(bytes: Long, locale: Locale): String =
+    String.format(locale, "%.0f", bytes / (1024.0 * 1024.0 * 1024.0))
+
+@Composable
+private fun HostTileView(tile: HostTile, modifier: Modifier) {
+    val noValue = stringResource(R.string.home_server_no_value)
+    val value = tile.value
+    val tone = if (tile.warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.clearAndSetSemantics {
+            contentDescription = listOfNotNull(tile.label, value ?: noValue, tile.detail).joinToString(", ")
+        }
+    ) {
+        Text(tile.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = value ?: "—",
+            fontFamily = OrsikMono,
+            fontSize = 15.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = when {
+                value == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                tile.warn -> tone
+                else -> MaterialTheme.colorScheme.onSurface
+            }
+        )
+        val fill = tile.fill
+        if (fill == null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .dashedBorder(MaterialTheme.colorScheme.outline, 3.dp)
+            )
+        } else {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(fill.coerceIn(0f, 1f))
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(tone)
+                )
+            }
         }
     }
 }
 
 @Composable
-fun QuickActionGrid(onNewChat: () -> Unit, onOpenServer: () -> Unit, modifier: Modifier = Modifier) {
-    // Live tiles first (KI-Chat starts a new chat, Server opens the Server
-    // tab), then the tools that only mark their future place.
+fun QuickActionGrid(
+    onNewChat: () -> Unit,
+    onOpenServer: () -> Unit,
+    onQuickTask: (QuickTask) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // KI-Chat starts a new chat, Server opens the Server tab; the four tool
+    // tiles start a new chat with a prepared request in the composer (sent
+    // only when the user sends it, so Hermes' approvals apply as usual).
     val cells = listOf(
         QuickTile("chat", R.string.home_quick_chat, OrsikIcons.Chat, onClick = onNewChat, filled = true),
-        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server, onClick = onOpenServer),
-        QuickTile("terminal", R.string.home_quick_terminal, OrsikIcons.Terminal),
-        QuickTile("files", R.string.home_quick_files, OrsikIcons.Folder),
-        QuickTile("docker", R.string.home_quick_docker, OrsikIcons.Container),
-        QuickTile("projects", R.string.home_quick_projects, OrsikIcons.Code)
-    )
+        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server, onClick = onOpenServer)
+    ) + QuickTask.entries.map { task ->
+        QuickTile(task.key, task.labelRes, task.icon, onClick = { onQuickTask(task) }, prepared = true)
+    }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cells.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -488,7 +608,10 @@ fun QuickActionGrid(onNewChat: () -> Unit, onOpenServer: () -> Unit, modifier: M
                         .testTag(HomeTags.QUICK_TILE_PREFIX + tile.key)
                     val onClick = tile.onClick
                     if (onClick != null) {
-                        LiveTile(stringResource(tile.labelRes), tile.icon, tile.filled, onClick, tileModifier)
+                        LiveTile(
+                            stringResource(tile.labelRes), tile.icon, tile.filled, onClick, tileModifier,
+                            onClickLabel = if (tile.prepared) stringResource(R.string.home_task_click_label) else null
+                        )
                     } else {
                         PreviewTile(label = stringResource(tile.labelRes), icon = tile.icon, modifier = tileModifier)
                     }
@@ -498,13 +621,26 @@ fun QuickActionGrid(onNewChat: () -> Unit, onOpenServer: () -> Unit, modifier: M
     }
 }
 
+/**
+ * A tool tile: a new chat titled [labelRes] whose composer holds [promptRes],
+ * a prepared request for Hermes. Nothing is sent until the user sends it.
+ */
+enum class QuickTask(val key: String, val labelRes: Int, val promptRes: Int, val icon: ImageVector) {
+    Terminal("terminal", R.string.home_quick_terminal, R.string.home_task_terminal_prompt, OrsikIcons.Terminal),
+    Files("files", R.string.home_quick_files, R.string.home_task_files_prompt, OrsikIcons.Folder),
+    Docker("docker", R.string.home_quick_docker, R.string.home_task_docker_prompt, OrsikIcons.Container),
+    Projects("projects", R.string.home_quick_projects, R.string.home_task_projects_prompt, OrsikIcons.Code)
+}
+
 /** One quick-access tile; without [onClick] it is a disabled "Bald" preview. */
 private class QuickTile(
     val key: String,
     val labelRes: Int,
     val icon: ImageVector,
     val onClick: (() -> Unit)? = null,
-    val filled: Boolean = false
+    val filled: Boolean = false,
+    /** Starts a chat with a prepared request (named for TalkBack). */
+    val prepared: Boolean = false
 )
 
 /**
@@ -512,21 +648,23 @@ private class QuickTile(
  * tile, otherwise a card-coloured tile (Server).
  */
 @Composable
-private fun LiveTile(
+internal fun LiveTile(
     label: String,
     icon: ImageVector,
     filled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** What a tap does, for TalkBack (the label is only a noun). */
+    onClickLabel: String? = null
 ) {
     val content = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Column(
         verticalArrangement = Arrangement.SpaceBetween,
         modifier = modifier
-            .height(92.dp)
+            .heightIn(min = 92.dp)
             .clip(OrsikShapes.card)
             .background(if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow)
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = onClickLabel, onClick = onClick)
             .padding(14.dp)
     ) {
         Icon(icon, contentDescription = null, tint = if (filled) content else MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
@@ -535,7 +673,8 @@ private fun LiveTile(
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = content,
-            maxLines = 1,
+            // Two lines at a large font instead of "Term…".
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -651,3 +790,6 @@ fun HomeSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
+
+/** From this font scale the server card stacks its values two per row. */
+private const val LARGE_FONT_SCALE = 1.3f
