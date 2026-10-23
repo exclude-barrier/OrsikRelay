@@ -52,6 +52,10 @@ under **⋮ → Settings → Language**.*
 - **Server terminal (opt-in):** a real shell in a tmux session on the server,
   behind the device credential on every visit; off unless the server admin
   sets `BRIDGE_TERMINAL=1` ([details](docs/bridge-installation.md#2b-optional-server-terminal)).
+- **Files and projects (opt-in, read-only):** browse one server folder, preview
+  text and images, save a file to the phone, and see the git projects in it
+  with branch, changes and last commit; off unless the server admin sets
+  `BRIDGE_FILES=1` ([details](docs/bridge-installation.md#2c-optional-read-only-files-and-projects)).
 - **Unmodified Hermes:** the bridge runs next to an official Hermes installation;
   no fork, no core patch.
 
@@ -270,6 +274,7 @@ contract before it stores anything.
 | Answer a tool approval | **Deny** or **Allow** (allow once) |
 | Attach an image | **Attach** in the composer (one image, ≤ 5 MiB) |
 | Open the settings | the gear on **Home** |
+| Browse server files / projects | **Files** or **Projects** on **Home** (Files also in the **Server** tab); needs `BRIDGE_FILES=1` on the server |
 | Open a shell on the server | **Terminal** on **Home** or in the **Server** tab (needs `BRIDGE_TERMINAL=1` on the server and a screen lock on the phone) |
 | Change the app language | **Settings → Language** (System / English / Deutsch) |
 | Light / dark mode | **Settings → Appearance** (System / Light / Dark) |
@@ -296,9 +301,9 @@ and immediately revoke paired phones.
 - **Attachments:** images only (JPEG, PNG, WEBP), one per turn, up to 5 MiB;
   vision depends on your model.
 - **Home:** shows only tasks started from this phone; runs started elsewhere
-  (Telegram, cron) do not appear. The Files, Docker and Projects tiles prepare a
-  request for Hermes (dedicated screens are planned); agents other than Hermes
-  are previews without function.
+  (Telegram, cron) do not appear. The Docker tile prepares a request for Hermes
+  (a dedicated screen is planned); agents other than Hermes are previews
+  without function.
 - **Not yet:** approvals do not show the command being approved, no voice input,
   no bot management.
 

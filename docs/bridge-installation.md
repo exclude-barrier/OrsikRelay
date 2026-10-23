@@ -137,6 +137,30 @@ BRIDGE_TERMINAL=1
 - To switch it off again, set `BRIDGE_TERMINAL=0` and restart the bridge; the
   app then shows "switched off".
 
+## 2c. Optional: read-only files and projects
+
+The app's **Files** and **Projects** show one folder of the server, read-only:
+
+```
+# in bridge.env, then restart the bridge
+BRIDGE_FILES=1
+BRIDGE_FILES_ROOT=/home/USER/projects
+```
+
+- The root must be an existing absolute folder **outside** the bridge home,
+  `bridge.env` and the Hermes home (`~/.hermes` with the API key); otherwise
+  the bridge does not start and `install.sh --check` says why. `/` is
+  refused. Choose a folder that holds only what the phone may read.
+- Nothing is written. Files up to 8 MiB can be previewed (text, images) or
+  saved to the phone; links that point outside the root are shown but not
+  opened.
+- **Projects** lists the git repositories in the root and one level below
+  (`root/repo`, `root/group/repo`) with branch, changed/clean and the last
+  commit. git runs with fixed arguments and ignores the repository's
+  fsmonitor and hooks.
+- Every file read is in the audit log (`file_read` with the path).
+- Switch it off with `BRIDGE_FILES=0` and a restart.
+
 ## 3. Operator Commands (No HTTP Admin)
 
 Pairing codes are generated **exclusively locally** — the file system permissions on

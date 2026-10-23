@@ -162,6 +162,21 @@ negotiable mobile contract.
 - The client never reconnects on its own; opening a shell is not an
   idempotent read.
 
+### 2.7 Read-only files (Bearer; only with `features.files` / `features.projects`)
+- `GET /v1/files/list?path=<rel>` → `{"object":"orsik.files.list","path":<rel>,
+  "entries":[{"name","type":"dir"|"file"|"other","size":<int>|null,
+  "modified_at":<int>|null}],"truncated":<bool>}` (folders first, ≤ 2000).
+- `GET /v1/files/content?path=<rel>` → the bytes with `Content-Type`
+  `image/png|jpeg|webp|gif`, `text/plain; charset=utf-8` or
+  `application/octet-stream`; ≤ 8 MiB.
+- `GET /v1/projects` → `{"object":"orsik.projects.list","projects":[{"name",
+  "path","branch":<str>|null,"dirty":<bool>|null,"last_commit":{"short",
+  "committed_at","subject"}|null}],"truncated":<bool>}`.
+- `path` is relative to the operator's root ("" or missing = the root), the
+  only query key, once. Errors: `403 path_not_allowed` (leaves the root),
+  `403 endpoint_out_of_scope` (switched off), `404 not_found`, `413
+  file_too_large`. Reads only; the client may retry them.
+
 ## 3. Capability negotiation & fail-closed
 
 | Situation | Result |
