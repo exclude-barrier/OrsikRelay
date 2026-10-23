@@ -31,6 +31,17 @@
              receives IME insets (consumed once in ChatScreen via
              WindowInsets.ime), so the window is never panned when the
              keyboard opens. -->
+        <!-- Shares one downloaded server file (cache/shared) read-only. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"

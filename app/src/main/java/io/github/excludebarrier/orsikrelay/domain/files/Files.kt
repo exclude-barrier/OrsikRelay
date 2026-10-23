@@ -11,7 +11,20 @@ enum class FileKind { Directory, File, Other }
 
 data class FileEntry(val name: String, val kind: FileKind, val sizeBytes: Long?, val modifiedAtSeconds: Long?)
 
-data class FileListing(val path: String, val entries: List<FileEntry>, val truncated: Boolean)
+data class FileListing(
+    val path: String,
+    val entries: List<FileEntry>,
+    val truncated: Boolean,
+    /** The absolute server folder, to name a path to Hermes; `null` from an older bridge. */
+    val root: String? = null
+)
+
+/** The absolute server path of [relative], or the relative one when the root is unknown. */
+fun serverPath(root: String?, relative: String): String = when {
+    root == null -> "/$relative"
+    relative.isEmpty() -> root.trimEnd('/').ifEmpty { "/" }
+    else -> "${root.trimEnd('/')}/$relative"
+}
 
 /** Content types the bridge sends: an image, UTF-8 text or anything else. */
 enum class FileContentKind { Text, Image, Binary }

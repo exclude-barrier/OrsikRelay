@@ -37,17 +37,17 @@ class RootTest(unittest.TestCase):
     def test_the_root_must_be_an_existing_absolute_directory(self):
         for raw in (None, "", "relative/dir", str(self.base / "missing"), "/"):
             with self.assertRaises(SystemExit, msg=raw):
-                files.resolve_root(raw, [])
+                files.resolve_root(raw, [], [])
         self.assertEqual(
-            files.resolve_root(str(self.base / "projects"), []), os.path.realpath(self.base / "projects"))
+            files.resolve_root(str(self.base / "projects"), [], []), os.path.realpath(self.base / "projects"))
 
     def test_a_root_containing_bridge_data_is_refused(self):
         with self.assertRaises(SystemExit):
-            files.resolve_root(str(self.base), [str(self.base / "bridge")])
+            files.resolve_root(str(self.base), [str(self.base / "bridge")], [])
         with self.assertRaises(SystemExit):
-            files.resolve_root(str(self.base / "bridge"), [str(self.base / "bridge")])
+            files.resolve_root(str(self.base / "bridge"), [str(self.base / "bridge")], [])
         # A sibling is fine.
-        files.resolve_root(str(self.base / "projects"), [str(self.base / "bridge")])
+        files.resolve_root(str(self.base / "projects"), [str(self.base / "bridge")], [])
 
     def test_the_env_protects_the_bridge_home_env_file_and_hermes_home(self):
         hermes = self.base / "hermes"
@@ -246,6 +246,7 @@ class FilesRouteTest(unittest.IsolatedAsyncioTestCase):
         listing = await (await self.client.get("/v1/files/list", headers=self.auth)).json()
         self.assertEqual(listing["object"], "orsik.files.list")
         self.assertEqual(listing["path"], "")
+        self.assertEqual(listing["root"], os.path.realpath(self.root))
         self.assertEqual([entry["name"] for entry in listing["entries"]], ["sub", "img.png"])
         sub = await (await self.client.get("/v1/files/list?path=sub", headers=self.auth)).json()
         self.assertEqual(sub["entries"][0]["size"], 5)

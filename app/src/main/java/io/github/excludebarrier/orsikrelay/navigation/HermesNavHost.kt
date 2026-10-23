@@ -1,5 +1,9 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import androidx.compose.ui.platform.LocalResources
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
+import io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult
+import io.github.excludebarrier.orsikrelay.ui.files.FilesHermes
 import io.github.excludebarrier.orsikrelay.ui.home.QuickTask
 import io.github.excludebarrier.orsikrelay.ui.files.ProjectsRoute
 import io.github.excludebarrier.orsikrelay.ui.files.FilesRoute
@@ -318,6 +322,45 @@ fun HermesNavHost(
         }
     }
 
+    val screenResources = LocalResources.current
+
+    // "Hermes zu <Pfad> fragen": a new session whose first message names the
+    // server path (sent, like Home's composer); "In neuer Hermes-Session
+    // öffnen": a new session with the path prepared in its composer.
+    fun filesHermes(profileId: String): FilesHermes? {
+        if (profileId.isBlank()) return null
+        val creator = sessionCreator ?: productionDependencies.value.sessionCreator
+        val controller = runController ?: productionDependencies.value.runController
+        return FilesHermes(
+            ask = ask@{ serverPath, question ->
+                if (controller.activeRun.value != null) return@ask FilesAskResult.Busy
+                val outbound = ChatOutboundMessage.create(
+                    screenResources.getString(R.string.files_ask_message, question, serverPath)
+                ) ?: return@ask FilesAskResult.Failed
+                val created = withContext(Dispatchers.IO) { creator.createSession(profileId, null) }
+                if (created !is SessionCreateResult.Success) return@ask FilesAskResult.Failed
+                when (controller.startTurn(profileId = profileId, sessionId = created.sessionId, message = outbound.text)) {
+                    RunSessionController.StartTurnResult.Started -> {
+                        openChat(created.sessionId, created.title)
+                        FilesAskResult.Opened
+                    }
+                    RunSessionController.StartTurnResult.ActiveRunConflict -> FilesAskResult.Busy
+                }
+            },
+            openInSession = { title, serverPath ->
+                val created = withContext(Dispatchers.IO) {
+                    createPreparedChat(
+                        creator,
+                        chatDraftRepository ?: productionDependencies.value.chatDraftRepository,
+                        profileId, title,
+                        screenResources.getString(R.string.files_session_prompt, serverPath)
+                    )
+                }
+                (created as? SessionCreateResult.Success)?.let { openChat(it.sessionId, it.title ?: title) } != null
+            }
+        )
+    }
+
     fun openTool(task: QuickTask) {
         val screen = when (task) {
             QuickTask.Terminal -> AppScreen.Terminal
@@ -627,6 +670,7 @@ fun HermesNavHost(
                     profileId = activeProfileId.orEmpty(),
                     source = filesSource ?: productionDependencies.value.filesSource,
                     startPath = entry.arguments?.getString(FILES_PATH_ARGUMENT).orEmpty(),
+                    hermes = filesHermes(activeProfileId.orEmpty()),
                     onBack = {
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()

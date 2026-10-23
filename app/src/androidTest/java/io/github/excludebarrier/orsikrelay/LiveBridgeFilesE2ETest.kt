@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -17,6 +18,8 @@ import io.github.excludebarrier.orsikrelay.domain.files.ProjectListing
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.network.HermesDevicePairClient
 import io.github.excludebarrier.orsikrelay.network.HermesFilesClient
+import io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult
+import io.github.excludebarrier.orsikrelay.ui.files.FilesHermes
 import io.github.excludebarrier.orsikrelay.ui.files.FilesRoute
 import io.github.excludebarrier.orsikrelay.ui.files.FilesTags
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
@@ -68,14 +71,35 @@ class LiveBridgeFilesE2ETest {
             override fun read(profileId: String, path: String): FilesResult<FileContent> = client.read(baseUrl, key, path)
             override fun projects(profileId: String): FilesResult<ProjectListing> = client.projects(baseUrl, key)
         }
-        composeRule.setContent { HermesTheme { FilesRoute(profileId = "live", source = source, startPath = "", onBack = {}) } }
+        composeRule.setContent {
+            HermesTheme {
+                FilesRoute(
+                    profileId = "live", source = source, startPath = "", onBack = {},
+                    hermes = FilesHermes(ask = { _, _ -> FilesAskResult.Failed }, openInSession = { _, _ -> false })
+                )
+            }
+        }
         composeRule.waitUntil(20_000) { composeRule.onAllNodesWithText("docs").fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithTag(FilesTags.ENTRY_PREFIX + "docs").performClick()
         composeRule.waitUntil(20_000) { composeRule.onAllNodesWithText("notes.md").fetchSemanticsNodes().isNotEmpty() }
         settle(3_000)
         composeRule.onNodeWithTag(FilesTags.ENTRY_PREFIX + "notes.md").performClick()
         composeRule.waitUntil(20_000) { composeRule.onAllNodesWithText("Hallo vom Teststand.", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.onNodeWithTag(FilesTags.TEXT).assertIsDisplayed()
+        // Markdown opens rendered.
+        composeRule.onNodeWithTag(FilesTags.MARKDOWN).assertIsDisplayed()
+        settle(3_000)
+        composeRule.onNodeWithTag(FilesTags.MODE_PREFIX + "source").performClick()
+        settle(3_000)
+        composeRule.onNodeWithTag("files_viewer_back").performClick()
+        composeRule.onNodeWithTag(FilesTags.ENTRY_PREFIX + "bild.png").performClick()
+        composeRule.waitUntil(20_000) { composeRule.onAllNodesWithTag(FilesTags.IMAGE).fetchSemanticsNodes().isNotEmpty() }
+        settle(3_000)
+        composeRule.onNodeWithTag("files_viewer_back").performClick()
+        composeRule.onNodeWithTag(FilesTags.ENTRY_PREFIX + "blob.bin").performClick()
+        composeRule.waitUntil(20_000) { composeRule.onAllNodesWithTag(FilesTags.BINARY).fetchSemanticsNodes().isNotEmpty() }
+        settle(3_000)
+        composeRule.onNodeWithTag("files_viewer_back").performClick()
+        composeRule.onNodeWithTag(FilesTags.MORE_PREFIX + "notes.md").performClick()
         settle(3_000)
     }
 

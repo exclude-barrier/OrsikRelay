@@ -12,9 +12,13 @@ thread.
 
 from __future__ import annotations
 
+import itertools
 import os
+import select
+import signal
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 MAX_ENTRIES = 2000
@@ -24,6 +28,11 @@ MAX_PROJECTS = 50
 # Repositories directly in the root or one level below (root/group/repo).
 PROJECT_DEPTH = 2
 GIT_TIMEOUT = 2.0
+# All git calls of one project scan together.
+SCAN_DEADLINE = 10.0
+# Folders looked at per directory while searching for projects.
+MAX_SCAN_CHILDREN = 1000
+GIT_OUTPUT_LIMIT = 4096
 
 _ENABLE_ERROR = "BRIDGE_FILES must be 1 (on), 0 or empty (off)"
 _ROOT_ERROR = "BRIDGE_FILES=1 needs BRIDGE_FILES_ROOT, an existing absolute directory"
@@ -50,8 +59,10 @@ def parse_enabled(raw: str | None) -> bool:
     raise SystemExit(_ENABLE_ERROR)
 
 
-def resolve_root(raw: str | None, protected: list[str]) -> str:
-    """The real path of the root; refuses a root that contains bridge data."""
+def resolve_root(raw: str | None, protected: list[str], sealed: list[str]) -> str:
+    """The real path of the root. It may not contain any [protected] path
+    (the home folder, bridge and Hermes data) nor lie inside a [sealed]
+    folder (the bridge and Hermes homes)."""
     value = (raw or "").strip()
     if not value or not os.path.isabs(value) or not os.path.isdir(value):
         raise SystemExit(_ROOT_ERROR)
@@ -61,7 +72,10 @@ def resolve_root(raw: str | None, protected: list[str]) -> str:
     for path in protected:
         if path and _inside(root, os.path.realpath(path)):
             raise SystemExit(
-                "BRIDGE_FILES_ROOT must not contain the bridge's own data or the Hermes env file")
+                "BRIDGE_FILES_ROOT must not contain the home folder, the bridge's own data or the Hermes home")
+    for path in sealed:
+        if path and _inside(os.path.realpath(path), root):
+            raise SystemExit("BRIDGE_FILES_ROOT must not lie inside the bridge or the Hermes home")
     return root
 
 
@@ -86,37 +100,88 @@ def _relative(root: str, real: str) -> str:
     return "" if real == root else os.path.relpath(real, root)
 
 
+def _open_inside(root: str, real: str, flags: int) -> int:
+    """Opens [real] (already resolved inside [root]) one component at a time
+    with O_NOFOLLOW, so no component can be swapped for a symlink between
+    resolving and opening."""
+    parts = [] if real == root else os.path.relpath(real, root).split(os.path.sep)
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for index, part in enumerate(parts):
+            last = index == len(parts) - 1
+            mode = flags if last else os.O_RDONLY | os.O_DIRECTORY
+            try:
+                child = os.open(part, mode | os.O_NOFOLLOW, dir_fd=fd)
+            except OSError:
+                try:
+                    swapped = stat.S_ISLNK(os.lstat(part, dir_fd=fd).st_mode)
+                except OSError:
+                    swapped = False
+                if swapped:
+                    raise PathRefused() from None
+                raise
+            os.close(fd)
+            fd = child
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _open_error(error: OSError) -> Exception:
+    import errno
+    if error.errno in (errno.ELOOP, errno.ENAMETOOLONG):
+        return PathRefused()
+    return NotFound()
+
+
 def list_dir(root: str, relative: str) -> dict:
     real = resolve(root, relative)
     try:
-        if not stat.S_ISDIR(os.stat(real).st_mode):
-            raise NotFound()
-        scanner = os.scandir(real)
-    except (FileNotFoundError, NotADirectoryError, PermissionError):
-        raise NotFound() from None
+        fd = _open_inside(root, real, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError as error:
+        raise _open_error(error) from None
     entries = []
     truncated = False
-    with scanner:
-        for entry in scanner:
-            if len(entries) >= MAX_ENTRIES:
-                truncated = True
-                break
-            entries.append(_entry(root, entry))
+    try:
+        with os.scandir(fd) as scanner:
+            for entry in scanner:
+                if len(entries) >= MAX_ENTRIES:
+                    truncated = True
+                    break
+                if not _utf8(entry.name):
+                    # Not representable in JSON; it could not be opened by name either.
+                    continue
+                entries.append(_entry(root, real, entry))
+    finally:
+        os.close(fd)
     entries.sort(key=lambda item: (item["type"] != "dir", item["name"].lower()))
     return {
         "object": "orsik.files.list",
+        # The absolute root, so a client can name a path to Hermes (which
+        # does not know the root).
+        "root": root,
         "path": _relative(root, real),
         "entries": entries,
         "truncated": truncated,
     }
 
 
-def _entry(root: str, entry: os.DirEntry) -> dict:
+def _utf8(name: str) -> bool:
+    try:
+        name.encode("utf-8")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def _entry(root: str, folder: str, entry: os.DirEntry) -> dict:
     kind = "other"
     size = None
     mtime = None
     try:
-        target = os.path.realpath(entry.path) if entry.is_symlink() else entry.path
+        path = os.path.join(folder, entry.name)
+        target = os.path.realpath(path) if entry.is_symlink() else path
         # A link that leaves the root is listed but never opened.
         if _inside(root, target):
             info = os.stat(target)
@@ -138,12 +203,10 @@ def read_file(root: str, relative: str) -> tuple[bytes, str]:
         raise NotFound()
     try:
         # O_NONBLOCK: a FIFO must not hang the worker; it is refused below.
-        fd = os.open(real, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
-    except (FileNotFoundError, NotADirectoryError, PermissionError, IsADirectoryError):
-        raise NotFound() from None
-    except OSError:
-        # ELOOP: the path was swapped for a symlink after resolving.
-        raise PathRefused() from None
+        fd = _open_inside(root, real, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as error:
+        # ELOOP: a component was swapped for a symlink after resolving.
+        raise _open_error(error) from None
     info = os.fstat(fd)
     if not stat.S_ISREG(info.st_mode):
         os.close(fd)
@@ -188,27 +251,74 @@ def _git_env() -> dict[str, str]:
     return env
 
 
-# A repository's own config may name programs (fsmonitor, hooks); none of
-# them may run for a read.
-_GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
+# A repository's own config and content may name programs (fsmonitor,
+# hooks, and through .gitattributes clean/smudge/process filters or
+# textconv); none of them may run for a read. An empty tree as the source
+# of attributes means no attribute selects any driver; the work tree is
+# pinned (core.worktree is ignored) and submodules are not entered.
+_EMPTY_TREE = {"sha1": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+               "sha256": "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321"}
 
 
-def _git(repo: str, *args: str) -> str | None:
+def _git_safe(repo: str, object_format: str = "sha1") -> tuple[str, ...]:
+    return (
+        "git", "--no-optional-locks",
+        f"--attr-source={_EMPTY_TREE[object_format]}",
+        f"--git-dir={os.path.join(repo, '.git')}", f"--work-tree={repo}",
+        "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+        "-c", "core.untrackedCache=false", "-c", "submodule.recurse=false",
+    )
+
+
+def _git(repo: str, *args: str, object_format: str = "sha1", deadline: float | None = None) -> str | None:
+    """git's first GIT_OUTPUT_LIMIT bytes, or None (error, timeout). The
+    whole process group dies afterwards, so nothing git started survives."""
+    budget = GIT_TIMEOUT if deadline is None else min(GIT_TIMEOUT, deadline - time.monotonic())
+    if budget <= 0:
+        return None
     try:
-        result = subprocess.run(
-            ("git", *_GIT_SAFE, "-C", repo, *args),
-            capture_output=True, timeout=GIT_TIMEOUT, env=_git_env(), stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.TimeoutExpired):
+        process = subprocess.Popen(
+            (*_git_safe(repo, object_format), *args), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, env=_git_env(), start_new_session=True)
+    except OSError:
         return None
-    if result.returncode != 0:
-        return None
-    return result.stdout.decode("utf-8", "replace")
+    end = time.monotonic() + budget
+    output = bytearray()
+    complete = False
+    try:
+        fd = process.stdout.fileno()
+        while len(output) < GIT_OUTPUT_LIMIT:
+            remaining = end - time.monotonic()
+            if remaining <= 0 or not select.select([fd], [], [], remaining)[0]:
+                return None
+            chunk = os.read(fd, GIT_OUTPUT_LIMIT)
+            if not chunk:
+                complete = True
+                break
+            output += chunk
+        if complete:
+            try:
+                if process.wait(timeout=max(0.05, end - time.monotonic())) != 0:
+                    return None
+            except subprocess.TimeoutExpired:
+                return None
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        process.stdout.close()
+        process.wait()
+    return output[:GIT_OUTPUT_LIMIT].decode("utf-8", "replace")
 
 
-def _project(root: str, repo: str) -> dict:
-    branch = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
-    head = _git(repo, "log", "-1", "--format=%h%x00%ct%x00%s")
-    status = _git(repo, "status", "--porcelain", "--untracked-files=no")
+def _project(root: str, repo: str, deadline: float) -> dict:
+    fmt = (_git(repo, "rev-parse", "--show-object-format", deadline=deadline) or "sha1").strip()
+    fmt = fmt if fmt in _EMPTY_TREE else "sha1"
+    branch = _git(repo, "rev-parse", "--abbrev-ref", "HEAD", object_format=fmt, deadline=deadline)
+    head = _git(repo, "log", "-1", "--format=%h%x00%ct%x00%s", object_format=fmt, deadline=deadline)
+    status = _git(repo, "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all",
+                  object_format=fmt, deadline=deadline)
     commit = None
     if head and head.count("\x00") == 2:
         short, when, subject = head.rstrip("\n").split("\x00")
@@ -230,7 +340,10 @@ def list_projects(root: str) -> dict:
 
     def walk(directory: str, depth: int) -> None:
         nonlocal truncated
-        if os.path.isdir(os.path.join(directory, ".git")):
+        git_dir = os.path.join(directory, ".git")
+        # A real .git folder inside the root only (a link to an outside
+        # repository is not followed).
+        if not os.path.islink(git_dir) and os.path.isdir(git_dir) and _inside(root, os.path.realpath(git_dir)):
             if len(repos) >= MAX_PROJECTS:
                 truncated = True
                 return
@@ -239,17 +352,19 @@ def list_projects(root: str) -> dict:
         if depth >= PROJECT_DEPTH:
             return
         try:
-            children = sorted(
-                entry.path for entry in os.scandir(directory)
-                if entry.is_dir(follow_symlinks=False) and not entry.name.startswith("."))
+            with os.scandir(directory) as scanner:
+                children = sorted(
+                    entry.path for entry in itertools.islice(scanner, MAX_SCAN_CHILDREN)
+                    if entry.is_dir(follow_symlinks=False) and not entry.name.startswith("."))
         except OSError:
             return
         for child in children:
             walk(child, depth + 1)
 
     walk(root, 0)
+    deadline = time.monotonic() + SCAN_DEADLINE
     return {
         "object": "orsik.projects.list",
-        "projects": [_project(root, repo) for repo in repos],
+        "projects": [_project(root, repo, deadline) for repo in repos],
         "truncated": truncated,
     }

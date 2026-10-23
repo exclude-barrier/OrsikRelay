@@ -70,7 +70,9 @@ class HermesFilesClient(
                 }
                 FileEntry(name, kind, item.longOrNull("size"), item.longOrNull("modified_at"))
             }
-            FileListing(listedPath, entries, root.opt("truncated") == true)
+            val serverRoot = (root.opt("root") as? String)
+                ?.takeIf { it.startsWith("/") && isSafeServerString(it, MAX_PATH) }
+            FileListing(listedPath, entries, root.opt("truncated") == true, serverRoot)
         }
     }
 

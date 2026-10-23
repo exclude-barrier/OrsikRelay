@@ -36,6 +36,16 @@ object OrsikIcons {
     val Terminal by lazy { stroke("Terminal", 1.9f, "m5 8 4 4-4 4M12 17h7") }
     val TerminalBox by lazy { stroke("TerminalBox", 2f, rect(3f, 4f, 18f, 16f, 3f), "m7 9 3 3-3 3M13 15h4") }
     val File by lazy { stroke("File", 1.9f, "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5") }
+    val FileText by lazy { stroke("FileText", 1.9f, "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5", "M9 13h6M9 17h4") }
+    val FileBinary by lazy { stroke("FileBinary", 1.9f, "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5", "M9 13v4M12 13v4M15 13v4") }
+    val Image by lazy { stroke("Image", 1.9f, "M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z", "M8.5 7a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3z", "m20 15-4.5-4.5L6 20") }
+    val Share by lazy { stroke("Share", 1.9f, "M18 3a3 3 0 1 0 0 6a3 3 0 1 0 0-6z", "M6 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z", "M18 15a3 3 0 1 0 0 6a3 3 0 1 0 0-6z", "m8.6 13.5 6.8 4M15.4 6.5l-6.8 4") }
+    val Link by lazy { stroke("Link", 1.9f, "M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7", "M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7") }
+    val Pencil by lazy { stroke("Pencil", 1.9f, "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z") }
+    val Grid by lazy { stroke("Grid", 1.9f, "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z") }
+    val ListView by lazy { stroke("ListView", 1.9f, "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01") }
+    val Sort by lazy { stroke("Sort", 1.9f, "m3 16 4 4 4-4M7 20V4", "m21 8-4-4-4 4M17 4v16") }
+    val Close by lazy { stroke("Close", 1.9f, "M18 6 6 18M6 6l12 12") }
     val Download by lazy { stroke("Download", 1.9f, "M12 4v11", "m7 11 5 5 5-5", "M5 20h14") }
     val Folder by lazy { stroke("Folder", 1.9f, "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z") }
     val Container by lazy { stroke("Container", 1.9f, "m12 3 8 4.5v9L12 21l-8-4.5v-9z", "m4 7.5 8 4.5 8-4.5M12 12v9") }

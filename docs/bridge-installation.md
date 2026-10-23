@@ -147,17 +147,21 @@ BRIDGE_FILES=1
 BRIDGE_FILES_ROOT=/home/USER/projects
 ```
 
-- The root must be an existing absolute folder **outside** the bridge home,
-  `bridge.env` and the Hermes home (`~/.hermes` with the API key); otherwise
-  the bridge does not start and `install.sh --check` says why. `/` is
-  refused. Choose a folder that holds only what the phone may read.
+- The root must be an existing absolute folder that contains neither your
+  home folder nor the bridge home, `bridge.env`, the state database, the
+  Hermes home (`~/.hermes` with the API key) or the Hermes env file, and that
+  does not lie inside the bridge or the Hermes home; otherwise the bridge
+  does not start and `install.sh --check` says why. `/` and your home folder
+  itself are refused. Choose a folder that holds only what the phone may
+  read, e.g. `~/projects`.
 - Nothing is written. Files up to 8 MiB can be previewed (text, images) or
   saved to the phone; links that point outside the root are shown but not
   opened.
 - **Projects** lists the git repositories in the root and one level below
   (`root/repo`, `root/group/repo`) with branch, changed/clean and the last
-  commit. git runs with fixed arguments and ignores the repository's
-  fsmonitor and hooks.
+  commit. git runs with fixed arguments and runs nothing a repository names
+  (no `.gitattributes` filters, fsmonitor or hooks); a slow repository is cut
+  off after 2 s.
 - Every file read is in the audit log (`file_read` with the path).
 - Switch it off with `BRIDGE_FILES=0` and a restart.
 

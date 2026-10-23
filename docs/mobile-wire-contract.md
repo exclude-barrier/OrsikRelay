@@ -163,7 +163,8 @@ negotiable mobile contract.
   idempotent read.
 
 ### 2.7 Read-only files (Bearer; only with `features.files` / `features.projects`)
-- `GET /v1/files/list?path=<rel>` → `{"object":"orsik.files.list","path":<rel>,
+- `GET /v1/files/list?path=<rel>` → `{"object":"orsik.files.list","root":<absolute
+  root>,"path":<rel>,
   "entries":[{"name","type":"dir"|"file"|"other","size":<int>|null,
   "modified_at":<int>|null}],"truncated":<bool>}` (folders first, ≤ 2000).
 - `GET /v1/files/content?path=<rel>` → the bytes with `Content-Type`

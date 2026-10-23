@@ -90,8 +90,12 @@ _DEVICE_KEY_SHAPE = re.compile(r"hd_[A-Za-z0-9_-]{20,}")
 
 
 def _audit_value(value: object) -> object:
-    if isinstance(value, str) and _DEVICE_KEY_SHAPE.search(value):
-        return "[redacted]"
+    if isinstance(value, str):
+        if _DEVICE_KEY_SHAPE.search(value):
+            return "[redacted]"
+        # One event per line: a file name may carry newlines or escape codes.
+        if not value.isprintable() or " " in value or "=" in value:
+            return value.encode("unicode_escape").decode("ascii").replace(" ", "\\x20").replace("=", "\\x3d")
     return value
 
 
@@ -321,14 +325,20 @@ def build_state_from_env(env: dict[str, str]) -> BridgeState:
 def _files_root_from_env(env: dict[str, str]) -> str | None:
     if not files_mod.parse_enabled(env.get("BRIDGE_FILES")):
         return None
+    home = os.path.expanduser("~")
     state_db = _state_db_path(env)
+    bridge_home = env.get("BRIDGE_HOME") or os.path.join(home, ".local", "orsik-mobile-bridge")
+    hermes_home = env.get("HERMES_HOME") or os.path.join(home, ".hermes")
     hermes_env = env.get("BRIDGE_HERMES_ENV", "")
-    # The Hermes home (config, .env with the API key) and the bridge's own
-    # files must stay outside the browsable root.
-    protected = [os.path.dirname(os.path.abspath(state_db)), env.get("BRIDGE_ENV_FILE", "")]
+    # Never the home folder (it holds the Hermes home and the bridge), never
+    # the bridge's own files or the Hermes env file (also behind a symlink),
+    # and never a folder inside the bridge or the Hermes home.
+    homes = [bridge_home, os.path.dirname(os.path.abspath(state_db)), hermes_home]
+    protected = [home, *homes, state_db, env.get("BRIDGE_ENV_FILE", "")]
     if hermes_env:
-        protected.append(os.path.dirname(os.path.abspath(hermes_env)))
-    return files_mod.resolve_root(env.get("BRIDGE_FILES_ROOT"), protected)
+        protected += [hermes_env, os.path.dirname(os.path.abspath(hermes_env)),
+                      os.path.dirname(os.path.realpath(hermes_env))]
+    return files_mod.resolve_root(env.get("BRIDGE_FILES_ROOT"), protected, sealed=homes)
 
 
 def _terminal_command_from_env(env: dict[str, str]) -> tuple[str, ...] | None:
