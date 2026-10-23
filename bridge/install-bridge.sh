@@ -128,13 +128,12 @@ echo "Release: $REF"
 UPDATE=()
 if [ -x "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" ]; then
   say "Updating the existing install"
-  # Back up the store the install actually uses (BRIDGE_STATE_DB may point
-  # elsewhere than the default).
-  STORE="$(sed -n 's/^BRIDGE_STATE_DB=//p' "$ENV_FILE" 2>/dev/null | tail -n 1)"
-  STORE="${STORE:-$BRIDGE_HOME/state.db}"
-  if [ -f "$ENV_FILE" ] && [ -f "$STORE" ]; then
+  # The bridge's own "admin backup" snapshots whatever store bridge.env
+  # configures (also a custom, quoted or relative BRIDGE_STATE_DB); the copy
+  # always lands in BRIDGE_HOME.
+  if [ -f "$ENV_FILE" ]; then
     BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin backup \
-      "$STORE.bak-$(date +%Y%m%d-%H%M%S)"
+      "$BRIDGE_HOME/state.db.bak-$(date +%Y%m%d-%H%M%S)"
   fi
   UPDATE=(--update)
 else
@@ -166,13 +165,17 @@ set_env() {
 # A rerun keeps the operator's own values; only missing or empty ones get
 # the defaults (a custom store path or port must survive an update).
 set_default() {
-  local current
-  current="$(sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1)"
+  local current=""
+  if [ -f "$ENV_FILE" ]; then
+    current="$(sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1)"
+  fi
   [ -n "$current" ] || set_env "$1" "$2"
 }
 set_default BRIDGE_BIND 127.0.0.1
 set_default BRIDGE_PORT 9842
-set_default BRIDGE_UPSTREAM "$UPSTREAM"
+# The upstream follows the Hermes api_server detected above (its port may
+# change between runs).
+set_env BRIDGE_UPSTREAM "$UPSTREAM"
 set_env BRIDGE_HERMES_ENV "$HERMES_ENV"
 set_default BRIDGE_STATE_DB "$BRIDGE_HOME/state.db"
 PUBLIC_URL="$(sed -n 's/^BRIDGE_PUBLIC_BASE_URL=//p' "$ENV_FILE" | tail -n 1)"

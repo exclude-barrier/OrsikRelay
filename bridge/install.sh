@@ -126,7 +126,7 @@ if [ "$CHECK" -eq 1 ]; then
   UPSTREAM="$(env_value BRIDGE_UPSTREAM)"
   # A present but empty BRIDGE_UPSTREAM is refused by the bridge (the master
   # key never goes to a guessed target); only a missing line means the default.
-  if [ -z "$UPSTREAM" ] && grep -q '^[[:space:]]*BRIDGE_UPSTREAM=' "$ENV_FILE" 2>/dev/null; then
+  if [ -z "$UPSTREAM" ] && grep -qE '^[[:space:]]*(export[[:space:]]+)?BRIDGE_UPSTREAM=' "$ENV_FILE" 2>/dev/null; then
     UPSTREAM="(empty)"
   fi
   UPSTREAM="${UPSTREAM:-http://127.0.0.1:8642}"
@@ -307,7 +307,10 @@ if [ "$UPDATE" -eq 1 ]; then
   # Keep the working venv until the new one is complete: a failed update
   # (stale lock, network, disk full) restores it instead of leaving no CLI.
   rm -rf "$BRIDGE_HOME/venv.previous"
-  [ -d "$BRIDGE_HOME/venv" ] && cp -a "$BRIDGE_HOME/venv" "$BRIDGE_HOME/venv.previous"
+  if [ -d "$BRIDGE_HOME/venv" ]; then
+    # A failed copy aborts here, before anything touched the working venv.
+    cp -a "$BRIDGE_HOME/venv" "$BRIDGE_HOME/venv.previous"
+  fi
   restore_venv() {
     if [ -d "$BRIDGE_HOME/venv.previous" ]; then
       rm -rf "$BRIDGE_HOME/venv"
@@ -315,7 +318,9 @@ if [ "$UPDATE" -eq 1 ]; then
       echo "install.sh: update failed; the previous venv was restored" >&2
     fi
   }
+  # Armed only after the backup is complete; also on Ctrl-C/TERM.
   trap restore_venv ERR
+  trap 'restore_venv; exit 130' INT TERM
 fi
 uv venv "${VENV_FLAGS[@]}" --python "${BRIDGE_PYTHON:-3.14}" "$BRIDGE_HOME/venv"
 
@@ -327,7 +332,7 @@ trap 'rm -f "$REQ"' EXIT
 uv export --project "$SRC" --frozen --no-dev --no-emit-project --format requirements.txt -o "$REQ"
 uv pip install --python "$BRIDGE_HOME/venv" --require-hashes -r "$REQ"
 uv pip install --python "$BRIDGE_HOME/venv" --no-deps "$SRC"
-trap - ERR
+trap - ERR INT TERM
 rm -rf "$BRIDGE_HOME/venv.previous"
 
 # bridge.env holds the master-key path, bind address and state DB. It is 0600.
@@ -347,7 +352,12 @@ BRIDGE_PUBLIC_BASE_URL=
 ENVEOF
   # The store lives in this install's BRIDGE_HOME (also with a custom one,
   # which the systemd unit may write); the path is data, never sed syntax.
-  STATE_DB="$BRIDGE_HOME/state.db" awk '{ sub(/@STATE_DB@/, ENVIRON["STATE_DB"]); print }' "$ENV" >"$ENV.tmp"
+  # index/substr, not sub(): an "&" in the path must stay literal.
+  STATE_DB="$BRIDGE_HOME/state.db" awk '{
+    i = index($0, "@STATE_DB@")
+    if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["STATE_DB"] substr($0, i + 10)
+    print
+  }' "$ENV" >"$ENV.tmp"
   mv "$ENV.tmp" "$ENV"
   chmod 600 "$ENV"
   echo "Wrote $ENV (edit BRIDGE_HERMES_ENV / BRIDGE_PUBLIC_BASE_URL)"
