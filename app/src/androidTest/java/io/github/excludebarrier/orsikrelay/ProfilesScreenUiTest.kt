@@ -254,8 +254,30 @@ class ProfilesScreenUiTest {
             }
         }
         composeRule.waitUntil(5_000) { count("Paired") > 0 }
-        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "terminal").performScrollTo().performClick()
+        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "docker").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { count(context.getString(R.string.new_session_error_generic)) > 0 }
+    }
+
+    @Test
+    fun theTerminalTileOpensTheTerminalInsteadOfAChat() {
+        val admin = FakeProfileAdmin(profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")), kinds = emptyMap())
+        var terminalOpened = 0
+        var tasksStarted = 0
+        composeRule.setContent {
+            HermesTheme {
+                ProfilesScreen(
+                    admin = admin, onBack = {}, activeProfileId = PAIRED_ID, onOpenMonitoring = {},
+                    onOpenTerminal = { terminalOpened++ },
+                    startTask = { _, _ -> tasksStarted++; true }
+                )
+            }
+        }
+        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "terminal").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, terminalOpened)
+            assertEquals(0, tasksStarted)
+        }
     }
 
     @Test
