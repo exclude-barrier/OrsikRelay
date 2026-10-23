@@ -107,13 +107,25 @@ internal class TerminalController(
                 finish(visit, channel, TerminalCloseReason.Disconnected)
                 return@launch
             }
+            // A Closed may already have been handled while open() returned.
+            if (_state.value != TerminalUiState.Connected) {
+                opened.close()
+                return@launch
+            }
             connection = opened
             size?.let { (columns, rows) -> opened.resize(columns, rows) }
         }
     }
 
+    /** A long paste goes out in pieces below the bridge's per-message bound. */
     fun input(bytes: ByteArray) {
-        connection?.send(bytes)
+        val open = connection ?: return
+        var start = 0
+        while (start < bytes.size) {
+            val end = minOf(bytes.size, start + INPUT_CHUNK_BYTES)
+            if (!open.send(bytes.copyOfRange(start, end))) return
+            start = end
+        }
     }
 
     fun resize(columns: Int, rows: Int) {
@@ -157,7 +169,8 @@ internal class TerminalController(
         _state.value = TerminalUiState.Closed(reason)
     }
 
-    private companion object {
+    internal companion object {
         const val OUTPUT_CHUNKS = 64
+        const val INPUT_CHUNK_BYTES = 16 * 1024
     }
 }

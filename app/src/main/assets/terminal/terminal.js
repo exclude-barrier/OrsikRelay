@@ -95,7 +95,13 @@
     }
   };
 
-  window.addEventListener("resize", reportSize);
+  // The WebView gets its final size only after the first layout (and again
+  // when the keyboard opens), so every size change of the area counts.
+  if (window.ResizeObserver) {
+    new ResizeObserver(reportSize).observe(document.getElementById("terminal"));
+  } else {
+    window.addEventListener("resize", reportSize);
+  }
   reportSize();
   port.postMessage("r:");
 })();

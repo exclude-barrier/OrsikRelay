@@ -72,13 +72,19 @@ class ParseTest(unittest.TestCase):
 
     def test_env_switch_builds_the_command_or_leaves_it_off(self):
         base = {"HERMES_API_KEY": "k", "BRIDGE_STATE_DB": ":memory:"}
-        off = bridge_server.build_state_from_env(base)
-        off.store.close()
-        self.assertIsNone(off.terminal_command)
+        self.assertIsNone(bridge_server._terminal_command_from_env(base))
         with mock.patch.object(terminal, "default_command", return_value=("x",)):
-            state = bridge_server.build_state_from_env({**base, "BRIDGE_TERMINAL": "1"})
-        state.store.close()
-        self.assertEqual(state.terminal_command, ("x",))
+            self.assertEqual(
+                bridge_server._terminal_command_from_env({**base, "BRIDGE_TERMINAL": "1"}), ("x",))
+
+    def test_admin_commands_need_no_tmux_even_with_the_terminal_on(self):
+        env = {"HERMES_API_KEY": "k", "BRIDGE_STATE_DB": ":memory:", "BRIDGE_TERMINAL": "1"}
+        with mock.patch.object(terminal.shutil, "which", return_value=None):
+            state = bridge_server.build_state_from_env(env)
+            state.store.close()
+            self.assertIsNone(state.terminal_command)
+            with self.assertRaises(SystemExit):
+                bridge_server._terminal_command_from_env(env)
 
 
 class TerminalRouteTest(unittest.IsolatedAsyncioTestCase):

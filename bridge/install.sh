@@ -220,12 +220,15 @@ if [ "$CHECK" -eq 1 ]; then
   if [ -x "$BRIDGE_HOME/venv/bin/python" ]; then
     if cfg_error="$(BRIDGE_STATE_DB="$(env_value BRIDGE_STATE_DB)" \
       BRIDGE_HOST_SERVICES="$(env_value BRIDGE_HOST_SERVICES)" \
+      BRIDGE_TERMINAL="$(env_value BRIDGE_TERMINAL)" \
       DEFAULT_DB="$BRIDGE_HOME/state.db" \
       "$BRIDGE_HOME/venv/bin/python" - 2>&1 <<'PYCHECK'
 import os, sys
-from orsik_mobile_bridge import hostmetrics
+from orsik_mobile_bridge import hostmetrics, terminal
 try:
     hostmetrics.parse_services(os.environ.get("BRIDGE_HOST_SERVICES") or None)
+    if terminal.parse_enabled(os.environ.get("BRIDGE_TERMINAL")):
+        terminal.default_command()
 except SystemExit as exc:
     sys.exit(str(exc))
 db = os.environ.get("BRIDGE_STATE_DB") or os.environ["DEFAULT_DB"]
@@ -349,6 +352,9 @@ BRIDGE_HERMES_ENV=/home/USER/.hermes/.env
 BRIDGE_STATE_DB=@STATE_DB@
 # HTTPS base URL used to print the orsik://pair deep link / QR.
 BRIDGE_PUBLIC_BASE_URL=
+# 1 = paired phones may open a shell (tmux) as this user, WITHOUT Hermes
+# approvals. Needs tmux. See docs/bridge-installation.md.
+BRIDGE_TERMINAL=0
 ENVEOF
   # The store lives in this install's BRIDGE_HOME (also with a custom one,
   # which the systemd unit may write); the path is data, never sed syntax.

@@ -10,6 +10,7 @@ import shutil
 import socket
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -212,6 +213,33 @@ class InstallCheckTest(unittest.TestCase):
                 result = self.run_check()
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn("FAIL port", result.stdout)
+
+    def test_the_terminal_switch_is_checked_like_the_bridge_reads_it(self):
+        # The config step runs the installed bridge's python; here the repo's.
+        python = self.home / "venv" / "bin" / "python"
+        python.write_text(f"#!/bin/sh\nPYTHONPATH={INSTALL_SH.parent} exec {sys.executable} \"$@\"\n")
+        python.chmod(0o755)
+        tools = self.root / "tools"
+        tools.mkdir()
+        for name in ("tmux", "setsid"):
+            (tools / name).write_text("#!/bin/sh\nexit 0\n")
+            (tools / name).chmod(0o755)
+        env_file = self.home / "bridge.env"
+        base = env_file.read_text()
+        for value, passes in (("0", True), ("1", True), ("yes", False)):
+            with self.subTest(value=value):
+                env_file.write_text(base + f"BRIDGE_TERMINAL={value}\n")
+                env = {k: v for k, v in os.environ.items() if not k.startswith("BRIDGE_")}
+                env.update(BRIDGE_HOME=str(self.home), HOME=str(self.root),
+                           PATH=f"{tools}:{os.environ['PATH']}")
+                result = subprocess.run(["bash", str(INSTALL_SH), "--check"], env=env,
+                                        capture_output=True, text=True, timeout=30)
+                output = result.stdout + result.stderr
+                if passes:
+                    self.assertIn("OK   config", result.stdout, output)
+                else:
+                    self.assertIn("FAIL config", result.stdout, output)
+                    self.assertIn("BRIDGE_TERMINAL", result.stdout, output)
 
     def test_an_empty_upstream_line_fails_like_the_bridge(self):
         self.write_env(upstream="")

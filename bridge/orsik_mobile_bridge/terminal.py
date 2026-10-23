@@ -4,8 +4,11 @@ Off unless the operator sets ``BRIDGE_TERMINAL=1``: a shell as the bridge user
 is far more than the Hermes tools (the user may, for example, be in the
 ``docker`` group). Hermes approvals do not apply to it.
 
-The child is started without a shell and with a minimal environment, so the
-Hermes API key (``HERMES_API_KEY``) or other bridge settings never reach it.
+The child is started without a shell and with a minimal environment, so it
+does not inherit the Hermes API key (``HERMES_API_KEY``) or other bridge
+settings. (Running as the bridge user it can still read what that user can,
+e.g. the bridge's own ``/proc/<pid>/environ`` and the Hermes env file: the
+terminal is meant for the server owner.)
 ``setsid --ctty`` makes the PTY the controlling terminal, so a resize reaches
 tmux as SIGWINCH. Closing the WebSocket ends only the tmux client; the tmux
 session (and what runs in it) stays until the user exits it.

@@ -108,6 +108,35 @@ is present and `uv python find ${BRIDGE_PYTHON:-3.14}` works; otherwise it
 aborts with a note. After an installation it reminds you of
 `./install.sh --check`.
 
+## 2b. Optional: server terminal
+
+The app's **Terminal** opens a real shell on the server – only when you switch
+it on:
+
+```
+# in bridge.env, then restart the bridge
+BRIDGE_TERMINAL=1
+```
+
+- It needs `tmux` and util-linux `setsid` on the bridge's PATH (`apt install
+  tmux`); without them the bridge does not start, and `install.sh --check`
+  says so. Any value other than `0`, `1` or empty is refused.
+- The shell runs **as the bridge user, without Hermes approvals**. Whatever
+  that user may do, a paired phone may do: in the `docker` group that is
+  root-equivalent. The systemd unit sets `NoNewPrivileges=true`, so `sudo`
+  does not work in it.
+- Every phone attaches to the same tmux session `orsik`. Leaving the screen
+  only detaches; the session keeps running until you exit it or the bridge
+  restarts (the session lives in the bridge's service).
+- The app asks for the phone's screen lock (fingerprint, PIN, pattern) on
+  every visit and every return from the background, and never reconnects on
+  its own.
+- Revoking a device (`admin revoke-device`) ends its open terminal within
+  15 s. The audit log names who opened and closed a terminal, never what was
+  typed or shown.
+- To switch it off again, set `BRIDGE_TERMINAL=0` and restart the bridge; the
+  app then shows "switched off".
+
 ## 3. Operator Commands (No HTTP Admin)
 
 Pairing codes are generated **exclusively locally** — the file system permissions on

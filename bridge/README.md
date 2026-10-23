@@ -33,6 +33,21 @@ URL unchanged.
 
 ## Security hardening
 
+- **Terminal, off by default.** With `BRIDGE_TERMINAL=1` (and `tmux` plus
+  util-linux `setsid` on the PATH) `GET /v1/terminal` upgrades to a WebSocket
+  that runs `setsid --ctty tmux new-session -A -s orsik` on a fresh PTY:
+  binary frames carry the bytes both ways, a text frame
+  `{"type":"resize","cols":C,"rows":R}` the size (1..500 × 1..300). It is a
+  shell as the bridge user **without Hermes approvals** (a user in the
+  `docker` group is root-equivalent); the systemd unit's
+  `NoNewPrivileges=true` keeps `sudo` out. Device token, no `Origin` header
+  (a browser always sends one), no query, at most 4 terminals, 64 KiB per
+  message; the child gets a minimal environment (never the Hermes key or a
+  bridge setting); a revoked device loses an open terminal within 15 s
+  (close `4401`); open and close are audited (`terminal_open` /
+  `terminal_close` with the reason), never input or output. Closing ends
+  only the tmux client: the session keeps running until it is exited or the
+  bridge restarts. Advertised as `terminal` only when enabled.
 - **Host metrics, read-only.** `GET /v1/host/metrics` (device token, no query,
   no body) is answered by the bridge itself, never proxied: CPU share from two
   `/proc/stat` samples, RAM from `/proc/meminfo`, the first NVIDIA GPU via

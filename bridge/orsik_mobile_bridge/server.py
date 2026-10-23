@@ -100,6 +100,15 @@ def _audit_event(action: str, device_id: str, **fields: object) -> None:
 def _audit(action: str, record: core.DeviceRecord, **fields: object) -> None:
     _audit_event(action, record.device_id, **fields)
 
+
+class _AccessLogger(web.AbstractAccessLogger):
+    """Method, path and status only: never the query string (a client may put
+    a token there although every route refuses it) or headers."""
+
+    def log(self, request: web.BaseRequest, response: web.StreamResponse, time: float) -> None:
+        self.logger.info(
+            "%s %s %s %.3fs", request.method, _audit_value(request.path), response.status, time)
+
 APPROVAL_PATH = "/v1/runs/{run_id}/approval"
 HOST_METRICS_PATH = "/v1/host/metrics"
 # Match the official api_server request bound (10_000_000) so the bridge does
@@ -293,12 +302,13 @@ def build_state_from_env(env: dict[str, str]) -> BridgeState:
     if not master_key:
         raise SystemExit("Bridge needs the Hermes API key (BRIDGE_HERMES_ENV or HERMES_API_KEY)")
     host_services = hostmetrics.parse_services(env.get("BRIDGE_HOST_SERVICES"))
-    terminal_command = (
-        terminal.default_command() if terminal.parse_enabled(env.get("BRIDGE_TERMINAL")) else None)
     store = store_mod.BridgeStore(_state_db_path(env))
-    return BridgeState(
-        upstream=upstream, master_key=master_key, store=store,
-        host_services=host_services, terminal_command=terminal_command)
+    return BridgeState(upstream=upstream, master_key=master_key, store=store, host_services=host_services)
+
+
+def _terminal_command_from_env(env: dict[str, str]) -> tuple[str, ...] | None:
+    """Only the serving bridge resolves tmux; the admin commands never need it."""
+    return terminal.default_command() if terminal.parse_enabled(env.get("BRIDGE_TERMINAL")) else None
 
 
 def _device_token(request: web.Request) -> str | None:
@@ -352,7 +362,9 @@ def create_app(state: BridgeState) -> web.Application:
     app.router.add_get("/health", _handle_health)
     app.router.add_get("/v1/capabilities", _handle_capabilities)
     app.router.add_get(HOST_METRICS_PATH, _handle_host_metrics)
-    app.router.add_get(core.TERMINAL_PATH, _handle_terminal)
+    # GET only: aiohttp would add HEAD to a GET route, and its WebSocket
+    # handshake no longer refuses another method.
+    app.router.add_get(core.TERMINAL_PATH, _handle_terminal, allow_head=False)
     app.router.add_post("/v1/devices/pair", _handle_pair)
     app.router.add_post("/v1/devices/self/revoke", _handle_self_revoke)
     # No HTTP admin surface: pairing codes are issued only via the local operator
@@ -444,8 +456,10 @@ async def _handle_terminal(request: web.Request) -> web.StreamResponse:
     if "Origin" in request.headers:
         _audit("terminal", record, status=403)
         return _closed(403, "origin_not_allowed")
+    # aiohttp refuses a message of exactly max_msg_size; MAX_INPUT_BYTES itself
+    # is allowed.
     ws = web.WebSocketResponse(
-        max_msg_size=terminal.MAX_INPUT_BYTES, heartbeat=30.0, autoping=True)
+        max_msg_size=terminal.MAX_INPUT_BYTES + 1, heartbeat=30.0, autoping=True)
     if not ws.can_prepare(request).ok:
         return _closed(400, "websocket_required")
     if state.active_terminals >= terminal.MAX_TERMINALS:
@@ -453,30 +467,36 @@ async def _handle_terminal(request: web.Request) -> web.StreamResponse:
         return _closed(429, "terminal_limit")
     state.active_terminals += 1
     try:
-        try:
-            pty = await terminal.Pty.spawn(state.terminal_command)
-        except OSError:
-            logger.error("Terminal could not be started")
-            _audit("terminal", record, status=503)
-            return _closed(503, "terminal_unavailable")
-        # aiohttp cancels the handler when the connection drops; the client
-        # is then simply gone.
-        reason = "client"
-        try:
-            await ws.prepare(request)
-            _audit("terminal_open", record)
-            reason = await _pump_terminal(state, token, ws, pty)
-        finally:
-            # Shielded: a second cancellation must not leak the PTY or leave
-            # the tmux client running.
-            await asyncio.shield(pty.close())
-            _audit("terminal_close", record, reason=reason)
-        if not ws.closed:
-            await ws.close(
-                code=_TERMINAL_CLOSE_CODES.get(reason, 1011), message=reason.encode())
-        return ws
-    finally:
+        pty = await terminal.Pty.spawn(state.terminal_command)
+    except asyncio.CancelledError:
+        # The client left during the handshake (aiohttp cancels the handler).
         state.active_terminals -= 1
+        raise
+    except Exception:
+        # Also a missing passwd entry (KeyError) or a failing NSS lookup.
+        state.active_terminals -= 1
+        logger.error("Terminal could not be started")
+        _audit("terminal", record, status=503)
+        return _closed(503, "terminal_unavailable")
+    # aiohttp cancels the handler when the connection drops; the client is
+    # then simply gone.
+    reason = "client"
+    try:
+        await ws.prepare(request)
+        _audit("terminal_open", record)
+        reason = await _pump_terminal(state, token, ws, pty)
+    finally:
+        # Shielded: a second cancellation must not leak the PTY or leave the
+        # tmux client running. The slot is free once the shell is gone, not
+        # only after the close handshake (a silent peer delays that).
+        try:
+            await asyncio.shield(pty.close())
+        finally:
+            state.active_terminals -= 1
+            _audit("terminal_close", record, reason=reason)
+    if not ws.closed:
+        await ws.close(code=_TERMINAL_CLOSE_CODES.get(reason, 1011), message=reason.encode())
+    return ws
 
 
 async def _pump_terminal(
@@ -1226,6 +1246,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     env = _load_env()
     state = build_state_from_env(env)
+    state.terminal_command = _terminal_command_from_env(env)
     # An empty value means the default, exactly as install.sh --check reads it.
     bind = _validate_bind(env.get("BRIDGE_BIND") or "127.0.0.1")
     port = _validate_port(env.get("BRIDGE_PORT") or "9842")
@@ -1233,7 +1254,7 @@ def main(argv: list[str] | None = None) -> int:
         "Orsik Mobile Bridge on http://%s:%d -> %s",
         bind, port, _safe_upstream_label(state.upstream),
     )
-    web.run_app(create_app(state), host=bind, port=port, print=None)
+    web.run_app(create_app(state), host=bind, port=port, print=None, access_log_class=_AccessLogger)
     return 0
 
 

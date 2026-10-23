@@ -1,2 +1,4 @@
-html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg, #000); }
-#terminal { position: absolute; inset: 4px; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg, #000); }
+body { padding: 4px; box-sizing: border-box; }
+/* An explicit height: the fit addon sizes the terminal from this element. */
+#terminal { width: 100%; height: 100%; }

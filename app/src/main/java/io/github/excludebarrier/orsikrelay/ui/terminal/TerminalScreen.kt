@@ -3,6 +3,7 @@ package io.github.excludebarrier.orsikrelay.ui.terminal
 import android.annotation.SuppressLint
 import android.net.Uri
 import android.util.Base64
+import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -96,6 +97,13 @@ internal fun TerminalRoute(
     authenticator: AppAuthenticator?,
     onBack: () -> Unit
 ) {
+    // Checked before anything else: an old WebView must not open a shell
+    // on the server that it then cannot show.
+    val webViewSupported = remember { WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) }
+    if (!webViewSupported) {
+        TerminalUnavailable(onBack)
+        return
+    }
     val scope = rememberCoroutineScope()
     val controller = remember(profileId, source) { TerminalController(source, profileId, scope) }
     val state by controller.state.collectAsState()
@@ -146,6 +154,34 @@ internal fun TerminalRoute(
 }
 
 @Composable
+private fun TerminalUnavailable(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().testTag(TerminalTags.SCREEN)) {
+        TerminalTopBar(onBack)
+        Box(Modifier.padding(16.dp)) {
+            NoticeCard(tone = NoticeTone.Error, title = stringResource(R.string.terminal_webview_unsupported))
+        }
+    }
+}
+
+@Composable
+private fun TerminalTopBar(onBack: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.terminal_back))
+        }
+        Text(
+            text = stringResource(R.string.terminal_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
 private fun TerminalScreen(
     state: TerminalUiState,
     controller: TerminalController,
@@ -158,20 +194,7 @@ private fun TerminalScreen(
             .imePadding()
             .testTag(TerminalTags.SCREEN)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.terminal_back))
-            }
-            Text(
-                text = stringResource(R.string.terminal_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        TerminalTopBar(onBack)
         when (state) {
             TerminalUiState.Connected -> TerminalConsole(controller, Modifier.weight(1f))
             else -> Box(Modifier.weight(1f).padding(16.dp)) {
@@ -234,12 +257,6 @@ private const val PAGE_URL = "$ASSET_ORIGIN/assets/terminal/index.html"
 
 @Composable
 private fun TerminalConsole(controller: TerminalController, modifier: Modifier = Modifier) {
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-        Box(modifier.padding(16.dp)) {
-            NoticeCard(tone = NoticeTone.Error, title = stringResource(R.string.terminal_webview_unsupported))
-        }
-        return
-    }
     var page by remember { mutableStateOf<JavaScriptReplyProxy?>(null) }
     var ctrlLatched by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -313,6 +330,9 @@ private fun createTerminalWebView(
         .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
         .build()
     return WebView(context).apply {
+        // Compose would hand the view WRAP_CONTENT, and a WebView then sizes
+        // its page by the content: an empty terminal would be 0 px high.
+        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         settings.javaScriptEnabled = true
         settings.allowFileAccess = false
         settings.allowContentAccess = false
