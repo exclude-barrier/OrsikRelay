@@ -135,7 +135,8 @@ fun ProfilesScreen(
     // values), the tools start a prepared Hermes request; null keeps the
     // tiles as previews.
     onOpenMonitoring: (() -> Unit)? = null,
-    onOpenTerminal: (() -> Unit)? = null,
+    /** Opens Terminal or Files (the tools with an own screen). */
+    onOpenTool: ((QuickTask) -> Unit)? = null,
     startTask: (suspend (title: String, prompt: String) -> Boolean)? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -413,7 +414,7 @@ fun ProfilesScreen(
                     Text(text = stringResource(R.string.onboarding_title), fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            item(key = "management") { Management(onOpenMonitoring, onOpenTerminal, startTask) }
+            item(key = "management") { Management(onOpenMonitoring, onOpenTool, startTask) }
         }
     }
 
@@ -671,14 +672,14 @@ private fun ProfileRow(
 @Composable
 private fun Management(
     onOpenMonitoring: (() -> Unit)?,
-    onOpenTerminal: (() -> Unit)?,
+    onOpenTool: ((QuickTask) -> Unit)?,
     startTask: (suspend (title: String, prompt: String) -> Boolean)?
 ) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     val live = onOpenMonitoring != null && startTask != null
-    val tasks = listOf(QuickTask.Docker, QuickTask.Files)
+    val tasks = listOf(QuickTask.Docker)
     val taskTexts = tasks.associateWith { stringResource(it.labelRes) to stringResource(checkNotNull(it.promptRes)) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 14.dp)) {
         Row(
@@ -696,7 +697,7 @@ private fun Management(
         }
         val tiles: List<Triple<String, Int, Pair<ImageVector, (() -> Unit)?>>> = listOf(
             Triple("monitoring", R.string.profiles_tile_monitoring, OrsikIcons.Activity to onOpenMonitoring),
-            Triple(QuickTask.Terminal.key, QuickTask.Terminal.labelRes, QuickTask.Terminal.icon to onOpenTerminal)
+            tool(QuickTask.Terminal, onOpenTool)
         ) + tasks.map { task ->
             Triple(task.key, task.labelRes, task.icon to startTask?.let { start ->
                 {
@@ -712,7 +713,8 @@ private fun Management(
                 }
             })
         }
-        tiles.chunked(2).forEach { row ->
+        val allTiles = tiles + tool(QuickTask.Files, onOpenTool)
+        allTiles.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { (key, label, iconAndAction) ->
                     val (icon, action) = iconAndAction
@@ -724,7 +726,7 @@ private fun Management(
                             stringResource(label), icon, filled = false, onClick = action, modifier = tileModifier,
                             onClickLabel = when (key) {
                                 "monitoring" -> stringResource(R.string.profiles_monitoring_click_label)
-                                QuickTask.Terminal.key -> null
+                                QuickTask.Terminal.key, QuickTask.Files.key -> null
                                 else -> stringResource(R.string.home_task_click_label)
                             }
                         )
@@ -765,3 +767,6 @@ private enum class RemovalStep { Idle, Disconnecting, Deleting }
 
 /** Closed failure state shown inside the removal dialog. */
 private enum class RemoveFailure { None, RevokeFailed, DeletionFailed }
+
+private fun tool(task: QuickTask, open: ((QuickTask) -> Unit)?): Triple<String, Int, Pair<ImageVector, (() -> Unit)?>> =
+    Triple(task.key, task.labelRes, task.icon to open?.let { { it(task) } })

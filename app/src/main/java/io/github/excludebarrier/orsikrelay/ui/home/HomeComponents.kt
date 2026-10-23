@@ -622,15 +622,16 @@ fun QuickActionGrid(
 }
 
 /**
- * A tool tile: Terminal opens the server shell; the others open a new chat
- * titled [labelRes] whose composer holds [promptRes], a prepared request
- * for Hermes. Nothing is sent until the user sends it.
+ * A tool tile: Terminal, Files and Projects open their own screen; Docker
+ * (no [promptRes] otherwise) opens a new chat titled [labelRes] whose
+ * composer holds [promptRes], a prepared request for Hermes. Nothing is
+ * sent until the user sends it.
  */
 enum class QuickTask(val key: String, val labelRes: Int, val promptRes: Int?, val icon: ImageVector) {
     Terminal("terminal", R.string.home_quick_terminal, null, OrsikIcons.Terminal),
-    Files("files", R.string.home_quick_files, R.string.home_task_files_prompt, OrsikIcons.Folder),
+    Files("files", R.string.home_quick_files, null, OrsikIcons.Folder),
     Docker("docker", R.string.home_quick_docker, R.string.home_task_docker_prompt, OrsikIcons.Container),
-    Projects("projects", R.string.home_quick_projects, R.string.home_task_projects_prompt, OrsikIcons.Code)
+    Projects("projects", R.string.home_quick_projects, null, OrsikIcons.Code)
 }
 
 /** One quick-access tile; without [onClick] it is a disabled "Bald" preview. */

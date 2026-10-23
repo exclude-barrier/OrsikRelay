@@ -1,5 +1,7 @@
 package io.github.excludebarrier.orsikrelay.di
 
+import io.github.excludebarrier.orsikrelay.data.files.FilesRepository
+import io.github.excludebarrier.orsikrelay.domain.files.FilesSource
 import io.github.excludebarrier.orsikrelay.data.terminal.TerminalRepository
 import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalSource
 import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsSource
@@ -93,6 +95,8 @@ internal data class AppDependencies(
     val hostMetricsSource: HostMetricsSource,
     /** The bridge's server shell (`GET /v1/terminal`), when the operator enabled it. */
     val terminalSource: TerminalSource,
+    /** The bridge's read-only files and projects, when the operator enabled them. */
+    val filesSource: FilesSource,
     val messageHistorySource: MessageHistorySource,
     val runController: RunSessionController,
     val runStopRequester: RunStopRequester,
@@ -297,6 +301,10 @@ internal fun buildAppDependencies(
             credentialStore = credentialStore
         ),
         terminalSource = TerminalRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore
+        ),
+        filesSource = FilesRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore
         ),

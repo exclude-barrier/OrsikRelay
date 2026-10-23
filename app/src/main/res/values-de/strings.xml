@@ -378,9 +378,7 @@
     <string name="home_server_gpu_none">keine</string>
     <string name="home_server_unreadable">Die Werte sind gerade nicht lesbar.</string>
     <string name="home_server_services_down">nicht aktiv: %1$s</string>
-    <string name="home_task_files_prompt">Zeig mir die Dateien und Ordner in meinem Home-Verzeichnis auf dem Server, mit Größe und Änderungsdatum.</string>
     <string name="home_task_docker_prompt">Liste alle Docker-Container auf dem Server mit Name, Image, Status und Ports auf.</string>
-    <string name="home_task_projects_prompt">Welche Projekte (Git-Repositories) liegen in meinem Home-Verzeichnis auf dem Server? Zeig mir je Name, Branch und letzten Commit.</string>
     <string name="chat_run_lost_no_key">Hermes meldet diesen Lauf als verloren, liefert aber nichts, womit die App ihn abschließen kann. Prüfe den Lauf bitte auf dem Server.</string>
     <string name="chat_run_release">In der App freigeben</string>
     <string name="chat_run_release_title">Lauf in der App freigeben?</string>
@@ -425,4 +423,26 @@
     <string name="terminal_key_down">Pfeil runter</string>
     <string name="terminal_key_up">Pfeil hoch</string>
     <string name="terminal_key_right">Pfeil rechts</string>
+    <string name="files_title">Dateien</string>
+    <string name="files_empty">Dieser Ordner ist leer.</string>
+    <string name="files_truncated">Es werden nur die ersten 2000 Einträge gezeigt.</string>
+    <string name="files_kind_folder">Ordner</string>
+    <string name="files_kind_other">Nicht lesbar oder Verweis nach außen</string>
+    <string name="files_unsupported_title">Dateien sind auf diesem Server ausgeschaltet.</string>
+    <string name="files_unsupported_text">Der Server-Admin kann sie mit BRIDGE_FILES=1 und BRIDGE_FILES_ROOT in bridge.env für einen Ordner einschalten (nur lesen).</string>
+    <string name="files_not_found">Nicht gefunden. Vielleicht wurde es gerade verschoben oder gelöscht.</string>
+    <string name="files_refused">Dieser Pfad liegt außerhalb des freigegebenen Ordners.</string>
+    <string name="files_too_large">Die Datei ist größer als 8 MB und wird nicht übertragen.</string>
+    <string name="files_failed">Der Server ist gerade nicht erreichbar.</string>
+    <string name="files_retry">Erneut versuchen</string>
+    <string name="files_download">Auf dem Handy speichern</string>
+    <string name="files_saved">Gespeichert.</string>
+    <string name="files_save_failed">Speichern fehlgeschlagen.</string>
+    <string name="files_no_preview">Für diese Datei gibt es keine Vorschau. Du kannst sie auf dem Handy speichern.</string>
+    <string name="projects_title">Projekte</string>
+    <string name="projects_empty">Im freigegebenen Ordner liegen keine Git-Projekte.</string>
+    <string name="projects_truncated">Es werden nur die ersten 50 Projekte gezeigt.</string>
+    <string name="projects_changed">geändert</string>
+    <string name="projects_clean">sauber</string>
+    <string name="projects_open_label">Projektordner öffnen</string>
 </resources>

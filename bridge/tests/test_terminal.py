@@ -63,10 +63,10 @@ class ParseTest(unittest.TestCase):
                 ("/usr/bin/setsid", "--ctty", "/usr/bin/tmux", "new-session", "-A", "-s", "orsik"))
 
     def test_capabilities_advertise_the_terminal_only_when_enabled(self):
-        off = core.build_capabilities(terminal=False)
+        off = core.build_capabilities(terminal=False, files=False)
         self.assertIs(off["features"]["terminal"], False)
         self.assertNotIn("terminal", off["endpoints"])
-        on = core.build_capabilities(terminal=True)
+        on = core.build_capabilities(terminal=True, files=False)
         self.assertIs(on["features"]["terminal"], True)
         self.assertEqual(on["endpoints"]["terminal"], {"method": "GET", "path": "/v1/terminal"})
 

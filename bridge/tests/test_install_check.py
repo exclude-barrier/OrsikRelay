@@ -241,6 +241,29 @@ class InstallCheckTest(unittest.TestCase):
                     self.assertIn("FAIL config", result.stdout, output)
                     self.assertIn("BRIDGE_TERMINAL", result.stdout, output)
 
+    def test_the_files_switch_and_root_are_checked_like_the_bridge_reads_them(self):
+        python = self.home / "venv" / "bin" / "python"
+        python.write_text(f"#!/bin/sh\nPYTHONPATH={INSTALL_SH.parent} exec {sys.executable} \"$@\"\n")
+        python.chmod(0o755)
+        projects = self.root / "projects"
+        projects.mkdir()
+        env_file = self.home / "bridge.env"
+        base = env_file.read_text()
+        cases = (
+            ("BRIDGE_FILES=0\n", True),
+            (f"BRIDGE_FILES=1\nBRIDGE_FILES_ROOT={projects}\n", True),
+            ("BRIDGE_FILES=1\n", False),
+            ("BRIDGE_FILES=yes\n", False),
+            # The root would contain the bridge home and the Hermes env file.
+            (f"BRIDGE_FILES=1\nBRIDGE_FILES_ROOT={self.root}\n", False),
+        )
+        for extra, passes in cases:
+            with self.subTest(extra=extra):
+                env_file.write_text(base + extra)
+                result = self.run_check()
+                output = result.stdout + result.stderr
+                self.assertIn("OK   config" if passes else "FAIL config", result.stdout, output)
+
     def test_an_empty_upstream_line_fails_like_the_bridge(self):
         self.write_env(upstream="")
         result = self.run_check()

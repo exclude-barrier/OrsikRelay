@@ -83,7 +83,8 @@ fun HomeRoute(
     onOpenServer: () -> Unit,
     onSwitchServer: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenTerminal: () -> Unit,
+    /** Opens the own screen of a tool without a prepared request. */
+    onOpenTool: (QuickTask) -> Unit,
     /** No server is saved at all (e.g. the last one was deleted). */
     onNoServer: () -> Unit = {},
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
@@ -344,7 +345,7 @@ fun HomeRoute(
         onNewChat = { newChat() },
         onQuickTask = { task ->
             val texts = taskTexts[task]
-            if (texts == null) onOpenTerminal() else newChat(title = texts.first, prompt = texts.second)
+            if (texts == null) onOpenTool(task) else newChat(title = texts.first, prompt = texts.second)
         },
         onOpenServer = onOpenServer,
         onSwitchServer = onSwitchServer,

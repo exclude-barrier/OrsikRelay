@@ -1,5 +1,9 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import io.github.excludebarrier.orsikrelay.ui.home.QuickTask
+import io.github.excludebarrier.orsikrelay.ui.files.ProjectsRoute
+import io.github.excludebarrier.orsikrelay.ui.files.FilesRoute
+import io.github.excludebarrier.orsikrelay.domain.files.FilesSource
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalRoute
 import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalSource
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
@@ -113,6 +117,7 @@ fun HermesNavHost(
     appLockController: AppLockController? = null,
     appAuthenticator: AppAuthenticator? = null,
     terminalSource: TerminalSource? = null,
+    filesSource: FilesSource? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
     capabilityStore: RunApprovalCapabilityStore? = null,
@@ -313,8 +318,14 @@ fun HermesNavHost(
         }
     }
 
-    fun openTerminal() {
-        navController.navigate(routeOf(AppScreen.Terminal)) { launchSingleTop = true }
+    fun openTool(task: QuickTask) {
+        val screen = when (task) {
+            QuickTask.Terminal -> AppScreen.Terminal
+            QuickTask.Files -> AppScreen.Files()
+            QuickTask.Projects -> AppScreen.Projects
+            QuickTask.Docker -> return
+        }
+        navController.navigate(routeOf(screen)) { launchSingleTop = true }
     }
 
     // Server management, shown as the Server tab and as the Profiles route
@@ -361,7 +372,7 @@ fun HermesNavHost(
                     .disconnect(profileId)
             },
             onOpenMonitoring = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openTab(AppScreen.Home) } },
-            onOpenTerminal = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openTerminal() } },
+            onOpenTool = activeProfileId?.takeIf { it.isNotBlank() }?.let { { task: QuickTask -> openTool(task) } },
             startTask = activeProfileId?.takeIf { it.isNotBlank() }?.let { profileId ->
                 { title: String, prompt: String ->
                     val created = withContext(Dispatchers.IO) {
@@ -431,7 +442,7 @@ fun HermesNavHost(
                             launchSingleTop = true
                         }
                     },
-                    onOpenTerminal = ::openTerminal,
+                    onOpenTool = ::openTool,
                     onNoServer = {
                         navController.navigate(routeOf(AppScreen.Welcome)) {
                             popUpTo(navController.graph.id) { inclusive = true }
@@ -605,6 +616,36 @@ fun HermesNavHost(
                     }
                 )
             }
+            composable(
+                route = FILES_ROUTE,
+                arguments = listOf(navArgument(FILES_PATH_ARGUMENT) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                })
+            ) { entry ->
+                FilesRoute(
+                    profileId = activeProfileId.orEmpty(),
+                    source = filesSource ?: productionDependencies.value.filesSource,
+                    startPath = entry.arguments?.getString(FILES_PATH_ARGUMENT).orEmpty(),
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
+                )
+            }
+            composable(routeOf(AppScreen.Projects)) {
+                ProjectsRoute(
+                    profileId = activeProfileId.orEmpty(),
+                    source = filesSource ?: productionDependencies.value.filesSource,
+                    onOpenProject = { path -> navController.navigate(routeOf(AppScreen.Files(path))) },
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
+                )
+            }
             composable(routeOf(AppScreen.About)) {
                 AboutScreen(
                     versionName = BuildConfig.VERSION_NAME,
@@ -710,7 +751,12 @@ internal fun routeOf(screen: AppScreen): String = when (screen) {
     AppScreen.Settings -> "settings"
     AppScreen.About -> "about"
     AppScreen.Terminal -> "terminal"
+    is AppScreen.Files -> "files?$FILES_PATH_ARGUMENT=${encodeRouteArgument(screen.path)}"
+    AppScreen.Projects -> "projects"
 }
+
+internal const val FILES_PATH_ARGUMENT = "path"
+internal const val FILES_ROUTE = "files?$FILES_PATH_ARGUMENT={$FILES_PATH_ARGUMENT}"
 
 internal const val CHAT_ARGUMENT = "sessionId"
 internal const val CHAT_ROUTE = "chat/{$CHAT_ARGUMENT}"

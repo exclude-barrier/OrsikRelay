@@ -379,9 +379,7 @@
     <string name="home_server_gpu_none">none</string>
     <string name="home_server_unreadable">The values cannot be read right now.</string>
     <string name="home_server_services_down">not running: %1$s</string>
-    <string name="home_task_files_prompt">Show me the files and folders in my home directory on the server, with size and modification date.</string>
     <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
-    <string name="home_task_projects_prompt">Which projects (Git repositories) are in my home directory on the server? Show name, branch and last commit for each.</string>
     <string name="chat_run_lost_no_key">Hermes reports this run as lost but gives the app nothing to close it with. Please check the run on the server.</string>
     <string name="chat_run_release">Release in the app</string>
     <string name="chat_run_release_title">Release the run in the app?</string>
@@ -426,4 +424,26 @@
     <string name="terminal_key_down">Arrow down</string>
     <string name="terminal_key_up">Arrow up</string>
     <string name="terminal_key_right">Arrow right</string>
+    <string name="files_title">Files</string>
+    <string name="files_empty">This folder is empty.</string>
+    <string name="files_truncated">Only the first 2000 entries are shown.</string>
+    <string name="files_kind_folder">Folder</string>
+    <string name="files_kind_other">Not readable or a link outside</string>
+    <string name="files_unsupported_title">Files are switched off on this server.</string>
+    <string name="files_unsupported_text">The server admin can switch them on for one folder with BRIDGE_FILES=1 and BRIDGE_FILES_ROOT in bridge.env (read-only).</string>
+    <string name="files_not_found">Not found. It may just have been moved or deleted.</string>
+    <string name="files_refused">This path is outside the shared folder.</string>
+    <string name="files_too_large">The file is larger than 8 MB and is not transferred.</string>
+    <string name="files_failed">The server cannot be reached right now.</string>
+    <string name="files_retry">Try again</string>
+    <string name="files_download">Save to the phone</string>
+    <string name="files_saved">Saved.</string>
+    <string name="files_save_failed">Saving failed.</string>
+    <string name="files_no_preview">There is no preview for this file. You can save it to the phone.</string>
+    <string name="projects_title">Projects</string>
+    <string name="projects_empty">There are no Git projects in the shared folder.</string>
+    <string name="projects_truncated">Only the first 50 projects are shown.</string>
+    <string name="projects_changed">changed</string>
+    <string name="projects_clean">clean</string>
+    <string name="projects_open_label">Open the project folder</string>
 </resources>

@@ -267,7 +267,7 @@ class ProfilesScreenUiTest {
             HermesTheme {
                 ProfilesScreen(
                     admin = admin, onBack = {}, activeProfileId = PAIRED_ID, onOpenMonitoring = {},
-                    onOpenTerminal = { terminalOpened++ },
+                    onOpenTool = { if (it == io.github.excludebarrier.orsikrelay.ui.home.QuickTask.Terminal) terminalOpened++ },
                     startTask = { _, _ -> tasksStarted++; true }
                 )
             }

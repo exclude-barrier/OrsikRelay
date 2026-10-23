@@ -35,6 +35,8 @@ object OrsikIcons {
     val Chat by lazy { stroke("Chat", 2.2f, "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z") }
     val Terminal by lazy { stroke("Terminal", 1.9f, "m5 8 4 4-4 4M12 17h7") }
     val TerminalBox by lazy { stroke("TerminalBox", 2f, rect(3f, 4f, 18f, 16f, 3f), "m7 9 3 3-3 3M13 15h4") }
+    val File by lazy { stroke("File", 1.9f, "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5") }
+    val Download by lazy { stroke("Download", 1.9f, "M12 4v11", "m7 11 5 5 5-5", "M5 20h14") }
     val Folder by lazy { stroke("Folder", 1.9f, "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z") }
     val Container by lazy { stroke("Container", 1.9f, "m12 3 8 4.5v9L12 21l-8-4.5v-9z", "m4 7.5 8 4.5 8-4.5M12 12v9") }
     val Code by lazy { stroke("Code", 1.9f, "m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14") }
