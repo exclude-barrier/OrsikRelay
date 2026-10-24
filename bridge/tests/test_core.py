@@ -323,6 +323,23 @@ class QueryAllowlistTest(unittest.TestCase):
 
 
 class RateLimiterTest(unittest.TestCase):
+    def test_one_client_cannot_exhaust_another_clients_budget(self):
+        limiter = core.RateLimiter(2, 10.0)
+        self.assertTrue(limiter.allow(now=100, key="a"))
+        self.assertTrue(limiter.allow(now=101, key="a"))
+        self.assertFalse(limiter.allow(now=102, key="a"))
+        self.assertTrue(limiter.allow(now=102, key="b"))
+
+    def test_full_identity_table_does_not_evict_an_existing_budget(self):
+        limiter = core.RateLimiter(1, 10.0, max_keys=2)
+        self.assertTrue(limiter.allow(now=100, key="a"))
+        self.assertTrue(limiter.allow(now=101, key="b"))
+        self.assertFalse(limiter.allow(now=102, key="c"))
+        self.assertFalse(limiter.allow(now=102, key="a"))
+        self.assertTrue(limiter.allow(now=110, key="c"))
+        self.assertFalse(limiter.allow(now=110, key="b"))
+        self.assertTrue(limiter.allow(now=111, key="b"))
+
     def test_window(self):
         limiter = core.RateLimiter(2, 10.0)
         self.assertTrue(limiter.allow(now=0.0))

@@ -179,20 +179,33 @@ def allowed_query_keys(method: str, upstream_path: str) -> frozenset[str]:
 
 
 class RateLimiter:
-    """Fixed-window limiter bounding pairing/admin abuse (loopback-global)."""
+    """Fixed-window budgets with a hard cap on live client identities.
 
-    def __init__(self, max_events: int, window_seconds: float) -> None:
+    A full table refuses new identities rather than evicting a live budget:
+    identity churn must not let a caller reset its exhausted window.
+    """
+
+    def __init__(self, max_events: int, window_seconds: float, max_keys: int = 1024) -> None:
         self._max = max_events
         self._window = window_seconds
-        self._events: list[float] = []
+        self._max_keys = max_keys
+        self._events: dict[str, list[float]] = {}
 
-    def allow(self, now: float | None = None) -> bool:
+    def allow(self, now: float | None = None, *, key: str = "global") -> bool:
         now = time.time() if now is None else now
         cutoff = now - self._window
-        self._events = [t for t in self._events if t > cutoff]
-        if len(self._events) >= self._max:
+        events = self._events.get(key)
+        if events is None:
+            self._events = {k: v for k, v in self._events.items() if v and v[-1] > cutoff}
+            if len(self._events) >= self._max_keys:
+                return False
+            events = []
+        else:
+            events = [t for t in events if t > cutoff]
+        if len(events) >= self._max:
             return False
-        self._events.append(now)
+        events.append(now)
+        self._events[key] = events
         return True
 
 

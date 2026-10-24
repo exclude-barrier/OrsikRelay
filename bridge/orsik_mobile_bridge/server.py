@@ -147,6 +147,7 @@ class BridgeState:
         host_services: tuple[str, ...] = hostmetrics.DEFAULT_SERVICES,
         terminal_command: tuple[str, ...] | None = None,
         files_root: str | None = None,
+        trust_tailscale_identity: bool = False,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.master_key = master_key
@@ -165,6 +166,7 @@ class BridgeState:
         self.runhub = runhub.RunHub()
         self.background: set[asyncio.Task] = set()
         self.pair_limiter = core.RateLimiter(_PAIR_PER_MINUTE, 60.0)
+        self.trust_tailscale_identity = trust_tailscale_identity
         # Operator-fixed unit names for the Home card (BRIDGE_HOST_SERVICES).
         self.host_services = host_services
         # One snapshot at a time: a burst of requests never runs the
@@ -319,7 +321,8 @@ def build_state_from_env(env: dict[str, str]) -> BridgeState:
     store = store_mod.BridgeStore(_state_db_path(env))
     return BridgeState(
         upstream=upstream, master_key=master_key, store=store,
-        host_services=host_services, files_root=files_root)
+        host_services=host_services, files_root=files_root,
+        trust_tailscale_identity=env.get("BRIDGE_TRUST_TAILSCALE_IDENTITY") == "1")
 
 
 def _files_root_from_env(env: dict[str, str]) -> str | None:
@@ -675,9 +678,30 @@ async def _pump_terminal(
     return first.result()
 
 
+def _pairing_client_key(request: web.Request, state: BridgeState) -> str:
+    """Rate-limit identity only; a valid one-time code is still mandatory.
+
+    Never trust arbitrary forwarding headers. Serve identity is opt-in and
+    accepted only from loopback, where the operator must exclude untrusted
+    local callers/proxies. Serve strips incoming copies of its identity header.
+    Missing/tagged identities conservatively share their transport peer budget.
+    """
+    peer = request.remote or "unknown"
+    try:
+        loopback = ipaddress.ip_address(peer).is_loopback
+    except ValueError:
+        loopback = False
+    if state.trust_tailscale_identity and loopback:
+        logins = request.headers.getall("Tailscale-User-Login", [])
+        if len(logins) == 1 and 0 < len(logins[0]) <= 1024 and logins[0].strip():
+            return "serve:" + core.sha256_hex(logins[0])
+    # Retain no raw IP/login in the bounded in-memory table or audit log.
+    return "peer:" + core.sha256_hex(peer)
+
+
 async def _handle_pair(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
-    if not state.pair_limiter.allow():
+    if not state.pair_limiter.allow(key=_pairing_client_key(request, state)):
         _audit_event("pair", "-", status=429)
         return _closed(429, "rate_limited")
     try:
