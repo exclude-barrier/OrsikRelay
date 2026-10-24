@@ -5,6 +5,8 @@ import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalFontStore
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsNotSelected
@@ -14,7 +16,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalAvailability
 import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalCloseReason
@@ -158,6 +163,22 @@ class TerminalScreenUiTest {
 
     private fun awaitSent(expected: String) = composeRule.waitUntil(5_000) { expected in source().sent }
 
+    private fun awaitConnectedSubtitle(source: FakeTerminalSource) {
+        // WebView can report another size while Compose applies the previous
+        // one. Compare the current report and UI together on every poll.
+        composeRule.waitUntil(15_000) {
+            val size = source.sizes.lastOrNull()
+            size != null && size.first >= 20 && size.second >= 5 &&
+                composeRule.onAllNodesWithText(
+                    context.getString(
+                        R.string.terminal_subtitle_connected, "testhost",
+                        "${size.first}×${size.second}"
+                    )
+                ).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(TerminalTags.SUBTITLE).assertIsDisplayed()
+    }
+
     private var current: FakeTerminalSource? = null
     private fun source() = current!!
 
@@ -173,17 +194,26 @@ class TerminalScreenUiTest {
         assumeTrue("WebView too old for the terminal", webViewSupported)
         val source = FakeTerminalSource().also { current = it }
         composeRule.setContent {
-            TerminalRoute(profileId = "p1", source = source, authenticator = FakeAppAuthenticator(autoResult = true), onBack = {}, serverLabel = "testhost")
+            TerminalRoute(
+                profileId = "p1", source = source,
+                authenticator = FakeAppAuthenticator(autoResult = true), onBack = {},
+                serverLabel = "testhost", fontStore = MemoryFontStore()
+            )
         }
         composeRule.waitUntil(5_000) { source.listener != null }
         composeRule.onNodeWithTag(TerminalTags.CONNECTING).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.terminal_subtitle_connecting, "testhost")).assertIsDisplayed()
         source.listener!!.invoke(TerminalEvent.Opened)
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(TerminalTags.CONNECTING).fetchSemanticsNodes().isEmpty() }
-        composeRule.waitUntil(15_000) { source.sizes.any { it.second >= 5 } }
-        val (columns, rows) = source.sizes.last()
-        // The subtitle names host, tmux and the size the page reported to the PTY.
-        composeRule.onNodeWithText(context.getString(R.string.terminal_subtitle_connected, "testhost", "${columns}×$rows")).assertIsDisplayed()
+        awaitConnectedSubtitle(source)
+        val initialSize = source.sizes.last()
+        // Exercise another asynchronous resize, without persisting a font
+        // preference that could affect the next test.
+        composeRule.onNodeWithTag(TerminalTags.FONT).performClick()
+        composeRule.onNodeWithTag(TerminalTags.FONT_LARGER).performClick()
+        Espresso.pressBack()
+        composeRule.waitUntil(15_000) { source.sizes.last() != initialSize }
+        awaitConnectedSubtitle(source)
     }
 
     @Test
@@ -252,15 +282,22 @@ class TerminalScreenUiTest {
         val source = FakeTerminalSource().also { current = it }
         val asked = CopyOnWriteArrayList<Pair<String, String>>()
         connected(source, hermes = TerminalHermes { output, question -> asked += output to question; FilesAskResult.Opened })
-        source.listener!!.invoke(TerminalEvent.Output("disk 88% voll\r\n".toByteArray()))
-        composeRule.waitForIdle()
-        Thread.sleep(500)
+        // xterm's status reply proves it parsed all preceding output. Compose
+        // idleness alone does not wait for the WebView's asynchronous writes.
+        source.listener!!.invoke(TerminalEvent.Output("disk 88% voll\r\n\u001b[5n".toByteArray()))
+        awaitSent("\u001b[0n")
         composeRule.onNodeWithTag(TerminalTags.LAST_OUTPUT).performClick()
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(TerminalTags.COMPOSER).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithText(context.getString(R.string.terminal_output_badge)).assertIsDisplayed()
+        composeRule.onNodeWithText("disk 88% voll").assertIsDisplayed()
         composeRule.onNodeWithTag(TerminalTags.COMPOSER).performTextInput("Warum?")
-        composeRule.onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.components.ComposerDockTags.SEND).performClick()
+        // Opening the IME resizes this dock. Invoke its enabled click action
+        // rather than a screen coordinate that can move during the gesture.
+        composeRule.onNodeWithTag(io.github.excludebarrier.orsikrelay.ui.components.ComposerDockTags.SEND)
+            .assertIsEnabled()
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { asked.isNotEmpty() }
+        assertEquals(1, asked.size)
         assertTrue(asked.single().first, asked.single().first.contains("disk 88% voll"))
         assertEquals("Warum?", asked.single().second)
     }
