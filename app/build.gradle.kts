@@ -129,6 +129,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.navigation.compose)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.webkit)
     // MainActivity is a FragmentActivity (BiometricPrompt); see the catalog.
     implementation(libs.androidx.fragment)
     implementation(libs.okhttp)

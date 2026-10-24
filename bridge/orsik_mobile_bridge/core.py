@@ -396,7 +396,13 @@ def build_interactive_approvals_contract() -> dict:
     }
 
 
-def build_capabilities() -> dict:
+TERMINAL_PATH = "/v1/terminal"
+FILES_LIST_PATH = "/v1/files/list"
+FILES_CONTENT_PATH = "/v1/files/content"
+PROJECTS_PATH = "/v1/projects"
+
+
+def build_capabilities(*, terminal: bool, files: bool) -> dict:
     """The Orsik Mobile Protocol v1 capability envelope, in the exact shape the
     shipped HermesConnectionClient hard-requires.
 
@@ -405,8 +411,10 @@ def build_capabilities() -> dict:
     for the session run, so ``approval.request`` genuinely reaches the client.
     The bridge narrows the choices to the least-privilege set ``once``/``deny``
     and refuses anything else locally, so that is exactly what it advertises.
+    The terminal and the read-only files/projects are advertised only when
+    the operator enabled them.
     """
-    return {
+    caps = {
         "object": CAPABILITIES_OBJECT,
         "platform": HERMES_PLATFORM,
         "auth": {"type": "bearer", "required": True},
@@ -425,6 +433,9 @@ def build_capabilities() -> dict:
             "run_steer": True,
             "run_unknown_resolution": True,
             "host_metrics": True,
+            "terminal": terminal,
+            "files": files,
+            "projects": files,
             "session_archive": True,
             "session_delete": True,
             "session_chat_interactive_approvals": build_interactive_approvals_contract(),
@@ -449,6 +460,13 @@ def build_capabilities() -> dict:
             "device_self_revoke": {"method": "POST", "path": "/v1/devices/self/revoke"},
         },
     }
+    if terminal:
+        caps["endpoints"]["terminal"] = {"method": "GET", "path": TERMINAL_PATH}
+    if files:
+        caps["endpoints"]["files_list"] = {"method": "GET", "path": FILES_LIST_PATH}
+        caps["endpoints"]["files_content"] = {"method": "GET", "path": FILES_CONTENT_PATH}
+        caps["endpoints"]["projects"] = {"method": "GET", "path": PROJECTS_PATH}
+    return caps
 
 
 def build_credential(record: DeviceRecord, token: str, issued_at: float) -> dict:

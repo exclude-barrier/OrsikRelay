@@ -13,6 +13,9 @@ interface AppAuthenticator {
     fun canAuthenticate(): Boolean
     fun authenticate(onResult: (Boolean) -> Unit)
 
+    /** The same gate for a single sensitive action, with its own [title]. */
+    fun authenticate(title: String, onResult: (Boolean) -> Unit) = authenticate(onResult)
+
     /**
      * `true` only when the device has no screen lock at all. Unlike a failed
      * [canAuthenticate] (which also covers a busy or briefly unavailable

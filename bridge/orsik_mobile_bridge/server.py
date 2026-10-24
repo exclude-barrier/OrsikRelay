@@ -9,6 +9,9 @@ namespace the shipped client already speaks), so the client is a drop-in:
   GET  /health                              (proxied, unauthenticated)
   GET  /v1/capabilities                     (bridge-generated, device token)
   GET  /v1/host/metrics                     (bridge-generated, read-only, device token)
+  GET  /v1/terminal                         (WebSocket PTY, only with BRIDGE_TERMINAL=1, device token)
+  GET  /v1/files/list, /v1/files/content, /v1/projects
+                                            (read-only, only with BRIDGE_FILES=1, device token)
   POST /v1/devices/pair                     (bridge-generated, unauthenticated)
   POST /v1/devices/self/revoke              (bridge-generated, device token)
   POST /v1/runs/{run_id}/approval           (validated, device token)
@@ -57,10 +60,12 @@ from urllib.parse import urlsplit
 from aiohttp import ClientResponse, ClientSession, ClientTimeout, web
 
 from . import core
+from . import files as files_mod
 from . import hostmetrics
 from . import pairing
 from . import runhub
 from . import store as store_mod
+from . import terminal
 from .sse import (
     MAX_FRAME_BYTES,
     Frame,
@@ -85,8 +90,12 @@ _DEVICE_KEY_SHAPE = re.compile(r"hd_[A-Za-z0-9_-]{20,}")
 
 
 def _audit_value(value: object) -> object:
-    if isinstance(value, str) and _DEVICE_KEY_SHAPE.search(value):
-        return "[redacted]"
+    if isinstance(value, str):
+        if _DEVICE_KEY_SHAPE.search(value):
+            return "[redacted]"
+        # One event per line: a file name may carry newlines or escape codes.
+        if not value.isprintable() or " " in value or "=" in value:
+            return value.encode("unicode_escape").decode("ascii").replace(" ", "\\x20").replace("=", "\\x3d")
     return value
 
 
@@ -97,6 +106,15 @@ def _audit_event(action: str, device_id: str, **fields: object) -> None:
 
 def _audit(action: str, record: core.DeviceRecord, **fields: object) -> None:
     _audit_event(action, record.device_id, **fields)
+
+
+class _AccessLogger(web.AbstractAccessLogger):
+    """Method, path and status only: never the query string (a client may put
+    a token there although every route refuses it) or headers."""
+
+    def log(self, request: web.BaseRequest, response: web.StreamResponse, time: float) -> None:
+        self.logger.info(
+            "%s %s %s %.3fs", request.method, _audit_value(request.path), response.status, time)
 
 APPROVAL_PATH = "/v1/runs/{run_id}/approval"
 HOST_METRICS_PATH = "/v1/host/metrics"
@@ -127,6 +145,8 @@ class BridgeState:
         master_key: str,
         store: store_mod.BridgeStore | None = None,
         host_services: tuple[str, ...] = hostmetrics.DEFAULT_SERVICES,
+        terminal_command: tuple[str, ...] | None = None,
+        files_root: str | None = None,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.master_key = master_key
@@ -151,6 +171,15 @@ class BridgeState:
         # subprocesses in parallel.
         self.host_metrics_lock = asyncio.Lock()
         self.host_metrics_cache: tuple[float, dict] | None = None
+        # None: the terminal is off (BRIDGE_TERMINAL); otherwise the fixed
+        # argv of the tmux attach.
+        self.terminal_command = terminal_command
+        self.active_terminals = 0
+        # None: files/projects are off (BRIDGE_FILES); otherwise the real
+        # path of BRIDGE_FILES_ROOT.
+        self.files_root = files_root
+        self.projects_lock = asyncio.Lock()
+        self.projects_cache: tuple[float, dict] | None = None
 
 
 async def _db(state: BridgeState, fn, *args, **kwargs):
@@ -286,8 +315,35 @@ def build_state_from_env(env: dict[str, str]) -> BridgeState:
     if not master_key:
         raise SystemExit("Bridge needs the Hermes API key (BRIDGE_HERMES_ENV or HERMES_API_KEY)")
     host_services = hostmetrics.parse_services(env.get("BRIDGE_HOST_SERVICES"))
+    files_root = _files_root_from_env(env)
     store = store_mod.BridgeStore(_state_db_path(env))
-    return BridgeState(upstream=upstream, master_key=master_key, store=store, host_services=host_services)
+    return BridgeState(
+        upstream=upstream, master_key=master_key, store=store,
+        host_services=host_services, files_root=files_root)
+
+
+def _files_root_from_env(env: dict[str, str]) -> str | None:
+    if not files_mod.parse_enabled(env.get("BRIDGE_FILES")):
+        return None
+    home = os.path.expanduser("~")
+    state_db = _state_db_path(env)
+    bridge_home = env.get("BRIDGE_HOME") or os.path.join(home, ".local", "orsik-mobile-bridge")
+    hermes_home = env.get("HERMES_HOME") or os.path.join(home, ".hermes")
+    hermes_env = env.get("BRIDGE_HERMES_ENV", "")
+    # Never the home folder (it holds the Hermes home and the bridge), never
+    # the bridge's own files or the Hermes env file (also behind a symlink),
+    # and never a folder inside the bridge or the Hermes home.
+    homes = [bridge_home, os.path.dirname(os.path.abspath(state_db)), hermes_home]
+    protected = [home, *homes, state_db, env.get("BRIDGE_ENV_FILE", "")]
+    if hermes_env:
+        protected += [hermes_env, os.path.dirname(os.path.abspath(hermes_env)),
+                      os.path.dirname(os.path.realpath(hermes_env))]
+    return files_mod.resolve_root(env.get("BRIDGE_FILES_ROOT"), protected, sealed=homes)
+
+
+def _terminal_command_from_env(env: dict[str, str]) -> tuple[str, ...] | None:
+    """Only the serving bridge resolves tmux; the admin commands never need it."""
+    return terminal.default_command() if terminal.parse_enabled(env.get("BRIDGE_TERMINAL")) else None
 
 
 def _device_token(request: web.Request) -> str | None:
@@ -341,6 +397,12 @@ def create_app(state: BridgeState) -> web.Application:
     app.router.add_get("/health", _handle_health)
     app.router.add_get("/v1/capabilities", _handle_capabilities)
     app.router.add_get(HOST_METRICS_PATH, _handle_host_metrics)
+    # GET only: aiohttp would add HEAD to a GET route, and its WebSocket
+    # handshake no longer refuses another method.
+    app.router.add_get(core.TERMINAL_PATH, _handle_terminal, allow_head=False)
+    app.router.add_get(core.FILES_LIST_PATH, _handle_files_list, allow_head=False)
+    app.router.add_get(core.FILES_CONTENT_PATH, _handle_files_content, allow_head=False)
+    app.router.add_get(core.PROJECTS_PATH, _handle_projects, allow_head=False)
     app.router.add_post("/v1/devices/pair", _handle_pair)
     app.router.add_post("/v1/devices/self/revoke", _handle_self_revoke)
     # No HTTP admin surface: pairing codes are issued only via the local operator
@@ -381,7 +443,8 @@ async def _handle_capabilities(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
     if await _db(state, state.tokens.lookup, _device_token(request)) is None:
         return _closed(401, "invalid_credentials")
-    return web.json_response(core.build_capabilities())
+    return web.json_response(core.build_capabilities(
+        terminal=state.terminal_command is not None, files=state.files_root is not None))
 
 
 async def _handle_host_metrics(request: web.Request) -> web.Response:
@@ -408,6 +471,199 @@ async def _handle_host_metrics(request: web.Request) -> web.Response:
             state.host_metrics_cache = (time.monotonic(), snapshot)
             cached = state.host_metrics_cache
     return web.json_response(cached[1])
+
+
+async def _files_request(request: web.Request, *, with_path: bool) -> tuple[str | None, web.Response | None]:
+    """Shared checks of the read-only file routes; returns (path, error)."""
+    state: BridgeState = request.app[STATE_KEY]
+    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+        return None, _closed(401, "invalid_credentials")
+    if state.files_root is None:
+        return None, _closed(403, "endpoint_out_of_scope")
+    query = request.query
+    allowed = {"path"} if with_path else set()
+    if set(query) - allowed or any(len(query.getall(key)) > 1 for key in query):
+        return None, _closed(403, "query_not_allowed")
+    try:
+        has_body = request.can_read_body and bool(await request.read())
+    except web.HTTPRequestEntityTooLarge:
+        return None, _closed(413, "body_too_large")
+    if has_body:
+        return None, _closed(400, "body_not_allowed")
+    return query.get("path", ""), None
+
+
+def _files_error(error: Exception) -> web.Response:
+    if isinstance(error, files_mod.PathRefused):
+        return _closed(403, "path_not_allowed")
+    if isinstance(error, files_mod.TooLarge):
+        return _closed(413, "file_too_large")
+    return _closed(404, "not_found")
+
+
+async def _handle_files_list(request: web.Request) -> web.Response:
+    path, error = await _files_request(request, with_path=True)
+    if error is not None:
+        return error
+    state: BridgeState = request.app[STATE_KEY]
+    try:
+        listing = await asyncio.to_thread(files_mod.list_dir, state.files_root, path)
+    except (files_mod.PathRefused, files_mod.NotFound) as refused:
+        return _files_error(refused)
+    return web.json_response(listing, headers={"Cache-Control": "no-store"})
+
+
+async def _handle_files_content(request: web.Request) -> web.Response:
+    path, error = await _files_request(request, with_path=True)
+    if error is not None:
+        return error
+    state: BridgeState = request.app[STATE_KEY]
+    try:
+        data, name = await asyncio.to_thread(files_mod.read_file, state.files_root, path)
+    except (files_mod.PathRefused, files_mod.NotFound, files_mod.TooLarge) as refused:
+        return _files_error(refused)
+    record = await _db(state, state.tokens.lookup, _device_token(request))
+    if record is not None:
+        _audit("file_read", record, path=path, bytes=len(data))
+    return web.Response(
+        body=data,
+        headers={
+            "Content-Type": files_mod.content_type(name, data),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+async def _handle_projects(request: web.Request) -> web.Response:
+    _, error = await _files_request(request, with_path=False)
+    if error is not None:
+        return error
+    state: BridgeState = request.app[STATE_KEY]
+    async with state.projects_lock:
+        # git runs per repository; a burst of requests shares one snapshot.
+        now = time.monotonic()
+        cached = state.projects_cache
+        if cached is None or now - cached[0] > _PROJECTS_MAX_AGE:
+            snapshot = await asyncio.to_thread(files_mod.list_projects, state.files_root)
+            state.projects_cache = cached = (time.monotonic(), snapshot)
+    return web.json_response(cached[1], headers={"Cache-Control": "no-store"})
+
+
+_PROJECTS_MAX_AGE = 10.0
+
+
+# WebSocket close codes: 1000 the shell ended, 1008 a malformed control
+# message, 4401 the device was revoked while connected.
+_TERMINAL_CLOSE_CODES = {"exited": 1000, "protocol": 1008, "revoked": 4401}
+
+
+async def _handle_terminal(request: web.Request) -> web.StreamResponse:
+    """A PTY on the tmux session, over a WebSocket (binary: bytes both ways;
+    text: a resize). Off unless BRIDGE_TERMINAL=1; never retried by design."""
+    state: BridgeState = request.app[STATE_KEY]
+    token = _device_token(request)
+    record = await _db(state, state.tokens.lookup, token)
+    if record is None:
+        return _closed(401, "invalid_credentials")
+    if state.terminal_command is None:
+        return _closed(403, "endpoint_out_of_scope")
+    if request.query_string:
+        return _closed(403, "query_not_allowed")
+    # A browser always sends Origin on a WebSocket; the app never does. This
+    # closes cross-site WebSocket hijacking even if a token leaked into one.
+    if "Origin" in request.headers:
+        _audit("terminal", record, status=403)
+        return _closed(403, "origin_not_allowed")
+    # aiohttp refuses a message of exactly max_msg_size; MAX_INPUT_BYTES itself
+    # is allowed.
+    ws = web.WebSocketResponse(
+        max_msg_size=terminal.MAX_INPUT_BYTES + 1, heartbeat=30.0, autoping=True)
+    if not ws.can_prepare(request).ok:
+        return _closed(400, "websocket_required")
+    if state.active_terminals >= terminal.MAX_TERMINALS:
+        _audit("terminal", record, status=429)
+        return _closed(429, "terminal_limit")
+    state.active_terminals += 1
+    try:
+        pty = await terminal.Pty.spawn(state.terminal_command)
+    except asyncio.CancelledError:
+        # The client left during the handshake (aiohttp cancels the handler).
+        state.active_terminals -= 1
+        raise
+    except Exception:
+        # Also a missing passwd entry (KeyError) or a failing NSS lookup.
+        state.active_terminals -= 1
+        logger.error("Terminal could not be started")
+        _audit("terminal", record, status=503)
+        return _closed(503, "terminal_unavailable")
+    # aiohttp cancels the handler when the connection drops; the client is
+    # then simply gone.
+    reason = "client"
+    try:
+        await ws.prepare(request)
+        _audit("terminal_open", record)
+        reason = await _pump_terminal(state, token, ws, pty)
+    finally:
+        # Shielded: a second cancellation must not leak the PTY or leave the
+        # tmux client running. The slot is free once the shell is gone, not
+        # only after the close handshake (a silent peer delays that).
+        try:
+            await asyncio.shield(pty.close())
+        finally:
+            state.active_terminals -= 1
+            _audit("terminal_close", record, reason=reason)
+    if not ws.closed:
+        await ws.close(code=_TERMINAL_CLOSE_CODES.get(reason, 1011), message=reason.encode())
+    return ws
+
+
+async def _pump_terminal(
+    state: BridgeState, token: str | None, ws: web.WebSocketResponse, pty: terminal.Pty
+) -> str:
+    """Relays until the shell exits, the client leaves, sends garbage or is
+    revoked; returns which one (never input or output content)."""
+
+    async def output() -> str:
+        while True:
+            data = await pty.read()
+            if not data:
+                return "exited"
+            await ws.send_bytes(data)
+
+    async def input_() -> str:
+        async for msg in ws:
+            if msg.type == web.WSMsgType.BINARY:
+                await pty.write(msg.data)
+            elif msg.type == web.WSMsgType.TEXT:
+                try:
+                    size = terminal.parse_resize(json.loads(msg.data))
+                except (ValueError, RecursionError):
+                    size = None
+                if size is None:
+                    return "protocol"
+                pty.resize(*size)
+            else:
+                return "error"
+        return "client"
+
+    async def revocation() -> str:
+        while True:
+            await asyncio.sleep(_REVOKE_CHECK_INTERVAL)
+            if await _db(state, state.tokens.lookup, token) is None:
+                return "revoked"
+
+    tasks = [asyncio.create_task(job()) for job in (output, input_, revocation)]
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    first = next(task for task in tasks if task in done)
+    if first.cancelled() or first.exception() is not None:
+        return "error"
+    return first.result()
 
 
 async def _handle_pair(request: web.Request) -> web.Response:
@@ -1109,6 +1365,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     env = _load_env()
     state = build_state_from_env(env)
+    state.terminal_command = _terminal_command_from_env(env)
     # An empty value means the default, exactly as install.sh --check reads it.
     bind = _validate_bind(env.get("BRIDGE_BIND") or "127.0.0.1")
     port = _validate_port(env.get("BRIDGE_PORT") or "9842")
@@ -1116,7 +1373,7 @@ def main(argv: list[str] | None = None) -> int:
         "Orsik Mobile Bridge on http://%s:%d -> %s",
         bind, port, _safe_upstream_label(state.upstream),
     )
-    web.run_app(create_app(state), host=bind, port=port, print=None)
+    web.run_app(create_app(state), host=bind, port=port, print=None, access_log_class=_AccessLogger)
     return 0
 
 

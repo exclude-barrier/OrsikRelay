@@ -33,6 +33,37 @@ URL unchanged.
 
 ## Security hardening
 
+- **Files and projects, read-only, off by default.** With `BRIDGE_FILES=1` and
+  `BRIDGE_FILES_ROOT=<absolute folder>` the bridge answers `GET
+  /v1/files/list?path=`, `GET /v1/files/content?path=` and `GET /v1/projects`
+  itself (device token, only the `path` query, no body, GET only). Paths are
+  relative to the root and must stay inside it after symlinks are resolved
+  (`403 path_not_allowed`; a link pointing outside is listed as `other` and
+  never opened). The root may not contain the bridge home, `bridge.env` or
+  the Hermes home with the API key – the bridge and `install.sh --check`
+  refuse such a root. Only regular files up to 8 MiB are sent (`413
+  file_too_large`), as an image, UTF-8 text or `application/octet-stream`,
+  with `nosniff` and `no-store`; nothing is ever written. Projects are git
+  working trees up to two levels below the root (at most 50): branch,
+  changed/clean and the last commit, read with fixed git arguments and
+  without the repository's fsmonitor or hooks; one snapshot per 10 s. A file
+  read is audited (`file_read` with path and size). Advertised as `files`
+  and `projects`.
+- **Terminal, off by default.** With `BRIDGE_TERMINAL=1` (and `tmux` plus
+  util-linux `setsid` on the PATH) `GET /v1/terminal` upgrades to a WebSocket
+  that runs `setsid --ctty tmux new-session -A -s orsik` on a fresh PTY:
+  binary frames carry the bytes both ways, a text frame
+  `{"type":"resize","cols":C,"rows":R}` the size (1..500 × 1..300). It is a
+  shell as the bridge user **without Hermes approvals** (a user in the
+  `docker` group is root-equivalent); the systemd unit's
+  `NoNewPrivileges=true` keeps `sudo` out. Device token, no `Origin` header
+  (a browser always sends one), no query, at most 4 terminals, 64 KiB per
+  message; the child gets a minimal environment (never the Hermes key or a
+  bridge setting); a revoked device loses an open terminal within 15 s
+  (close `4401`); open and close are audited (`terminal_open` /
+  `terminal_close` with the reason), never input or output. Closing ends
+  only the tmux client: the session keeps running until it is exited or the
+  bridge restarts. Advertised as `terminal` only when enabled.
 - **Host metrics, read-only.** `GET /v1/host/metrics` (device token, no query,
   no body) is answered by the bridge itself, never proxied: CPU share from two
   `/proc/stat` samples, RAM from `/proc/meminfo`, the first NVIDIA GPU via

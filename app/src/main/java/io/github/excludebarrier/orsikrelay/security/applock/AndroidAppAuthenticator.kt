@@ -39,7 +39,10 @@ class AndroidAppAuthenticator(
     override fun deviceLockMissing(): Boolean =
         activity.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == false
 
-    override fun authenticate(onResult: (Boolean) -> Unit) {
+    override fun authenticate(onResult: (Boolean) -> Unit) =
+        authenticate(activity.getString(R.string.app_lock_prompt_title), onResult)
+
+    override fun authenticate(title: String, onResult: (Boolean) -> Unit) {
         val prompt = BiometricPrompt(
             activity,
             ContextCompat.getMainExecutor(activity),
@@ -60,7 +63,7 @@ class AndroidAppAuthenticator(
         )
         prompt.authenticate(
             BiometricPrompt.PromptInfo.Builder()
-                .setTitle(activity.getString(R.string.app_lock_prompt_title))
+                .setTitle(title)
                 .setAllowedAuthenticators(allowedAuthenticators())
                 .build()
         )

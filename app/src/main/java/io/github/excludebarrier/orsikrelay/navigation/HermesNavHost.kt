@@ -1,5 +1,16 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
+import androidx.compose.ui.platform.LocalResources
+import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
+import io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult
+import io.github.excludebarrier.orsikrelay.ui.files.FilesHermes
+import io.github.excludebarrier.orsikrelay.ui.home.QuickTask
+import io.github.excludebarrier.orsikrelay.ui.files.ProjectsRoute
+import io.github.excludebarrier.orsikrelay.ui.files.FilesRoute
+import io.github.excludebarrier.orsikrelay.domain.files.FilesSource
+import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalRoute
+import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalSource
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateResult
 import io.github.excludebarrier.orsikrelay.ui.home.createPreparedChat
 import androidx.activity.compose.LocalActivity
@@ -110,6 +121,8 @@ fun HermesNavHost(
     materialYouController: MaterialYouController? = null,
     appLockController: AppLockController? = null,
     appAuthenticator: AppAuthenticator? = null,
+    terminalSource: TerminalSource? = null,
+    filesSource: FilesSource? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
     capabilityStore: RunApprovalCapabilityStore? = null,
@@ -310,6 +323,60 @@ fun HermesNavHost(
         }
     }
 
+    val screenResources = LocalResources.current
+
+    // "Hermes zu <Pfad> fragen": a new session whose first message names the
+    // server path (sent, like Home's composer); "In neuer Hermes-Session
+    // öffnen": a new session with the path prepared in its composer.
+    // A new session whose first message is [message], sent like Home's composer.
+    suspend fun askHermes(profileId: String, message: String): FilesAskResult {
+        val creator = sessionCreator ?: productionDependencies.value.sessionCreator
+        val controller = runController ?: productionDependencies.value.runController
+        if (controller.activeRun.value != null) return FilesAskResult.Busy
+        val outbound = ChatOutboundMessage.create(message) ?: return FilesAskResult.Failed
+        val created = withContext(Dispatchers.IO) { creator.createSession(profileId, null) }
+        if (created !is SessionCreateResult.Success) return FilesAskResult.Failed
+        return when (controller.startTurn(profileId = profileId, sessionId = created.sessionId, message = outbound.text)) {
+            RunSessionController.StartTurnResult.Started -> {
+                openChat(created.sessionId, created.title)
+                FilesAskResult.Opened
+            }
+            RunSessionController.StartTurnResult.ActiveRunConflict -> FilesAskResult.Busy
+        }
+    }
+
+    fun filesHermes(profileId: String): FilesHermes? {
+        if (profileId.isBlank()) return null
+        val creator = sessionCreator ?: productionDependencies.value.sessionCreator
+        val controller = runController ?: productionDependencies.value.runController
+        return FilesHermes(
+            ask = { serverPath, question ->
+                askHermes(profileId, screenResources.getString(R.string.files_ask_message, question, serverPath))
+            },
+            openInSession = { title, serverPath ->
+                val created = withContext(Dispatchers.IO) {
+                    createPreparedChat(
+                        creator,
+                        chatDraftRepository ?: productionDependencies.value.chatDraftRepository,
+                        profileId, title,
+                        screenResources.getString(R.string.files_session_prompt, serverPath)
+                    )
+                }
+                (created as? SessionCreateResult.Success)?.let { openChat(it.sessionId, it.title ?: title) } != null
+            }
+        )
+    }
+
+    fun openTool(task: QuickTask) {
+        val screen = when (task) {
+            QuickTask.Terminal -> AppScreen.Terminal
+            QuickTask.Files -> AppScreen.Files()
+            QuickTask.Projects -> AppScreen.Projects
+            QuickTask.Docker -> return
+        }
+        navController.navigate(routeOf(screen)) { launchSingleTop = true }
+    }
+
     // Server management, shown as the Server tab and as the Profiles route
     // (opened from settings or the Home server switcher, with a back arrow).
     @Composable
@@ -354,6 +421,7 @@ fun HermesNavHost(
                     .disconnect(profileId)
             },
             onOpenMonitoring = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openTab(AppScreen.Home) } },
+            onOpenTool = activeProfileId?.takeIf { it.isNotBlank() }?.let { { task: QuickTask -> openTool(task) } },
             startTask = activeProfileId?.takeIf { it.isNotBlank() }?.let { profileId ->
                 { title: String, prompt: String ->
                     val created = withContext(Dispatchers.IO) {
@@ -423,6 +491,7 @@ fun HermesNavHost(
                             launchSingleTop = true
                         }
                     },
+                    onOpenTool = ::openTool,
                     onNoServer = {
                         navController.navigate(routeOf(AppScreen.Welcome)) {
                             popUpTo(navController.graph.id) { inclusive = true }
@@ -584,6 +653,65 @@ fun HermesNavHost(
                     }
                 )
             }
+            composable(routeOf(AppScreen.Terminal)) {
+                val profileId = activeProfileId.orEmpty()
+                val admin = profileAdmin ?: productionDependencies.value.profileAdmin
+                val serverLabel by produceState("", profileId) {
+                    value = try {
+                        withContext(Dispatchers.IO) { admin.listProfiles() }.firstOrNull { it.id == profileId }?.profileName.orEmpty()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        ""
+                    }
+                }
+                TerminalRoute(
+                    profileId = profileId,
+                    source = terminalSource ?: productionDependencies.value.terminalSource,
+                    authenticator = resolvedAppAuthenticator,
+                    serverLabel = serverLabel,
+                    // Selection or last output as a code block below the question.
+                    hermes = profileId.takeIf { it.isNotBlank() }?.let { id ->
+                        TerminalHermes { output, question -> askHermes(id, question + "\n\n" + codeBlock(output)) }
+                    },
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
+                )
+            }
+            composable(
+                route = FILES_ROUTE,
+                arguments = listOf(navArgument(FILES_PATH_ARGUMENT) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                })
+            ) { entry ->
+                FilesRoute(
+                    profileId = activeProfileId.orEmpty(),
+                    source = filesSource ?: productionDependencies.value.filesSource,
+                    startPath = entry.arguments?.getString(FILES_PATH_ARGUMENT).orEmpty(),
+                    hermes = filesHermes(activeProfileId.orEmpty()),
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
+                )
+            }
+            composable(routeOf(AppScreen.Projects)) {
+                ProjectsRoute(
+                    profileId = activeProfileId.orEmpty(),
+                    source = filesSource ?: productionDependencies.value.filesSource,
+                    onOpenProject = { path -> navController.navigate(routeOf(AppScreen.Files(path))) },
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
+                )
+            }
             composable(routeOf(AppScreen.About)) {
                 AboutScreen(
                     versionName = BuildConfig.VERSION_NAME,
@@ -688,7 +816,13 @@ internal fun routeOf(screen: AppScreen): String = when (screen) {
     AppScreen.Profiles -> "profiles"
     AppScreen.Settings -> "settings"
     AppScreen.About -> "about"
+    AppScreen.Terminal -> "terminal"
+    is AppScreen.Files -> "files?$FILES_PATH_ARGUMENT=${encodeRouteArgument(screen.path)}"
+    AppScreen.Projects -> "projects"
 }
+
+internal const val FILES_PATH_ARGUMENT = "path"
+internal const val FILES_ROUTE = "files?$FILES_PATH_ARGUMENT={$FILES_PATH_ARGUMENT}"
 
 internal const val CHAT_ARGUMENT = "sessionId"
 internal const val CHAT_ROUTE = "chat/{$CHAT_ARGUMENT}"
@@ -701,4 +835,11 @@ internal fun decodeRouteArgument(value: String): String = try {
     String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8)
 } catch (_: IllegalArgumentException) {
     ""
+}
+
+/** [text] as a Markdown code block whose fence is longer than any backtick run inside. */
+internal fun codeBlock(text: String): String {
+    val longest = Regex("`+").findAll(text).maxOfOrNull { it.value.length } ?: 0
+    val fence = "`".repeat(maxOf(3, longest + 1))
+    return "$fence\n${text.trimEnd('\n')}\n$fence"
 }

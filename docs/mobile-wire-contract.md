@@ -146,6 +146,38 @@ negotiable mobile contract.
 - 409 (`approval_not_pending`/`approval_not_active`) → `NoPending`, never
   resubmitted. **Approvals are never confirmed automatically.**
 
+### 2.6 `GET /v1/terminal` (Bearer, WebSocket; only with `features.terminal`)
+- Advertised as `features.terminal: true` plus `endpoints.terminal`
+  `{"method":"GET","path":"/v1/terminal"}` only when the operator enabled it;
+  otherwise `403 endpoint_out_of_scope`.
+- Upgrade request without `Origin` and without a query (`403`); no upgrade
+  `400 websocket_required`; more than 4 open `429 terminal_limit`; the PTY
+  cannot start `503 terminal_unavailable`; 401 as everywhere.
+- Frames: binary = PTY bytes in both directions (UTF-8 and escape sequences,
+  split anywhere); text client → bridge exactly
+  `{"type":"resize","cols":1..500,"rows":1..300}`. Any other text frame closes
+  with `1008`; a message over 64 KiB with `1009`.
+- Close: `1000` the shell (tmux client) ended, `4401` the device was revoked,
+  `1008` protocol error. The tmux session survives a close.
+- The client never reconnects on its own; opening a shell is not an
+  idempotent read.
+
+### 2.7 Read-only files (Bearer; only with `features.files` / `features.projects`)
+- `GET /v1/files/list?path=<rel>` → `{"object":"orsik.files.list","root":<absolute
+  root>,"path":<rel>,
+  "entries":[{"name","type":"dir"|"file"|"other","size":<int>|null,
+  "modified_at":<int>|null}],"truncated":<bool>}` (folders first, ≤ 2000).
+- `GET /v1/files/content?path=<rel>` → the bytes with `Content-Type`
+  `image/png|jpeg|webp|gif`, `text/plain; charset=utf-8` or
+  `application/octet-stream`; ≤ 8 MiB.
+- `GET /v1/projects` → `{"object":"orsik.projects.list","projects":[{"name",
+  "path","branch":<str>|null,"dirty":<bool>|null,"last_commit":{"short",
+  "committed_at","subject"}|null}],"truncated":<bool>}`.
+- `path` is relative to the operator's root ("" or missing = the root), the
+  only query key, once. Errors: `403 path_not_allowed` (leaves the root),
+  `403 endpoint_out_of_scope` (switched off), `404 not_found`, `413
+  file_too_large`. Reads only; the client may retry them.
+
 ## 3. Capability negotiation & fail-closed
 
 | Situation | Result |

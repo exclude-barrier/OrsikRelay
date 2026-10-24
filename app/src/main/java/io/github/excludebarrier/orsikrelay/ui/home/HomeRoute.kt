@@ -83,15 +83,17 @@ fun HomeRoute(
     onOpenServer: () -> Unit,
     onSwitchServer: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Opens the own screen of a tool without a prepared request. */
+    onOpenTool: (QuickTask) -> Unit,
     /** No server is saved at all (e.g. the last one was deleted). */
     onNoServer: () -> Unit = {},
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     val scope = rememberCoroutineScope()
     // Title and prepared request of each tool tile, configuration-aware.
-    val taskTexts = QuickTask.entries.associateWith { task ->
-        stringResource(task.labelRes) to stringResource(task.promptRes)
-    }
+    val taskTexts = QuickTask.entries.mapNotNull { task ->
+        task.promptRes?.let { task to (stringResource(task.labelRes) to stringResource(it)) }
+    }.toMap()
     var serverName by remember(profileId) { mutableStateOf<String?>(null) }
     var hostMetrics by remember(profileId) { mutableStateOf<HostMetricsResult?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -342,8 +344,8 @@ fun HomeRoute(
         onOpenAllSessions = onOpenAllSessions,
         onNewChat = { newChat() },
         onQuickTask = { task ->
-            val (title, prompt) = taskTexts.getValue(task)
-            newChat(title = title, prompt = prompt)
+            val texts = taskTexts[task]
+            if (texts == null) onOpenTool(task) else newChat(title = texts.first, prompt = texts.second)
         },
         onOpenServer = onOpenServer,
         onSwitchServer = onSwitchServer,

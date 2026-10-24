@@ -1,5 +1,9 @@
 package io.github.excludebarrier.orsikrelay.di
 
+import io.github.excludebarrier.orsikrelay.data.files.FilesRepository
+import io.github.excludebarrier.orsikrelay.domain.files.FilesSource
+import io.github.excludebarrier.orsikrelay.data.terminal.TerminalRepository
+import io.github.excludebarrier.orsikrelay.domain.terminal.TerminalSource
 import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsSource
 import io.github.excludebarrier.orsikrelay.data.host.HostMetricsRepository
 import android.content.Context
@@ -89,6 +93,10 @@ internal data class AppDependencies(
     val sessionManager: SessionManager,
     /** Live host values for the Home card (`GET /v1/host/metrics`). */
     val hostMetricsSource: HostMetricsSource,
+    /** The bridge's server shell (`GET /v1/terminal`), when the operator enabled it. */
+    val terminalSource: TerminalSource,
+    /** The bridge's read-only files and projects, when the operator enabled them. */
+    val filesSource: FilesSource,
     val messageHistorySource: MessageHistorySource,
     val runController: RunSessionController,
     val runStopRequester: RunStopRequester,
@@ -289,6 +297,14 @@ internal fun buildAppDependencies(
             credentialStore = credentialStore
         ),
         hostMetricsSource = HostMetricsRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore
+        ),
+        terminalSource = TerminalRepository(
+            profileRepository = profileRepository,
+            credentialStore = credentialStore
+        ),
+        filesSource = FilesRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore
         ),

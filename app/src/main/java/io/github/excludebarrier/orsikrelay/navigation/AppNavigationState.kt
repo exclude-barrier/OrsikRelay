@@ -17,6 +17,9 @@ sealed interface AppScreen {
     data object Profiles : AppScreen
     data object Settings : AppScreen
     data object About : AppScreen
+    data object Terminal : AppScreen
+    data class Files(val path: String = "") : AppScreen
+    data object Projects : AppScreen
 }
 
 /** The bottom-navigation tabs, in bar order. Every other screen hides the bar. */
