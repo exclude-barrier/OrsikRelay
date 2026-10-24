@@ -10,8 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Production [HostMetricsSource]. Once the server advertised `host_metrics`
- * that is kept for the process, so a poll is a single GET; a "no" is asked
- * again on the next poll, so a bridge update shows up without a restart. A
+ * that is kept until a read fails, so a healthy poll is a single GET. A "no"
+ * is asked again on the next poll, so a bridge update shows up without a restart. A
  * missing profile or credential fails closed.
  */
 class HostMetricsRepository(
@@ -38,8 +38,13 @@ class HostMetricsRepository(
         return try {
             val advertised = supported[profileId] == true ||
                 transport.supports(profile.baseUrl, credential).also { if (it) supported[profileId] = true }
-            if (advertised) transport.read(profile.baseUrl, credential) else HostMetricsResult.Unsupported
+            if (advertised) {
+                transport.read(profile.baseUrl, credential).also {
+                    if (it == HostMetricsResult.Failed) supported.remove(profileId)
+                }
+            } else HostMetricsResult.Unsupported
         } catch (_: Exception) {
+            supported.remove(profileId)
             HostMetricsResult.Failed
         }
     }
