@@ -9,6 +9,7 @@ and the exact pairing/self-revoke/credential contract.
 
 import asyncio
 import json
+import threading
 import unittest
 from unittest import mock
 import uuid
@@ -46,6 +47,7 @@ def _upstream_app():
         return web.json_response({"data": [], "auth": request.headers.get("Authorization")})
 
     async def sessions_post(_):
+        UPSTREAM["sessions_posts"] = int(UPSTREAM.get("sessions_posts", 0)) + 1
         return web.json_response({"object": "hermes.session", "session": {"id": "s1"}}, status=201)
 
     async def messages(_):
@@ -145,6 +147,24 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
 
     def _bearer(self, token):
         return {"Authorization": "Bearer " + token}
+
+    async def _small_body_client(self, limit=200):
+        """A client whose aiohttp body bound is low enough to test 413 cheaply."""
+        original = bridge_server._MAX_BODY_BYTES
+        bridge_server._MAX_BODY_BYTES = limit
+        client = TestClient(TestServer(bridge_server.create_app(self.state)))
+        await client.start_server()
+
+        async def cleanup():
+            bridge_server._MAX_BODY_BYTES = original
+            await client.close()
+
+        self.addAsyncCleanup(cleanup)
+        issued = self.state.codes.issue()
+        self.assertIsNotNone(issued)
+        resp = await client.post("/v1/devices/pair", json={"code": issued[0]})
+        self.assertEqual(resp.status, 201)
+        return client, (await resp.json())["device_key"]
 
     # --- baseline behaviour -------------------------------------------------
     async def test_health_is_unauthenticated_proxy(self):
@@ -636,6 +656,120 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         finally:
             bridge_server._MAX_BODY_BYTES = original
             await client.close()
+
+    async def test_oversized_proxy_body_is_a_closed_413_and_is_audited(self):
+        # Was a bug: request.read() raised HTTPRequestEntityTooLarge outside the
+        # handler's error handling, so aiohttp answered 413 text/plain with no
+        # audit line instead of the closed JSON envelope.
+        client, token = await self._small_body_client()
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            resp = await client.post(
+                "/api/sessions", headers={"Authorization": "Bearer " + token},
+                data=b"x" * 401)
+        self.assertEqual(resp.status, 413)
+        self.assertEqual(await resp.json(), {"error": {"code": "body_too_large"}})
+        lines = "\n".join(logs.output)
+        self.assertIn("audit action=session_create device=", lines)
+        self.assertIn("status=413", lines)
+        self.assertEqual(int(UPSTREAM.get("sessions_posts", 0)), 0)
+
+    async def test_oversized_chat_stream_body_is_a_closed_413(self):
+        # Was a bug: the body read happened before the run buffer was created,
+        # but the oversized read escaped as aiohttp's plain-text 413.
+        client, token = await self._small_body_client()
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            resp = await client.post(
+                "/api/sessions/s1/chat/stream",
+                headers={"Authorization": "Bearer " + token}, data=b"x" * 401)
+        self.assertEqual(resp.status, 413)
+        self.assertEqual(await resp.json(), {"error": {"code": "body_too_large"}})
+        self.assertIn("status=413", "\n".join(logs.output))
+        self.assertEqual(int(UPSTREAM.get("chat_posts", 0)), 0)
+
+    async def test_oversized_self_revoke_body_is_a_closed_413_not_a_revoke(self):
+        # Was a bug: the body read raised before the token was checked.
+        client, token = await self._small_body_client()
+        headers = {"Authorization": "Bearer " + token}
+        resp = await client.post("/v1/devices/self/revoke", headers=headers, data=b"x" * 401)
+        self.assertEqual(resp.status, 413)
+        self.assertEqual(await resp.json(), {"error": {"code": "body_too_large"}})
+        # The rejected request did not revoke the device.
+        self.assertEqual(
+            (await client.get("/v1/capabilities", headers=headers)).status, 200)
+        # Anonymous oversized bodies still learn nothing (token checked first).
+        anonymous = await client.post("/v1/devices/self/revoke", data=b"x" * 401)
+        self.assertEqual(anonymous.status, 401)
+        self.assertEqual(
+            (await anonymous.json())["error"]["code"], "invalid_credentials")
+
+    async def test_oversized_buffered_body_is_audited_with_its_502(self):
+        # Was a bug: status 200 and headers were sent before the buffered body
+        # was read; an oversize body then produced an empty 200 and the audit
+        # line still said 200.
+        token = (await self._pair())["device_key"]
+        original = bridge_server._MAX_BUFFERED_BODY_BYTES
+        bridge_server._MAX_BUFFERED_BODY_BYTES = 5
+        try:
+            with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+                resp = await self.client.post(
+                    "/api/sessions", headers=self._bearer(token), data=b"{}")
+        finally:
+            bridge_server._MAX_BUFFERED_BODY_BYTES = original
+        self.assertEqual(resp.status, 502)
+        self.assertEqual(await resp.json(), {"error": {"code": "upstream_error_too_large"}})
+        lines = "\n".join(logs.output)
+        self.assertIn("audit action=session_create device=", lines)
+        self.assertIn("status=502", lines)
+        self.assertNotIn("status=200", lines)
+        self.assertEqual(int(UPSTREAM.get("sessions_posts", 0)), 1)
+
+    async def test_oversized_history_page_is_a_closed_502_not_an_empty_200(self):
+        token = (await self._pair())["device_key"]
+        original = bridge_server._MAX_HISTORY_BODY_BYTES
+        bridge_server._MAX_HISTORY_BODY_BYTES = 5
+        try:
+            resp = await self.client.get(
+                "/api/sessions/s1/messages", headers=self._bearer(token))
+        finally:
+            bridge_server._MAX_HISTORY_BODY_BYTES = original
+        self.assertEqual(resp.status, 502)
+        self.assertEqual(await resp.json(), {"error": {"code": "upstream_error_too_large"}})
+
+    async def test_history_transform_failure_is_a_closed_502_not_an_empty_200(self):
+        token = (await self._pair())["device_key"]
+        with mock.patch.object(
+                bridge_server.core, "strip_history_images",
+                side_effect=RecursionError("deeply nested")):
+            resp = await self.client.get(
+                "/api/sessions/s1/messages", headers=self._bearer(token))
+        self.assertEqual(resp.status, 502)
+        self.assertEqual(await resp.json(), {"error": {"code": "upstream_unavailable"}})
+
+    async def test_history_transform_and_redaction_run_off_the_event_loop(self):
+        # Was a bug: json.loads/dumps on up to 64 MiB plus the master-key
+        # replacement ran synchronously on the aiohttp event loop.
+        token = (await self._pair())["device_key"]
+        seen = {}
+        real_transform = core.strip_history_images
+        real_redact = bridge_server._redact_master_key
+
+        def transform(payload):
+            seen["transform_thread"] = threading.current_thread()
+            return real_transform(payload)
+
+        def redact(state, payload):
+            seen["redact_thread"] = threading.current_thread()
+            return real_redact(state, payload)
+
+        with mock.patch.object(bridge_server.core, "strip_history_images", transform), \
+                mock.patch.object(bridge_server, "_redact_master_key", redact):
+            resp = await self.client.get(
+                "/api/sessions/s1/messages", headers=self._bearer(token))
+        self.assertEqual(resp.status, 200)
+        self.assertIn("transform_thread", seen)
+        self.assertIn("redact_thread", seen)
+        self.assertIsNot(seen["transform_thread"], threading.main_thread())
+        self.assertIs(seen["transform_thread"], seen["redact_thread"])
 
     # --- Phase 2: SSE reconnect / after_seq replay --------------------------
     async def test_reattach_replays_after_seq_without_second_post(self):

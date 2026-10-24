@@ -53,7 +53,10 @@ import kotlinx.coroutines.flow.flowOn
  * never execute on the collecting (main) thread. The turn is
  * never re-POSTed; after a transient stream failure only the socket is
  * re-attached to the same server run, bounded by
- * [maxReconnectAttempts] with [reconnectBackoffMs] between attempts. A
+ * [maxReconnectAttempts] failed attempts in a row with
+ * [reconnectBackoffMs] between them. A re-attach that advanced the
+ * confirmed sequence before it dropped starts the count again, so a long
+ * run survives any number of separate interruptions. A
  * re-attach attempt that fails before its stream was bound (an HTTP
  * status failure such as a transient 5xx, or a synchronous open
  * failure) processed no frame: the loop then continues from the
@@ -66,9 +69,9 @@ class StreamingChatRepository(
     private val streamTransport: ChatStreamTransport = HermesSessionStreamClient(),
     private val runApprovalCapabilitySource: RunApprovalCapabilitySource =
         RunApprovalCapabilitySource { false },
-    /** At most this many re-attach attempts after the initial stream. */
+    /** At most this many re-attach attempts in a row without progress. */
     private val maxReconnectAttempts: Int = MAX_RECONNECT_ATTEMPTS,
-    /** Capped backoff (ms) per re-attach attempt index. */
+    /** Capped backoff (ms) per re-attach attempt in a row. */
     private val reconnectBackoffMs: LongArray = RECONNECT_BACKOFF_MS
 ) : StreamingChatSource {
 
@@ -138,6 +141,9 @@ class StreamingChatRepository(
         // happens-before edge.
         var runId: String? = null
         var attempts = 0
+        // Re-attaches since the confirmed sequence last advanced: only
+        // these count against [maxReconnectAttempts] and the backoff.
+        var failuresInARow = 0
         var currentHandle: ChatStreamHandle? = null
         var resume: ChatStreamResumeState? = null
         try {
@@ -269,10 +275,17 @@ class StreamingChatRepository(
                 // reset nor replayed twice, and the confirmed run survives
                 // the transport hiccup instead of ending the turn.
                 val confirmed = snapshot ?: resume
+                // The initial stream, or a re-attach that moved past the
+                // sequence it started from, made progress: start counting
+                // again from zero.
+                val started = resume
+                val progressed = started == null ||
+                    (snapshot != null && snapshot.lastSeq > started.lastSeq)
+                val streak = if (progressed) 0 else failuresInARow
                 if (
                     failure != null &&
                     isReconnectable(failure) &&
-                    attempt < maxReconnectAttempts &&
+                    streak < maxReconnectAttempts &&
                     runId != null &&
                     confirmed != null &&
                     !confirmed.terminal
@@ -284,18 +297,19 @@ class StreamingChatRepository(
                         return@callbackFlow
                     }
                     attempts = attempt + 1
+                    failuresInARow = streak + 1
                     resume = confirmed
                     // Bounded, non-zero fallback, see
-                    // [reconnectBackoffMsFor]: `attempt` is normally
+                    // [reconnectBackoffMsFor]: `streak` is normally
                     // inside [reconnectBackoffMs] because the re-attach
-                    // branch requires `attempt < maxReconnectAttempts`
+                    // branch requires `streak < maxReconnectAttempts`
                     // and the production ladder has one interval per
                     // attempt. A shorter ladder clamps to its last
                     // interval instead of falling back to 0 ms, so an
                     // unexpected attempt state can never turn into an
                     // aggressive 0 ms retry spin. Either way the whole
                     // ladder stays bounded by `maxReconnectAttempts`.
-                    delay(reconnectBackoffMsFor(attempt, reconnectBackoffMs))
+                    delay(reconnectBackoffMsFor(streak, reconnectBackoffMs))
                     continue
                 }
                 if (terminal != null) {
@@ -325,7 +339,7 @@ class StreamingChatRepository(
     }.flowOn(Dispatchers.IO)
 
     internal companion object {
-        /** At most this many re-attach attempts after the initial stream. */
+        /** At most this many re-attach attempts in a row without progress. */
         const val MAX_RECONNECT_ATTEMPTS = 5
 
         /** Capped exponential backoff between re-attach attempts. */

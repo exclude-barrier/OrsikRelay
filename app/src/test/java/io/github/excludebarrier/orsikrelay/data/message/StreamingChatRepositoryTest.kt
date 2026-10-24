@@ -722,6 +722,52 @@ class StreamingChatRepositoryTest {
     }
 
     @Test
+    fun reattachesThatAdvanceTheRunDoNotUseUpTheAttemptBound() {
+        // The bound limits failures in a row, not interruptions per turn: a
+        // long run whose every re-attach advances the confirmed sequence
+        // before the next drop must keep going past maxReconnectAttempts.
+        val metadata = FakeMetadataStore(mutableListOf(profile()))
+        val credentials = FakeCredentialStore(
+            mutableMapOf(PROFILE_ID to SecretValue(FIXTURE_KEY))
+        )
+        val transport = ReattachTransport(
+            firstAttempt = { listener ->
+                listener.onEvent(ChatTurnEvent.RunStarted("run_p4"))
+                listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                listener.onFinished()
+                HandleWithSnapshot(snapshot(lastSeq = 2L))
+            },
+            resumeAttempt = { listener, resume ->
+                val next = resume.lastSeq + 1
+                if (next < 7L) {
+                    listener.onEvent(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+                    listener.onFinished()
+                    HandleWithSnapshot(snapshot(lastSeq = next))
+                } else {
+                    listener.onEvent(ChatTurnEvent.TurnCompleted())
+                    listener.onFinished()
+                    HandleWithSnapshot(snapshot(lastSeq = next, runCompleted = true))
+                }
+            }
+        )
+        val repository = repository(
+            metadata, credentials, transport,
+            maxReconnectAttempts = 2,
+            reconnectBackoffMs = longArrayOf(1L, 1L)
+        )
+
+        val events = collect(repository) { it.streamTurn(PROFILE_ID, SESSION_ID, "Hallo") }
+
+        assertEquals(
+            listOf<ChatTurnEvent>(ChatTurnEvent.RunStarted("run_p4")) +
+                List(5) { ChatTurnEvent.StreamReconnecting } +
+                ChatTurnEvent.TurnCompleted(),
+            events
+        )
+        assertEquals(5, transport.openResumeCalls)
+    }
+
+    @Test
     fun resumeFailureWithoutAttemptSnapshotFallsBackToTheConfirmedState() {
         // Production shape of an HTTP status failure on the re-attach GET
         // (5xx -> Network): the stream was never bound, so that attempt's
