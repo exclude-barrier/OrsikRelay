@@ -72,15 +72,17 @@ BRIDGE_STATE_DB=/home/USER/.local/orsik-mobile-bridge/state.db
 BRIDGE_PUBLIC_BASE_URL=https://<host>
 ```
 
-Comments only on their own lines: `bridge.env` is read as `KEY=VALUE`,
-an inline comment would become part of the value (and, for example, make
-`BRIDGE_BIND` / `BRIDGE_UPSTREAM` invalid).
+`bridge.env` is read like the bridge reads it: `KEY=VALUE` with optional
+`export ` and surrounding whitespace, matching outer quotes, and an unquoted
+` #` starts an inline comment. If a key appears more than once, the last
+occurrence wins.
 
 ## 2a. Preflight: `./install.sh --check`
 
 Checks an existing installation **without creating or changing anything**,
-reading `$BRIDGE_HOME/bridge.env` line by line as data (`KEY=VALUE`,
-comments/blank lines ignored; no `source`, no `eval`). Output per
+reading `$BRIDGE_HOME/bridge.env` line by line as data (`KEY=VALUE`, with
+`export`/whitespace/quotes and last-occurrence-wins exactly as the bridge
+reads it; comments/blank lines ignored; no `source`, no `eval`). Output per
 check exactly one line `OK <name>` / `WARN <name>: <reason>` /
 `FAIL <name>: <reason>`; key/token values are never output. Exit code 1
 as soon as one check is FAIL, otherwise 0; at the end `PREFLIGHT: PASS` or
@@ -95,7 +97,7 @@ as soon as one check is FAIL, otherwise 0; at the end `PREFLIGHT: PASS` or
 | `home_mode` | `$BRIDGE_HOME` exists, mode 700 |
 | `env_mode` | `bridge.env` exists, mode 600 |
 | `venv` | `$BRIDGE_HOME/venv/bin/orsik-mobile-bridge` executable |
-| `bind` | `BRIDGE_BIND` empty, `127.0.0.1` or `::1` |
+| `bind` | `BRIDGE_BIND` empty or any loopback IP literal (`127.0.0.0/8`, `::1`), like the bridge |
 | `upstream` | `BRIDGE_UPSTREAM` (default `http://127.0.0.1:8642`, the Hermes default port) matches `^http://(127.x.x.x\|[::1]):port$` |
 | `hermes_env` | `BRIDGE_HERMES_ENV` set, file 0600, with `API_SERVER_KEY=…` |
 | `approvals_mode` | `config.yaml` next to the Hermes env file sets `approvals: mode: manual`; if the file is missing or another mode is set there → WARN (core default `smart` sometimes approves without asking) |

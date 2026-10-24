@@ -33,6 +33,73 @@ BRIDGE_HOME="${BRIDGE_HOME:-$HOME/.local/orsik-mobile-bridge}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_NAME="orsik-mobile-bridge.service"
 
+# Read an env file exactly like the bridge (_load_env_file / _env_value):
+# `export `, surrounding whitespace, matching outer quotes, an unquoted " #"
+# comment, and the LAST occurrence of a key wins. Data only, never sourced.
+env_value() { # <file> <key>
+  local file="$1" want="$2" line key value result="" found=0
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    case "$line" in
+      "export "*) line="${line#export }"; line="${line#"${line%%[![:space:]]*}"}" ;;
+    esac
+    case "$line" in
+      ""|\#*) continue ;;
+      *=*) ;;
+      *) continue ;;
+    esac
+    key="${line%%=*}"
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    if [ "$key" = "$want" ]; then
+      value="${line#*=}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      case "$value" in
+        \"*\"|\'*\') value="${value:1:${#value}-2}" ;;
+        *" #"*) value="${value%% #*}"; value="${value%"${value##*[![:space:]]}"}" ;;
+      esac
+      result="$value"
+      found=1
+    fi
+  done <"$file"
+  [ "$found" -eq 1 ] && printf '%s\n' "$result"
+  return 0
+}
+
+# True when the key occurs at all (an empty value still means "present").
+env_has_key() { # <file> <key>
+  local file="$1" want="$2" line key
+  [ -f "$file" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    case "$line" in
+      "export "*) line="${line#export }"; line="${line#"${line%%[![:space:]]*}"}" ;;
+    esac
+    case "$line" in
+      ""|\#*) continue ;;
+      *=*) ;;
+      *) continue ;;
+    esac
+    key="${line%%=*}"
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    [ "$key" = "$want" ] && return 0
+  done <"$file"
+  return 1
+}
+
+# Quote one path for a systemd unit file (whitespace-safe, literal %).
+systemd_quote() {
+  local path="${1//\\/\\\\}"
+  path="${path//\"/\\\"}"
+  path="${path//%/%%}"
+  printf '"%s"' "$path"
+}
+
 # --check is read-only: it inspects an existing installation, reports one line
 # per check and exits non-zero if anything FAILed. It never creates, moves or
 # rewrites a file, and it never prints a key or token value.
@@ -45,40 +112,6 @@ if [ "$CHECK" -eq 1 ]; then
   chk_fail() {
     printf 'FAIL %s: %s\n' "$1" "$2"
     FAILED=$((FAILED + 1))
-  }
-
-  # Read bridge.env as data: line by line KEY=VALUE, comments and blank lines
-  # ignored. Never sourced, never eval'd - the file is operator input.
-  env_value() {
-    local want="$1" line key value
-    [ -f "$ENV_FILE" ] || return 0
-    while IFS= read -r line || [ -n "$line" ]; do
-      case "$line" in
-        \#*) continue ;;
-      esac
-      case "$line" in
-        *=*) ;;
-        *) continue ;;
-      esac
-      key="${line%%=*}"
-      value="${line#*=}"
-      key="${key%"${key##*[![:space:]]}"}"
-      key="${key#"${key%%[![:space:]]*}"}"
-      key="${key#export }"
-      if [ "$key" = "$want" ]; then
-        # Same value rules as the bridge (_env_value): trimmed, matching
-        # outer quotes removed, an unquoted value ends at " #".
-        value="${value#"${value%%[![:space:]]*}"}"
-        value="${value%"${value##*[![:space:]]}"}"
-        case "$value" in
-          \"*\") value="${value:1:${#value}-2}" ;;
-          \'*\') value="${value:1:${#value}-2}" ;;
-          *" #"*) value="${value%% #*}"; value="${value%"${value##*[![:space:]]}"}" ;;
-        esac
-        printf '%s\n' "$value"
-        return 0
-      fi
-    done <"$ENV_FILE"
   }
 
   mode_of() { stat -c %a "$1" 2>/dev/null || true; }
@@ -115,18 +148,51 @@ if [ "$CHECK" -eq 1 ]; then
     chk_fail venv "venv/bin/orsik-mobile-bridge is not executable"
   fi
 
-  # 4. The bind address must stay on loopback (empty = bridge default).
-  BIND_VALUE="$(env_value BRIDGE_BIND)"
-  case "$BIND_VALUE" in
-    ""|127.0.0.1|::1) chk_ok bind ;;
-    *) chk_fail bind "BRIDGE_BIND is not loopback (127.0.0.1 or ::1)" ;;
-  esac
+  # 4. The bind address must stay on loopback (empty = bridge default), with
+  # the bridge's own rule: any 127.0.0.0/8 IP literal or a ::1 spelling.
+  BIND_VALUE="$(env_value "$ENV_FILE" BRIDGE_BIND)"
+  bind_ok=0
+  if [ -z "$BIND_VALUE" ]; then
+    bind_ok=1
+  elif [ -x "$BRIDGE_HOME/venv/bin/python" ]; then
+    # Exact same set as server._validate_bind (ipaddress is_loopback).
+    if BIND="$BIND_VALUE" "$BRIDGE_HOME/venv/bin/python" -c '
+import ipaddress, os, sys
+try:
+    ok = ipaddress.ip_address(os.environ.get("BIND", "")).is_loopback
+except ValueError:
+    ok = False
+sys.exit(0 if ok else 1)' 2>/dev/null; then
+      bind_ok=1
+    fi
+  else
+    case "$BIND_VALUE" in
+      ::1) bind_ok=1 ;;
+      127.*)
+        if [[ "$BIND_VALUE" =~ ^127\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+          bind_ok=1
+          for octet in "${BASH_REMATCH[@]:1}"; do
+            case "$octet" in
+              0|[1-9]|[1-9][0-9]|[1-9][0-9][0-9]) ;;
+              *) bind_ok=0 ;;
+            esac
+            [ "$octet" -le 255 ] || bind_ok=0
+          done
+        fi
+        ;;
+    esac
+  fi
+  if [ "$bind_ok" -eq 1 ]; then
+    chk_ok bind
+  else
+    chk_fail bind "BRIDGE_BIND is not a loopback IP address"
+  fi
 
   # 5. The upstream must be a plain-HTTP loopback IP with an explicit port.
-  UPSTREAM="$(env_value BRIDGE_UPSTREAM)"
+  UPSTREAM="$(env_value "$ENV_FILE" BRIDGE_UPSTREAM)"
   # A present but empty BRIDGE_UPSTREAM is refused by the bridge (the master
   # key never goes to a guessed target); only a missing line means the default.
-  if [ -z "$UPSTREAM" ] && grep -qE '^[[:space:]]*(export[[:space:]]+)?BRIDGE_UPSTREAM=' "$ENV_FILE" 2>/dev/null; then
+  if [ -z "$UPSTREAM" ] && env_has_key "$ENV_FILE" BRIDGE_UPSTREAM; then
     UPSTREAM="(empty)"
   fi
   UPSTREAM="${UPSTREAM:-http://127.0.0.1:8642}"
@@ -139,9 +205,9 @@ if [ "$CHECK" -eq 1 ]; then
     chk_fail upstream "must be loopback http IP with port"
   fi
 
-  # 6. Hermes env file: 0600 and holding a non-empty API_SERVER_KEY. The value
-  # itself is only ever passed to grep, never captured or printed.
-  HERMES_ENV="$(env_value BRIDGE_HERMES_ENV)"
+  # 6. Hermes env file: 0600 and holding a non-empty API_SERVER_KEY after the
+  # bridge's own parsing. The value is compared to empty, never printed.
+  HERMES_ENV="$(env_value "$ENV_FILE" BRIDGE_HERMES_ENV)"
   if [ -z "$HERMES_ENV" ]; then
     chk_fail hermes_env "BRIDGE_HERMES_ENV is not set"
   elif [ ! -f "$HERMES_ENV" ]; then
@@ -150,10 +216,10 @@ if [ "$CHECK" -eq 1 ]; then
     mode="$(mode_of "$HERMES_ENV")"
     if [ "$mode" != "600" ]; then
       chk_fail hermes_env "Hermes env file has mode ${mode:-unknown}, expected 600"
-    elif grep -qE '^API_SERVER_KEY=.+' "$HERMES_ENV"; then
+    elif [ -n "$(env_value "$HERMES_ENV" API_SERVER_KEY)" ]; then
       chk_ok hermes_env
     else
-      chk_fail hermes_env "Hermes env file has no API_SERVER_KEY line"
+      chk_fail hermes_env "Hermes env file has no non-empty API_SERVER_KEY"
     fi
   fi
 
@@ -182,7 +248,7 @@ if [ "$CHECK" -eq 1 ]; then
   fi
 
   # 7. Without a public base URL there is no deep link and no QR.
-  BASE_URL="$(env_value BRIDGE_PUBLIC_BASE_URL)"
+  BASE_URL="$(env_value "$ENV_FILE" BRIDGE_PUBLIC_BASE_URL)"
   case "$BASE_URL" in
     "") chk_warn public_base_url "no deep link/QR" ;;
     https://*) chk_ok public_base_url ;;
@@ -190,7 +256,7 @@ if [ "$CHECK" -eq 1 ]; then
   esac
 
   # 8. A listener on the bridge port usually means the bridge is already up.
-  PORT="$(env_value BRIDGE_PORT)"
+  PORT="$(env_value "$ENV_FILE" BRIDGE_PORT)"
   PORT="${PORT:-${BRIDGE_PORT:-9842}}"
   if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
     chk_fail port "BRIDGE_PORT must be a number between 1 and 65535"
@@ -218,12 +284,12 @@ if [ "$CHECK" -eq 1 ]; then
   # 10. The settings the bridge checks at start (state DB path, service list),
   # validated by the installed bridge itself so both always agree.
   if [ -x "$BRIDGE_HOME/venv/bin/python" ]; then
-    if cfg_error="$(BRIDGE_STATE_DB="$(env_value BRIDGE_STATE_DB)" \
-      BRIDGE_HOST_SERVICES="$(env_value BRIDGE_HOST_SERVICES)" \
-      BRIDGE_TERMINAL="$(env_value BRIDGE_TERMINAL)" \
-      BRIDGE_FILES="$(env_value BRIDGE_FILES)" \
-      BRIDGE_FILES_ROOT="$(env_value BRIDGE_FILES_ROOT)" \
-      BRIDGE_HERMES_ENV="$(env_value BRIDGE_HERMES_ENV)" \
+    if cfg_error="$(BRIDGE_STATE_DB="$(env_value "$ENV_FILE" BRIDGE_STATE_DB)" \
+      BRIDGE_HOST_SERVICES="$(env_value "$ENV_FILE" BRIDGE_HOST_SERVICES)" \
+      BRIDGE_TERMINAL="$(env_value "$ENV_FILE" BRIDGE_TERMINAL)" \
+      BRIDGE_FILES="$(env_value "$ENV_FILE" BRIDGE_FILES)" \
+      BRIDGE_FILES_ROOT="$(env_value "$ENV_FILE" BRIDGE_FILES_ROOT)" \
+      BRIDGE_HERMES_ENV="$(env_value "$ENV_FILE" BRIDGE_HERMES_ENV)" \
       BRIDGE_ENV_FILE="$ENV_FILE" \
       DEFAULT_DB="$BRIDGE_HOME/state.db" \
       "$BRIDGE_HOME/venv/bin/python" - 2>&1 <<'PYCHECK'
@@ -383,6 +449,32 @@ ENVEOF
 fi
 
 if [ "$SYSTEMD" -eq 1 ]; then
+  # ProtectSystem=strict makes everything read-only except the listed paths;
+  # a state DB outside BRIDGE_HOME needs its own directory or the service
+  # cannot open it (--check runs as the operator and would not notice).
+  STATE_DB="$(env_value "$ENV" BRIDGE_STATE_DB)"
+  STATE_DB="${STATE_DB:-$BRIDGE_HOME/state.db}"
+  STATE_DB="${STATE_DB/#\~/$HOME}"
+  STATE_DB_DIR="$(dirname -- "$STATE_DB")"
+  # A user service runs in the home directory, so a relative path is
+  # relative to $HOME, not to wherever this script was started.
+  case "$STATE_DB_DIR" in
+    /*) ;;
+    *) STATE_DB_DIR="$HOME/$STATE_DB_DIR" ;;
+  esac
+  if [ -d "$STATE_DB_DIR" ]; then
+    STATE_DB_DIR="$(cd "$STATE_DB_DIR" && pwd -P)"
+  fi
+  BRIDGE_HOME_REAL="$BRIDGE_HOME"
+  if [ -d "$BRIDGE_HOME" ]; then
+    BRIDGE_HOME_REAL="$(cd "$BRIDGE_HOME" && pwd -P)"
+  fi
+  READ_WRITE_PATHS="$(systemd_quote "$BRIDGE_HOME_REAL")"
+  case "$STATE_DB_DIR/" in
+    "$BRIDGE_HOME_REAL/"*) ;;
+    *) READ_WRITE_PATHS="$READ_WRITE_PATHS $(systemd_quote "$STATE_DB_DIR")" ;;
+  esac
+
   mkdir -p "$UNIT_DIR"
   cat >"$UNIT_DIR/$UNIT_NAME" <<UNITEOF
 [Unit]
@@ -400,7 +492,7 @@ UMask=0077
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=$BRIDGE_HOME
+ReadWritePaths=$READ_WRITE_PATHS
 
 [Install]
 WantedBy=default.target

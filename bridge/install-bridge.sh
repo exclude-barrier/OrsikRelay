@@ -35,6 +35,42 @@ done
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'install-bridge: %s\n' "$*" >&2; exit 1; }
 
+# Read an env file exactly like the bridge (_load_env_file / _env_value):
+# `export `, surrounding whitespace, matching outer quotes, an unquoted " #"
+# comment, and the LAST occurrence of a key wins. Data only, never sourced.
+env_value() { # <file> <key>
+  local file="$1" want="$2" line key value result="" found=0
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    case "$line" in
+      "export "*) line="${line#export }"; line="${line#"${line%%[![:space:]]*}"}" ;;
+    esac
+    case "$line" in
+      ""|\#*) continue ;;
+      *=*) ;;
+      *) continue ;;
+    esac
+    key="${line%%=*}"
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    if [ "$key" = "$want" ]; then
+      value="${line#*=}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      case "$value" in
+        \"*\"|\'*\') value="${value:1:${#value}-2}" ;;
+        *" #"*) value="${value%% #*}"; value="${value%"${value##*[![:space:]]}"}" ;;
+      esac
+      result="$value"
+      found=1
+    fi
+  done <"$file"
+  [ "$found" -eq 1 ] && printf '%s\n' "$result"
+  return 0
+}
+
 # Package command for 'qrencode' on this distribution (hint only; never run).
 qr_install_command() {
   local id="" like=""
@@ -71,7 +107,9 @@ command -v uv >/dev/null || die "uv is missing; install it first, e.g.: sudo apt
 
 HERMES_ENV="$HERMES_HOME/.env"
 [ -f "$HERMES_ENV" ] || die "no Hermes env file at $HERMES_ENV (set HERMES_HOME)"
-grep -q '^API_SERVER_KEY=.' "$HERMES_ENV" || die "API_SERVER_KEY is not set in $HERMES_ENV (enable the Hermes api_server first)"
+# Same parse as the bridge: `export`, quotes and the last occurrence count.
+[ -n "$(env_value "$HERMES_ENV" API_SERVER_KEY)" ] \
+  || die "API_SERVER_KEY is not set in $HERMES_ENV (enable the Hermes api_server first)"
 PORT="$(sed -n 's/^API_SERVER_PORT=\([0-9][0-9]*\).*/\1/p' "$HERMES_ENV" | tail -n 1)"
 PORT="${PORT:-8642}"
 UPSTREAM="http://127.0.0.1:$PORT"
@@ -128,12 +166,26 @@ echo "Release: $REF"
 UPDATE=()
 if [ -x "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" ]; then
   say "Updating the existing install"
-  # The bridge's own "admin backup" snapshots whatever store bridge.env
-  # configures (also a custom, quoted or relative BRIDGE_STATE_DB); the copy
-  # always lands in BRIDGE_HOME.
+  # The backup runs the OLD installed binary, whose env parser may keep quotes
+  # and ignore `export`. Resolve BRIDGE_STATE_DB here, with the bridge's rules,
+  # and pass it explicitly. BRIDGE_ENV_FILE is cleared because the binary's
+  # loader prefers the file's value over the process environment.
   if [ -f "$ENV_FILE" ]; then
-    BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin backup \
-      "$BRIDGE_HOME/state.db.bak-$(date +%Y%m%d-%H%M%S)"
+    STATE_DB="$(env_value "$ENV_FILE" BRIDGE_STATE_DB)"
+    STATE_DB="${STATE_DB:-$BRIDGE_HOME/state.db}"
+    STATE_DB="${STATE_DB/#\~/$HOME}"
+    if [ -f "$STATE_DB" ]; then
+      BACKUP_HERMES_ENV="$(env_value "$ENV_FILE" BRIDGE_HERMES_ENV)"
+      [ -n "$BACKUP_HERMES_ENV" ] || BACKUP_HERMES_ENV="$HERMES_ENV"
+      BACKUP="$BRIDGE_HOME/state.db.bak-$(date +%Y%m%d-%H%M%S)"
+      if ! BRIDGE_ENV_FILE= BRIDGE_STATE_DB="$STATE_DB" \
+        BRIDGE_HERMES_ENV="$BACKUP_HERMES_ENV" \
+        "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin backup "$BACKUP"; then
+        die "could not back up the device store at $STATE_DB; aborting the update"
+      fi
+    else
+      echo "No device store at $STATE_DB; skipping the pre-update backup."
+    fi
   fi
   UPDATE=(--update)
 else
@@ -155,8 +207,21 @@ set_env() {
   tmp="$(mktemp "$ENV_FILE.XXXXXX")"
   KEY="$key" VALUE="$value" awk '
     BEGIN { key = ENVIRON["KEY"]; value = ENVIRON["VALUE"] }
-    index($0, key "=") == 1 { print key "=" value; found = 1; next }
-    { print }
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+$/, "", line)
+      if (line == "" || line ~ /^#/) { print; next }
+      if (line ~ /^export /) sub(/^export /, "", line)
+      sub(/^[[:space:]]+/, "", line)
+      eq = index(line, "=")
+      if (eq > 0) {
+        found_key = substr(line, 1, eq - 1)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", found_key)
+        if (found_key == key) { print key "=" value; found = 1; next }
+      }
+      print
+    }
     END { if (!found) print key "=" value }
   ' "$ENV_FILE" >"$tmp"
   chmod 600 "$tmp"
@@ -165,10 +230,8 @@ set_env() {
 # A rerun keeps the operator's own values; only missing or empty ones get
 # the defaults (a custom store path or port must survive an update).
 set_default() {
-  local current=""
-  if [ -f "$ENV_FILE" ]; then
-    current="$(sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1)"
-  fi
+  local current
+  current="$(env_value "$ENV_FILE" "$1")"
   [ -n "$current" ] || set_env "$1" "$2"
 }
 set_default BRIDGE_BIND 127.0.0.1
@@ -178,13 +241,24 @@ set_default BRIDGE_PORT 9842
 set_env BRIDGE_UPSTREAM "$UPSTREAM"
 set_env BRIDGE_HERMES_ENV "$HERMES_ENV"
 set_default BRIDGE_STATE_DB "$BRIDGE_HOME/state.db"
-PUBLIC_URL="$(sed -n 's/^BRIDGE_PUBLIC_BASE_URL=//p' "$ENV_FILE" | tail -n 1)"
+PUBLIC_URL="$(env_value "$ENV_FILE" BRIDGE_PUBLIC_BASE_URL)"
 if [ -z "$PUBLIC_URL" ] && command -v tailscale >/dev/null; then
   name="$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
   [ -n "$name" ] && PUBLIC_URL="https://$name:8443"
 fi
 [ -n "$PUBLIC_URL" ] && set_env BRIDGE_PUBLIC_BASE_URL "$PUBLIC_URL"
 chmod 600 "$ENV_FILE"
+
+# The hints below must name the configured listener, not the defaults.
+BRIDGE_BIND_CFG="$(env_value "$ENV_FILE" BRIDGE_BIND)"
+BRIDGE_BIND_CFG="${BRIDGE_BIND_CFG:-127.0.0.1}"
+BRIDGE_PORT_CFG="$(env_value "$ENV_FILE" BRIDGE_PORT)"
+BRIDGE_PORT_CFG="${BRIDGE_PORT_CFG:-9842}"
+case "$BRIDGE_BIND_CFG" in
+  *:*) BRIDGE_HOST_CFG="[$BRIDGE_BIND_CFG]" ;;
+  *) BRIDGE_HOST_CFG="$BRIDGE_BIND_CFG" ;;
+esac
+BRIDGE_URL_CFG="http://$BRIDGE_HOST_CFG:$BRIDGE_PORT_CFG"
 
 # --- 5. Check and start -------------------------------------------------------
 say "Checking the install"
@@ -194,7 +268,7 @@ if [ "$SERVICE" -eq 1 ]; then
   systemctl --user enable --quiet "$UNIT"
   systemctl --user restart "$UNIT"
   systemctl --user is-active --quiet "$UNIT" || die "the bridge service did not start; see: journalctl --user -u $UNIT"
-  echo "Service $UNIT is running on 127.0.0.1:9842"
+  echo "Service $UNIT is running on $BRIDGE_URL_CFG"
 fi
 
 # --- 6. Next steps ------------------------------------------------------------
@@ -202,13 +276,13 @@ say "Done"
 if [ -n "$PUBLIC_URL" ]; then
   cat <<EOF
 Private HTTPS (once, needs root; stays inside your tailnet, no Funnel):
-  sudo tailscale serve --bg --https=8443 http://127.0.0.1:9842
+  sudo tailscale serve --bg --https=8443 $BRIDGE_URL_CFG
 
 The app connects to: $PUBLIC_URL
 EOF
 else
   cat <<EOF
-Expose 127.0.0.1:9842 privately over HTTPS (e.g. Tailscale Serve, see docs/network-deployment.md),
+Expose $BRIDGE_URL_CFG privately over HTTPS (e.g. Tailscale Serve, see docs/network-deployment.md),
 then set BRIDGE_PUBLIC_BASE_URL in $ENV_FILE and run: systemctl --user restart $UNIT
 EOF
 fi
