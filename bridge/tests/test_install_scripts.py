@@ -115,7 +115,7 @@ class InstallBridgeScriptTest(unittest.TestCase):
     def args(self):
         return ["bash", str(INSTALL_BRIDGE_SH)]
 
-    def run_script(self, extra_env=None, args=()):
+    def run_script(self, extra_env=None, args=(), cwd=None):
         env = {
             k: v
             for k, v in os.environ.items()
@@ -133,6 +133,7 @@ class InstallBridgeScriptTest(unittest.TestCase):
         return subprocess.run(
             [*self.args(), *args],
             env=env,
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=60,
@@ -246,6 +247,37 @@ class InstallBridgeScriptTest(unittest.TestCase):
         self.assertIn("cli-env BRIDGE_ENV_FILE=", calls)
         # The resolved path is passed explicitly, not the bridge.env override.
         self.assertNotIn(f"cli-env BRIDGE_ENV_FILE={self.bridge_env}", calls)
+
+    def test_relative_backup_path_is_resolved_against_service_home(self):
+        self.install_fake_cli()
+        relative_db = Path("data dir") / "state.db"
+        real_db = self.home / relative_db
+        real_db.parent.mkdir()
+        real_db.write_bytes(b"sqlite")
+        self.write_bridge_env(f'BRIDGE_STATE_DB="{relative_db}"')
+        caller = self.root / "caller"
+        caller.mkdir()
+
+        for caller_has_store in (False, True):
+            with self.subTest(caller_has_store=caller_has_store):
+                self.log.write_text("")
+                if caller_has_store:
+                    decoy = caller / relative_db
+                    decoy.parent.mkdir()
+                    decoy.write_bytes(b"unrelated")
+
+                result = self.run_script(cwd=caller)
+
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                calls = self.calls()
+                backups = [line for line in calls
+                           if line.startswith("cli admin backup ")]
+                self.assertEqual(len(backups), 1, calls)
+                self.assertIn(f"cli-env BRIDGE_STATE_DB={real_db}", calls)
+                install = next(line for line in calls
+                               if line.startswith("install.sh --update"))
+                self.assertLess(calls.index(backups[0]), calls.index(install))
+                self.assertNotIn("skipping the pre-update backup", result.stdout)
 
     def test_backup_is_skipped_when_the_state_db_does_not_exist(self):
         self.install_fake_cli()

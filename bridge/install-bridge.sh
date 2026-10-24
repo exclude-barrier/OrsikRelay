@@ -174,6 +174,11 @@ if [ -x "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" ]; then
     STATE_DB="$(env_value "$ENV_FILE" BRIDGE_STATE_DB)"
     STATE_DB="${STATE_DB:-$BRIDGE_HOME/state.db}"
     STATE_DB="${STATE_DB/#\~/$HOME}"
+    # Match the user service's working directory, not the caller's cwd.
+    case "$STATE_DB" in
+      /*) ;;
+      *) STATE_DB="$HOME/$STATE_DB" ;;
+    esac
     if [ -f "$STATE_DB" ]; then
       BACKUP_HERMES_ENV="$(env_value "$ENV_FILE" BRIDGE_HERMES_ENV)"
       [ -n "$BACKUP_HERMES_ENV" ] || BACKUP_HERMES_ENV="$HERMES_ENV"
