@@ -34,6 +34,17 @@ class CpuTest(unittest.TestCase):
         # 100 busy of 200 total ticks (iowait counts as idle).
         self.assertEqual(percent, 50.0)
 
+    def test_guest_ticks_are_not_counted_twice(self):
+        # /proc/stat already accounts guest/guest_nice in user/nice; adding the
+        # guest fields to the total would double-count them.
+        samples = iter([
+            "cpu  100 0 100 700 100 0 0 0 20 20\n",
+            "cpu  150 0 150 850 100 0 0 0 50 50\n",
+        ])
+        percent = hostmetrics.cpu_percent(read=lambda: next(samples), sleep=lambda _: None)
+        # 100 busy of 250 total ticks over the first eight (non-guest) fields.
+        self.assertEqual(percent, 40.0)
+
     def test_unreadable_stat_gives_none(self):
         def broken():
             raise OSError("no /proc")
