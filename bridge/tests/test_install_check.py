@@ -321,6 +321,105 @@ class InstallCheckTest(unittest.TestCase):
         self.run_check()
         self.assertEqual(before, self.snapshot())
 
+    # -- env-file parsing matches the bridge -----------------------------
+
+    def append_env(self, text: str):
+        env_file = self.home / "bridge.env"
+        env_file.write_text(env_file.read_text() + text)
+        env_file.chmod(0o600)
+
+    def test_last_value_of_a_key_wins_like_the_bridge(self):
+        self.append_env("BRIDGE_BIND=0.0.0.0\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL bind", result.stdout)
+
+        self.write_env(bind="0.0.0.0")
+        self.append_env("export BRIDGE_BIND=127.0.0.1\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("OK   bind", result.stdout)
+
+    def test_indented_exported_values_are_read_like_the_bridge(self):
+        self.write_env(bind="", port="")
+        self.append_env(
+            "   export BRIDGE_BIND=127.0.0.1\n"
+            f"  export   BRIDGE_PORT={self.port}\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("OK   bind", result.stdout)
+        self.assertIn("OK   port", result.stdout)
+
+    def test_an_indented_empty_upstream_line_is_not_the_default(self):
+        self.append_env("   export   BRIDGE_UPSTREAM=\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL upstream", result.stdout)
+
+    def test_hermes_api_key_is_parsed_like_the_bridge(self):
+        cases = (
+            ('API_SERVER_KEY=""\n', False),
+            ("API_SERVER_KEY=''\n", False),
+            (f"export API_SERVER_KEY={SECRET}\n", True),
+            (f"   API_SERVER_KEY={SECRET}\n", True),
+            (f"API_SERVER_KEY={SECRET}\nAPI_SERVER_KEY=\n", False),
+            (f"API_SERVER_KEY=\nAPI_SERVER_KEY={SECRET}\n", True),
+            ("API_SERVER_KEY=  # comment\n", True),
+        )
+        for text, passes in cases:
+            with self.subTest(text=text):
+                self.hermes_env.write_text(text)
+                self.hermes_env.chmod(0o600)
+                result = self.run_check()
+                self.assertNoSecret(result)
+                if passes:
+                    self.assertIn("OK   hermes_env", result.stdout,
+                                  result.stdout + result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 1,
+                                     result.stdout + result.stderr)
+                    self.assertIn("FAIL hermes_env", result.stdout)
+
+    # -- bind: any loopback address, like the bridge ---------------------
+
+    def test_any_loopback_bind_is_accepted_like_the_bridge(self):
+        for bind in ("127.0.0.1", "127.0.0.2", "127.1.2.3", "127.255.255.254", "::1"):
+            with self.subTest(bind=bind):
+                self.write_env(bind=bind)
+                result = self.run_check()
+                self.assertEqual(result.returncode, 0,
+                                 result.stdout + result.stderr)
+                self.assertIn("OK   bind", result.stdout)
+        for bind in ("0.0.0.0", "10.0.0.1", "127.0.0.256", "127.00.0.1",
+                     "localhost", "127.0.0.1:9842"):
+            with self.subTest(bind=bind):
+                self.write_env(bind=bind)
+                result = self.run_check()
+                self.assertEqual(result.returncode, 1,
+                                 result.stdout + result.stderr)
+                self.assertIn("FAIL bind", result.stdout)
+
+    def test_other_loopback_ipv6_spellings_match_the_bridge(self):
+        python = self.home / "venv" / "bin" / "python"
+        python.write_text(
+            f"#!/bin/sh\nPYTHONPATH={INSTALL_SH.parent} exec {sys.executable} \"$@\"\n")
+        python.chmod(0o755)
+        cases = (("0:0:0:0:0:0:0:1", True), ("0000::1", True),
+                 ("::ffff:127.0.0.1", True), ("::ffff:8.8.8.8", False),
+                 ("127.0.0.1", True))
+        for bind, passes in cases:
+            with self.subTest(bind=bind):
+                self.write_env(bind=bind)
+                result = self.run_check()
+                if passes:
+                    self.assertEqual(result.returncode, 0,
+                                     result.stdout + result.stderr)
+                    self.assertIn("OK   bind", result.stdout)
+                else:
+                    self.assertEqual(result.returncode, 1,
+                                     result.stdout + result.stderr)
+                    self.assertIn("FAIL bind", result.stdout)
+
 
 class SystemdUnitSourceTest(unittest.TestCase):
     def test_unit_sets_restrictive_umask(self):
