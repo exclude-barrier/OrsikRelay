@@ -33,6 +33,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalResult
 import io.github.excludebarrier.orsikrelay.ui.chat.ApprovalDialog
 import io.github.excludebarrier.orsikrelay.ui.chat.ObscuredTouchGuard
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
@@ -59,6 +60,81 @@ class ApprovalDialogUiTest {
     @org.junit.Before
     fun resetAttemptedApprovals() {
         io.github.excludebarrier.orsikrelay.ui.chat.AttemptedApprovals.reset()
+    }
+
+    @Test
+    fun aDecisionSurvivesDialogRecreationWithoutASecondPost() {
+        val gate = CompletableDeferred<Unit>()
+        val calls = AtomicInteger()
+        val cancelled = AtomicInteger()
+        val oldDismissals = AtomicInteger()
+        val currentDismissals = AtomicInteger()
+        var show by mutableStateOf(true)
+        var recreated by mutableStateOf(false)
+        val requester = fake { _, _, _, choice ->
+            calls.incrementAndGet()
+            try {
+                gate.await()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                cancelled.incrementAndGet()
+                throw error
+            }
+            RunApprovalResult.Resolved(RUN_ID, choice)
+        }
+        composeRule.setContent {
+            if (show) {
+                val isRecreated = recreated
+                HermesTheme {
+                    ApprovalDialog(REQUEST, PROFILE_ID, requester, onDismiss = {
+                        if (isRecreated) currentDismissals.incrementAndGet()
+                        else oldDismissals.incrementAndGet()
+                        show = false
+                    })
+                }
+            }
+        }
+        composeRule.onNodeWithTag(TAG_DENY).performClick()
+        composeRule.waitUntil(5_000) { calls.get() == 1 }
+        composeRule.runOnIdle { show = false }
+        composeRule.waitForIdle()
+        assertEquals("disposing the dialog must not cancel the decision", 0, cancelled.get())
+        composeRule.runOnIdle { recreated = true; show = true }
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsNotEnabled().performClick()
+        composeRule.onNodeWithTag(TAG_DENY).assertIsNotEnabled()
+        composeRule.runOnIdle { gate.complete(Unit) }
+        composeRule.waitUntil(5_000) { currentDismissals.get() == 1 }
+        assertEquals(1, calls.get())
+        assertEquals(0, oldDismissals.get())
+        assertEquals(0, cancelled.get())
+    }
+
+    @Test
+    fun anOutcomeReceivedWhileHiddenIsDeliveredOnlyToTheRecreatedDialog() {
+        val gate = CompletableDeferred<Unit>()
+        val completed = AtomicInteger()
+        val callbacks = AtomicInteger()
+        var show by mutableStateOf(true)
+        val requester = fake { _, _, _, _ ->
+            gate.await()
+            completed.incrementAndGet()
+            RunApprovalResult.NoPending(RUN_ID)
+        }
+        composeRule.setContent {
+            if (show) HermesTheme {
+                ApprovalDialog(REQUEST, PROFILE_ID, requester,
+                    onDismiss = {}, onFinished = { callbacks.incrementAndGet() })
+            }
+        }
+        composeRule.onNodeWithTag(TAG_DENY).performClick()
+        composeRule.runOnIdle { show = false }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { gate.complete(Unit) }
+        composeRule.waitUntil(5_000) { completed.get() == 1 }
+        assertEquals(0, callbacks.get())
+        composeRule.runOnIdle { show = true }
+        composeRule.waitUntil(5_000) { callbacks.get() == 1 }
+        composeRule.onNodeWithText(ALREADY_RESOLVED).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_ALLOW).assertIsNotEnabled()
     }
 
     @Test
