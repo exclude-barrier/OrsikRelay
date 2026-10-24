@@ -378,6 +378,15 @@ def _redact_master_key(state: BridgeState, payload: bytes) -> bytes:
     return payload.replace(key, _REDACTED)
 
 
+def _buffered_body(
+    state: BridgeState, payload: bytes, transform: Callable[[bytes], bytes] | None
+) -> bytes:
+    """Transform then redact one buffered body; runs in the default executor."""
+    if transform is not None:
+        payload = transform(payload)
+    return _redact_master_key(state, payload)
+
+
 STATE_KEY = web.AppKey("state", BridgeState)
 
 
@@ -701,7 +710,15 @@ async def _handle_self_revoke(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
     # Contract: exactly 0 bytes. The token is checked first, so an anonymous
     # caller learns nothing from the body rule.
-    if request.can_read_body and await request.read():
+    try:
+        has_body = request.can_read_body and bool(await request.read())
+    except web.HTTPRequestEntityTooLarge:
+        record = await _db(state, state.tokens.lookup, _device_token(request))
+        if record is None:
+            return _closed(401, "invalid_credentials")
+        _audit("revoke", record, status=413)
+        return _closed(413, "body_too_large")
+    if has_body:
         if await _db(state, state.tokens.lookup, _device_token(request)) is None:
             return _closed(401, "invalid_credentials")
         return _closed(400, "body_not_allowed")
@@ -812,7 +829,11 @@ async def _handle_chat_stream(request: web.Request) -> web.StreamResponse:
     if request.query:
         return _closed(403, "query_not_allowed")
     _audit("chat", record, session=session_id)
-    body = await request.read() if request.can_read_body else None
+    try:
+        body = await request.read() if request.can_read_body else None
+    except web.HTTPRequestEntityTooLarge:
+        _audit("chat", record, session=session_id, status=413)
+        return _closed(413, "body_too_large")
     upstream_path = f"/api/sessions/{session_id}/chat/stream"
     try:
         buf = state.runhub.create_pending(session_id)
@@ -1222,7 +1243,10 @@ async def _proxy(
     if body_override is not None:
         body: bytes | None = body_override
     else:
-        body = await request.read() if request.can_read_body else None
+        try:
+            body = await request.read() if request.can_read_body else None
+        except web.HTTPRequestEntityTooLarge:
+            return closed(413, "body_too_large")
 
     headers = {"Authorization": "Bearer " + state.master_key}
     upstream_ct = request.headers.get("Content-Type")
@@ -1247,33 +1271,58 @@ async def _proxy(
             return closed(502, "upstream_redirect")  # type: ignore[return-value]
 
         content_type = upstream.headers.get("Content-Type", "application/json")
-        downstream = web.StreamResponse(status=upstream.status)
-        downstream.content_type = content_type.split(";")[0].strip()
         if "text/event-stream" in content_type:
+            # Streaming path: status and headers go out before the first chunk.
+            downstream = web.StreamResponse(status=upstream.status)
+            downstream.content_type = content_type.split(";")[0].strip()
             downstream.headers["Cache-Control"] = "no-cache"
-        if on_status is not None:
-            on_status(upstream.status)
-        await downstream.prepare(request)
-        try:
-            if "text/event-stream" in content_type:
+            if on_status is not None:
+                on_status(upstream.status)
+            await downstream.prepare(request)
+            try:
                 async for chunk in upstream.content.iter_chunked(4096):
                     await downstream.write(chunk)
-            else:
-                # Buffered path: a reflected Authorization header must not reach
-                # the device. SSE stays a chunk-wise relay (see module docstring).
-                payload = await _read_bounded_body(
-                    upstream, max_buffered_bytes or _MAX_BUFFERED_BODY_BYTES)
-                if payload is not None and transform is not None and upstream.status == 200:
-                    payload = transform(payload)
-                if payload is not None:
-                    # Above the bound nothing is written (a truncated answer the
-                    # client rejects); never an unredacted body.
-                    await downstream.write(_redact_master_key(state, payload))
+            except Exception:
+                pass
+            finally:
+                upstream.release()
+            await downstream.write_eof()
+            return downstream
+
+        # Buffered path: read and transform BEFORE the status/headers go out, so
+        # an oversize body or a failed transform is a closed error envelope
+        # instead of a half-sent 200 whose audit line still says 200.
+        try:
+            payload = await _read_bounded_body(
+                upstream, max_buffered_bytes or _MAX_BUFFERED_BODY_BYTES)
+        except Exception:
+            upstream.release()
+            return closed(502, "upstream_unavailable")  # type: ignore[return-value]
+        if payload is None:
+            upstream.release()
+            return closed(502, "upstream_error_too_large")  # type: ignore[return-value]
+        # Transform (json.loads/dumps over up to 64 MiB) and redaction run in the
+        # default executor, never on the aiohttp event loop.
+        loop = asyncio.get_running_loop()
+        effective_transform = transform if upstream.status == 200 else None
+        try:
+            payload = await loop.run_in_executor(
+                None, functools.partial(_buffered_body, state, payload, effective_transform))
+        except Exception:
+            upstream.release()
+            return closed(502, "upstream_unavailable")  # type: ignore[return-value]
+
+        upstream.release()
+        downstream = web.StreamResponse(status=upstream.status)
+        downstream.content_type = content_type.split(";")[0].strip()
+        if on_status is not None:
+            on_status(upstream.status)
+        try:
+            await downstream.prepare(request)
+            await downstream.write(payload)
+            await downstream.write_eof()
         except Exception:
             pass
-        finally:
-            upstream.release()
-        await downstream.write_eof()
         return downstream
 
 

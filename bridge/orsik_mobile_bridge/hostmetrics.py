@@ -46,7 +46,9 @@ def _read(path: str) -> str:
 def _cpu_ticks(text: str) -> tuple[int, int]:
     fields = [int(value) for value in text.splitlines()[0].split()[1:]]
     idle = fields[3] + (fields[4] if len(fields) > 4 else 0)
-    return sum(fields), idle
+    # Only the first eight fields (user..steal). guest/guest_nice are already
+    # included in user/nice, so adding them would count those ticks twice.
+    return sum(fields[:8]), idle
 
 
 def cpu_percent(
