@@ -224,20 +224,24 @@ fun SettingsScreen(
                     )
                 }
             }
-            val screenProtection = screenProtectionController.enabled
+            val screenProtection = screenProtectionController.enabled || appLockEnabled
             SettingsBlock(
                 position = GroupPosition.Last,
                 icon = OrsikIcons.Eye,
                 title = stringResource(R.string.settings_screen_protection_label),
-                description = stringResource(R.string.settings_screen_protection_description),
+                description = stringResource(
+                    if (appLockEnabled) R.string.settings_screen_protection_app_lock_description
+                    else R.string.settings_screen_protection_description
+                ),
                 modifier = Modifier
                     .testTag("settings_screen_protection")
                     .toggleable(
                         value = screenProtection,
+                        enabled = !appLockEnabled,
                         role = Role.Switch,
                         onValueChange = { screenProtectionController.setEnabled(it) }
                     ),
-                trailing = { Switch(checked = screenProtection, onCheckedChange = null) }
+                trailing = { Switch(checked = screenProtection, onCheckedChange = null, enabled = !appLockEnabled) }
             )
 
             GroupLabel(stringResource(R.string.settings_info_section))

@@ -705,9 +705,20 @@ private fun Management(
                         busy = true
                         failed = false
                         scope.launch {
-                            val (title, prompt) = taskTexts.getValue(task)
-                            failed = !start(title, prompt)
-                            busy = false
+                            try {
+                                val (title, prompt) = taskTexts.getValue(task)
+                                failed = !start(title, prompt)
+                            } catch (error: CancellationException) {
+                                // Disposed mid-start: propagate the cancellation,
+                                // never swallow it.
+                                throw error
+                            } catch (_: Exception) {
+                                // start() failed (network/core): surface it as a
+                                // failure and stay alive; finally releases busy.
+                                failed = true
+                            } finally {
+                                busy = false
+                            }
                         }
                     }
                 }

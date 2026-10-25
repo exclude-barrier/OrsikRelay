@@ -108,6 +108,7 @@
     <string name="settings_privacy_section">Sicherheit</string>
     <string name="settings_screen_protection_label">Bildschirmschutz</string>
     <string name="settings_screen_protection_description">Keine Screenshots und keine Vorschau im App-Wechsler.</string>
+    <string name="settings_screen_protection_app_lock_description">Durch die App-Sperre aktiviert. Keine Screenshots und keine Vorschau im App-Wechsler.</string>
     <string name="settings_app_lock_label">App-Sperre</string>
     <string name="settings_app_lock_description">Beim Öffnen und nach 30 Sekunden im Hintergrund mit Fingerabdruck, Gesicht oder Geräte-PIN entsperren. Schützt auch vor Screenshots und der Vorschau im App-Wechsler.</string>
     <string name="settings_app_lock_unavailable">Richte zuerst eine Displaysperre auf dem Gerät ein.</string>
