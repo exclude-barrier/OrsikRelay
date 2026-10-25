@@ -1,9 +1,7 @@
 name: Android API 37 smoke test
 
-# Issue #51 was reported on Android 17. The API 37 emulator image does not yet
-# boot reliably on hosted runners, so this smoke test is kept out of the pull
-# request checks and runs nightly or on demand. Move it back into android.yml
-# once the image has proven stable.
+# Issue #51 was reported on Android 17. Keep this targeted API 37 coverage
+# nightly/on demand alongside the required API 36 pull request checks.
 
 on:
   schedule:
@@ -36,7 +34,25 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
+          cmdline-tools-version: '15859902' # 22.0, verified with API 37 metadata
           packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0'
+
+      - name: Align SDK tools selected by emulator-runner
+        run: |
+          set -euo pipefail
+          tools_root="$ANDROID_HOME/cmdline-tools"
+          current_tools="$tools_root/22.0"
+          backup="$RUNNER_TEMP/orsik-preinstalled-cmdline-tools"
+          test -x "$current_tools/bin/avdmanager"
+          test -x "$current_tools/bin/sdkmanager"
+          test ! -e "$backup"
+          test ! -L "$backup"
+          if [ -e "$tools_root/latest" ] || [ -L "$tools_root/latest" ]; then
+            mv "$tools_root/latest" "$backup"
+          fi
+          ln -s "$current_tools" "$tools_root/latest"
+          test "$(readlink -f "$tools_root/latest")" = "$(readlink -f "$current_tools")"
+          sed -n '/^Pkg.Revision/p' "$tools_root/latest/source.properties"
 
       - name: Free disk space
         run: |
@@ -62,9 +78,26 @@ jobs:
           target: google_apis
           arch: x86_64
           disk-size: 6144M
+          pre-emulator-launch-script: >-
+            python3 -c "import os; from pathlib import Path;
+            lines=(Path(os.environ['ANDROID_AVD_HOME']) / 'test.ini').read_text().splitlines();
+            target=next((line for line in lines if line.startswith('target=')), 'missing');
+            assert target == 'target=android-37.0', 'Unexpected AVD target: ' + target;
+            print('Verified AVD metadata: ' + target)"
+          # The generic API 37 AVD otherwise boots with about 96 MiB and OOMs.
+          ram-size: 2048M
+          # Preserve the runner defaults and expose guest boot failures.
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
           emulator-boot-timeout: 900
           disable-animations: true
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.excludebarrier.orsikrelay.PhotoPickerLaunchUiTest
+          # AGP can report success after an APK installation failure with zero tests.
+          script: >-
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.excludebarrier.orsikrelay.PhotoPickerLaunchUiTest &&
+            python3 -c "import glob, xml.etree.ElementTree as E;
+            roots=[E.parse(p).getroot() for p in glob.glob('app/build/outputs/androidTest-results/connected/**/TEST-*.xml', recursive=True)];
+            assert sum(int(r.get('tests', 0)) for r in roots) >= 4, 'Photo picker tests did not execute';
+            assert not any(int(r.get('failures', 0)) or int(r.get('errors', 0)) or int(r.get('skipped', 0)) for r in roots), 'Photo picker tests failed or skipped'"
 
       - name: Upload picker test reports
         if: always()
