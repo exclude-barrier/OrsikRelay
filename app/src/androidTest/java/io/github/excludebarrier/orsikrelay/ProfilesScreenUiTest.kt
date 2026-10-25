@@ -259,6 +259,35 @@ class ProfilesScreenUiTest {
     }
 
     @Test
+    fun aThrowingTaskShowsFailureAndStaysClickable() {
+        val admin = FakeProfileAdmin(profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")), kinds = emptyMap())
+        val calls = CopyOnWriteArrayList<Int>()
+        composeRule.setContent {
+            HermesTheme {
+                ProfilesScreen(
+                    admin = admin, onBack = {}, activeProfileId = PAIRED_ID, onOpenMonitoring = {},
+                    startTask = { _, _ ->
+                        calls += 1
+                        if (calls.size == 1) throw RuntimeException("boom")
+                        true
+                    }
+                )
+            }
+        }
+        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+
+        // First click: start throws. The failure is surfaced, the screen stays
+        // alive (no crash) and the tile must remain usable.
+        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "docker").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { count(context.getString(R.string.new_session_error_generic)) > 0 }
+        composeRule.waitForIdle()
+
+        // busy was released by the finally block: a second click reaches start.
+        composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + "docker").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(2, calls.size) }
+    }
+
+    @Test
     fun theTerminalTileOpensTheTerminalInsteadOfAChat() {
         val admin = FakeProfileAdmin(profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")), kinds = emptyMap())
         var terminalOpened = 0
