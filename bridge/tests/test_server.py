@@ -15,7 +15,7 @@ from unittest import mock
 import uuid
 
 from aiohttp import web
-from aiohttp import ClientTimeout
+from aiohttp import ClientTimeout, ClientSession, TCPConnector
 from aiohttp.test_utils import TestClient, TestServer
 
 from orsik_mobile_bridge import core
@@ -604,6 +604,60 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run_q.status, 403)
 
     # --- Phase 5: caps and rate limits -------------------------------------
+    async def test_pair_budget_is_isolated_between_transport_peers(self):
+        self.state.pair_limiter = core.RateLimiter(2, 60.0)
+        for _ in range(2):
+            self.assertEqual((await self.client.post(
+                "/v1/devices/pair", json={"code": "BAD"})).status, 400)
+        code = await self._admin_code()
+        url = self.client.make_url("/v1/devices/pair")
+        async with ClientSession(connector=TCPConnector(local_addr=("127.0.0.2", 0))) as other:
+            response = await other.post(url, json={"code": code})
+            self.assertEqual(response.status, 201)
+        self.assertEqual((await self.client.post(
+            "/v1/devices/pair", json={"code": "BAD"})).status, 429)
+
+    async def test_trusted_serve_users_have_separate_pairing_budgets(self):
+        self.state.trust_tailscale_identity = True
+        self.state.pair_limiter = core.RateLimiter(2, 60.0)
+        first = {"Tailscale-User-Login": "first@example.invalid"}
+        second = {"Tailscale-User-Login": "second@example.invalid"}
+        for _ in range(2):
+            self.assertEqual((await self.client.post(
+                "/v1/devices/pair", headers=first, json={"code": "BAD"})).status, 400)
+        response = await self.client.post("/v1/devices/pair", headers=second,
+                                          json={"code": await self._admin_code()})
+        self.assertEqual(response.status, 201)
+        self.assertEqual((await self.client.post(
+            "/v1/devices/pair", headers=first, json={"code": "BAD"})).status, 429)
+
+    async def test_untrusted_forwarded_headers_cannot_reset_a_pairing_budget(self):
+        self.state.pair_limiter = core.RateLimiter(2, 60.0)
+        for index in range(2):
+            self.assertEqual((await self.client.post("/v1/devices/pair",
+                headers={"Tailscale-User-Login": f"user{index}@example.invalid",
+                         "X-Forwarded-For": f"192.0.2.{index + 1}"},
+                json={"code": "BAD"})).status, 400)
+        response = await self.client.post("/v1/devices/pair",
+            headers={"Tailscale-User-Login": "third@example.invalid", "X-Forwarded-For": "192.0.2.3"},
+            json={"code": await self._admin_code()})
+        self.assertEqual(response.status, 429)
+
+    async def test_missing_duplicate_and_oversized_serve_identities_use_the_peer_budget(self):
+        self.state.trust_tailscale_identity = True
+        self.state.pair_limiter = core.RateLimiter(1, 60.0)
+        for headers in ([], [("Tailscale-User-Login", "a"), ("Tailscale-User-Login", "b")],
+                        [("Tailscale-User-Login", "x" * 1025)]):
+            with self.subTest(headers_kind=len(headers)):
+                response = await self.client.post("/v1/devices/pair", headers=headers,
+                                                  json={"code": "BAD"})
+                self.assertEqual(response.status, 400 if not headers else 429)
+        # Exhausting the anonymous fallback must not consume a named user's budget.
+        response = await self.client.post("/v1/devices/pair",
+            headers={"Tailscale-User-Login": "named@example.invalid"},
+            json={"code": await self._admin_code()})
+        self.assertEqual(response.status, 201)
+
     async def test_pair_rate_limited(self):
         self.state.pair_limiter = core.RateLimiter(2, 60.0)
         for _ in range(2):

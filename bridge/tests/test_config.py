@@ -93,6 +93,28 @@ class UpstreamValidationTest(unittest.TestCase):
             self.assertFalse(os.path.exists(path))
 
 
+class PairingIdentityConfigTest(unittest.TestCase):
+    def test_tailscale_identity_requires_explicit_opt_in(self):
+        for value, expected in ((None, False), ("0", False), ("true", False), ("1", True)):
+            with self.subTest(value=value):
+                env = _env()
+                if value is not None:
+                    env["BRIDGE_TRUST_TAILSCALE_IDENTITY"] = value
+                state = bridge_server.build_state_from_env(env)
+                self.addCleanup(state.store.close)
+                self.addCleanup(state.db_executor.shutdown)
+                self.assertEqual(state.trust_tailscale_identity, expected)
+
+    def test_non_loopback_peer_cannot_assert_a_serve_identity(self):
+        state = mock.Mock(trust_tailscale_identity=True)
+        request = mock.Mock(remote="192.0.2.1")
+        request.headers.getall.return_value = ["first@example.invalid"]
+        first = bridge_server._pairing_client_key(request, state)
+        request.headers.getall.return_value = ["second@example.invalid"]
+        self.assertEqual(first, bridge_server._pairing_client_key(request, state))
+        request.headers.getall.assert_not_called()
+
+
 class BindValidationTest(unittest.TestCase):
     def test_literal_loopback_ips_accepted(self):
         for value in ("127.0.0.1", "::1", "127.0.0.2"):

@@ -107,8 +107,10 @@ URL unchanged.
 - **Body bound.** The request limit is `10_000_000` bytes (matching the official
   api_server) so the client's supported ≤ 8 MiB encoded image bodies are not
   silently rejected. Malformed JSON yields a closed `400`, never a `500`.
-- **Rate limits + true caps.** Pairing is rate-limited; the store enforces hard
-  caps for live codes and active devices.
+- **Rate limits + true caps.** Pairing allows 60 attempts per minute per transport
+  peer. The in-memory identity table is capped at 1024 live windows; a full table
+  refuses new identities without evicting another client’s active budget. The
+  store also caps live codes and active devices.
 - **Durable, hashed credentials.** Device tokens and pairing codes are stored
   only as SHA-256 hashes in SQLite; the file is 0600 in a 0700 directory. Any
   store error fails **closed** (`503 store_unavailable`), never open.
@@ -118,6 +120,24 @@ URL unchanged.
 - **No credential leakage.** Bridge-origin errors use a closed body
   (`{"error":{"code":…}}`); upstream response headers are not relayed; the
   master key is used only in the upstream `Authorization` header.
+
+### Pairing behind Tailscale Serve
+
+A reverse proxy makes several devices appear as the same loopback peer. For a
+backend reached **only through trusted Tailscale Serve and trusted local
+processes**, set `BRIDGE_TRUST_TAILSCALE_IDENTITY=1` in `bridge.env`. This opts into
+separate pairing budgets per `Tailscale-User-Login`, received from a loopback peer.
+It never replaces the one-time pairing code or device-token authentication.
+The default is off; arbitrary `X-Forwarded-For` headers are always ignored.
+
+[Tailscale’s Serve documentation](https://tailscale.com/docs/features/tailscale-serve#identity-headers)
+states that Serve strips incoming copies of its identity headers and adds the
+requester’s user identity. All devices of one user share a budget. Tagged devices
+have no user identity and fall back to the shared transport-peer budget, as do
+missing, duplicate or oversized identity headers. A different proxy needs its
+own verified identity contract; do not enable this option for it. Local callers
+can forge these headers, so the opt-in requires a trusted local host. Identity
+values are hashed in memory and never added to audit logs.
 
 ## Endpoints
 
