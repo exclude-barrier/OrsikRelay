@@ -67,7 +67,13 @@ jobs:
             -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
           emulator-boot-timeout: 900
           disable-animations: true
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.excludebarrier.orsikrelay.PhotoPickerLaunchUiTest
+          # AGP can report success after an APK installation failure with zero tests.
+          script: >-
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.excludebarrier.orsikrelay.PhotoPickerLaunchUiTest &&
+            python3 -c "import glob, xml.etree.ElementTree as E;
+            roots=[E.parse(p).getroot() for p in glob.glob('app/build/outputs/androidTest-results/connected/**/TEST-*.xml', recursive=True)];
+            assert sum(int(r.get('tests', 0)) for r in roots) >= 4, 'Photo picker tests did not execute';
+            assert not any(int(r.get('failures', 0)) or int(r.get('errors', 0)) or int(r.get('skipped', 0)) for r in roots), 'Photo picker tests failed or skipped'"
 
       - name: Upload picker test reports
         if: always()
