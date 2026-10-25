@@ -43,6 +43,18 @@ class AppLockSettingsUiTest {
     val composeRule = createComposeRule()
 
     @Test
+    fun appLockMakesTheEffectiveScreenProtectionVisibleAndReadOnly() {
+        val controller = AppLockController(initiallyEnabled = true, persist = {})
+        setSettings(controller, FakeAppAuthenticator(autoResult = true))
+        composeRule.onNodeWithTag("settings_screen_protection")
+            .performScrollTo().assertIsOn().assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.settings_screen_protection_app_lock_description))
+            .assertIsDisplayed()
+        composeRule.runOnIdle { controller.setEnabled(false) }
+        composeRule.onNodeWithTag("settings_screen_protection").assertIsOff()
+    }
+
+    @Test
     fun switchIsDisabledAndExplainedWithoutAScreenLock() {
         val controller = AppLockController(initiallyEnabled = false, persist = {})
         val authenticator = FakeAppAuthenticator(available = false)

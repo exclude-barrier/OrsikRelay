@@ -108,6 +108,7 @@
     <string name="settings_privacy_section">Security</string>
     <string name="settings_screen_protection_label">Screen protection</string>
     <string name="settings_screen_protection_description">No screenshots and no preview in the app switcher.</string>
+    <string name="settings_screen_protection_app_lock_description">Enabled by app lock. No screenshots and no preview in the app switcher.</string>
     <string name="settings_app_lock_label">App lock</string>
     <string name="settings_app_lock_description">Unlock with fingerprint, face or device PIN when opening the app and after 30 seconds in the background. Also hides the app from screenshots and the app switcher preview.</string>
     <string name="settings_app_lock_unavailable">Set up a screen lock on the device first.</string>
