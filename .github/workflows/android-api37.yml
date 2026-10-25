@@ -1,9 +1,7 @@
 name: Android API 37 smoke test
 
-# Issue #51 was reported on Android 17. The API 37 emulator image does not yet
-# boot reliably on hosted runners, so this smoke test is kept out of the pull
-# request checks and runs nightly or on demand. Move it back into android.yml
-# once the image has proven stable.
+# Issue #51 was reported on Android 17. Keep this targeted API 37 coverage
+# nightly/on demand alongside the required API 36 pull request checks.
 
 on:
   schedule:
@@ -62,6 +60,8 @@ jobs:
           target: google_apis
           arch: x86_64
           disk-size: 6144M
+          # The generic API 37 AVD otherwise boots with about 96 MiB and OOMs.
+          ram-size: 2048M
           # Preserve the runner defaults and expose guest boot failures.
           emulator-options: >-
             -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
