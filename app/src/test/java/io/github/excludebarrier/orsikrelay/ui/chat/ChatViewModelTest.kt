@@ -1025,6 +1025,64 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun anExternallyReleasedSlotSettlesTheLocalReleaseAction() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        advanceUntilIdle()
+        chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        advanceUntilIdle()
+        assertTrue(model.state.value.releaseVisible)
+        val controller = checkNotNull(lastController)
+        assertTrue(controller.releaseUncertainByUser(profileId, sessionId))
+        advanceUntilIdle()
+        model.releaseUncertainLocally()
+        advanceUntilIdle()
+        assertFalse(model.state.value.turnUncertain)
+        assertFalse(model.state.value.turnActive)
+        assertFalse(model.state.value.releaseVisible)
+        assertEquals(1, chat.calls.get())
+    }
+
+    @Test
+    fun aLocalReleaseDoesNotFreeAnotherSessionsNewRun() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        advanceUntilIdle()
+        chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        advanceUntilIdle()
+        val controller = checkNotNull(lastController)
+        assertTrue(controller.releaseUncertainByUser(profileId, sessionId))
+        controller.startTurn(profileId, "other-session", "other")
+        advanceUntilIdle()
+        model.releaseUncertainLocally()
+        advanceUntilIdle()
+        assertFalse(model.state.value.turnActive)
+        assertFalse(model.state.value.releaseVisible)
+        assertEquals("other-session", controller.activeRun.value?.sessionId)
+        assertEquals(2, chat.calls.get())
+    }
+
+    @Test
+    fun aLocalReleaseAdoptsAHealthyReplacementRunOfTheSameSession() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        advanceUntilIdle()
+        chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        advanceUntilIdle()
+        val controller = checkNotNull(lastController)
+        assertTrue(controller.releaseUncertainByUser(profileId, sessionId))
+        controller.startTurn(profileId, sessionId, "new")
+        advanceUntilIdle()
+        model.releaseUncertainLocally()
+        advanceUntilIdle()
+        assertTrue(model.state.value.turnActive)
+        assertFalse(model.state.value.turnUncertain)
+        assertFalse(model.state.value.releaseVisible)
+        assertEquals(sessionId, controller.activeRun.value?.sessionId)
+        assertEquals(2, chat.calls.get())
+    }
+
+    @Test
     fun anUnconfirmedSendFailureCanBeReleasedInTheAppAndKeepsTheDraft() = withModel { model, chat, _, _, _ ->
         model.onDraftChange("hi")
         model.send()

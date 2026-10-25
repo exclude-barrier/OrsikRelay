@@ -16,13 +16,16 @@ class HostMetricsRepositoryTest {
     private class Transport(var supported: Boolean) : HostMetricsTransport {
         var supportCalls = 0
         var readCalls = 0
+        var readResult: HostMetricsResult = HostMetricsResult.Ready(HostMetrics(1.0, 1, 1, 2, null, emptyList()))
+        var failRead = false
         override fun supports(baseUrl: String, apiKey: SecretValue): Boolean {
             supportCalls++
             return supported
         }
         override fun read(baseUrl: String, apiKey: SecretValue): HostMetricsResult {
             readCalls++
-            return HostMetricsResult.Ready(HostMetrics(1.0, 1, 1, 2, null, emptyList()))
+            if (failRead) throw IllegalStateException()
+            return readResult
         }
     }
 
@@ -64,6 +67,32 @@ class HostMetricsRepositoryTest {
         assertEquals(HostMetricsResult.Unsupported, repository.read("p"))
         transport.supported = true
         assertEquals(HostMetricsResult.Ready(HostMetrics(1.0, 1, 1, 2, null, emptyList())), repository.read("p"))
+        assertEquals(2, transport.supportCalls)
+    }
+
+    @Test
+    fun aFailedReadRechecksCapabilitiesOnTheNextPoll() {
+        val transport = Transport(supported = true)
+        val repository = repository(transport)
+        repository.read("p")
+        transport.readResult = HostMetricsResult.Failed
+        assertEquals(HostMetricsResult.Failed, repository.read("p"))
+        transport.supported = false
+        assertEquals(HostMetricsResult.Unsupported, repository.read("p"))
+        assertEquals(2, transport.supportCalls)
+        assertEquals(2, transport.readCalls)
+    }
+
+    @Test
+    fun aThrownReadAlsoInvalidatesTheCapabilityCache() {
+        val transport = Transport(supported = true)
+        val repository = repository(transport)
+        repository.read("p")
+        transport.failRead = true
+        assertEquals(HostMetricsResult.Failed, repository.read("p"))
+        transport.supported = false
+        transport.failRead = false
+        assertEquals(HostMetricsResult.Unsupported, repository.read("p"))
         assertEquals(2, transport.supportCalls)
     }
 

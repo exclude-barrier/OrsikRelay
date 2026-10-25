@@ -2,16 +2,23 @@ package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -37,11 +44,17 @@ class ComposerControlsDesignUiTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    private var referenceIcon by mutableStateOf<ImageVector?>(null)
+    private var referenceOffset by mutableStateOf(IntOffset.Zero)
+
     private fun setBar(compact: Boolean, running: Boolean) {
         composeRule.setContent {
             HermesTheme(darkTheme = true) {
-                Column {
-                    ComposerBar(
+                Box(Modifier.fillMaxSize()) {
+                    val icon = referenceIcon
+                    if (icon != null) {
+                        Reference(icon, REF_ICON, Modifier.offset { referenceOffset })
+                    } else ComposerBar(
                         draft = "",
                         onDraftChange = {},
                         sendEnabled = true,
@@ -70,21 +83,38 @@ class ComposerControlsDesignUiTest {
                             null
                         }
                     )
-                    // References on the dock's input surface, tinted like the steer action.
-                    Reference(OrsikIcons.ArrowUp, REF_ARROW)
-                    Reference(OrsikIcons.Send, REF_PLANE)
                 }
             }
         }
     }
 
     @Composable
-    private fun Reference(icon: ImageVector, tag: String) {
-        Box(Modifier.background(MaterialTheme.colorScheme.surfaceContainer)) {
+    private fun Reference(icon: ImageVector, tag: String, modifier: Modifier) {
+        Box(modifier.background(MaterialTheme.colorScheme.surfaceContainer)) {
             IconButton(onClick = {}, modifier = Modifier.testTag(tag)) {
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+
+    private fun referenceAt(icon: ImageVector, bounds: Rect): ImageBitmap {
+        composeRule.runOnIdle {
+            referenceOffset = IntOffset.Zero
+            referenceIcon = icon
+        }
+        val reference = composeRule.onNodeWithTag(REF_ICON)
+        val initial = reference.fetchSemanticsNode().boundsInRoot
+        composeRule.runOnIdle {
+            referenceOffset = IntOffset(
+                (bounds.left - initial.left).roundToInt(),
+                (bounds.top - initial.top).roundToInt()
+            )
+        }
+        // Stroke antialiasing depends on the final canvas position. Render
+        // each reference at the product's position, with identical bounds;
+        // keep the strict pixel comparison and its original threshold.
+        assertEquals(bounds, reference.fetchSemanticsNode().boundsInRoot)
+        return reference.captureToImage()
     }
 
     private fun shapeOf(tag: String) =
@@ -105,9 +135,11 @@ class ComposerControlsDesignUiTest {
         setBar(compact = false, running = true)
 
         assertEquals(ExpressiveShape.Cookie.shape, shapeOf(TAG_RUN_STOP))
-        val steer = composeRule.onNodeWithTag("chatSteerSend").captureToImage()
-        val arrow = composeRule.onNodeWithTag(REF_ARROW).captureToImage()
-        val plane = composeRule.onNodeWithTag(REF_PLANE).captureToImage()
+        val steerNode = composeRule.onNodeWithTag("chatSteerSend")
+        val bounds = steerNode.fetchSemanticsNode().boundsInRoot
+        val steer = steerNode.captureToImage()
+        val arrow = referenceAt(OrsikIcons.ArrowUp, bounds)
+        val plane = referenceAt(OrsikIcons.Send, bounds)
         val arrowMatch = steer.matchShare(arrow)
         val planeMatch = steer.matchShare(plane)
         assertTrue("steer icon must be the send arrow (match $arrowMatch)", arrowMatch > 0.99f)
@@ -122,7 +154,6 @@ class ComposerControlsDesignUiTest {
     }
 
     private companion object {
-        const val REF_ARROW = "reference_arrow"
-        const val REF_PLANE = "reference_plane"
+        const val REF_ICON = "reference_icon"
     }
 }

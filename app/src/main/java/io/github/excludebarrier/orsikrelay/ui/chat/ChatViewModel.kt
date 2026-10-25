@@ -670,6 +670,27 @@ internal class ChatViewModel(
         if (!_state.value.releaseVisible) return
         if (runController.releaseUncertainByUser(profileId, sessionId)) {
             releaseUncertainRun()
+            return
+        }
+        // Another observer may already have released the old slot. Settle
+        // only this screen; never release a replacement or another session.
+        val active = runController.activeRun.value
+        if (active == null || active.profileId != profileId || active.sessionId != sessionId) {
+            releaseUncertainRun()
+        } else {
+            _state.update {
+                it.copy(
+                    turnUncertain = active.uncertain,
+                    runStarted = active.runId != null,
+                    boundRunId = active.runId,
+                    reconcileInFlight = false,
+                    reconcileFailed = false,
+                    reconcileStillActive = false,
+                    lostRun = null,
+                    lostRunWithoutKey = false,
+                    resolveInFlight = false
+                )
+            }
         }
     }
 
