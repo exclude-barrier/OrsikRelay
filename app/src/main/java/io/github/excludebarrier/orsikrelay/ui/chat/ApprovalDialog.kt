@@ -26,11 +26,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
@@ -45,6 +46,13 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalResult
 import io.github.excludebarrier.orsikrelay.domain.run.RunApprovalError
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -106,61 +114,26 @@ fun ApprovalDialog(
     onFinished: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val scope = rememberCoroutineScope()
-    // True while exactly one decision request is in flight.
-    var inFlight by remember { mutableStateOf(false) }
-    // A closed terminal outcome after a completed request, or null while
-    // the dialog is still awaiting a decision. A request this process has
-    // already sent a decision for (the dialog was re-created by a rotation
-    // or by leaving and re-entering the chat) starts as "already sent", so
-    // a second, non-idempotent decision is impossible.
     val attemptKey = request.runId + "/" + request.requestId
-    var outcome by remember {
-        mutableStateOf(if (AttemptedApprovals.contains(attemptKey)) ApprovalOutcome.AlreadySent else null)
+    var attempt by remember(attemptKey) { mutableStateOf(AttemptedApprovals.observe(attemptKey)) }
+    val outcome by attempt.collectAsState()
+    val inFlight = outcome == ApprovalOutcome.Sending
+
+    // Only the currently composed dialog receives an outcome. The request
+    // itself belongs to the process and survives rotation/navigation.
+    LaunchedEffect(attemptKey, outcome) {
+        when (outcome) {
+            ApprovalOutcome.Resolved -> onDismiss()
+            ApprovalOutcome.AlreadyResolved -> onFinished()
+            else -> Unit
+        }
     }
 
     fun decide(choice: RunApprovalChoice) {
-        // Any completed attempt is terminal. A transport failure is
-        // ambiguous, so sending the same non-idempotent decision again is
-        // forbidden just like an already-resolved response.
-        if (inFlight || outcome != null) return
-        if (!AttemptedApprovals.mark(attemptKey)) {
-            outcome = ApprovalOutcome.AlreadySent
-            return
-        }
-        inFlight = true
-        outcome = null
-        scope.launch {
-            val result = try {
-                requester.respond(
-                    profileId = profileId,
-                    runId = request.runId,
-                    requestId = request.requestId,
-                    choice = choice
-                )
-            } catch (error: CancellationException) {
-                // Propagate: the dialog is being disposed.
-                throw error
-            } catch (_: Exception) {
-                RunApprovalResult.Failure(RunApprovalError.Network)
-            }
-            inFlight = false
-            when (result) {
-                is RunApprovalResult.Resolved -> onDismiss()
-                is RunApprovalResult.NoPending -> {
-                    // The server's authoritative "not pending" answer is
-                    // terminal for the request: report it so the app-level
-                    // record is dropped (no resurrection after recreation),
-                    // then keep this composition's note.
-                    outcome = ApprovalOutcome.AlreadyResolved
-                    onFinished()
-                }
-                is RunApprovalResult.Failure -> outcome = ApprovalOutcome.Failed
-            }
-        }
+        attempt = AttemptedApprovals.respondOnce(attemptKey, profileId, request, choice, requester)
     }
 
-    val buttonsEnabled = !inFlight && outcome == null
+    val buttonsEnabled = outcome == ApprovalOutcome.Awaiting
 
     // The content-lambda `AlertDialog` overload is
     // @Deprecated in material3 1.3.2 ("Use BasicAlertDialog instead", proven
@@ -226,7 +199,7 @@ fun ApprovalDialog(
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
-                    null -> Unit
+                    ApprovalOutcome.Awaiting, ApprovalOutcome.Sending, ApprovalOutcome.Resolved -> Unit
                 }
                 if (inFlight) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -281,7 +254,7 @@ fun ApprovalDialog(
                 // After a decided, failed or already-answered request (and
                 // while one is in flight) the decision buttons stay disabled;
                 // this is the way out.
-                if (outcome != null || inFlight) {
+                if (outcome != ApprovalOutcome.Awaiting) {
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
                         onClick = onDismiss,
@@ -298,32 +271,85 @@ fun ApprovalDialog(
 }
 
 /**
- * The approval requests this process has sent a decision for, so a
- * re-created dialog never offers a second one. Bounded; only opaque
- * run/request IDs, nothing persisted.
+ * Process-owned, single-attempt approval requests. Only opaque IDs and closed
+ * outcomes are retained; no UI callback or Activity survives a dialog.
+ * In-flight entries are never evicted. A transport failure remains terminal:
+ * a non-idempotent decision may already have reached Hermes.
  */
 internal object AttemptedApprovals {
     private const val MAX = 64
-    private val keys = LinkedHashSet<String>()
+    private val attempts = LinkedHashMap<String, MutableStateFlow<ApprovalOutcome>>()
+    private var scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     @Synchronized
-    fun contains(key: String): Boolean = key in keys
+    fun observe(key: String): StateFlow<ApprovalOutcome> =
+        (attempts[key] ?: MutableStateFlow(ApprovalOutcome.Awaiting)).asStateFlow()
 
     /** Tests share fixed request IDs across cases in one process. */
     @Synchronized
-    internal fun reset() = keys.clear()
+    internal fun reset() {
+        scope.cancel()
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        attempts.clear()
+    }
 
-    /** Records [key]; `false` when a decision was already sent for it. */
+    /** Synthetic already-sent entry used by the recreation regression test. */
     @Synchronized
-    fun mark(key: String): Boolean {
-        if (!keys.add(key)) return false
-        if (keys.size > MAX) keys.remove(keys.first())
+    internal fun mark(key: String): Boolean {
+        val state = attempts.getOrPut(key) { MutableStateFlow(ApprovalOutcome.Awaiting) }
+        if (state.value != ApprovalOutcome.Awaiting) return false
+        state.value = ApprovalOutcome.AlreadySent
+        trim()
         return true
+    }
+
+    @Synchronized
+    fun respondOnce(
+        key: String,
+        profileId: String,
+        request: ApprovalRequest,
+        choice: RunApprovalChoice,
+        requester: RunApprovalRequester
+    ): StateFlow<ApprovalOutcome> {
+        val state = attempts.getOrPut(key) { MutableStateFlow(ApprovalOutcome.Awaiting) }
+        if (state.value != ApprovalOutcome.Awaiting) return state.asStateFlow()
+        state.value = ApprovalOutcome.Sending
+        trim()
+        scope.launch {
+            val result = try {
+                requester.respond(profileId, request.runId, request.requestId, choice)
+            } catch (error: CancellationException) {
+                // Cancellation is ambiguous too; never offer a second POST.
+                state.value = ApprovalOutcome.Failed
+                throw error
+            } catch (_: Exception) {
+                RunApprovalResult.Failure(RunApprovalError.Network)
+            }
+            state.value = when (result) {
+                is RunApprovalResult.Resolved -> ApprovalOutcome.Resolved
+                is RunApprovalResult.NoPending -> ApprovalOutcome.AlreadyResolved
+                is RunApprovalResult.Failure -> ApprovalOutcome.Failed
+            }
+            synchronized(this@AttemptedApprovals) { trim() }
+        }
+        return state.asStateFlow()
+    }
+
+    private fun trim() {
+        while (attempts.size > MAX) {
+            val removable = attempts.entries.firstOrNull {
+                it.value.value != ApprovalOutcome.Sending
+            } ?: return
+            attempts.remove(removable.key)
+        }
     }
 }
 
 /** Closed, non-serialised outcome states for the approval dialog. */
-private enum class ApprovalOutcome {
+internal enum class ApprovalOutcome {
+    Awaiting,
+    Sending,
+    Resolved,
     Failed,
     AlreadyResolved,
     AlreadySent
