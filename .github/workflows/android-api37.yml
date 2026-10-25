@@ -62,6 +62,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disk-size: 6144M
+          # Preserve the runner defaults and expose guest boot failures.
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
           emulator-boot-timeout: 900
           disable-animations: true
           script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.excludebarrier.orsikrelay.PhotoPickerLaunchUiTest
