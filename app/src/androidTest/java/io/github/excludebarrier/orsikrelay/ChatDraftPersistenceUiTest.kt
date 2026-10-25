@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -11,6 +12,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -35,6 +38,7 @@ import io.github.excludebarrier.orsikrelay.draft.InMemoryChatDraftRepository
 import io.github.excludebarrier.orsikrelay.ui.chat.ChatScreen
 import io.github.excludebarrier.orsikrelay.ui.chat.NoOpNotificationCoordinator
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import io.github.excludebarrier.orsikrelay.testdiagnostics.withUiFailureDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -313,8 +317,23 @@ class ChatDraftPersistenceUiTest {
         }
         waitForEmpty()
         composeRule.onNodeWithText(context().getString(R.string.chat_input_label)).performTextInput("Ordinary message")
-        composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).performClick()
-        assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+        val sendStartedAt = SystemClock.elapsedRealtime()
+        withUiFailureDiagnostics(describe = {
+            val stateAtFailure =
+                "phase=ordinary send; elapsedMs=${SystemClock.elapsedRealtime() - sendStartedAt}; " +
+                    "streamCalls=${source.calls.get()}; opened=${source.opened.count}; " +
+                    "steerCalls=${steerer.calls.get()}"
+            val button = runCatching {
+                composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).printToString()
+            }.getOrElse { "unavailable: ${it.javaClass.simpleName}" }
+            val tree = runCatching {
+                composeRule.onRoot(useUnmergedTree = true).printToString()
+            }.getOrElse { "unavailable: ${it.javaClass.simpleName}" }
+            "$stateAtFailure\nsendButton (collected after failure):\n$button\nui:\n$tree"
+        }) {
+            composeRule.onNodeWithContentDescription(context().getString(R.string.chat_send)).performClick()
+            assertTrue(source.opened.await(3, TimeUnit.SECONDS))
+        }
         source.enqueue(ChatTurnEvent.RunStarted(RUN_ID))
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("chatSteerInput").fetchSemanticsNodes().isNotEmpty()
