@@ -34,8 +34,25 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          # emulator-runner prepends latest/bin, so refresh the old preinstalled tools.
-          packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0 cmdline-tools;latest'
+          cmdline-tools-version: '15859902' # 22.0, verified with API 37 metadata
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.1.0'
+
+      - name: Align SDK tools selected by emulator-runner
+        run: |
+          set -euo pipefail
+          tools_root="$ANDROID_HOME/cmdline-tools"
+          current_tools="$tools_root/22.0"
+          backup="$RUNNER_TEMP/orsik-preinstalled-cmdline-tools"
+          test -x "$current_tools/bin/avdmanager"
+          test -x "$current_tools/bin/sdkmanager"
+          test ! -e "$backup"
+          test ! -L "$backup"
+          if [ -e "$tools_root/latest" ] || [ -L "$tools_root/latest" ]; then
+            mv "$tools_root/latest" "$backup"
+          fi
+          ln -s "$current_tools" "$tools_root/latest"
+          test "$(readlink -f "$tools_root/latest")" = "$(readlink -f "$current_tools")"
+          sed -n '/^Pkg.Revision/p' "$tools_root/latest/source.properties"
 
       - name: Free disk space
         run: |
@@ -61,6 +78,12 @@ jobs:
           target: google_apis
           arch: x86_64
           disk-size: 6144M
+          pre-emulator-launch-script: >-
+            python3 -c "import os; from pathlib import Path;
+            lines=(Path(os.environ['ANDROID_AVD_HOME']) / 'test.ini').read_text().splitlines();
+            target=next((line for line in lines if line.startswith('target=')), 'missing');
+            assert target == 'target=android-37.0', 'Unexpected AVD target: ' + target;
+            print('Verified AVD metadata: ' + target)"
           # The generic API 37 AVD otherwise boots with about 96 MiB and OOMs.
           ram-size: 2048M
           # Preserve the runner defaults and expose guest boot failures.
