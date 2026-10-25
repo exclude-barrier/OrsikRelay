@@ -128,7 +128,7 @@ jobs:
           target: google_apis
           arch: x86_64
           # Keep the userdata partition small enough for the runner disk.
-          disk-size: 4096
+          disk-size: 4096M
           emulator-boot-timeout: 900
           disable-animations: true
           # Capture-only (@CaptureOnly) and live-bridge (@LiveBridge) tests are
