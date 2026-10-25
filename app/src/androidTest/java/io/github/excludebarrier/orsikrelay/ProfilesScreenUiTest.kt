@@ -6,6 +6,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.activity.ComponentActivity
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -15,6 +16,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.test.platform.app.InstrumentationRegistry
@@ -23,7 +26,9 @@ import io.github.excludebarrier.orsikrelay.domain.profile.ProfileCredentialKind
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
+import io.github.excludebarrier.orsikrelay.testdiagnostics.withUiFailureDiagnostics
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -195,8 +200,20 @@ class ProfilesScreenUiTest {
             profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local"), profile(API_ID, "Api", "https://api.local")),
             kinds = mapOf(PAIRED_ID to ProfileCredentialKind.DEVICE_CREDENTIAL, API_ID to ProfileCredentialKind.API_KEY)
         )
-        setContent(admin, activeProfileId = PAIRED_ID, onBack = null, activeReachable = true)
-        composeRule.waitUntil(5_000) { count("Paired") > 0 }
+        val loadStartedAt = SystemClock.elapsedRealtime()
+        withUiFailureDiagnostics(describe = {
+            val stateAtFailure =
+                "phase=initial profile rows; elapsedMs=${SystemClock.elapsedRealtime() - loadStartedAt}; " +
+                    "listCalls=${admin.listCalls.get()}; kindCalls=${admin.kindCalls.get()}; " +
+                    "kindCompleted=${admin.kindCompleted.get()}"
+            val tree = runCatching {
+                composeRule.onRoot(useUnmergedTree = true).printToString()
+            }.getOrElse { "unavailable: ${it.javaClass.simpleName}" }
+            "$stateAtFailure\nui (collected after failure):\n$tree"
+        }) {
+            setContent(admin, activeProfileId = PAIRED_ID, onBack = null, activeReachable = true)
+            composeRule.waitUntil(5_000) { count("Paired") > 0 }
+        }
 
         composeRule.onAllNodesWithTag("settings_back").assertCountEquals(0)
         assertEquals(1, count(context.getString(R.string.home_server_reachable)))
@@ -387,8 +404,14 @@ class ProfilesScreenUiTest {
         private val failingKinds: Set<String> = emptySet()
     ) : ProfileAdmin {
         val selected = CopyOnWriteArrayList<String>()
+        val listCalls = AtomicInteger()
+        val kindCalls = AtomicInteger()
+        val kindCompleted = AtomicInteger()
 
-        override fun listProfiles(): List<ServerProfile> = profiles
+        override fun listProfiles(): List<ServerProfile> {
+            listCalls.incrementAndGet()
+            return profiles
+        }
 
         override fun deleteProfile(profileId: String) = Unit
 
@@ -397,8 +420,9 @@ class ProfilesScreenUiTest {
         }
 
         override fun credentialKind(profileId: String): ProfileCredentialKind {
+            kindCalls.incrementAndGet()
             check(profileId !in failingKinds) { "metadata unavailable" }
-            return kinds[profileId] ?: ProfileCredentialKind.API_KEY
+            return (kinds[profileId] ?: ProfileCredentialKind.API_KEY).also { kindCompleted.incrementAndGet() }
         }
     }
 
