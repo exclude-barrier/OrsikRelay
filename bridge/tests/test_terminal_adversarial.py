@@ -898,9 +898,12 @@ class ProtocolTest(TerminalCase):
 
     async def test_the_documented_message_bound_is_64_kib_inclusive(self):
         state, client, token = await self.extra_bridge(
-            ("sh", "-c", "stty raw -echo; head -c 65536 > /dev/null; echo GOT"))
+            ("sh", "-c", "stty raw -echo; echo READY; head -c 65536 > /dev/null; echo GOT"))
         ws = await client.ws_connect(
             "/v1/terminal", headers={"Authorization": "Bearer " + token})
+        # The PTY starts in canonical mode, which can discard a large input
+        # before the child executes stty. Wait for its raw-mode handshake.
+        await self.read_until(ws, b"READY")
         await ws.send_bytes(b"x" * terminal.MAX_INPUT_BYTES)
         await self.read_until(ws, b"GOT")
         await ws.close()
