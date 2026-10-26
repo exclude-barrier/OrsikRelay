@@ -228,13 +228,17 @@ def _env_value(raw: str) -> str:
 
 def _load_env_file(path: str) -> dict[str, str]:
     _check_secret_file(path)
-    values: dict[str, str] = {}
     try:
         text = Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         # Fail closed: a file that passed the checks but cannot be read must
         # never fall back to other key sources.
         raise SystemExit(f"Could not read env file: {path}") from None
+    return _parse_env_text(text)
+
+
+def _parse_env_text(text: str) -> dict[str, str]:
+    values: dict[str, str] = {}
     for line in text.splitlines():
         line = line.strip()
         if line.startswith("export "):
@@ -453,10 +457,12 @@ async def _handle_health(request: web.Request) -> web.StreamResponse:
 
 async def _handle_capabilities(request: web.Request) -> web.Response:
     state: BridgeState = request.app[STATE_KEY]
-    if await _db(state, state.tokens.lookup, _device_token(request)) is None:
+    record = await _db(state, state.tokens.lookup, _device_token(request))
+    if record is None:
         return _closed(401, "invalid_credentials")
     return web.json_response(core.build_capabilities(
-        terminal=state.terminal_command is not None, files=state.files_root is not None))
+        terminal=state.terminal_command is not None and record.terminal_allowed,
+        files=state.files_root is not None))
 
 
 async def _handle_host_metrics(request: web.Request) -> web.Response:
@@ -566,8 +572,9 @@ _PROJECTS_MAX_AGE = 10.0
 
 
 # WebSocket close codes: 1000 the shell ended, 1008 a malformed control
-# message, 4401 the device was revoked while connected.
-_TERMINAL_CLOSE_CODES = {"exited": 1000, "protocol": 1008, "revoked": 4401}
+# message, 4401 the device was revoked, 4403 its terminal grant was removed.
+_TERMINAL_CLOSE_CODES = {"exited": 1000, "protocol": 1008, "revoked": 4401,
+                         "terminal_revoked": 4403}
 
 
 async def _handle_terminal(request: web.Request) -> web.StreamResponse:
@@ -580,6 +587,9 @@ async def _handle_terminal(request: web.Request) -> web.StreamResponse:
         return _closed(401, "invalid_credentials")
     if state.terminal_command is None:
         return _closed(403, "endpoint_out_of_scope")
+    if not record.terminal_allowed:
+        _audit("terminal", record, status=403)
+        return _closed(403, "terminal_not_allowed")
     if request.query_string:
         return _closed(403, "query_not_allowed")
     # A browser always sends Origin on a WebSocket; the app never does. This
@@ -613,6 +623,15 @@ async def _handle_terminal(request: web.Request) -> web.StreamResponse:
     # then simply gone.
     reason = "client"
     try:
+        # Spawning yields: an operator may have revoked the token/grant while
+        # the PTY was starting. Recheck before exposing it to the client.
+        current = await _db(state, state.tokens.lookup, token)
+        if current is None:
+            reason = "revoked"
+            return _closed(401, "invalid_credentials")
+        if not current.terminal_allowed:
+            reason = "terminal_revoked"
+            return _closed(403, "terminal_not_allowed")
         await ws.prepare(request)
         _audit("terminal_open", record)
         reason = await _pump_terminal(state, token, ws, pty)
@@ -662,8 +681,11 @@ async def _pump_terminal(
     async def revocation() -> str:
         while True:
             await asyncio.sleep(_REVOKE_CHECK_INTERVAL)
-            if await _db(state, state.tokens.lookup, token) is None:
+            record = await _db(state, state.tokens.lookup, token)
+            if record is None:
                 return "revoked"
+            if not record.terminal_allowed:
+                return "terminal_revoked"
 
     tasks = [asyncio.create_task(job()) for job in (output, input_, revocation)]
     try:
@@ -1372,6 +1394,10 @@ def _admin_main(argv: list[str]) -> int:
     sub.add_parser("list-devices", help="list paired devices (no secrets)")
     revoke = sub.add_parser("revoke-device", help="revoke a device by device_id")
     revoke.add_argument("device_id")
+    grant_terminal = sub.add_parser("grant-terminal", help="allow shell access for one active device")
+    grant_terminal.add_argument("device_id")
+    revoke_terminal = sub.add_parser("revoke-terminal", help="remove shell access for one active device")
+    revoke_terminal.add_argument("device_id")
     backup = sub.add_parser("backup", help="write an atomic snapshot of the store")
     backup.add_argument("dest", help="destination path for the backup file")
     args = parser.parse_args(argv)
@@ -1406,7 +1432,21 @@ def _admin_main(argv: list[str]) -> int:
         if args.cmd == "list-devices":
             for device in state.store.list_devices():
                 flag = "revoked" if device["revoked"] else "active"
-                print(f"{device['device_id']}  {flag:7}  {device['label']}  [{device['profile']}]")
+                terminal_flag = "allowed" if device["terminal_allowed"] else "denied"
+                print(f"{device['device_id']}  {flag:7}  {device['label']}  [{device['profile']}]"
+                      f"  terminal={terminal_flag}")
+            return 0
+        if args.cmd in ("grant-terminal", "revoke-terminal"):
+            allowed = args.cmd == "grant-terminal"
+            try:
+                found = state.store.set_terminal_access(args.device_id, allowed)
+            except store_mod.StoreUnavailable:
+                print("error: device store unavailable", file=sys.stderr)
+                return 1
+            if not found:
+                print("error: no active device with this device_id", file=sys.stderr)
+                return 1
+            print(f"terminal {'allowed' if allowed else 'denied'} for {args.device_id}")
             return 0
         if args.cmd == "revoke-device":
             if state.store.revoke_device_by_id(args.device_id):
@@ -1432,6 +1472,12 @@ def main(argv: list[str] | None = None) -> int:
     # group/world accessible, even before _harden_file runs.
     os.umask(0o077)
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "update":
+        from . import update
+        return update.main(argv[1:])
+    if argv and argv[0] == "setup":
+        from . import setup
+        return setup.main(argv[1:])
     if argv and argv[0] == "admin":
         logging.basicConfig(level=logging.WARNING, format="%(message)s")
         return _admin_main(argv[1:])

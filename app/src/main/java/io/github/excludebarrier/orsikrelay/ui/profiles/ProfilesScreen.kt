@@ -1,5 +1,8 @@
 package io.github.excludebarrier.orsikrelay.ui.profiles
 
+import android.content.ClipData
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -150,6 +153,7 @@ fun ProfilesScreen(
     // an API-key profile (that would delete it locally and leave a possible
     // device access valid on the server) but takes the disconnect path.
     var credentialKinds by remember { mutableStateOf<Map<String, ProfileCredentialKind?>>(emptyMap()) }
+    var deviceIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var deleteTarget by remember { mutableStateOf<ServerProfile?>(null) }
     var removalStep by remember { mutableStateOf(RemovalStep.Idle) }
     var removeFailure by remember { mutableStateOf(RemoveFailure.None) }
@@ -179,7 +183,7 @@ fun ProfilesScreen(
             // a failed query (null) go through the disconnect path, whose
             // production source re-checks the device metadata and fails
             // closed into the fallback dialog.
-            credentialKinds = withContext(Dispatchers.IO) {
+            val loadedKinds = withContext(Dispatchers.IO) {
                 list.associate { profile ->
                     profile.id to
                         try {
@@ -189,8 +193,23 @@ fun ProfilesScreen(
                         }
                 }
             }
+            val loadedDeviceIds = withContext(Dispatchers.IO) {
+                list.associate { profile ->
+                    profile.id to if (loadedKinds[profile.id] == ProfileCredentialKind.DEVICE_CREDENTIAL) {
+                        try {
+                            admin.deviceId(profile.id)
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            null
+                        }
+                    } else null
+                }
+            }
             // Rows appear only together with their kinds, so a tap can never
             // see a profile whose kind has not been queried yet.
+            credentialKinds = loadedKinds
+            deviceIds = loadedDeviceIds
             profiles = list
         }
     }
@@ -387,6 +406,7 @@ fun ProfilesScreen(
                             reachable = activeReachable,
                             isSelecting = selecting != null,
                             credentialKind = credentialKinds[profile.id],
+                            deviceId = deviceIds[profile.id],
                             onClick = {
                                 if (profile.id != activeProfileId) {
                                     confirmSelect(profile)
@@ -580,11 +600,15 @@ private fun ProfileRow(
     reachable: Boolean?,
     isSelecting: Boolean,
     credentialKind: ProfileCredentialKind?,
+    deviceId: String?,
     onClick: () -> Unit,
     onUseAsActive: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuOpen by remember(profile.id) { mutableStateOf(false) }
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val copyLabel = stringResource(R.string.profiles_copy_device_id)
     val address = remember(profile.baseUrl) {
         profile.baseUrl.removePrefix("https://")
     }
@@ -637,6 +661,16 @@ private fun ProfileRow(
                     expanded = menuOpen,
                     onDismissRequest = { menuOpen = false }
                 ) {
+                    if (deviceId != null && credentialKind == ProfileCredentialKind.DEVICE_CREDENTIAL) {
+                        DropdownMenuItem(
+                            text = { Text(copyLabel) },
+                            onClick = {
+                                menuOpen = false
+                                scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(copyLabel, deviceId))) }
+                            },
+                            modifier = Modifier.testTag("copyDeviceId:${profile.id}")
+                        )
+                    }
                     if (!isActive) {
                         DropdownMenuItem(
                             text = { Text(text = stringResource(R.string.profiles_select_active)) },

@@ -12,11 +12,15 @@ license = { text = "Apache-2.0" }
 dependencies = ["aiohttp>=3.10,<4"]
 
 [project.scripts]
+omb = "orsik_mobile_bridge.server:main"
 orsik-mobile-bridge = "orsik_mobile_bridge.server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["orsik_mobile_bridge*"]
+
+[tool.setuptools.data-files]
+"share/orsik-mobile-bridge" = ["install-bridge.sh"]
 
 [dependency-groups]
 dev = ["coverage==7.16.2"]

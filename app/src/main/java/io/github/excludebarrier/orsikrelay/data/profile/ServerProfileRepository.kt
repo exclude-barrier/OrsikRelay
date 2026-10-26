@@ -142,6 +142,19 @@ class ServerProfileRepository(
         deviceMetadata.get(profileId) != null
     }
 
+    /** Non-secret UUID only; malformed metadata never reaches the clipboard. */
+    fun deviceId(profileId: String): String? = repositoryCall {
+        if (metadataStore.get(profileId) == null) return@repositoryCall null
+        val id = deviceCredentialMetadataStore?.get(profileId)?.deviceId
+            ?: return@repositoryCall null
+        val canonical = try {
+            UUID.fromString(id).toString()
+        } catch (_: IllegalArgumentException) {
+            return@repositoryCall null
+        }
+        id.takeIf { canonical.equals(it, ignoreCase = true) }
+    }
+
     fun delete(profileId: String) {
         repositoryCall {
             credentialStore.delete(profileId)

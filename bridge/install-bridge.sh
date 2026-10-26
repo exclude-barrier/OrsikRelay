@@ -278,6 +278,15 @@ fi
 
 # --- 6. Next steps ------------------------------------------------------------
 say "Done"
+TERMINAL_CFG="$(env_value "$ENV_FILE" BRIDGE_TERMINAL)"
+if [[ "$TERMINAL_CFG" =~ ^[[:space:]]*1[[:space:]]*$ ]]; then
+  echo
+  echo "Terminal access requires a separate local grant for each device, including previously paired devices."
+  echo "Review the device list and grant only the intended DEVICE_ID:"
+  printf '  BRIDGE_ENV_FILE=%q %q admin list-devices\n' "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
+  printf '  BRIDGE_ENV_FILE=%q %q admin grant-terminal DEVICE_ID\n' "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
+  printf '  BRIDGE_ENV_FILE=%q %q admin revoke-terminal DEVICE_ID\n' "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
+fi
 if [ -n "$PUBLIC_URL" ]; then
   cat <<EOF
 Private HTTPS (once, needs root; stays inside your tailnet, no Funnel):
@@ -296,7 +305,8 @@ if ! command -v qrencode >/dev/null 2>&1; then
   echo "No 'qrencode' found: the pairing command prints the deep link but no QR code."
   echo "Install it with: $(qr_install_command)"
 fi
-PAIR_CMD="BRIDGE_ENV_FILE=$ENV_FILE $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code --base-url ${PUBLIC_URL:-<https-url>}"
+printf -v PAIR_CMD 'BRIDGE_ENV_FILE=%q %q admin pairing-code --base-url %q' \
+  "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" "${PUBLIC_URL:-<https-url>}"
 if [ "$PAIR" -eq 1 ] && [ -n "$PUBLIC_URL" ]; then
   say "Pairing code (works once, for 5 minutes)"
   BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin pairing-code --base-url "$PUBLIC_URL"

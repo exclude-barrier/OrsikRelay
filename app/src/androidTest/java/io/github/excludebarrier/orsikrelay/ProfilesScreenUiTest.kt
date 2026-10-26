@@ -54,6 +54,47 @@ class ProfilesScreenUiTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
+    fun pairedDeviceIdCanBeCopiedForOperatorMatching() {
+        val id = "12345678-1234-1234-1234-123456789abc"
+        val admin = FakeProfileAdmin(
+            profiles = listOf(profile(PAIRED_ID, "Paired", "https://paired.local")),
+            kinds = mapOf(PAIRED_ID to ProfileCredentialKind.DEVICE_CREDENTIAL),
+            deviceIds = mapOf(PAIRED_ID to id)
+        )
+        setContent(admin, activeProfileId = PAIRED_ID)
+        waitForText("Paired")
+        val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+        composeRule.runOnIdle {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("fixture", "before-copy"))
+        }
+        composeRule.onNodeWithTag(actionsTag(PAIRED_ID)).performClick()
+        composeRule.onNodeWithTag("copyDeviceId:$PAIRED_ID").performClick()
+        composeRule.waitUntil(5_000) {
+            clipboard.primaryClip?.getItemAt(0)?.text?.toString() == id
+        }
+    }
+
+    @Test
+    fun apiKeyAndUnavailableDeviceIdentityHaveNoCopyAction() {
+        val admin = FakeProfileAdmin(
+            profiles = listOf(profile(API_ID, "Api", "https://api.local"),
+                              profile(PAIRED_ID, "Paired", "https://paired.local")),
+            kinds = mapOf(API_ID to ProfileCredentialKind.API_KEY,
+                          PAIRED_ID to ProfileCredentialKind.DEVICE_CREDENTIAL),
+            deviceIds = mapOf(API_ID to "12345678-1234-1234-1234-123456789abc"),
+            failingIdentities = setOf(PAIRED_ID)
+        )
+        setContent(admin, activeProfileId = PAIRED_ID)
+        waitForText("Paired")
+        composeRule.onNodeWithTag(actionsTag(API_ID)).performClick()
+        composeRule.onAllNodesWithTag("copyDeviceId:$API_ID").assertCountEquals(0)
+        androidx.test.espresso.Espresso.pressBack()
+        composeRule.onNodeWithTag(actionsTag(PAIRED_ID)).performClick()
+        composeRule.onNodeWithTag(deleteTag(PAIRED_ID)).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("copyDeviceId:$PAIRED_ID").assertCountEquals(0)
+    }
+
+    @Test
     fun chipsShowActivePairedAndApiKeyKinds() {
         val admin = FakeProfileAdmin(
             profiles = listOf(
@@ -401,7 +442,9 @@ class ProfilesScreenUiTest {
     private class FakeProfileAdmin(
         private val profiles: List<ServerProfile>,
         private val kinds: Map<String, ProfileCredentialKind> = emptyMap(),
-        private val failingKinds: Set<String> = emptySet()
+        private val failingKinds: Set<String> = emptySet(),
+        private val deviceIds: Map<String, String> = emptyMap(),
+        private val failingIdentities: Set<String> = emptySet()
     ) : ProfileAdmin {
         val selected = CopyOnWriteArrayList<String>()
         val listCalls = AtomicInteger()
@@ -423,6 +466,11 @@ class ProfilesScreenUiTest {
             kindCalls.incrementAndGet()
             check(profileId !in failingKinds) { "metadata unavailable" }
             return (kinds[profileId] ?: ProfileCredentialKind.API_KEY).also { kindCompleted.incrementAndGet() }
+        }
+
+        override fun deviceId(profileId: String): String? {
+            check(profileId !in failingIdentities) { "identity unavailable" }
+            return deviceIds[profileId]
         }
     }
 

@@ -222,6 +222,16 @@ systemctl --user restart orsik-mobile-bridge.service
 
 ## 6. Update / Rollback / Backup / Restore / Uninstall
 
+With the local administration CLI installed, run `omb update` and confirm
+the prompt. It uses the packaged bootstrap installer and a fresh temporary
+checkout of the official release; your working checkout remains untouched.
+The installer backs up the store and preserves `bridge.env` and device grants.
+Use `omb update --no-service` to skip systemd changes, or `--yes` for an
+explicitly authorized unattended run. Failed updates are not retried.
+The bootstrap layout (`BRIDGE_HOME/bridge.env`, Hermes `HERMES_HOME/.env`)
+is required; externally located env files need the manual procedure below.
+The CLI becomes available after an initial update through the regular installer.
+
 - **Update:** back up the store (see below), switch the checkout to the new
   release and rebuild the venv; `bridge.env` and the store are retained,
   pairing/tokens survive:

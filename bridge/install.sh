@@ -409,8 +409,29 @@ trap 'rm -f "$REQ"' EXIT
 uv export --project "$SRC" --frozen --no-dev --no-emit-project --format requirements.txt -o "$REQ"
 uv pip install --python "$BRIDGE_HOME/venv" --require-hashes -r "$REQ"
 uv pip install --python "$BRIDGE_HOME/venv" --no-deps "$SRC"
+# Wheels may preserve a group-writable checkout's mode. The local updater
+# only executes its private, owned copy of the packaged bootstrap.
+chmod 600 "$BRIDGE_HOME/venv/share/orsik-mobile-bridge/install-bridge.sh"
 trap - ERR INT TERM
 rm -rf "$BRIDGE_HOME/venv.previous"
+
+# BEGIN OMB SHORTCUT
+install_omb_shortcut() {
+  local shortcut_dir="$HOME/.local/bin"
+  local shortcut="$shortcut_dir/omb"
+  if ! mkdir -p "$shortcut_dir"; then
+    echo "Could not create omb shortcut; use $BRIDGE_HOME/venv/bin/omb setup" >&2
+    return 0
+  fi
+  if [ ! -e "$shortcut" ] && [ ! -L "$shortcut" ]; then
+    if ! ln -s "$BRIDGE_HOME/venv/bin/omb" "$shortcut"; then
+      echo "Could not create omb shortcut; use $BRIDGE_HOME/venv/bin/omb setup" >&2
+    fi
+  elif [ ! -L "$shortcut" ] || [ "$(readlink "$shortcut")" != "$BRIDGE_HOME/venv/bin/omb" ]; then
+    echo "Existing $shortcut kept; use $BRIDGE_HOME/venv/bin/omb setup" >&2
+  fi
+}
+# END OMB SHORTCUT
 
 # bridge.env holds the master-key path, bind address and state DB. It is 0600.
 ENV="$BRIDGE_HOME/bridge.env"
@@ -506,6 +527,9 @@ echo
 echo "Installed into $BRIDGE_HOME."
 echo "Next steps:"
 echo "  1. Edit $ENV (Hermes env path, public base URL)."
+install_omb_shortcut
+echo "  Local settings menu: omb setup (ensure \$HOME/.local/bin is on PATH)"
+echo "  Or directly: $BRIDGE_HOME/venv/bin/omb setup"
 echo "  2. Issue a pairing code:  BRIDGE_ENV_FILE=$ENV $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code"
 echo "  3. Start the bridge:      BRIDGE_ENV_FILE=$ENV $BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
 echo "     or (with --systemd):   systemctl --user start $UNIT_NAME"

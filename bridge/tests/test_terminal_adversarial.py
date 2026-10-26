@@ -168,6 +168,7 @@ async def start_bridge(command):
     issued = state.codes.issue()
     resp = await client.post("/v1/devices/pair", json={"code": issued[0]})
     token = (await resp.json())["device_key"]
+    state.store.set_terminal_access(state.tokens.lookup(token).device_id, True)
     return state, client, token
 
 
@@ -643,6 +644,7 @@ async def main():
     issued = state.codes.issue()
     resp = await client.post("/v1/devices/pair", json={"code": issued[0]})
     token = (await resp.json())["device_key"]
+    state.store.set_terminal_access(state.tokens.lookup(token).device_id, True)
     ws = await client.ws_connect(
         "/v1/terminal", headers={"Authorization": "Bearer " + token})
     seen = b""

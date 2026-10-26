@@ -281,6 +281,8 @@ class DeviceRecord:
     revoked: bool = False
     # Set on a self-revoke answer when the device was already revoked before.
     already_revoked: bool = False
+    # Operator-local grant; deliberately absent from pairing permissions.
+    terminal_allowed: bool = False
 
 
 class TokenStore:

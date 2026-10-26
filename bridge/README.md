@@ -50,7 +50,8 @@ URL unchanged.
   read is audited (`file_read` with path and size). Advertised as `files`
   and `projects`.
 - **Terminal, off by default.** With `BRIDGE_TERMINAL=1` (and `tmux` plus
-  util-linux `setsid` on the PATH) `GET /v1/terminal` upgrades to a WebSocket
+  util-linux `setsid` on the PATH), plus a separate local grant for the device,
+  `GET /v1/terminal` upgrades to a WebSocket
   that runs `setsid --ctty tmux new-session -A -s orsik` on a fresh PTY:
   binary frames carry the bytes both ways, a text frame
   `{"type":"resize","cols":C,"rows":R}` the size (1..500 × 1..300). It is a
@@ -62,8 +63,72 @@ URL unchanged.
   bridge setting); a revoked device loses an open terminal within 15 s
   (close `4401`); open and close are audited (`terminal_open` /
   `terminal_close` with the reason), never input or output. Closing ends
-  only the tmux client: the session keeps running until it is exited or the
-  bridge restarts. Advertised as `terminal` only when enabled.
+  only the tmux client: the session keeps running after disconnect. Its
+  lifetime on service/host shutdown depends on the supervisor configuration.
+  Advertised as `terminal` only when globally enabled **and**
+  granted to the requesting device. Removing only the terminal grant closes
+  open terminal sockets within the same 15-second check interval (`4403`,
+  `terminal_revoked`); it leaves the device's chat/run credential valid.
+  Existing app versions show this new close code as a disconnected terminal.
+
+  All devices, including existing devices migrated from schema v1, start with
+  terminal access denied. Pairing's fixed `approvals/chat/runs` permissions
+  and seven-field credential envelope do not change. The operator can inspect
+  and change the separate grant locally, using the usual `BRIDGE_ENV_FILE`:
+
+  ```sh
+  orsik-mobile-bridge admin list-devices
+  orsik-mobile-bridge admin grant-terminal DEVICE_ID
+  orsik-mobile-bridge admin revoke-terminal DEVICE_ID
+  ```
+
+  Updated apps offer **Copy device ID** in the server profile's menu. Match
+  that non-secret ID against `admin list-devices` before granting access.
+  The terminal remains a full server shell as the bridge user.
+
+  For a local menu, use **`omb setup`** instead: toggle terminal/files, choose
+  the read-only file root and select a device by number to grant/revoke terminal
+  access. Global settings are only written after **s** and confirmation; **q**,
+  EOF or Ctrl+C discard pending settings. Device grants have their own explicit
+  confirmation and take effect immediately, even if pending settings are later
+  discarded. No HTTP administration is added.
+
+  `install.sh` installs a non-overwriting `~/.local/bin/omb` shortcut. Ensure
+  that directory is on PATH, or use `~/.local/orsik-mobile-bridge/venv/bin/omb setup`.
+  A custom installation's shortcut detects its adjacent `bridge.env`; explicit
+  `--env-file /path/to/bridge.env` or `BRIDGE_ENV_FILE` overrides that path,
+  followed by `BRIDGE_HOME/bridge.env`. Setup requires an existing private,
+  owned regular env file and an interactive terminal. It never displays keys
+  or reads the Hermes key file. Only `BRIDGE_TERMINAL`, `BRIDGE_FILES` and
+  `BRIDGE_FILES_ROOT` are editable; all other lines are preserved. Saving is
+  atomic and refuses an observed concurrent edit. Paths containing quotes,
+  backslashes or control characters are refused. Enabling terminal checks for
+  tmux/setsid; enabling files uses the normal protected-root validation.
+  Restart the bridge after changing global settings; the menu prints the
+  command and does not restart services itself. Device grants need no restart.
+
+  **`omb update`** runs the packaged bootstrap installer after confirmation.
+  It clones the official release into a private temporary directory rather
+  than switching your working checkout. The existing installer backs up the
+  device store, retains settings and replaces the venv; it also updates/starts
+  the user service unless `--no-service` is supplied. `--yes` explicitly permits
+  noninteractive updates. No automatic retries. Only the standard
+  `BRIDGE_HOME/bridge.env` and Hermes `HERMES_HOME/.env` layout is supported;
+  custom external config files require the manual update procedure. This is
+  a release update, not a way to install unpublished main changes. The first
+  installation of this command still needs the regular installer.
+
+  These admin commands do not enable the global switch and have no HTTP equivalent.
+  When terminal access is globally enabled, the bootstrap installer prints
+  these manual steps, including the requirement for previously paired devices;
+  it never grants terminal access itself.
+  A grant is durable across restarts and can only target an active device.
+  The v1-to-v2 migration preserves paired devices, creates the existing
+  pre-migration backup, and defaults the new grant to false. Older bridge
+  binaries refuse the v2 store: rollback requires the pre-migration backup
+  (which also rolls back subsequent credential/revocation changes).
+  This authorization boundary does **not** isolate an authorized shell from
+  the bridge user's files or other tmux clients; Linux isolation is separate.
 - **Host metrics, read-only.** `GET /v1/host/metrics` (device token, no query,
   no body) is answered by the bridge itself, never proxied: CPU share from two
   `/proc/stat` samples, RAM from `/proc/meminfo`, the first NVIDIA GPU via
