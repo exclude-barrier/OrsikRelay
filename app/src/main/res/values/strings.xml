@@ -401,10 +401,11 @@
         <item quantity="other">%1$d cores</item>
     </plurals>
     <string name="terminal_title">Terminal</string>
+    <string name="profiles_copy_device_id">Copy device ID</string>
     <string name="terminal_back">Back</string>
     <string name="terminal_checking">Connecting to the server terminal …</string>
-    <string name="terminal_unsupported_title">The terminal is switched off on this server.</string>
-    <string name="terminal_unsupported_text">The server admin can switch it on with BRIDGE_TERMINAL=1 in bridge.env. It is a shell as the bridge user, without Hermes approvals.</string>
+    <string name="terminal_unsupported_title">The terminal is unavailable for this device.</string>
+    <string name="terminal_unsupported_text">The server admin must enable terminal access and authorize this device. The terminal provides a shell as the bridge user, without Hermes approvals.</string>
     <string name="terminal_check_failed">The server cannot be reached right now.</string>
     <string name="terminal_reconnect">Reconnect</string>
     <string name="terminal_unlock_prompt">Open terminal</string>

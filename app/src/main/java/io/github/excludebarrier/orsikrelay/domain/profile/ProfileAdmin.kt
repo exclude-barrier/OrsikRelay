@@ -38,4 +38,7 @@ interface ProfileAdmin {
      * safe to call from `Dispatchers.IO`.
      */
     fun credentialKind(profileId: String): ProfileCredentialKind
+
+    /** Public device UUID for local operator matching; reads no credential. */
+    fun deviceId(profileId: String): String? = null
 }

@@ -187,6 +187,7 @@ class HermesTerminalClientTest {
         val cases = listOf(
             1000 to TerminalCloseReason.Exited,
             4401 to TerminalCloseReason.Unauthorized,
+            4403 to TerminalCloseReason.Disabled,
             1011 to TerminalCloseReason.Disconnected,
             1008 to TerminalCloseReason.Disconnected
         )

@@ -400,10 +400,11 @@
         <item quantity="other">%1$d Kerne</item>
     </plurals>
     <string name="terminal_title">Terminal</string>
+    <string name="profiles_copy_device_id">Geräte-ID kopieren</string>
     <string name="terminal_back">Zurück</string>
     <string name="terminal_checking">Verbinde mit dem Server-Terminal …</string>
-    <string name="terminal_unsupported_title">Das Terminal ist auf diesem Server ausgeschaltet.</string>
-    <string name="terminal_unsupported_text">Der Server-Admin kann es mit BRIDGE_TERMINAL=1 in bridge.env einschalten. Es ist eine Shell als Bridge-Nutzer, ohne Hermes-Freigaben.</string>
+    <string name="terminal_unsupported_title">Das Terminal ist für dieses Gerät nicht verfügbar.</string>
+    <string name="terminal_unsupported_text">Der Server-Admin muss den Terminalzugriff aktivieren und dieses Gerät freigeben. Das Terminal bietet eine Shell als Bridge-Nutzer, ohne Hermes-Freigaben.</string>
     <string name="terminal_check_failed">Der Server ist gerade nicht erreichbar.</string>
     <string name="terminal_reconnect">Neu verbinden</string>
     <string name="terminal_unlock_prompt">Terminal öffnen</string>

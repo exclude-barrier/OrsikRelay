@@ -42,6 +42,8 @@ class ServerProfileAdmin(
             ProfileCredentialKind.API_KEY
         }
 
+    override fun deviceId(profileId: String): String? = profileRepository.deviceId(profileId)
+
     override fun load(profileId: String): DeviceDisconnectTarget? {
         return try {
             // Defense in depth: the UI hides disconnect for API-key profiles,

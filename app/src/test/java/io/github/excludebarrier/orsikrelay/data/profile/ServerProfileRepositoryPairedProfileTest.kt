@@ -196,6 +196,37 @@ class ServerProfileRepositoryPairedProfileTest {
         )
     }
 
+    @Test
+    fun deviceIdReadsOnlyNonSecretMetadata() {
+        val fixture = Fixture()
+        val credential = DeviceCredential(
+            deviceId = "12345678-1234-1234-1234-123456789abc",
+            deviceKey = CREDENTIAL.deviceKey,
+            profile = CREDENTIAL.profile,
+            label = CREDENTIAL.label,
+            permissions = CREDENTIAL.permissions,
+            issuedAt = CREDENTIAL.issuedAt
+        )
+        val profile = fixture.repository.saveVerifiedPaired(DRAFT, credential)
+        fixture.events.clear()
+
+        assertEquals(credential.deviceId, ServerProfileAdmin(fixture.repository).deviceId(profile.id))
+        assertFalse(fixture.events.any { it.startsWith("credential.") })
+    }
+
+    @Test
+    fun deviceIdIsAbsentForUnknownOrApiKeyProfilesAndRejectsInvalidMetadata() {
+        val fixture = Fixture()
+        val profile = fixture.repository.saveVerified(DRAFT)
+        val admin = ServerProfileAdmin(fixture.repository)
+        assertNull(admin.deviceId("unknown"))
+        assertNull(admin.deviceId(profile.id))
+        for (invalid in listOf(RAW_KEY, "1-1-1-1-1", "", " https://example.invalid ")) {
+            fixture.deviceMetadata[profile.id] = METADATA.copy(deviceId = invalid)
+            assertNull(admin.deviceId(profile.id))
+        }
+    }
+
     private fun assertRepositoryFailure(action: () -> Unit): ServerProfileRepositoryException {
         return try {
             action()

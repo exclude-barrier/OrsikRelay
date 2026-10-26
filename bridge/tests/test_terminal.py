@@ -96,6 +96,8 @@ class TerminalRouteTest(unittest.IsolatedAsyncioTestCase):
         issued = self.state.codes.issue()
         resp = await self.client.post("/v1/devices/pair", json={"code": issued[0]})
         self.token = (await resp.json())["device_key"]
+        device = self.state.tokens.lookup(self.token)
+        self.state.store.set_terminal_access(device.device_id, True)
 
     async def asyncTearDown(self):
         await self.client.close()

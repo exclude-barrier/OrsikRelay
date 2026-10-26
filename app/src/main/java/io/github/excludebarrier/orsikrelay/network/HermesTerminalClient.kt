@@ -137,6 +137,7 @@ class HermesTerminalClient(
         fun closeReason(code: Int): TerminalCloseReason = when (code) {
             1000 -> TerminalCloseReason.Exited
             4401 -> TerminalCloseReason.Unauthorized
+            4403 -> TerminalCloseReason.Disabled
             else -> TerminalCloseReason.Disconnected
         }
 

@@ -85,9 +85,17 @@ def _migration_v0_to_v1(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS devices_revoked ON devices(revoked)")
 
 
+def _migration_v1_to_v2(conn: sqlite3.Connection) -> None:
+    """Existing and newly paired devices have no shell authority by default."""
+    conn.execute(
+        "ALTER TABLE devices ADD COLUMN terminal_allowed INTEGER NOT NULL DEFAULT 0"
+        " CHECK (terminal_allowed IN (0, 1))"
+    )
+
+
 # Ordered schema steps: element ``i`` migrates version ``i`` to ``i + 1``. A
 # released step is never reordered or removed — new steps are appended.
-_MIGRATIONS = (_migration_v0_to_v1,)
+_MIGRATIONS = (_migration_v0_to_v1, _migration_v1_to_v2)
 
 SCHEMA_VERSION = len(_MIGRATIONS)
 
@@ -292,7 +300,7 @@ class BridgeStore:
         with self._lock:
             try:
                 row = self._conn.execute(
-                    "SELECT device_id, label, profile, permissions FROM devices"
+                    "SELECT device_id, label, profile, permissions, terminal_allowed FROM devices"
                     " WHERE token_hash = ? AND revoked = 0",
                     (_sha256_hex(token),),
                 ).fetchone()
@@ -300,13 +308,28 @@ class BridgeStore:
                 raise StoreUnavailable("device lookup failed") from exc
         if row is None:
             return None
-        device_id, label, profile, permissions = row
+        device_id, label, profile, permissions, terminal_allowed = row
         return core.DeviceRecord(
             device_id=device_id,
             label=label,
             profile=profile,
             permissions=tuple(permissions.split(",")) if permissions else core.DEVICE_PERMISSIONS,
+            terminal_allowed=terminal_allowed == 1,
         )
+
+    def set_terminal_access(self, device_id: str, allowed: bool) -> bool:
+        """Local operator only; never grants authority to a revoked device."""
+        if type(allowed) is not bool:
+            raise ValueError("terminal access must be a boolean")
+        with self._lock:
+            try:
+                cur = self._conn.execute(
+                    "UPDATE devices SET terminal_allowed = ? WHERE device_id = ? AND revoked = 0",
+                    (int(allowed), device_id),
+                )
+                return cur.rowcount >= 1
+            except sqlite3.DatabaseError as exc:
+                raise StoreUnavailable("terminal access update failed") from exc
 
     def revoke_device(self, token: str | None):
         if not token:
@@ -345,7 +368,7 @@ class BridgeStore:
         with self._lock:
             try:
                 rows = self._conn.execute(
-                    "SELECT device_id, label, profile, permissions, revoked, issued_at"
+                    "SELECT device_id, label, profile, permissions, revoked, issued_at, terminal_allowed"
                     " FROM devices ORDER BY created_at"
                 ).fetchall()
             except sqlite3.DatabaseError as exc:
@@ -355,6 +378,7 @@ class BridgeStore:
                 "device_id": r[0], "label": r[1], "profile": r[2],
                 "permissions": r[3].split(",") if r[3] else [],
                 "revoked": bool(r[4]), "issued_at": r[5],
+                "terminal_allowed": r[6] == 1 and not r[4],
             }
             for r in rows
         ]

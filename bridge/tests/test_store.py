@@ -118,10 +118,12 @@ class StorePersistenceTest(unittest.TestCase):
 
     # 8. Migration backups and operator backups --------------------------------
     def _seed_v1_db(self) -> str:
-        """Create a current-schema file DB with one paired device; return token."""
-        store = self._open()
-        token, _ = store.tokens.mint("laptop", "default")
-        store.close()
+        """Create a version-1 file DB to exercise migration of existing devices."""
+        with mock.patch.object(store_mod, "_MIGRATIONS", (store_mod._migration_v0_to_v1,)), \
+                mock.patch.object(store_mod, "SCHEMA_VERSION", 1):
+            store = self._open()
+            token, _ = store.tokens.mint("laptop", "default")
+            store.close()
         return token
 
     def test_fresh_file_db_migrates_without_backup(self):
@@ -177,7 +179,7 @@ class StorePersistenceTest(unittest.TestCase):
                 self._open()
 
         store = self._open()
-        self.assertEqual(store._conn.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(store._conn.execute("PRAGMA user_version").fetchone()[0], store_mod.SCHEMA_VERSION)
         self.assertIsNotNone(store.tokens.lookup(token))
         store.close()
 

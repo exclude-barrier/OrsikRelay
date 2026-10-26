@@ -169,6 +169,66 @@ class InstallBridgeScriptTest(unittest.TestCase):
     def calls(self):
         return self.log.read_text().splitlines()
 
+    def test_enabled_terminal_explains_manual_grant_without_running_it(self):
+        self.install_fake_cli()
+        self.write_bridge_env('BRIDGE_TERMINAL=1')
+        result = self.run_script(args=('--no-service',))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('including previously paired devices', result.stdout)
+        for command in ('list-devices', 'grant-terminal DEVICE_ID', 'revoke-terminal DEVICE_ID'):
+            self.assertIn('admin ' + command, result.stdout)
+        self.assertFalse([line for line in self.calls() if line.startswith('cli admin ')],
+                         'the installer executed a device administration command')
+
+    def test_terminal_hint_uses_effective_opt_in_without_changing_it(self):
+        for value, enabled in (
+            ('BRIDGE_TERMINAL=0', False),
+            ('BRIDGE_TERMINAL=', False),
+            ('BRIDGE_TERMINAL=1\nBRIDGE_TERMINAL=0', False),
+            ('BRIDGE_TERMINAL=0\n  export BRIDGE_TERMINAL=" 1 "', True),
+        ):
+            with self.subTest(value=value):
+                self.write_bridge_env(value)
+                result = self.run_script(args=('--no-service',))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual('admin grant-terminal DEVICE_ID' in result.stdout, enabled)
+                self.assertIn(value, self.bridge_env.read_text())
+
+    def test_terminal_inventory_hint_quotes_paths_for_copy_and_paste(self):
+        self.bridge_home = self.root / 'bridge space $(touch SHOULD_NOT_EXIST)'
+        self.bridge_env = self.bridge_home / 'bridge.env'
+        self.install_fake_cli()
+        self.write_bridge_env('BRIDGE_TERMINAL=1')
+        result = self.run_script(args=('--no-service',))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = [line for line in result.stdout.splitlines() if line.endswith('admin list-devices')]
+        self.assertEqual(len(commands), 1, result.stdout)
+        copied = subprocess.run(
+            ['bash', '-c', commands[0]], cwd=self.root,
+            env={**os.environ, 'CALL_LOG': str(self.log)},
+            capture_output=True, text=True, timeout=10)
+        self.assertEqual(copied.returncode, 0, copied.stdout + copied.stderr)
+        self.assertIn('cli-env BRIDGE_ENV_FILE=' + str(self.bridge_env), self.calls())
+        self.assertFalse((self.root / 'SHOULD_NOT_EXIST').exists())
+
+    def test_pairing_hint_quotes_paths_for_copy_and_paste(self):
+        self.bridge_home = self.root / 'bridge space $(touch SHOULD_NOT_EXIST)'
+        self.bridge_env = self.bridge_home / 'bridge.env'
+        self.install_fake_cli()
+        self.write_bridge_env('BRIDGE_TERMINAL=0')
+        result = self.run_script(args=('--no-service',))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = [line for line in result.stdout.splitlines()
+                    if 'admin pairing-code --base-url' in line]
+        self.assertEqual(len(commands), 1, result.stdout)
+        copied = subprocess.run(
+            ['bash', '-c', commands[0]], cwd=self.root,
+            env={**os.environ, 'CALL_LOG': str(self.log)},
+            capture_output=True, text=True, timeout=10)
+        self.assertEqual(copied.returncode, 0, copied.stdout + copied.stderr)
+        self.assertIn('cli-env BRIDGE_ENV_FILE=' + str(self.bridge_env), self.calls())
+        self.assertFalse((self.root / 'SHOULD_NOT_EXIST').exists())
+
     # -- B2: the API key check parses like the bridge --------------------
 
     def test_empty_quoted_api_key_is_refused(self):
@@ -409,7 +469,14 @@ class SystemdUnitGenerationTest(unittest.TestCase):
 
         bin_dir = root / "bin"
         bin_dir.mkdir()
-        _write_exe(bin_dir / "uv", "#!/bin/sh\nexit 0\n")
+        _write_exe(bin_dir / "uv", r'''
+            #!/bin/sh
+            if [ "$1" = pip ] && [ "$2" = install ]; then
+              mkdir -p "$BRIDGE_HOME/venv/share/orsik-mobile-bridge"
+              : > "$BRIDGE_HOME/venv/share/orsik-mobile-bridge/install-bridge.sh"
+            fi
+            exit 0
+        ''')
         _write_exe(bin_dir / "systemctl", "#!/bin/sh\nexit 0\n")
 
         config_home = root / "config"
