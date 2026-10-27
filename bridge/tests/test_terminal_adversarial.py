@@ -542,10 +542,14 @@ class LeakTest(TerminalCase):
 
     async def test_a_slow_client_does_not_buffer_the_output(self):
         script = (
-            "import sys\n"
+            "import sys, time\n"
             "for _ in range(128):\n"
             "    sys.stdout.write('x' * 65535 + '\\n')\n"
             "    sys.stdout.flush()\n"
+            # Keep the finite producer alive until the client disconnects.
+            # A fast host may otherwise legitimately finish before the slot
+            # assertion, independently of user-space memory/backpressure.
+            "time.sleep(300)\n"
         )
         state, client, token = await self.extra_bridge((PY, "-c", script))
         tracemalloc.start()

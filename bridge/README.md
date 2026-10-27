@@ -86,12 +86,21 @@ URL unchanged.
   that non-secret ID against `admin list-devices` before granting access.
   The terminal remains a full server shell as the bridge user.
 
-  For a local menu, use **`omb setup`** instead: toggle terminal/files, choose
-  the read-only file root and select a device by number to grant/revoke terminal
-  access. Global settings are only written after **s** and confirmation; **q**,
-  EOF or Ctrl+C discard pending settings. Device grants have their own explicit
-  confirmation and take effect immediately, even if pending settings are later
-  discarded. No HTTP administration is added.
+  For local administration, use **`omb setup`**: a full-screen interface with
+  a navigation sidebar, contextual help and a persistent status/key bar.
+  Navigate with **↑/↓**, select with **Enter**, return/cancel with **Esc**.
+  **Ctrl+S** opens the save confirmation; **Ctrl+Q** exits. Dialog buttons use
+  **←/→** or **Tab**, then **Enter**, and default to **Cancel**. Pending global
+  changes require confirmation before saving or discarding. Device grants
+  have their own explicit confirmation and take effect immediately, even if
+  pending global settings are later discarded. No HTTP administration is added.
+
+  The complete interface supports **Deutsch** (including ä/ö/ü/ß) and
+  **English**. Select **Language / Sprache** without losing pending edits, or
+  launch with `omb setup --language de` / `omb setup --language en`. The default
+  follows `LC_ALL`, `LC_MESSAGES`, then `LANG`; other locales use English.
+  The language selection lasts for the session and does not alter server
+  configuration. Requires a UTF-8 terminal; noninteractive calls are refused.
 
   `install.sh` installs a non-overwriting `~/.local/bin/omb` shortcut. Ensure
   that directory is on PATH, or use `~/.local/orsik-mobile-bridge/venv/bin/omb setup`.

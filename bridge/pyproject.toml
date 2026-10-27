@@ -9,7 +9,7 @@ description = "Minimal Orsik Mobile Bridge: a safe, installable Mobile-v1 surfac
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-dependencies = ["aiohttp>=3.10,<4"]
+dependencies = ["aiohttp>=3.10,<4", "prompt-toolkit==3.0.52"]
 
 [project.scripts]
 omb = "orsik_mobile_bridge.server:main"
