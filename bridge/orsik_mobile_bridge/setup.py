@@ -1,4 +1,4 @@
-"""Local, dependency-free setup menu. No HTTP administration or service restart."""
+"""Private local configuration and the keyboard-driven setup entry point."""
 from __future__ import annotations
 
 import argparse
@@ -8,14 +8,19 @@ import stat
 import sys
 import tempfile
 
-from . import files, server, store, terminal
+from . import files, server, store, terminal, setup_i18n
 
 _SETTINGS = {"BRIDGE_TERMINAL", "BRIDGE_FILES", "BRIDGE_FILES_ROOT"}
 _MAX_CONFIG = 1024 * 1024
 
 
 class SetupError(Exception):
-    pass
+    def localized(self, language: str) -> str:
+        message = str(self.args[0]) if self.args else 'validation_error'
+        return setup_i18n.text(language, message) if message in setup_i18n.TEXT[language] else message
+
+    def __str__(self):
+        return self.localized(setup_i18n.detect_language())
 
 
 def config_path(explicit: str | None) -> Path:
@@ -59,14 +64,14 @@ class SettingsFile:
                 info = os.fstat(handle.fileno())
                 if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
                         or info.st_mode & 0o077):
-                    raise SetupError("bridge.env muss eine eigene private Datei sein (chmod 600).")
+                    raise SetupError("config_private")
                 data = handle.read(_MAX_CONFIG + 1)
                 if len(data) > _MAX_CONFIG:
-                    raise SetupError("bridge.env ist zu gross.")
+                    raise SetupError("config_large")
                 data.decode("utf-8")
                 return data
         except (OSError, UnicodeDecodeError):
-            raise SetupError("bridge.env nicht lesbar; Pfad und Dateirechte pruefen.") from None
+            raise SetupError("config_read") from None
 
     def save(self, changes: dict[str, str]) -> None:
         if not changes:
@@ -74,7 +79,7 @@ class SettingsFile:
         for key, value in changes.items():
             if (key not in _SETTINGS or not isinstance(value, str)
                     or any(not ch.isprintable() or ch in "\"'\\" for ch in value)):
-                raise SetupError("Nur erlaubte einzeilige Einstellungen ohne Quotes/Backslash speichern.")
+                raise SetupError("config_value")
         lines = []
         remaining = set(changes)
         for line in self.original.decode("utf-8").splitlines(keepends=True):
@@ -96,127 +101,124 @@ class SettingsFile:
                 handle.flush()
                 os.fsync(handle.fileno())
             if self._read() != self.original:
-                raise SetupError("bridge.env wurde inzwischen geaendert; Setup neu starten.")
+                raise SetupError("config_changed")
             os.replace(temporary, self.path)
             self.original = content
         except OSError:
-            raise SetupError("Speichern fehlgeschlagen; Dateirechte pruefen.") from None
+            raise SetupError("config_write") from None
         finally:
             if temporary is not None:
                 Path(temporary).unlink(missing_ok=True)
 
 
-def _text(value: str) -> str:
-    # Labels/paths can contain terminal controls. Never let them clear a prompt.
-    return "".join(ch for ch in value if ch.isprintable())[:160]
 
+class SetupSession:
+    """Draft global settings; device decisions remain explicitly immediate."""
+    def __init__(self, settings: SettingsFile, language: str):
+        if language not in setup_i18n.TEXT:
+            raise ValueError('unsupported setup language')
+        self.settings = settings
+        self.language = language
+        self.pending: dict[str, str] = {}
+        self.restart_required = False
 
-def _confirmed(prompt: str) -> bool:
-    return input(prompt + " [j/N]: ").strip().lower() == "j"
+    def t(self, key: str) -> str:
+        return setup_i18n.text(self.language, key)
 
+    @property
+    def values(self) -> dict[str, str]:
+        return {**self.settings.values, **self.pending}
 
-def _devices(settings: SettingsFile) -> None:
-    env = settings.values
-    path = Path(server._state_db_path(env)).expanduser()
-    if not path.is_absolute():
-        path = Path.home() / path  # Default working directory of a user unit.
-    if not path.is_file():
-        print("Keine Geraetedatenbank vorhanden. Zuerst ein Geraet koppeln.")
-        return
-    db = store.BridgeStore(str(path))
-    try:
-        while True:
-            devices = [d for d in db.list_devices() if not d["revoked"]]
-            by_number = {str(number): device for number, device in enumerate(devices, 1)}
-            print("\nGeraete-Terminalrechte (Aenderungen wirken sofort):")
-            for number, device in enumerate(devices, 1):
-                status = "freigegeben" if device["terminal_allowed"] else "gesperrt"
-                print(f"{number}. {_text(device['label'])} | {_text(device['device_id'])} | {status}")
-            choice = input("Geraetenummer waehlen, 0 = zurueck: ").strip()
-            if choice == "0":
-                return
-            device = by_number.get(choice)
-            if device is None:
-                print("Ungueltige Auswahl.")
-                continue
-            allowed = not device["terminal_allowed"]
-            verb = "Volle Server-Shell freigeben" if allowed else "Terminalrecht entziehen"
-            if _confirmed(f"{verb} fuer {_text(device['label'])} ({_text(device['device_id'])})?"):
-                if db.set_terminal_access(device["device_id"], allowed):
-                    print("Geraeterecht gespeichert. Globaler Terminal-Schalter bleibt unveraendert.")
-                else:
-                    print("Geraet nicht mehr aktiv; keine Freigabe gespeichert.")
-    finally:
-        db.close()
+    def set_value(self, key: str, value: str) -> None:
+        if key not in _SETTINGS:
+            raise SetupError('config_value')
+        original = self.settings.values.get(key, '')
+        if key in ('BRIDGE_TERMINAL', 'BRIDGE_FILES'):
+            original = '1' if original.strip() == '1' else '0'
+        if value == original:
+            self.pending.pop(key, None)
+        else:
+            self.pending[key] = value
 
+    def toggle(self, key: str) -> None:
+        parser = terminal.parse_enabled if key == 'BRIDGE_TERMINAL' else files.parse_enabled
+        self.set_value(key, '0' if parser(self.values.get(key)) else '1')
 
-def _menu(settings: SettingsFile) -> int:
-    pending: dict[str, str] = {}
-    while True:
-        env = {**settings.values, **pending}
-        print("\nOMB Setup — lokale Bridge-Einstellungen")
-        print(f"Konfiguration: {_text(str(settings.path))}")
-        print(f"1. Terminal: {'AN' if terminal.parse_enabled(env.get('BRIDGE_TERMINAL')) else 'AUS'}")
-        print(f"2. Dateizugriff (nur lesend): {'AN' if files.parse_enabled(env.get('BRIDGE_FILES')) else 'AUS'}")
-        print(f"3. Dateiordner: {_text(env.get('BRIDGE_FILES_ROOT', '')) or '(nicht gesetzt)'}")
-        print("4. Geraete-Terminalrechte verwalten (wirkt sofort)")
-        print("s. Einstellungen speichern | q. Ohne Speichern beenden")
-        if pending:
-            print("Ungespeicherte Einstellungen vorhanden.")
-        choice = input("Auswahl: ").strip().lower()
-        if choice == "q":
-            return 0
+    def save(self) -> None:
+        if not self.pending:
+            return
+        env = self.values
+        if terminal.parse_enabled(env.get('BRIDGE_TERMINAL')):
+            terminal.default_command()
+        server._files_root_from_env(env)
+        self.settings.save(self.pending)
+        self.settings.values.update(self.pending)
+        self.pending.clear()
+        self.restart_required = True
+
+    def _store_path(self) -> Path:
+        path = Path(server._state_db_path(self.settings.values)).expanduser()
+        return path if path.is_absolute() else Path.home() / path
+
+    def devices(self) -> list[dict]:
+        path = self._store_path()
+        if not path.is_file():
+            return []
+        db = store.BridgeStore(str(path))
         try:
-            if choice == "1":
-                pending["BRIDGE_TERMINAL"] = "0" if terminal.parse_enabled(env.get("BRIDGE_TERMINAL")) else "1"
-                if pending["BRIDGE_TERMINAL"] == "1":
-                    print("Volle Shell als Bridge-Benutzer; jedes Geraet braucht zusaetzlich eine Freigabe.")
-            elif choice == "2":
-                pending["BRIDGE_FILES"] = "0" if files.parse_enabled(env.get("BRIDGE_FILES")) else "1"
-            elif choice == "3":
-                pending["BRIDGE_FILES_ROOT"] = input("Absoluter freizugebender Ordner: ").strip()
-            elif choice == "4":
-                _devices(settings)
-            elif choice == "s":
-                if not pending:
-                    print("Keine Aenderungen.")
-                    continue
-                if not _confirmed("Einstellungen speichern?"):
-                    continue
-                # Existing validation: never open the store or read Hermes keys.
-                if terminal.parse_enabled(env.get("BRIDGE_TERMINAL")):
-                    terminal.default_command()
-                server._files_root_from_env(env)
-                settings.save(pending)
-                print("Einstellungen gespeichert. Zum Anwenden den Dienst neu starten:")
-                print("  systemctl --user restart orsik-mobile-bridge.service")
-                print("Bei eigener Service-Konfiguration deren Neustartverfahren verwenden.")
-                return 0
-            else:
-                print("Ungueltige Auswahl.")
-        except (SetupError, store.StoreUnavailable) as error:
-            # Store errors are intentionally not printed (may contain details).
-            print(str(error) if isinstance(error, SetupError) else "Geraetedatenbank nicht verfuegbar.")
-        except SystemExit as error:
-            # Only existing validators are called here; they return fixed text.
-            print(_text(str(error)))
+            return [device for device in db.list_devices() if not device['revoked']]
+        finally:
+            db.close()
+
+    def change_terminal(self, device_id: str, allowed: bool) -> bool:
+        path = self._store_path()
+        if not path.is_file():
+            raise SetupError('no_devices')
+        db = store.BridgeStore(str(path))
+        try:
+            return db.set_terminal_access(device_id, allowed)
+        finally:
+            db.close()
+
+
+def error_text(error: BaseException, language: str) -> str:
+    if isinstance(error, SetupError):
+        key = str(error.args[0]) if error.args else ''
+        return error.localized(language) if key in setup_i18n.TEXT[language] else setup_i18n.text(language, 'validation_error')
+    if isinstance(error, store.StoreUnavailable):
+        return setup_i18n.text(language, 'store_error')
+    known = {
+        terminal._ENABLE_ERROR: 'invalid_terminal',
+        files._ENABLE_ERROR: 'invalid_files',
+        files._ROOT_ERROR: 'invalid_folder',
+        'BRIDGE_TERMINAL=1 needs tmux and setsid (util-linux) on the PATH': 'terminal_tools',
+        'BRIDGE_FILES_ROOT must not be /': 'protected_folder',
+        "BRIDGE_FILES_ROOT must not contain the home folder, the bridge's own data or the Hermes home": 'protected_folder',
+        'BRIDGE_FILES_ROOT must not lie inside the bridge or the Hermes home': 'protected_folder',
+    }
+    return setup_i18n.text(language, known.get(str(error), 'validation_error'))
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="omb setup", description=__doc__)
-    parser.add_argument("--env-file", help="bridge.env (sonst BRIDGE_ENV_FILE oder BRIDGE_HOME/bridge.env)")
+    initial = setup_i18n.detect_language()
+    language_parser = argparse.ArgumentParser(add_help=False)
+    language_parser.add_argument('--language', '--lang', choices=('de', 'en'), default=initial)
+    language = language_parser.parse_known_args(argv)[0].language
+    parser = argparse.ArgumentParser(prog='omb setup', description=setup_i18n.text(language, 'title'))
+    parser.add_argument('--env-file', help=setup_i18n.text(language, 'env_help'))
+    parser.add_argument('--language', '--lang', choices=('de', 'en'), default=language,
+                        help=setup_i18n.text(language, 'lang_help'))
     args = parser.parse_args(argv)
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        print("omb setup braucht ein interaktives Terminal.")
+        print(setup_i18n.text(language, 'tty'))
         return 1
     try:
-        return _menu(SettingsFile(config_path(args.env_file), dict(os.environ)))
+        from .setup_tui import SetupApplication
+        settings = SettingsFile(config_path(args.env_file), dict(os.environ))
+        return SetupApplication(SetupSession(settings, language)).application.run()
     except (EOFError, KeyboardInterrupt):
-        print("\nBeendet; ungespeicherte Einstellungen verworfen.")
+        print(setup_i18n.text(language, 'ended'))
         return 0
-    except SetupError as error:
-        print(str(error))
-        return 1
-    except SystemExit as error:
-        print(_text(str(error)))
+    except (SetupError, store.StoreUnavailable, SystemExit) as error:
+        print(error_text(error, language))
         return 1

@@ -220,6 +220,24 @@ systemctl --user status  orsik-mobile-bridge.service
 systemctl --user restart orsik-mobile-bridge.service
 ```
 
+## 5a. Interactive local settings
+
+Run `omb setup` as the user who owns the running bridge. For an installation
+owned by `hermes-agent`, a different administrator can open it with
+`sudo -u hermes-agent -H /home/hermes-agent/.local/bin/omb setup`.
+
+The full-screen terminal interface uses arrow keys and Enter. Esc returns or
+cancels, Ctrl+S opens the save confirmation, and Ctrl+Q exits with a discard confirmation
+when needed. Confirmation dialogs start on Cancel. Terminal/file switches and
+the shared folder remain a draft until saved; individually confirmed device
+permissions apply immediately. Global settings require a manual service
+restart, whose command is shown after saving.
+
+Use `--language de` or `--language en`, or change the language in the menu.
+German uses proper Unicode umlauts; the locale is detected automatically when
+no language is specified. No key material is displayed or edited. The UI uses
+the locked prompt-toolkit dependency for keyboard input and terminal resizing.
+
 ## 6. Update / Rollback / Backup / Restore / Uninstall
 
 With the local administration CLI installed, run `omb update` and confirm
