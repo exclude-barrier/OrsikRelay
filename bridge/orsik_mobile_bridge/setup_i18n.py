@@ -57,8 +57,9 @@ _COPY = {
                 'Terminal access revoked. Chat credentials remain valid.'),
     'device_gone': ('Das Gerät ist nicht mehr aktiv. Es wurde kein Recht geändert.',
                     'The device is no longer active. No permission was changed.'),
-    'language_help': ('Wähle Deutsch oder Englisch. Die Sprache ändert keine Servereinstellung und gilt für diese Sitzung.',
-                      'Choose German or English. Language selection does not change server settings and lasts for this session.'),
+    'language_help': ('Wähle Deutsch oder Englisch und speichere die Änderung. Sie gilt für omb setup und omb update; Standard ist Englisch.',
+                      'Choose German or English and save the change. It applies to omb setup and omb update; English is the default.'),
+    'language_saved': ('Sprache gespeichert. Kein Dienstneustart nötig.', 'Language saved. No service restart needed.'),
     'language_selected': ('Sprache auf Deutsch umgestellt.', 'Language changed to English.'),
     'save_help': ('Prüft und speichert deine globalen Änderungen. Bestehende Schlüssel und andere Einstellungen bleiben erhalten.',
                   'Validate and save your global changes. Existing secrets and other settings are preserved.'),
@@ -105,8 +106,62 @@ _COPY = {
     'ended': ('Menü beendet. Ungespeicherte Einstellungen wurden nicht geschrieben.',
               'Setup closed. Unsaved settings were not written.'),
     'env_help': ('Pfad zur bridge.env dieser Installation', 'Path to this installation’s bridge.env'),
-    'lang_help': ('Oberflächensprache (de/en), sonst System-Locale', 'Interface language (de/en), otherwise system locale'),
+    'lang_help': ('Oberflächensprache (de/en), sonst gespeicherte Auswahl oder Englisch', 'Interface language (de/en), otherwise saved preference or English'),
 }
+
+_COPY.update({
+    'update_installer_untrusted': ('Installierter Update-Installer ist nicht vertrauenswürdig.',
+        'Installed update installer is not trusted.'),
+    'update_installer_invalid': ('Installierter Update-Installer ist ungültig.',
+        'Installed update installer is invalid.'),
+    'update_installer_missing': ('Update-Installer fehlt; Bridge einmal mit dem regulären Installer aktualisieren.',
+        'Update installer is missing; update the bridge once with the regular installer.'),
+    'update_yes_help': ('Update ausdrücklich ohne Nachfrage bestätigen',
+        'Explicitly confirm the update without prompting'),
+    'update_no_service_help': ('keinen systemd-Dienst ändern/starten',
+        'Do not change or start the systemd service'),
+    'update_env_help': ('bridge.env der Installation',
+        'Installation bridge.env file'),
+    'update_tty': ('omb update braucht ein Terminal oder eine ausdrückliche Bestätigung mit --yes.',
+        'omb update requires a terminal or explicit confirmation with --yes.'),
+    'update_external_config': ('Update unterstützt bridge.env in BRIDGE_HOME; externe Konfiguration manuell aktualisieren.',
+        'Update supports bridge.env in BRIDGE_HOME; update external configurations manually.'),
+    'update_hermes_config': ('Der Bootstrap-Updatepfad benötigt die Hermes-Konfiguration HERMES_HOME/.env.',
+        'The bootstrap update path requires the Hermes configuration HERMES_HOME/.env.'),
+    'update_confirm_title': ('Bridge auf die neueste Release-Markierung aktualisieren?',
+        'Update to the latest release tag?'),
+    'update_confirm_store': ('Der Installer sichert den Gerätestore, behält bridge.env und erneuert die Bridge-venv.',
+        'The installer backs up the device store, preserves bridge.env and rebuilds the bridge virtual environment.'),
+    'update_confirm_service': ('Er prüft Hermes und kann den systemd-User-Dienst aktualisieren/neustarten (--no-service unterbindet das).',
+        'It checks Hermes and may update/restart the systemd user service (--no-service prevents this).'),
+    'update_prompt': ('Update starten? [j/N]: ',
+        'Start update? [y/N]: '),
+    'update_cancelled': ('Abgebrochen; kein Update gestartet.',
+        'Cancelled; no update started.'),
+    'update_failed': ('Update fehlgeschlagen; Installer-Ausgabe und Backup prüfen. Keine automatische Wiederholung.',
+        'Update failed; check the installer output and backup. No automatic retry.'),
+    'update_interrupted': ('\nUpdate unterbrochen; bei bereits gestartetem Installer dessen Zustand prüfen.',
+        '\nUpdate interrupted; check the installer state if it has already started.'),
+    'update_execution_failed': ('Update konnte nicht ausgeführt werden; bash, Speicherplatz und Dateirechte prüfen.',
+        'Could not run the update; check bash, disk space and file permissions.'),
+})
+_COPY['update_description'] = ('Bridge über den vorhandenen Installer aktualisieren.', 'Update the bridge using the installed bootstrap installer.')
+
+_COPY.update({
+    'apply_restart': ('Übernehmen und neu starten', 'Apply and restart bridge'),
+    'apply_restart_help': ('Gespeicherte Servereinstellungen durch einen Dienstneustart übernehmen. Sprachänderungen benötigen keinen Neustart.', 'Apply saved server settings by restarting the service. Language changes do not require a restart.'),
+    'restart_action': ('Neu starten', 'Restart'),
+    'restart_confirm': ('Bridge jetzt neu starten? Aktive Verbindungen werden unterbrochen. Laufende Shell-Aufgaben werden dadurch nicht zuverlässig beendet.', 'Restart the bridge now? Active connections will be interrupted. This does not reliably terminate running shell tasks.'),
+    'restart_save_first': ('Speichere zuerst geänderte Servereinstellungen. Ohne ausstehende Übernahme ist kein Neustart nötig.', 'Save changed server settings first. No restart is needed when there are no saved settings to apply.'),
+    'restart_failed': ('Neustart fehlgeschlagen. Dienststatus prüfen; kein automatischer Wiederholungsversuch.', 'Restart failed. Check the service status; no automatic retry.'),
+    'restarted': ('Bridge neu gestartet. Einstellungen übernommen.', 'Bridge restarted. Settings applied.'),
+})
+
+_COPY.update({
+    'update_current': ('Bereits aktuell. Kein Update verfügbar:', 'Bridge is already up to date. No update available:'),
+    'update_unknown': ('Installierter Stand unbekannt. Ein bestätigtes Update erfasst ihn für künftige Prüfungen.', 'Installed version is unknown. A confirmed update records it for future checks.'),
+    'update_check_failed': ('Update-Prüfung fehlgeschlagen. Netzwerk und Git prüfen; nichts installiert.', 'Update check failed. Check the network and Git; nothing was installed.'),
+})
 
 TEXT = {language: {key: pair[index] for key, pair in _COPY.items()}
         for index, language in enumerate(('de', 'en'))}
@@ -114,8 +169,7 @@ TEXT = {language: {key: pair[index] for key, pair in _COPY.items()}
 
 def detect_language(env=None):
     env = os.environ if env is None else env
-    locale = env.get('LC_ALL') or env.get('LC_MESSAGES') or env.get('LANG') or ''
-    return 'de' if locale.lower().startswith('de') else 'en'
+    return 'de' if env.get('OMB_LANGUAGE') == 'de' else 'en'
 
 
 def text(language: str, key: str) -> str:

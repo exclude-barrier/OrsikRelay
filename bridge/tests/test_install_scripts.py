@@ -96,6 +96,9 @@ class InstallBridgeScriptTest(unittest.TestCase):
             if [ "$1" = "-C" ] && [ "$3" = "describe" ]; then
               printf 'v-test\n'
             fi
+            if [ "$1" = "-C" ] && [ "$3" = "rev-parse" ]; then
+              printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'
+            fi
             exit 0
             """)
         _write_exe(self.bin / "curl", "#!/bin/sh\nprintf 200\n")
@@ -288,6 +291,13 @@ class InstallBridgeScriptTest(unittest.TestCase):
                 self.assertNotIn("9842", result.stdout)
 
     # -- B7: pre-update backup uses the resolved state DB ---------------
+
+    def test_successful_install_records_private_commit_marker(self):
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        marker = self.bridge_home / 'installed-commit'
+        self.assertEqual(marker.read_text().strip(), 'a' * 40)
+        self.assertEqual(marker.stat().st_mode & 0o777, 0o600)
 
     def test_backup_uses_the_resolved_quoted_state_db(self):
         self.install_fake_cli()

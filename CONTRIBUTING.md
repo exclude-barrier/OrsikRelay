@@ -45,6 +45,15 @@ translation:
 texts especially carefully; have a native speaker review them where possible.
 Run `./gradlew :app:testDebugUnitTest` before opening the pull request.
 
+## Bridge CLI translations
+
+The bridge CLI defaults to English independently of the system locale. Keep
+English and German entries complete in `bridge/orsik_mobile_bridge/setup_i18n.py`,
+including help, errors and confirmation text. Use real German umlauts. Setup
+persists the explicitly saved language as `OMB_LANGUAGE=de|en`; update reuses it.
+Language-only changes must not require a service restart. Test default English,
+saved preferences, explicit overrides and safe cancellation in both languages.
+
 ## Pull requests
 
 Before opening a pull request, please run locally:

@@ -1,6 +1,7 @@
 # Orsik Mobile Bridge – Security Threat Model
 
-As of: 2026-10-10.
+Local administration section updated: 2026-10-27. Earlier live observations
+retain their individual test dates.
 
 ## 1. Protected Asset
 
@@ -166,3 +167,28 @@ reads the run status and session history of device A (`200`) and answers its
   error bodies, URLs (except the `orsik://pair` link) or reports. The deep link
   is handed to `qrencode` via stdin, not argv.
 - No credentials in Git; `bridge.env`, `state.db` are excluded.
+
+## Local settings, language and update controls
+
+The local CLI defaults to English. Saving `OMB_LANGUAGE=de|en` in setup applies
+to both setup and update; `--language` is a per-invocation override. This setting
+is independent of terminal/file access. The private configuration writer permits
+only `BRIDGE_TERMINAL`, `BRIDGE_FILES`, `BRIDGE_FILES_ROOT` and `OMB_LANGUAGE`,
+preserves other lines, validates file ownership/mode and rejects observed
+concurrent edits. No new remote administration route is exposed.
+
+Server-setting saves and service restarts are separate actions. Restart requires
+a confirmation that explains connection interruption; failure or timeout does
+not trigger a retry. Language-only saves require no restart. Existing terminal
+processes are not reliably terminated by a service restart or grant revocation.
+
+Update discovery clones only official repository metadata into a private
+working directory and selects the latest reachable tag on `origin/main`, as the
+installer does. The confirmed install is pinned to its resolved commit. Network
+checks have bounded timeouts and fail without installing. A private local
+`installed-commit` record suppresses redundant installation when it matches;
+unknown versions are reported explicitly. The installer removes a stale record
+before replacement and records success only after checks and requested service
+operations succeed. This does not detect arbitrary local package tampering or
+replace artifact verification. Neither settings nor updates confirm Hermes
+approvals, grant terminal access implicitly or change TLS/loopback protections.
