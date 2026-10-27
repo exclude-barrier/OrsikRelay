@@ -98,9 +98,10 @@ URL unchanged.
   The complete interface supports **Deutsch** (including ä/ö/ü/ß) and
   **English**. Select **Language / Sprache** without losing pending edits, or
   launch with `omb setup --language de` / `omb setup --language en`. The default
-  follows `LC_ALL`, `LC_MESSAGES`, then `LANG`; other locales use English.
-  The language selection lasts for the session and does not alter server
-  configuration. Requires a UTF-8 terminal; noninteractive calls are refused.
+  is English. Save a menu language change to persist `OMB_LANGUAGE=de|en`
+  for both `omb setup` and `omb update`; locale does not override it. Language
+  changes need no service restart. Saved server settings can be applied using
+  **Apply and restart bridge**, with a separate confirmation. Requires a UTF-8 terminal; noninteractive calls are refused.
 
   `install.sh` installs a non-overwriting `~/.local/bin/omb` shortcut. Ensure
   that directory is on PATH, or use `~/.local/orsik-mobile-bridge/venv/bin/omb setup`.
@@ -108,15 +109,20 @@ URL unchanged.
   `--env-file /path/to/bridge.env` or `BRIDGE_ENV_FILE` overrides that path,
   followed by `BRIDGE_HOME/bridge.env`. Setup requires an existing private,
   owned regular env file and an interactive terminal. It never displays keys
-  or reads the Hermes key file. Only `BRIDGE_TERMINAL`, `BRIDGE_FILES` and
-  `BRIDGE_FILES_ROOT` are editable; all other lines are preserved. Saving is
+  or reads the Hermes key file. Only `BRIDGE_TERMINAL`, `BRIDGE_FILES`,
+  `BRIDGE_FILES_ROOT` and `OMB_LANGUAGE` are editable; all other lines are preserved. Saving is
   atomic and refuses an observed concurrent edit. Paths containing quotes,
   backslashes or control characters are refused. Enabling terminal checks for
   tmux/setsid; enabling files uses the normal protected-root validation.
-  Restart the bridge after changing global settings; the menu prints the
-  command and does not restart services itself. Device grants need no restart.
+  Saved server settings require a restart through **Apply and restart bridge**
+  with separate confirmation. Saving alone never restarts the service. Language
+  changes and device grants need no restart.
 
-  **`omb update`** runs the packaged bootstrap installer after confirmation.
+  **`omb update`** checks the latest release before confirmation. Matching
+  installed commits are reported without reinstalling or restarting. A missing
+  version marker is reported as unknown until one successful update records it.
+  Failed network checks abort without installing. A confirmed update runs the
+  packaged bootstrap installer, pinned to the checked commit.
   It clones the official release into a private temporary directory rather
   than switching your working checkout. The existing installer backs up the
   device store, retains settings and replaces the venv; it also updates/starts

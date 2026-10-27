@@ -231,17 +231,22 @@ cancels, Ctrl+S opens the save confirmation, and Ctrl+Q exits with a discard con
 when needed. Confirmation dialogs start on Cancel. Terminal/file switches and
 the shared folder remain a draft until saved; individually confirmed device
 permissions apply immediately. Global settings require a manual service
-restart, whose command is shown after saving.
+restart, available through **Apply and restart bridge** with a separate confirmation.
 
 Use `--language de` or `--language en`, or change the language in the menu.
-German uses proper Unicode umlauts; the locale is detected automatically when
-no language is specified. No key material is displayed or edited. The UI uses
+German uses proper Unicode umlauts. English is the default. Save a language
+change in setup to persist `OMB_LANGUAGE=de|en` for both setup and update; a
+language-only change takes effect without a service restart. No key material is displayed or edited. The UI uses
 the locked prompt-toolkit dependency for keyboard input and terminal resizing.
 
 ## 6. Update / Rollback / Backup / Restore / Uninstall
 
 With the local administration CLI installed, run `omb update` and confirm
-the prompt. It uses the packaged bootstrap installer and a fresh temporary
+the prompt. It first checks the latest tagged release; an already installed
+commit is reported without reinstalling or restarting. Older installations
+without an `installed-commit` marker report their version as unknown until one
+confirmed update records it. A failed check does not start an installation.
+It uses the packaged bootstrap installer and a fresh temporary
 checkout of the official release; your working checkout remains untouched.
 The installer backs up the store and preserves `bridge.env` and device grants.
 Use `omb update --no-service` to skip systemd changes, or `--yes` for an

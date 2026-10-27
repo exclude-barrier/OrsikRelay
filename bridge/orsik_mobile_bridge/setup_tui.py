@@ -16,7 +16,7 @@ from prompt_toolkit.widgets import Button, Label, TextArea, Frame, Box
 from . import files, terminal, store
 from .setup import SetupSession, SetupError, error_text
 
-SECTIONS = ('terminal', 'files', 'folder', 'devices', 'language', 'save', 'quit')
+SECTIONS = ('terminal', 'files', 'folder', 'devices', 'language', 'save', 'apply_restart', 'quit')
 STYLE = Style.from_dict({
     '': 'bg:#101923 #d5e0ed',
     'brand': 'bg:#172637 #70d9e5 bold',
@@ -150,11 +150,11 @@ class SetupApplication:
                 body = (safe_text(self.session.values.get('BRIDGE_FILES_ROOT', '')) or self.t('not_set')) + '\n\n' + body
             elif key == 'save':
                 for flag, value in self.session.pending.items():
-                    name = {'BRIDGE_TERMINAL': 'terminal', 'BRIDGE_FILES': 'files', 'BRIDGE_FILES_ROOT': 'folder'}[flag]
-                    display = self.t('on' if value == '1' else 'off') if name != 'folder' else safe_text(value)
+                    name = {'BRIDGE_TERMINAL': 'terminal', 'BRIDGE_FILES': 'files', 'BRIDGE_FILES_ROOT': 'folder', 'OMB_LANGUAGE': 'language'}[flag]
+                    display = self.t('on' if value == '1' else 'off') if name not in ('folder', 'language') else safe_text(value)
                     body += '\n\n' + self.t(name) + ' → ' + display
         if self.session.restart_required:
-            body += '\n\n' + self.t('saved') + '\n' + self.t('restart') + '\nsystemctl --user restart orsik-mobile-bridge.service'
+            body += '\n\n' + self.t('saved') + '\n' + self.t('apply_restart_help')
         return [('class:title', '\n' + title + '\n\n'), ('', body)]
 
     def _set_notice(self, key='ready', error=None):
@@ -229,7 +229,7 @@ class SetupApplication:
 
         def save():
             self.session.save()
-            self._set_notice('saved')
+            self._set_notice('saved' if self.session.restart_required else 'language_saved')
 
         self._confirm(self.t('save_title'), self.t('save_confirm'), self.t('save'), save)
 
@@ -245,7 +245,7 @@ class SetupApplication:
     def _activate(self):
         try:
             if self.mode == 'language':
-                self.session.language = ('de', 'en')[self.selected]
+                self.session.set_language(('de', 'en')[self.selected])
                 self.mode, self.selected = 'main', SECTIONS.index('language')
                 self._set_notice('language_selected')
             elif self.mode == 'devices':
@@ -286,6 +286,14 @@ class SetupApplication:
                     self.selected = 0 if self.session.language == 'de' else 1
                 elif section == 'save':
                     self._save()
+                elif section == 'apply_restart':
+                    if self.session.pending or not self.session.restart_required:
+                        self._set_notice('restart_save_first')
+                    else:
+                        def restart():
+                            self.session.restart()
+                            self._set_notice('restarted')
+                        self._confirm(self.t('apply_restart'), self.t('restart_confirm'), self.t('restart_action'), restart)
                 elif section == 'quit':
                     self._quit()
         except (SetupError, store.StoreUnavailable, SystemExit) as error:

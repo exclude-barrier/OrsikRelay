@@ -5,12 +5,13 @@ import argparse
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 
 from . import files, server, store, terminal, setup_i18n
 
-_SETTINGS = {"BRIDGE_TERMINAL", "BRIDGE_FILES", "BRIDGE_FILES_ROOT"}
+_SETTINGS = {"BRIDGE_TERMINAL", "BRIDGE_FILES", "BRIDGE_FILES_ROOT", "OMB_LANGUAGE"}
 _MAX_CONFIG = 1024 * 1024
 
 
@@ -78,6 +79,7 @@ class SettingsFile:
             return
         for key, value in changes.items():
             if (key not in _SETTINGS or not isinstance(value, str)
+                    or (key == 'OMB_LANGUAGE' and value not in ('de', 'en'))
                     or any(not ch.isprintable() or ch in "\"'\\" for ch in value)):
                 raise SetupError("config_value")
         lines = []
@@ -140,6 +142,12 @@ class SetupSession:
         else:
             self.pending[key] = value
 
+    def set_language(self, language: str) -> None:
+        if language not in setup_i18n.TEXT:
+            raise SetupError('config_value')
+        self.language = language
+        self.set_value('OMB_LANGUAGE', language)
+
     def toggle(self, key: str) -> None:
         parser = terminal.parse_enabled if key == 'BRIDGE_TERMINAL' else files.parse_enabled
         self.set_value(key, '0' if parser(self.values.get(key)) else '1')
@@ -148,13 +156,28 @@ class SetupSession:
         if not self.pending:
             return
         env = self.values
-        if terminal.parse_enabled(env.get('BRIDGE_TERMINAL')):
-            terminal.default_command()
-        server._files_root_from_env(env)
+        service_change = bool(set(self.pending) - {'OMB_LANGUAGE'})
+        if service_change:
+            if terminal.parse_enabled(env.get('BRIDGE_TERMINAL')):
+                terminal.default_command()
+            server._files_root_from_env(env)
         self.settings.save(self.pending)
         self.settings.values.update(self.pending)
         self.pending.clear()
-        self.restart_required = True
+        self.restart_required = self.restart_required or service_change
+
+    def restart(self) -> None:
+        if self.pending or not self.restart_required:
+            raise SetupError('restart_save_first')
+        try:
+            result = subprocess.run(
+                ['systemctl', '--user', 'restart', 'orsik-mobile-bridge.service'],
+                check=False, capture_output=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            raise SetupError('restart_failed') from None
+        if result.returncode:
+            raise SetupError('restart_failed')
+        self.restart_required = False
 
     def _store_path(self) -> Path:
         path = Path(server._state_db_path(self.settings.values)).expanduser()
@@ -199,8 +222,23 @@ def error_text(error: BaseException, language: str) -> str:
     return setup_i18n.text(language, known.get(str(error), 'validation_error'))
 
 
+def command_language(argv: list[str]) -> str:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--language', '--lang', choices=('de', 'en'))
+    parser.add_argument('--env-file')
+    args, _ = parser.parse_known_args(argv)
+    if args.language:
+        return args.language
+    try:
+        return setup_i18n.detect_language(SettingsFile(config_path(args.env_file), dict(os.environ)).values)
+    except SetupError:
+        # Help remains available without an installed/private config. Normal
+        # commands still validate the file before performing any action.
+        return 'en'
+
+
 def main(argv: list[str]) -> int:
-    initial = setup_i18n.detect_language()
+    initial = command_language(argv)
     language_parser = argparse.ArgumentParser(add_help=False)
     language_parser.add_argument('--language', '--lang', choices=('de', 'en'), default=initial)
     language = language_parser.parse_known_args(argv)[0].language

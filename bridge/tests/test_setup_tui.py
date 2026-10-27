@@ -39,6 +39,33 @@ class SetupTuiTest(unittest.IsolatedAsyncioTestCase):
             result = await asyncio.wait_for(ui.application.run_async(), 4)
             return result, ui
 
+    async def test_language_selection_is_saved_for_future_commands_without_restart(self):
+        session = self.session('en')
+        await self.drive(session, DOWN * 4 + ENTER + '\x1b[A' + ENTER + '\x13' + RIGHT + ENTER + QUIT)
+        values = server._load_env_file(str(self.path))
+        self.assertEqual(values['OMB_LANGUAGE'], 'de')
+        self.assertEqual(setup_i18n.detect_language(values), 'de')
+        self.assertFalse(session.restart_required)
+
+    async def test_restart_requires_saved_changes_and_explicit_confirmation(self):
+        session = self.session('en')
+        with mock.patch.object(server.terminal, 'default_command', return_value=('tmux',)), \
+                mock.patch.object(setup.subprocess, 'run') as run:
+            # Save terminal draft; restart defaults Cancel, then confirm.
+            run.return_value.returncode = 0
+            await self.drive(session, ENTER + '\x13' + RIGHT + ENTER + DOWN * 6 + ENTER + ENTER + ENTER + RIGHT + ENTER + QUIT)
+        run.assert_called_once_with(['systemctl', '--user', 'restart', 'orsik-mobile-bridge.service'], check=False, capture_output=True, timeout=30)
+        self.assertFalse(session.restart_required)
+
+    async def test_restart_failure_preserves_restart_required_without_retry(self):
+        session = self.session('en')
+        session.restart_required = True
+        with mock.patch.object(setup.subprocess, 'run') as run:
+            run.return_value.returncode = 1
+            await self.drive(session, DOWN * 6 + ENTER + RIGHT + ENTER + QUIT)
+        run.assert_called_once()
+        self.assertTrue(session.restart_required)
+
     async def test_arrow_enter_toggles_then_cancelled_quit_preserves_draft(self):
         # Enter toggles terminal; quit opens discard dialog, Enter defaults Cancel.
         session = self.session()
@@ -171,9 +198,9 @@ class SetupLanguageTest(unittest.TestCase):
                 self.assertTrue(value.strip())
 
     def test_locale_precedence_and_explicit_language(self):
-        self.assertEqual(setup_i18n.detect_language({'LANG': 'de_DE.UTF-8'}), 'de')
+        self.assertEqual(setup_i18n.detect_language({'LANG': 'de_DE.UTF-8'}), 'en')
         self.assertEqual(setup_i18n.detect_language({'LC_ALL': 'en_US.UTF-8', 'LANG': 'de_DE.UTF-8'}), 'en')
-        self.assertEqual(setup_i18n.detect_language({'LC_MESSAGES': 'de_AT.UTF-8', 'LANG': 'en_US.UTF-8'}), 'de')
+        self.assertEqual(setup_i18n.detect_language({'LC_MESSAGES': 'de_AT.UTF-8', 'LANG': 'en_US.UTF-8'}), 'en')
         self.assertEqual(setup_i18n.detect_language({'LANG': 'C.UTF-8'}), 'en')
 
     def test_external_labels_cannot_inject_terminal_controls(self):

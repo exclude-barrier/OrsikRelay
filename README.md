@@ -223,10 +223,27 @@ contract before it stores anything.
   <img src="docs/images/onboarding.png" width="28%" alt="Adding a server with a pairing code">
 </p>
 
+### Bridge settings
+
+Run `omb setup` as the account that runs the bridge. Navigate with the arrow
+keys and Enter; Esc cancels. **English is the default**, regardless of the
+system locale. Choose **Language / Sprache**, then **Save changes** to persist
+English or German for both `omb setup` and `omb update`. A language-only change
+needs no service restart. `--language en` or `--language de` overrides the saved
+language for one invocation.
+
+Terminal and file settings remain drafts until saved. Use **Apply and restart
+bridge** to apply saved server settings, with a separate confirmation. Device
+terminal grants have their own confirmation and apply immediately. See the
+[installation guide](docs/bridge-installation.md#5a-interactive-local-settings).
+
 ### Updating
 
-- **Bridge, quickest:** run the install command from above again. It backs up
-  the device store, switches to the latest release and restarts the bridge.
+- **Bridge, quickest:** run `omb update` as the bridge account. It checks the
+  latest release first and reports when already up to date. A confirmed update
+  backs up the device store, preserves settings and restarts the bridge. Older
+  installations without a version marker need one successful update before
+  they can report an exact match. See the [update guide](docs/bridge-installation.md#6-update--rollback--backup--restore--uninstall).
 - **App:** install the new APK over the old one. It is signed with the same
   key, so your servers and pairing are kept. [Obtainium](https://github.com/ImranR98/Obtainium)
   can watch the GitHub releases and tell you about new versions.
@@ -257,7 +274,8 @@ contract before it stores anything.
   ```
 
   `bridge.env` and the device store are kept, paired phones stay paired.
-  Update app and bridge to the same release.
+  Bridge-only maintenance releases do not require a new Android APK; follow
+  the release notes for compatibility and required app updates.
 
 ## Using the app
 

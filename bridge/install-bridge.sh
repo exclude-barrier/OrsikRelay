@@ -198,6 +198,8 @@ else
 fi
 SYSTEMD=()
 [ "$SERVICE" -eq 1 ] && SYSTEMD=(--systemd)
+# An interrupted replacement must never leave a stale "already current" marker.
+rm -f "$BRIDGE_HOME/installed-commit"
 bash "$ORSIK_DIR/bridge/install.sh" "${UPDATE[@]}" "${SYSTEMD[@]}"
 
 # --- 4. Configuration ---------------------------------------------------------
@@ -275,6 +277,14 @@ if [ "$SERVICE" -eq 1 ]; then
   systemctl --user is-active --quiet "$UNIT" || die "the bridge service did not start; see: journalctl --user -u $UNIT"
   echo "Service $UNIT is running on $BRIDGE_URL_CFG"
 fi
+
+# Record only a successfully installed and checked source revision. The local
+# updater uses this marker to avoid reinstalling an unchanged release.
+INSTALLED_COMMIT="$(git -C "$ORSIK_DIR" rev-parse HEAD)"
+COMMIT_TMP="$(mktemp "$BRIDGE_HOME/.installed-commit.XXXXXX")"
+printf '%s\n' "$INSTALLED_COMMIT" >"$COMMIT_TMP"
+chmod 600 "$COMMIT_TMP"
+mv "$COMMIT_TMP" "$BRIDGE_HOME/installed-commit"
 
 # --- 6. Next steps ------------------------------------------------------------
 say "Done"
