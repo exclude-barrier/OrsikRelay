@@ -33,11 +33,12 @@ class UpdateTest(unittest.TestCase):
         self.env = {'BRIDGE_HOME': str(self.home), 'BRIDGE_ENV_FILE': str(self.config),
                     'ORSIK_DIR': str(self.root / 'do-not-touch'), 'ORSIK_REF': 'do-not-inherit'}
 
-    def invoke(self, args=(), answer='y\n', tty=True, release_error=None):
+    def invoke(self, args=(), answer='y\n', tty=True, release_error=None, matches=False):
         output = Tty() if tty else io.StringIO()
         with mock.patch.dict(os.environ, self.env, clear=True), \
                 mock.patch.object(update.sys, 'prefix', str(self.prefix)), \
                 mock.patch.object(update, '_latest_release', return_value=('v0.1.0-alpha.17-bridge.1', 'a' * 40), side_effect=release_error), \
+                mock.patch.object(update, '_matches_release', return_value=matches), \
                 mock.patch('sys.stdin', Tty(answer) if tty else io.StringIO(answer)), \
                 mock.patch('sys.stdout', output):
             return server.main(['update', *args]), output.getvalue()
@@ -81,7 +82,7 @@ class UpdateTest(unittest.TestCase):
     def test_unknown_installed_version_is_reported_before_confirmation(self):
         code, output = self.invoke(answer='n\n')
         self.assertEqual(code, 0)
-        self.assertIn('Installed version is unknown', output)
+        self.assertIn('could not be identified reliably', output)
 
     def test_failed_release_check_does_not_run_installer(self):
         with mock.patch.object(update.subprocess, 'run') as run:
@@ -117,6 +118,46 @@ class UpdateTest(unittest.TestCase):
         self.assertEqual(clone.call_args.kwargs['timeout'], 60)
         self.assertEqual(git.call_count, 2)
         self.assertIn('origin/main', git.call_args_list[0].args[0])
+
+    def test_exact_installed_files_are_recognized_without_a_marker(self):
+        import io
+        import tarfile
+        package = self.root / 'installed-package'
+        package.mkdir()
+        (package / '__init__.py').write_bytes(b'# package')
+        (package / 'update.py').write_bytes(b'# updater')
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode='w') as tar:
+            for name, content in {
+                'bridge/orsik_mobile_bridge/__init__.py': b'# package',
+                'bridge/orsik_mobile_bridge/update.py': b'# updater',
+                'bridge/install-bridge.sh': b'# installer',
+            }.items():
+                entry = tarfile.TarInfo(name)
+                entry.size = len(content)
+                tar.addfile(entry, io.BytesIO(content))
+        with mock.patch.object(update.subprocess, 'check_output', return_value=archive.getvalue()), \
+                mock.patch.object(update, '__file__', str(package / 'update.py')):
+            self.assertTrue(update._matches_release(self.root / 'source', 'a' * 40, b'# installer'))
+            (package / 'update.py').write_bytes(b'# different')
+            self.assertFalse(update._matches_release(self.root / 'source', 'a' * 40, b'# installer'))
+            (package / 'update.py').write_bytes(b'# updater')
+            (package / 'extra.py').write_bytes(b'# extra')
+            self.assertFalse(update._matches_release(self.root / 'source', 'a' * 40, b'# installer'))
+
+    def test_matching_legacy_install_never_prompts_or_installs(self):
+        with mock.patch.object(update.subprocess, 'run') as run:
+            code, output = self.invoke(matches=True)
+        self.assertEqual(code, 0)
+        self.assertIn('already up to date', output)
+        self.assertNotIn('Start update?', output)
+        run.assert_not_called()
+
+    def test_successful_legacy_installer_also_records_revision(self):
+        with mock.patch.object(update.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            code, _ = self.invoke(['--yes'])
+        self.assertEqual(code, 0)
+        self.assertEqual(update._installed_commit(self.home), 'a' * 40)
 
     def test_cancel_or_eof_never_runs_installer(self):
         for answer in ('n\n', ''):

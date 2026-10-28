@@ -187,7 +187,8 @@ working directory and selects the latest reachable tag on `origin/main`, as the
 installer does. The confirmed install is pinned to its resolved commit. Network
 checks have bounded timeouts and fail without installing. A private local
 `installed-commit` record suppresses redundant installation when it matches;
-unknown versions are reported explicitly. The installer removes a stale record
+missing markers fall back to an exact package/installer comparison, with
+unidentified versions reported explicitly. The installer removes a stale record
 before replacement and records success only after checks and requested service
 operations succeed. This does not detect arbitrary local package tampering or
 replace artifact verification. Neither settings nor updates confirm Hermes

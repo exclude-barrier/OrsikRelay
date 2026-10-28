@@ -101,7 +101,7 @@ URL unchanged.
   is English. Save a menu language change to persist `OMB_LANGUAGE=de|en`
   for both `omb setup` and `omb update`; locale does not override it. Language
   changes need no service restart. Saved server settings can be applied using
-  **Apply and restart bridge**, with a separate confirmation. Requires a UTF-8 terminal; noninteractive calls are refused.
+  **Restart bridge**, with a separate confirmation. Requires a UTF-8 terminal; noninteractive calls are refused.
 
   `install.sh` installs a non-overwriting `~/.local/bin/omb` shortcut. Ensure
   that directory is on PATH, or use `~/.local/orsik-mobile-bridge/venv/bin/omb setup`.
@@ -114,13 +114,14 @@ URL unchanged.
   atomic and refuses an observed concurrent edit. Paths containing quotes,
   backslashes or control characters are refused. Enabling terminal checks for
   tmux/setsid; enabling files uses the normal protected-root validation.
-  Saved server settings require a restart through **Apply and restart bridge**
+  Saved server settings require a restart through **Restart bridge**
   with separate confirmation. Saving alone never restarts the service. Language
   changes and device grants need no restart.
 
   **`omb update`** checks the latest release before confirmation. Matching
   installed commits are reported without reinstalling or restarting. A missing
-  version marker is reported as unknown until one successful update records it.
+  version marker triggers an exact comparison of package and installer files;
+  matching legacy installs are recognized without reinstalling.
   Failed network checks abort without installing. A confirmed update runs the
   packaged bootstrap installer, pinned to the checked commit.
   It clones the official release into a private temporary directory rather
