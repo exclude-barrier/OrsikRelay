@@ -1,6 +1,21 @@
 package io.github.excludebarrier.orsikrelay
 
 import io.github.excludebarrier.orsikrelay.ui.profiles.ProfilesScreen
+import io.github.excludebarrier.orsikrelay.ui.files.FilesRoute
+import io.github.excludebarrier.orsikrelay.ui.files.ProjectsRoute
+import io.github.excludebarrier.orsikrelay.domain.files.FileContent
+import io.github.excludebarrier.orsikrelay.domain.files.FileEntry
+import io.github.excludebarrier.orsikrelay.domain.files.FileKind
+import io.github.excludebarrier.orsikrelay.domain.files.FileListing
+import io.github.excludebarrier.orsikrelay.domain.files.FilesResult
+import io.github.excludebarrier.orsikrelay.domain.files.FilesSource
+import io.github.excludebarrier.orsikrelay.domain.files.Project
+import io.github.excludebarrier.orsikrelay.domain.files.ProjectCommit
+import io.github.excludebarrier.orsikrelay.domain.files.ProjectListing
+import io.github.excludebarrier.orsikrelay.domain.host.GpuMetrics
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetrics
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
+import io.github.excludebarrier.orsikrelay.domain.host.ServiceState
 import io.github.excludebarrier.orsikrelay.ui.onboarding.WelcomeScreen
 import io.github.excludebarrier.orsikrelay.ui.home.HomeUiState
 import io.github.excludebarrier.orsikrelay.ui.home.HomeScreen
@@ -183,7 +198,11 @@ class ReadmeScreenshotsTest {
                     onBack = null,
                     activeProfileId = "fixture-home",
                     activeReachable = true,
-                    modifier = modifier
+                    modifier = modifier,
+                    // As in production for an active server: the tiles are live, not previews.
+                    onOpenMonitoring = {},
+                    onOpenTool = {},
+                    startTask = { _, _ -> true }
                 )
             }
         }
@@ -202,6 +221,61 @@ class ReadmeScreenshotsTest {
         capture("welcome")
     }
 
+    @CaptureOnly
+    @Test
+    fun files() {
+        prepareWindow()
+        setScreen(dark = false) {
+            FilesRoute(profileId = "fixture-home", source = readmeFiles, startPath = "", onBack = {})
+        }
+        waitForText("docker-compose.yml")
+        capture("files")
+    }
+
+    @CaptureOnly
+    @Test
+    fun projects() {
+        prepareWindow()
+        setScreen(dark = false) {
+            ProjectsRoute(profileId = "fixture-home", source = readmeFiles, onOpenProject = {}, onBack = {})
+        }
+        waitForText("homelab-ansible")
+        capture("projects")
+    }
+
+    private val readmeFiles = object : FilesSource {
+        private val now = System.currentTimeMillis() / 1_000
+        override fun list(profileId: String, path: String) = FilesResult.Ready(
+            FileListing(
+                path = path,
+                entries = listOf(
+                    FileEntry("homelab-ansible", FileKind.Directory, null, now - 3_600),
+                    FileEntry("notes", FileKind.Directory, null, now - 86_400),
+                    FileEntry("photos", FileKind.Directory, null, now - 7 * 86_400),
+                    FileEntry("docker-compose.yml", FileKind.File, 2_310, now - 1_800),
+                    FileEntry("backup-report.md", FileKind.File, 8_900, now - 5_400),
+                    FileEntry("rack.jpg", FileKind.File, 1_840_000, now - 2 * 86_400)
+                ),
+                truncated = false,
+                root = "/srv/share"
+            )
+        )
+        override fun read(profileId: String, path: String): FilesResult<FileContent> = FilesResult.NotFound
+        override fun projects(profileId: String) = FilesResult.Ready(
+            ProjectListing(
+                projects = listOf(
+                    Project("homelab-ansible", "homelab-ansible", "main", dirty = true,
+                        lastCommit = ProjectCommit("a1b2c3d", now - 3_600, "Add backup role")),
+                    Project("website", "website", "main", dirty = false,
+                        lastCommit = ProjectCommit("9f8e7d6", now - 2 * 86_400, "Update imprint")),
+                    Project("scripts", "scripts", "dev", dirty = false,
+                        lastCommit = ProjectCommit("4c5d6e7", now - 9 * 86_400, "Rotate logs weekly"))
+                ),
+                truncated = false
+            )
+        )
+    }
+
     private fun renderHome(dark: Boolean, name: String) {
         val now = System.currentTimeMillis() / 1_000
         prepareWindow()
@@ -212,10 +286,17 @@ class ReadmeScreenshotsTest {
                         serverName = "Home server",
                         connection = HomeConnection.Connected,
                         runs = listOf(
-                            HomeRunItem("fixture-docker", "Docker updates", awaitingApproval = true, uncertain = false),
-                            HomeRunItem("fixture-backup", "Check backup", awaitingApproval = false, uncertain = false)
+                            HomeRunItem("fixture-docker", "Docker updates", awaitingApproval = true, uncertain = false)
                         ),
-                        recent = HomeRecent.Ready(sessionFixtures().take(3).map { it.copy(lastActiveEpochSeconds = now - 600) })
+                        recent = HomeRecent.Ready(sessionFixtures().take(3).map { it.copy(lastActiveEpochSeconds = now - 600) }),
+                        hostMetrics = HostMetricsResult.Ready(
+                            HostMetrics(
+                                cpuPercent = 23.0, cores = 16,
+                                memoryUsedBytes = 21L * GIB, memoryTotalBytes = 64L * GIB,
+                                gpu = GpuMetrics("RTX 4070", 41, 5L * GIB, 12L * GIB),
+                                services = listOf(ServiceState("hermes-gateway", true), ServiceState("orsik-mobile-bridge", true))
+                            )
+                        )
                     ),
                     onDraftChange = {}, onSend = {}, onAttach = {}, onRemoveAttachment = {},
                     onOpenRun = {}, onOpenSession = {}, onOpenAllSessions = {}, onSwitchServer = {},
@@ -476,6 +557,7 @@ class ReadmeScreenshotsTest {
     }
 
     private companion object {
+        const val GIB = 1024L * 1024L * 1024L
         const val PROFILE_ID = "fixture-profile-id"
         const val SESSION_ID = "fixture-session-id"
 
