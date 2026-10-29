@@ -14,9 +14,9 @@ device credential and talks to a small, self-hosted **Orsik Mobile Bridge** over
 your private network.
 
 <p align="center">
+  <img src="docs/images/home.png" width="23%" alt="Home with running tasks and live server values">
   <img src="docs/images/chat.png" width="23%" alt="Chat with a Markdown answer and tool activity">
   <img src="docs/images/approval.png" width="23%" alt="Tool approval: deny or allow once">
-  <img src="docs/images/sessions.png" width="23%" alt="Session list">
   <img src="docs/images/chat-dark.png" width="23%" alt="Chat in dark mode">
 </p>
 
@@ -58,6 +58,13 @@ under **⋮ → Settings → Language**.*
   `BRIDGE_FILES=1` ([details](docs/bridge-installation.md#2c-optional-read-only-files-and-projects)).
 - **Unmodified Hermes:** the bridge runs next to an official Hermes installation;
   no fork, no core patch.
+
+<p align="center">
+  <img src="docs/images/sessions.png" width="23%" alt="Session list">
+  <img src="docs/images/files.png" width="23%" alt="Read-only file browser">
+  <img src="docs/images/projects.png" width="23%" alt="Git projects with branch and last commit">
+  <img src="docs/images/server.png" width="23%" alt="Server list">
+</p>
 
 ## How it works
 

@@ -12,7 +12,7 @@ PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
 ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 ADB="$ANDROID_HOME/platform-tools/adb"
 DEVICE_DIR=/sdcard/Download/orsik-readme
-SHOTS=(chat chat-dark approval approval-dark sessions onboarding)
+SHOTS=(chat chat-dark approval approval-dark sessions onboarding home server files projects)
 
 setting() { "$ADB" shell settings get global "$1" | tr -d '\r'; }
 restore_setting() {
