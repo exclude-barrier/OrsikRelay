@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="slash_models_loading">Modelloptionen für die Session werden geladen…</string>
+    <string name="slash_models_failed">Modelloptionen konnten nicht geladen werden.</string>
+    <string name="slash_models_empty">Der Server bietet keine Modelloptionen an.</string>
+    <string name="slash_failed">Befehl fehlgeschlagen oder Ergebnis unbekannt. Vor erneutem Senden die Session prüfen.</string>
+    <string name="slash_done">Session-Befehl übernommen.</string>
+    <string name="slash_error">Befehl nicht verfügbar oder ungültig. Nichts wurde an das Modell gesendet.</string>
+    <string name="slash_no_run">Kein laufender Run</string>
+    <string name="slash_busy">Aktuelle Aktion abwarten</string>
     <string name="app_name">Orsik Relay</string>
     <string name="onboarding_title">Server hinzufügen</string>
     <string name="onboarding_subtitle">Sicher mit deinem Hermes-Agent-Server verbinden</string>
@@ -302,6 +310,7 @@
     <string name="home_composer_send">Senden</string>
     <string name="home_send_failed">Die Aufgabe konnte nicht gestartet werden. Bitte erneut versuchen.</string>
     <string name="home_send_busy">Es läuft bereits eine Aufgabe. Warte sie ab oder stoppe sie in ihrem Chat.</string>
+    <string name="home_command_in_chat">Befehle funktionieren im Chat. Öffne einen Chat und gib den Befehl dort ein.</string>
     <string name="home_offline_title">Keine Verbindung zu %1$s</string>
     <string name="home_offline_unaffected">Laufende Aufgaben auf dem Server sind davon nicht betroffen.</string>
     <string name="home_offline_retry">Erneut versuchen</string>

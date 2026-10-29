@@ -292,4 +292,5 @@ private fun HomeNotice.textRes(): Int = when (this) {
     HomeNotice.AttachmentTooLarge -> R.string.chat_attachment_error_size
     HomeNotice.AttachmentUnreadable -> R.string.chat_attachment_error_unreadable
     HomeNotice.NewChatFailed -> R.string.new_session_error_generic
+    HomeNotice.CommandInChat -> R.string.home_command_in_chat
 }

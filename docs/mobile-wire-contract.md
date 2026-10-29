@@ -100,6 +100,22 @@ negotiable mobile contract.
      `run_id`) frees the chat, `stale_generation` drops the offer. A core
      without the `unknown` status never triggers it.
 
+5. Slash commands in the chat (Orsik bridge)
+   - Read when a chat opens (not persisted). A command is offered only when
+     its endpoint is advertised with exact `method`+`path`:
+     `/new` → `session_create`, `/stop` → `run_stop`, `/steer` → `run_steer`,
+     `/title` → `session_update` plus `features.session_title == true`,
+     `/branch` → `endpoints.session_fork`: `{ method:"POST", path:"/api/sessions/{session_id}/fork" }`,
+     `/model` → `endpoints.session_model_lock`: `{ method:"POST", path:"/api/sessions/{session_id}/model" }`
+     plus `endpoints.model_options`: `{ method:"GET", path:"/api/model/options" }`.
+   - The bridge forwards PATCH title only as exactly `{ "title": <1–512 chars,
+     no control characters> }`, fork only with the body `{}`, and the model
+     lock only as exactly `{ "provider", "model" }`; all three need the
+     `chat` permission and are audited without their values.
+   - Command POSTs are never retried; an unclear result is shown as failed.
+     A leading `/word` never reaches the model; a path such as
+     `/var/log/syslog` stays ordinary text.
+
 > **Field strictness:** The soft contract objects are checked against **exactly
 > the expected field set** (missing **or** additional field → closed).
 > This is deliberately conservative: the client enables a mobile capability only

@@ -94,6 +94,21 @@ class HermesSessionManageClientTest {
         assertEquals("""{"archived":false}""", server.takeRequest().body.readUtf8())
     }
 
+    @Test fun renameChecksExactSessionAndTitleAndNeverRetriesAWrite() {
+        server.enqueue(json(200, """{"object":"hermes.session","session":{"id":"s1","title":"New title"}}"""))
+        assertEquals(SessionManageResult.Success, client.rename(base, key, "s1", "New title"))
+        val request = server.takeRequest()
+        assertEquals("PATCH", request.method)
+        assertEquals("/p/api/sessions/s1", request.path)
+        assertEquals(setOf("title"), JSONObject(request.body.readUtf8()).keys().asSequence().toSet())
+        server.enqueue(json(200, """{"object":"hermes.session","session":{"id":"other","title":"New title"}}"""))
+        assertTrue(client.rename(base, key, "s1", "New title") is SessionManageResult.Failure)
+        server.enqueue(json(503, "{}"))
+        assertTrue(client.rename(base, key, "s1", "New title") is SessionManageResult.Failure)
+        assertTrue(client.rename(base, key, "s1", "\n") is SessionManageResult.Failure)
+        assertEquals(3, server.requestCount)
+    }
+
     @Test
     fun deleteSendsNoBodyAndMapsTheAnswers() {
         server.enqueue(json(200, """{"object":"hermes.session.deleted","id":"s1","deleted":true}"""))

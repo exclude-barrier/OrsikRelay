@@ -13,6 +13,7 @@ import threading
 import unittest
 from unittest import mock
 import uuid
+from dataclasses import replace
 
 from aiohttp import web
 from aiohttp import ClientTimeout, ClientSession, TCPConnector
@@ -104,6 +105,22 @@ def _upstream_app():
         return web.json_response(
             {"object": "hermes.session.deleted", "id": request.match_info["sid"], "deleted": True})
 
+    async def session_fork(request):
+        UPSTREAM["fork_posts"] = int(UPSTREAM.get("fork_posts", 0)) + 1
+        UPSTREAM["fork_body"] = await request.json()
+        return web.json_response({"object": "hermes.session", "session": {
+            "id": "child", "parent_session_id": request.match_info["sid"]}}, status=201)
+
+    async def session_model(request):
+        UPSTREAM["model_posts"] = int(UPSTREAM.get("model_posts", 0)) + 1
+        UPSTREAM["model_body"] = await request.json()
+        return web.json_response({"object": "hermes.session.model_lock", "session_id": request.match_info["sid"],
+                                  "runtime": {"model_lock": "accepted", "requested": UPSTREAM["model_body"]}})
+
+    async def model_options(request):
+        UPSTREAM["model_gets"] = int(UPSTREAM.get("model_gets", 0)) + 1
+        return web.json_response({"providers": [{"slug": "provider", "models": ["model"]}]})
+
     app = web.Application()
     app.router.add_get("/health", health)
     app.router.add_get("/api/sessions", sessions_get)
@@ -116,10 +133,66 @@ def _upstream_app():
     app.router.add_patch("/api/sessions/{sid}", session_patch)
     app.router.add_post("/v1/runs/{rid}/resolve-unknown", resolve_unknown)
     app.router.add_delete("/api/sessions/{sid}", session_delete)
+    app.router.add_post("/api/sessions/{sid}/fork", session_fork)
+    app.router.add_post("/api/sessions/{sid}/model", session_model)
+    app.router.add_get("/api/model/options", model_options)
     return app
 
 
 class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
+    async def test_session_command_routes_require_chat_permission_and_refuse_large_bodies(self):
+        cred = await self._pair()
+        token = cred["device_key"]
+        record = self.state.tokens.lookup(token)
+        with mock.patch.object(self.state.tokens, "lookup", return_value=replace(record, permissions=("runs",))):
+            self.assertEqual((await self.client.post("/api/sessions/s1/fork", headers=self._bearer(token), json={})).status, 403)
+            self.assertEqual((await self.client.post("/api/sessions/s1/model", headers=self._bearer(token),
+                                                    json={"model": "model", "provider": "provider"})).status, 403)
+            self.assertEqual((await self.client.get("/api/model/options", headers=self._bearer(token))).status, 403)
+        self.assertEqual((await self.client.post("/api/sessions/s1/fork", headers=self._bearer(token), data=b" " * 4097)).status, 413)
+        self.assertEqual(UPSTREAM.get("fork_posts", 0), 0)
+        self.assertEqual(UPSTREAM.get("model_posts", 0), 0)
+        self.assertEqual(UPSTREAM.get("model_gets", 0), 0)
+
+    async def test_model_routes_are_narrow_and_do_not_audit_identifiers(self):
+        self.assertEqual((await self.client.get("/api/model/options")).status, 401)
+        cred = await self._pair()
+        headers = self._bearer(cred["device_key"])
+        self.assertEqual((await self.client.get("/api/model/options", headers=headers)).status, 200)
+        self.assertEqual((await self.client.get("/api/model/options?refresh=true", headers=headers)).status, 403)
+        self.assertEqual((await self.client.get("/api/model/options", headers=headers, data=b"x")).status, 400)
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            response = await self.client.post("/api/sessions/s1/model", headers=headers,
+                                               json={"provider": "provider", "model": "private-model"})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(UPSTREAM["model_body"], {"provider": "provider", "model": "private-model"})
+        self.assertNotIn("private-model", "\n".join(r.getMessage() for r in logs.records))
+        for body in ({}, {"model": "x"}, {"provider": "p", "model": "x", "base_url": "bad"},
+                     {"provider": "p", "model": "x" * 201}, {"provider": "p", "model": "x\n"}):
+            self.assertEqual((await self.client.post("/api/sessions/s1/model", headers=headers, json=body)).status, 400)
+        self.assertEqual(UPSTREAM["model_posts"], 1)
+        caps = core.build_capabilities(terminal=False, files=False)
+        self.assertEqual(caps["endpoints"]["session_model_lock"], {"method": "POST", "path": "/api/sessions/{session_id}/model"})
+        self.assertNotIn("skills", caps["endpoints"])
+
+    async def test_fork_is_narrow_authenticated_and_audited_without_arguments(self):
+        self.assertEqual((await self.client.post("/api/sessions/s1/fork", json={})).status, 401)
+        cred = await self._pair()
+        headers = self._bearer(cred["device_key"])
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            response = await self.client.post("/api/sessions/s1/fork", headers=headers, json={})
+        self.assertEqual(response.status, 201)
+        self.assertEqual(UPSTREAM["fork_body"], {})
+        self.assertTrue(any("action=session_fork" in r.getMessage() for r in logs.records))
+        for body in ({"id": "chosen"}, {"title": "private"}, [], None):
+            response = await self.client.post("/api/sessions/s1/fork", headers={**headers, "Content-Type": "application/json"},
+                                              data=json.dumps(body))
+            self.assertEqual(response.status, 400)
+        self.assertEqual((await self.client.post("/api/sessions/s1/fork?x=1", headers=headers, json={})).status, 403)
+        self.assertEqual(UPSTREAM["fork_posts"], 1)
+        caps = core.build_capabilities(terminal=False, files=False)
+        self.assertEqual(caps["endpoints"]["session_fork"], {"method": "POST", "path": "/api/sessions/{session_id}/fork"})
+
     async def asyncSetUp(self):
         UPSTREAM.clear()
         self.upstream = TestServer(_upstream_app())
@@ -389,7 +462,16 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(token, line)
             self.assertNotIn("master_key_test", line)
 
-    # --- archive / delete (only the archived flag, never title/pin/hidden) ---
+    # --- archive / bounded title / delete ---
+    async def test_title_forwards_only_bounded_title_without_audit_contents(self):
+        cred = await self._pair()
+        with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
+            resp = await self.client.patch("/api/sessions/s1", headers=self._bearer(cred["device_key"]),
+                                           json={"title": "Private new title"})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(json.loads(UPSTREAM["session_patch_body"]), {"title": "Private new title"})
+        self.assertNotIn("Private new title", "\n".join(r.getMessage() for r in logs.records))
+
     async def test_archive_forwards_exactly_the_archived_flag_and_is_audited(self):
         cred = await self._pair()
         with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
@@ -403,7 +485,8 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_patch_with_any_other_field_never_reaches_upstream(self):
         cred = await self._pair()
-        for body in ({"title": "x"}, {"pinned": True}, {"hidden": True}, {"end_reason": "x"},
+        for body in ({"title": ""}, {"title": "x" * 513}, {"title": "x\n"}, {"title": 3},
+                     {"title": "x", "archived": True}, {"pinned": True}, {"hidden": True}, {"end_reason": "x"},
                      {"archived": True, "unread": True}, {"archived": "yes"}):
             resp = await self.client.patch(
                 "/api/sessions/s1", headers=self._bearer(cred["device_key"]), json=body)
@@ -417,7 +500,7 @@ class BridgeHttpTest(unittest.IsolatedAsyncioTestCase):
     async def test_local_rejections_are_audited_too(self):
         cred = await self._pair()
         with self.assertLogs("orsik_mobile_bridge.audit", "INFO") as logs:
-            await self.client.patch("/api/sessions/s1", headers=self._bearer(cred["device_key"]), json={"title": "x"})
+            await self.client.patch("/api/sessions/s1", headers=self._bearer(cred["device_key"]), json={"pinned": True})
             await self.client.delete("/api/sessions/s1", headers=self._bearer(cred["device_key"]), data=b"x")
             await self.client.post("/v1/runs/run_a/resolve-unknown", headers=self._bearer(cred["device_key"]),
                                    json={"admission_id": "a"})

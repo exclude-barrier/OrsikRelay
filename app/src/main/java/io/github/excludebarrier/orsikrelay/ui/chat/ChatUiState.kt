@@ -9,6 +9,8 @@ import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageRole
 import io.github.excludebarrier.orsikrelay.domain.run.ApprovalRequest
 import io.github.excludebarrier.orsikrelay.domain.run.LostRun
+import io.github.excludebarrier.orsikrelay.domain.chat.SessionModelOption
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
 
 /**
  * Closed UI timeline row: the small, separate UI-only type that unifies
@@ -88,6 +90,16 @@ internal data class ChatUiState(
      */
     val olderLoadError: MessageHistoryError? = null,
     val draft: String = "",
+    val slashCommands: Set<SlashCommand> = emptySet(),
+    val slashError: Boolean = false,
+    val slashBusy: Boolean = false,
+    val slashFailed: Boolean = false,
+    val slashDone: Boolean = false,
+    val slashTitle: String? = null,
+    val modelOptions: List<SessionModelOption> = emptyList(),
+    val modelsLoaded: Boolean = false,
+    val modelsLoading: Boolean = false,
+    val modelsFailed: Boolean = false,
     /**
      * The attachment the user picked but has not sent yet, or `null`.
      * Local-only: the picker's content URI never reaches the server, the
@@ -205,7 +217,9 @@ internal data class ChatUiState(
      * [ChatOutboundMessage.create] decides the exact body.
      */
     val sendEnabled: Boolean
-        get() = !turnActive &&
+        get() = if (draft.startsWith('/')) {
+            !slashBusy && !turnUncertain && !attachmentBusy
+        } else !slashBusy && !turnActive &&
             !turnUncertain &&
             !attachmentBusy &&
             (turnFailure == null || !runStarted) &&

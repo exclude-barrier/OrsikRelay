@@ -1164,6 +1164,18 @@ async def _handle_proxy(request: web.Request) -> web.StreamResponse:
     # validating handler, never forwarded by the generic proxy.
     if request.method == "POST" and match.upstream_path.endswith("/approval"):
         return _closed(403, "endpoint_out_of_scope")
+    if request.method == "POST" and match.upstream_path.rsplit("/", 1)[-1] in ("fork", "model"):
+        return await _handle_session_command(request, state, record, match)
+    if request.method == "GET" and match.upstream_path == "/api/model/options":
+        if "chat" not in record.permissions:
+            return _closed(403, "device_scope_denied")
+        try:
+            if request.can_read_body and await request.read():
+                return _closed(400, "body_not_allowed")
+        except web.HTTPRequestEntityTooLarge:
+            return _closed(413, "body_too_large")
+        return await _proxy(request, state, match.upstream_path,
+                            on_status=lambda status: _audit("model_options", record, status=status))
     if "session_id" in match.params and request.method in ("PATCH", "DELETE"):
         return await _handle_session_management(request, state, record, match)
     if request.method == "POST" and match.upstream_path.endswith("/resolve-unknown"):
@@ -1220,16 +1232,48 @@ async def _handle_resolve_unknown(
     return await _proxy(request, state, match.upstream_path, body_override=body, on_status=on_status)
 
 
+async def _handle_session_command(
+    request: web.Request, state: BridgeState, record: core.DeviceRecord, match: core.ProxyMatch
+) -> web.StreamResponse:
+    """Only the closed, bounded REST equivalents; never arbitrary TUI commands."""
+    is_model = match.upstream_path.endswith("/model")
+    action = "session_model_lock" if is_model else "session_fork"
+
+    def rejected(status: int, code: str) -> web.Response:
+        _audit(action, record, status=status)
+        return _closed(status, code)
+
+    if "chat" not in record.permissions:
+        return rejected(403, "device_scope_denied")
+    try:
+        raw = await request.read() if request.can_read_body else b""
+    except web.HTTPRequestEntityTooLarge:
+        return rejected(413, "body_too_large")
+    if len(raw) > 4096:
+        return rejected(413, "body_too_large")
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        return rejected(400, "invalid_json")
+    if is_model:
+        ok, code = core.validate_session_model_body(parsed)
+        if not ok:
+            return rejected(400, code)
+    elif not isinstance(parsed, dict) or parsed:
+        return rejected(400, "invalid_fields")
+    body = json.dumps(parsed).encode()
+    return await _proxy(request, state, match.upstream_path, body_override=body,
+                        on_status=lambda status: _audit(action, record, status=status))
+
+
 async def _handle_session_management(
     request: web.Request, state: BridgeState, record: core.DeviceRecord, match: core.ProxyMatch
 ) -> web.StreamResponse:
-    """Archive (PATCH, archived flag only) or delete (DELETE, no body) one session.
-
-    The body is validated locally and re-serialised, so no other session field
-    (title, pin, hidden, end_reason) can ever reach Hermes through the bridge.
-    """
+    """Archive, rename with a bounded title, or delete one session."""
     session_id = match.params["session_id"]
     action = "session_delete" if request.method == "DELETE" else "session_archive"
+    if "chat" not in record.permissions:
+        return _closed(403, "device_scope_denied")
 
     def rejected(status: int, code: str) -> web.Response:
         # Local rejections are audited too (least-privilege attempts stay visible).
@@ -1252,7 +1296,9 @@ async def _handle_session_management(
         ok, code = core.validate_session_patch_body(parsed)
         if not ok:
             return rejected(400, code)
-        body = json.dumps({"archived": parsed["archived"]}).encode()
+        if "title" in parsed:
+            action = "session_title"
+        body = json.dumps(parsed).encode()
     on_status = lambda status: _audit(action, record, session=session_id, status=status)  # noqa: E731
     return await _proxy(request, state, match.upstream_path, body_override=body, on_status=on_status)
 

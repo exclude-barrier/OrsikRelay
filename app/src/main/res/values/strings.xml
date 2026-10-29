@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="slash_models_loading">Loading session model options…</string>
+    <string name="slash_models_failed">Model options could not be loaded.</string>
+    <string name="slash_models_empty">The server offered no model options.</string>
+    <string name="slash_failed">Command failed or its outcome is unknown. Check the session before trying again.</string>
+    <string name="slash_done">Session command applied.</string>
+    <string name="slash_error">Command unavailable or invalid. Nothing was sent to the model.</string>
+    <string name="slash_no_run">No active run</string>
+    <string name="slash_busy">Wait for the current operation</string>
     <string name="app_name">Orsik Relay</string>
     <string name="onboarding_title">Add server</string>
     <string name="onboarding_subtitle">Connect securely to your Hermes agent server</string>
@@ -303,6 +311,7 @@
     <string name="home_composer_send">Send</string>
     <string name="home_send_failed">The task could not be started. Try again.</string>
     <string name="home_send_busy">A task is already running. Wait for it or stop it in its chat.</string>
+    <string name="home_command_in_chat">Commands work inside a chat. Open a chat and type the command there.</string>
     <string name="home_offline_title">No connection to %1$s</string>
     <string name="home_offline_unaffected">Tasks running on the server are not affected.</string>
     <string name="home_offline_retry">Try again</string>

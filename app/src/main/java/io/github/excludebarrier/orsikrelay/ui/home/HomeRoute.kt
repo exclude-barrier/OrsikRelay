@@ -220,9 +220,9 @@ fun HomeRoute(
 
     fun send() {
         if (sending) return
-        // One run slot: refuse before creating a session that would stay empty.
-        if (runController.activeRun.value != null) {
-            notice = HomeNotice.Busy
+        // One run slot, and no command as a task: refuse before creating a session that would stay empty.
+        homeSendRefusal(draft, runActive = runController.activeRun.value != null)?.let {
+            notice = it
             return
         }
         val text = draft

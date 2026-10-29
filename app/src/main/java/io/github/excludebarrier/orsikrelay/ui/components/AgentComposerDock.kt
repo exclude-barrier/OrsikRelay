@@ -26,6 +26,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -40,10 +43,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
 
@@ -54,6 +64,9 @@ object ComposerDockTags {
     const val ATTACH = "home_composer_attach"
     const val AGENT = "home_composer_agent"
 }
+
+/** Presentation-only suggestions. Selecting inserts text, never submits it. */
+data class ComposerSuggestion(val text: String, val enabled: Boolean = true, val reason: String? = null)
 
 /**
  * The fixed bottom area of design v2: card surface with a hairline on top
@@ -108,8 +121,17 @@ fun AgentComposerDock(
     sendTestTag: String = ComposerDockTags.SEND,
     attachTestTag: String = ComposerDockTags.ATTACH,
     above: (@Composable ColumnScope.() -> Unit)? = null,
-    trailing: (@Composable RowScope.() -> Unit)? = null
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    suggestions: List<ComposerSuggestion> = emptyList(),
+    onSuggestion: (String) -> Unit = {},
+    suggestionMaxHeight: Dp = 192.dp
 ) {
+    val focusRequester = remember { FocusRequester() }
+    var fieldValue by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
+    // External replacements (command selection, restore, clear) put the cursor
+    // at the end. Ordinary typing/selection retains the IME's exact state.
+    val displayedValue = if (fieldValue.text == draft) fieldValue else TextFieldValue(draft, TextRange(draft.length))
+    SideEffect { fieldValue = displayedValue }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -119,14 +141,30 @@ fun AgentComposerDock(
             .padding(5.dp)
     ) {
         above?.invoke(this)
+        if (suggestions.isNotEmpty()) {
+            Column(Modifier.heightIn(max = suggestionMaxHeight).verticalScroll(rememberScrollState()).testTag("slash_menu")) {
+                suggestions.forEach { suggestion ->
+                    androidx.compose.material3.TextButton(
+                        enabled = suggestion.enabled,
+                        onClick = { onSuggestion(suggestion.text); focusRequester.requestFocus() },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("slash:${suggestion.text}")
+                    ) {
+                        Text(suggestion.text + (suggestion.reason?.let { " — $it" } ?: ""))
+                    }
+                }
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (agentSelector) {
                 AgentAvatar(enabled = enabled, onClick = onOpenAgentPicker, modifier = Modifier.testTag(ComposerDockTags.AGENT))
             }
             val textColor = MaterialTheme.colorScheme.onSurface
             BasicTextField(
-                value = draft,
-                onValueChange = onDraftChange,
+                value = displayedValue,
+                onValueChange = { value ->
+                    fieldValue = value
+                    if (value.text != draft) onDraftChange(value.text)
+                },
                 enabled = enabled,
                 maxLines = maxLines,
                 textStyle = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, color = textColor),
@@ -149,6 +187,7 @@ fun AgentComposerDock(
                 },
                 modifier = Modifier
                     .weight(1f)
+                    .focusRequester(focusRequester)
                     .padding(horizontal = if (agentSelector) 8.dp else 14.dp)
                     .testTag(inputTestTag)
             )

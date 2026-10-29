@@ -48,6 +48,9 @@ PROXIED_ROUTES: tuple[tuple[str, str], ...] = (
     ("GET", "/api/sessions/{session_id}"),
     ("GET", "/api/sessions/{session_id}/messages"),
     ("POST", "/api/sessions/{session_id}/chat/stream"),
+    ("POST", "/api/sessions/{session_id}/fork"),
+    ("POST", "/api/sessions/{session_id}/model"),
+    ("GET", "/api/model/options"),
     ("GET", "/v1/runs/{run_id}"),
     ("POST", "/v1/runs/{run_id}/approval"),
     ("POST", "/v1/runs/{run_id}/stop"),
@@ -123,8 +126,8 @@ def validate_approval_body(body: object) -> tuple[bool, str]:
 
 
 # --- Session archive contract (least privilege) ----------------------------
-# The core's PATCH also accepts title/pinned/hidden/unread/end_reason; the
-# mobile client only archives and restores, so nothing else may reach Hermes.
+# PATCH accepts exactly one archived flag OR one bounded title. No other
+# fields and no combined mutation may reach Hermes.
 SESSION_PATCH_FIELDS = frozenset({"archived"})
 
 
@@ -132,10 +135,28 @@ def validate_session_patch_body(body: object) -> tuple[bool, str]:
     """Returns ``(ok, error_code)``; on failure no upstream request is made."""
     if not isinstance(body, dict):
         return False, "invalid_json"
+    if set(body.keys()) == {"title"}:
+        title = body["title"]
+        if (not isinstance(title, str) or not title.strip() or len(title) > 512
+                or not _is_control_free(title) or any(0x80 <= ord(ch) <= 0x9F for ch in title)):
+            return False, "invalid_title"
+        return True, ""
     if set(body.keys()) != SESSION_PATCH_FIELDS:
         return False, "invalid_fields"
     if not isinstance(body["archived"], bool):
         return False, "invalid_archived"
+    return True, ""
+
+
+def validate_session_model_body(body: object) -> tuple[bool, str]:
+    if not isinstance(body, dict) or set(body) != {"provider", "model"}:
+        return False, "invalid_fields"
+    provider, model = body["provider"], body["model"]
+    if not isinstance(provider, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", provider):
+        return False, "invalid_provider"
+    if (not isinstance(model, str) or not model or len(model) > 200
+            or not _is_control_free(model) or any(ch.isspace() or 0x80 <= ord(ch) <= 0x9F for ch in model) or "::" in model):
+        return False, "invalid_model"
     return True, ""
 
 
@@ -452,6 +473,9 @@ def build_capabilities(*, terminal: bool, files: bool) -> dict:
             "files": files,
             "projects": files,
             "session_archive": True,
+            "session_title": True,
+            "session_fork": True,
+            "session_model_lock": True,
             "session_delete": True,
             "session_chat_interactive_approvals": build_interactive_approvals_contract(),
             "device_credentials": build_device_credentials_contract(),
@@ -466,6 +490,9 @@ def build_capabilities(*, terminal: bool, files: bool) -> dict:
             "run_unknown_resolution": {"method": "POST", "path": "/v1/runs/{run_id}/resolve-unknown"},
             "host_metrics": {"method": "GET", "path": "/v1/host/metrics"},
             "session_update": {"method": "PATCH", "path": "/api/sessions/{session_id}"},
+            "session_fork": {"method": "POST", "path": "/api/sessions/{session_id}/fork"},
+            "session_model_lock": {"method": "POST", "path": "/api/sessions/{session_id}/model"},
+            "model_options": {"method": "GET", "path": "/api/model/options"},
             "session_delete": {"method": "DELETE", "path": "/api/sessions/{session_id}"},
             "run_status": {"method": "GET", "path": "/v1/runs/{run_id}"},
             "run_approval": {"method": "POST", "path": "/v1/runs/{run_id}/approval"},

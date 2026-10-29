@@ -63,13 +63,22 @@ class HermesSessionManageClient(
         return write(request(url, apiKey).delete().build(), DELETED_OBJECT)
     }
 
-    private fun write(request: Request, expectedObject: String): SessionManageResult = try {
+    fun rename(baseUrl: String, apiKey: SecretValue, sessionId: String, title: String): SessionManageResult {
+        if (title.isBlank() || title.length > 512 || title.any { it.isISOControl() }) return failed()
+        val url = sessionUrl(baseUrl, apiKey, sessionId) ?: return failed()
+        val body = JSONObject().put("title", title).toString().toRequestBody(JSON)
+        return write(request(url, apiKey).patch(body).build(), SESSION_OBJECT, sessionId, title)
+    }
+
+    private fun write(request: Request, expectedObject: String, sessionId: String? = null, title: String? = null): SessionManageResult = try {
         client.newCall(request).execute().use { response ->
             when (response.code) {
                 200 -> {
                     requireJsonContentType(response) { return failed() }
                     val text = readBoundedUtf8(response.body, MAX_RESPONSE_BYTES) { return failed() }
                     val root = JSONObject(text)
+                    if (sessionId != null && (root.optJSONObject("session")?.opt("id") != sessionId ||
+                            root.optJSONObject("session")?.opt("title") != title)) return failed()
                     when {
                         root.opt(OBJECT_FIELD) != expectedObject -> failed()
                         expectedObject != DELETED_OBJECT -> SessionManageResult.Success

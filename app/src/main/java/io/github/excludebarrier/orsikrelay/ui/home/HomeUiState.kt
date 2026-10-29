@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashInput
 import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsResult
 
 import io.github.excludebarrier.orsikrelay.domain.connection.ConnectionFailureReason
@@ -34,7 +35,18 @@ enum class HomeNotice {
     AttachmentUnsupported,
     AttachmentTooLarge,
     AttachmentUnreadable,
-    NewChatFailed
+    NewChatFailed,
+    CommandInChat
+}
+
+/**
+ * Why Home refuses to start a task, or `null` to send. A slash command is
+ * never turned into an agent task here; commands work inside a chat.
+ */
+internal fun homeSendRefusal(draft: String, runActive: Boolean): HomeNotice? = when {
+    SlashInput.parse(draft) != null -> HomeNotice.CommandInChat
+    runActive -> HomeNotice.Busy
+    else -> null
 }
 
 /** Everything the stateless [HomeScreen] renders. */
