@@ -34,6 +34,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import androidx.webkit.WebViewFeature
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -335,6 +340,35 @@ class TerminalScreenUiTest {
         composeRule.waitUntil(5_000) { source.listener != null }
         source.listener!!.invoke(TerminalEvent.Closed(TerminalCloseReason.Unauthorized))
         composeRule.onNodeWithText(text(R.string.terminal_closed_unauthorized)).assertIsDisplayed()
+    }
+
+    @Test
+    fun aCrashedRendererIsReplacedAndTheConsoleKeepsWorking() {
+        assumeTrue("WebView too old for the terminal", webViewSupported)
+        val source = FakeTerminalSource().also { current = it }
+        connected(source)
+        val crashed = terminalWebView()!!
+        val sizesBefore = source.sizes.size
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { crashed.loadUrl("chrome://crash") }
+        // A new page reports its size again; the old WebView is gone.
+        composeRule.waitUntil(15_000) { source.sizes.size > sizesBefore && terminalWebView().let { it != null && it !== crashed } }
+        assertEquals(1, source.opens)
+        key("enter"); awaitSent("\r")
+    }
+
+    private fun terminalWebView(): WebView? {
+        var found: WebView? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).firstOrNull()
+            found = activity?.window?.decorView?.let(::findWebView)
+        }
+        return found
+    }
+
+    private fun findWebView(view: View): WebView? = when (view) {
+        is WebView -> view
+        is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { findWebView(view.getChildAt(it)) }
+        else -> null
     }
 
     @Test
