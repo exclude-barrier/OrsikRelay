@@ -61,6 +61,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsResult
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
+import io.github.excludebarrier.orsikrelay.domain.chat.SessionModelOption
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandResult
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 
 /**
  * JVM unit tests for the [ChatViewModel] turn state machine.
@@ -124,6 +131,12 @@ class ChatViewModelTest {
         serviceStarter: RunForegroundServiceStarter = FakeRunServiceStarter(),
         attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
         onBack: () -> Unit = {},
+        slashSource: SlashCommandSource =
+            SlashCommandSource { emptySet() },
+        slashExecutor: ExecuteSlashCommand? = null,
+        onOpenSession: (String) -> Unit = {},
+        modelOptionsSource: ModelOptionsSource =
+            ModelOptionsSource { ModelOptionsResult.Failed },
         // An EXISTING controller simulates a re-created screen that
         // re-attaches to the same app-level run.
         controller: RunSessionController? = null,
@@ -153,8 +166,140 @@ class ChatViewModelTest {
             toolActivityLabel = "Tool ist aktiv…",
             namedToolActivityLabel = "Werkzeug %s ist aktiv…",
             dispatcher = dispatcher,
-            ioDispatcher = ioDispatcher
+            ioDispatcher = ioDispatcher,
+            slashSource = slashSource,
+            slashExecutor = slashExecutor,
+            onOpenSession = onOpenSession,
+            modelOptionsSource = modelOptionsSource
         )
+    }
+
+    /** Creates the model and loads (empty) history so the composer is enabled. */
+    @Test fun slashSelectionOnlyInsertsAndUnknownCommandNeverStartsATurn() = runTest {
+        val command = SlashCommand.TITLE
+        val model = build(testScheduler, slashSource = { setOf(command) })
+        try {
+            model.loadHistory()
+            model.loadSlashCommands()
+            advanceUntilIdle()
+            model.selectSlashCommand(command)
+            assertEquals("/title ", model.state.value.draft)
+            assertFalse(model.state.value.turnActive)
+            model.onDraftChange("/unknown secret argument")
+            model.send()
+            assertTrue(model.state.value.slashError)
+            assertFalse(model.state.value.turnActive)
+            assertTrue(model.state.value.localLines.isEmpty())
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun idleRunCommandAndUnadvertisedCommandCannotBeSelected() = runTest {
+        val stop = SlashCommand.STOP
+        val model = build(testScheduler, slashSource = { setOf(stop) })
+        try {
+            model.loadSlashCommands()
+            advanceUntilIdle()
+            model.onDraftChange("/")
+            model.selectSlashCommand(stop)
+            assertEquals("/", model.state.value.draft)
+            model.selectSlashCommand(SlashCommand.NEW)
+            assertEquals("/", model.state.value.draft)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun slashNewCreatesOnceOnlyOnSendAndNavigatesOnlyAfterSuccess() = runTest {
+        var calls = 0
+        var opened: String? = null
+        val command = SlashCommand.NEW
+        val executor = ExecuteSlashCommand { p, s, cmd, arg ->
+            assertEquals(profileId, p); assertEquals(sessionId, s)
+            assertEquals(command, cmd); assertEquals("", arg)
+            calls++
+            SlashCommandResult.OpenSession("new-session")
+        }
+        val model = build(testScheduler, slashSource = { setOf(command) }, slashExecutor = executor,
+            onOpenSession = { opened = it })
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.selectSlashCommand(command)
+            assertEquals(0, calls)
+            model.send(); model.send(); advanceUntilIdle()
+            assertEquals(1, calls); assertEquals("new-session", opened)
+            assertEquals("", model.state.value.draft)
+            assertFalse(model.state.value.turnActive)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun slashBranchNavigatesToVerifiedChildAndTitleUpdatesOnlyAfterAcknowledgement() = runTest {
+        val branch = SlashCommand.BRANCH
+        val title = SlashCommand.TITLE
+        var opened: String? = null
+        val calls = mutableListOf<SlashCommand>()
+        val executor = ExecuteSlashCommand { _, _, cmd, _ ->
+            calls += cmd
+            if (cmd == branch) SlashCommandResult.OpenSession("child")
+            else SlashCommandResult.Done
+        }
+        val model = build(testScheduler, slashSource = { setOf(branch, title) }, slashExecutor = executor,
+            onOpenSession = { opened = it })
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.onDraftChange("/title New title"); model.send(); advanceUntilIdle()
+            assertEquals("New title", model.state.value.slashTitle)
+            assertNull(opened)
+            model.onDraftChange("/branch"); model.send(); model.send(); advanceUntilIdle()
+            assertEquals("child", opened)
+            assertEquals(listOf(title, branch), calls)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun slashModelLoadsCatalogOnceAndOnlySendsAnUnambiguousCatalogChoice() = runTest {
+        val command = SlashCommand.MODEL
+        var reads = 0
+        val writes = mutableListOf<String>()
+        val model = build(testScheduler, slashSource = { setOf(command) },
+            modelOptionsSource = {
+                reads++
+                ModelOptionsResult.Loaded(listOf(
+                    SessionModelOption("provider", "org/model")))
+            },
+            slashExecutor = ExecuteSlashCommand { _, _, cmd, arg ->
+                assertEquals(command, cmd); writes += arg
+                SlashCommandResult.Done
+            })
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.selectSlashCommand(command); advanceUntilIdle()
+            assertEquals(1, reads); assertTrue(writes.isEmpty())
+            model.onDraftChange("/model unknown"); model.send(); advanceUntilIdle()
+            assertTrue(model.state.value.slashError); assertTrue(writes.isEmpty())
+            model.onDraftChange("/model org/model"); model.send(); model.send(); advanceUntilIdle()
+            assertEquals(listOf("provider::org/model"), writes)
+            assertTrue(model.state.value.slashDone)
+            assertEquals(1, reads)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun ambiguousSlashFailureKeepsDraftAndRestorationNeverReexecutes() = runTest {
+        val command = SlashCommand.BRANCH
+        val draft = FakeDraftRepository()
+        var calls = 0
+        val execute = ExecuteSlashCommand { _, _, _, _ ->
+            calls++
+            SlashCommandResult.Failed
+        }
+        val model = build(testScheduler, draft = draft, slashSource = { setOf(command) }, slashExecutor = execute)
+        model.loadSlashCommands(); advanceUntilIdle()
+        model.onDraftChange("/branch"); model.send(); advanceUntilIdle()
+        assertEquals(1, calls); assertTrue(model.state.value.slashFailed)
+        assertEquals("/branch", model.state.value.draft)
+        model.close(); lastController?.close()
+        val restored = build(testScheduler, draft = draft, slashSource = { setOf(command) }, slashExecutor = execute)
+        try {
+            restored.restoreDraft(); restored.loadSlashCommands(); advanceUntilIdle()
+            assertEquals(1, calls)
+            assertFalse(restored.state.value.turnActive)
+        } finally { restored.close(); lastController?.close() }
     }
 
     /** Creates the model and loads (empty) history so the composer is enabled. */
@@ -162,6 +307,8 @@ class ChatViewModelTest {
         history: MessageHistorySource = readyHistory(),
         onBack: () -> Unit = {},
         attachmentSource: ChatAttachmentSource = NoopChatAttachmentSource,
+        slashSource: SlashCommandSource =
+            SlashCommandSource { emptySet() },
         block: suspend kotlinx.coroutines.test.TestScope.(
             model: ChatViewModel,
             chat: FakeTurnSource,
@@ -174,7 +321,7 @@ class ChatViewModelTest {
         val stop = FakeStopRequester()
         val steer = FakeSteerRequester()
         val draft = FakeDraftRepository()
-        val model = build(this.testScheduler, history = history, chat = chat, stop = stop, steer = steer, draft = draft, onBack = onBack, attachmentSource = attachmentSource)
+        val model = build(this.testScheduler, history = history, chat = chat, stop = stop, steer = steer, draft = draft, onBack = onBack, attachmentSource = attachmentSource, slashSource = slashSource)
         model.loadHistory()
         testScheduler.advanceUntilIdle()
         block(model, chat, stop, steer, draft)
@@ -1240,6 +1387,34 @@ class ChatViewModelTest {
         assertTrue(model.state.value.turnActive)
         assertTrue(model.state.value.stopInFlight)
     }
+
+    @Test fun slashStopUsesBoundRunOnceAndDoesNotOptimisticallyEndIt() =
+        withModel(slashSource = { setOf(SlashCommand.STOP) }) { model, chat, stop, _, _ ->
+            model.loadSlashCommands()
+            model.onDraftChange("hi"); model.send()
+            chat.enqueue(ChatTurnEvent.RunStarted(runId)); advanceUntilIdle()
+            model.onDraftChange("/stop")
+            assertTrue(model.state.value.sendEnabled)
+            model.send(); model.send(); advanceUntilIdle()
+            assertEquals(1, stop.calls.get())
+            assertTrue(model.state.value.turnActive)
+            assertTrue(model.state.value.stopInFlight)
+            assertEquals("", model.state.value.draft)
+        }
+
+    @Test fun slashSteerUsesExistingRequesterAndReportsQueuedNotCompleted() =
+        withModel(slashSource = { setOf(SlashCommand.STEER) }) { model, chat, _, steer, _ ->
+            model.loadSlashCommands()
+            model.onDraftChange("hi"); model.send()
+            chat.enqueue(ChatTurnEvent.RunStarted(runId)); advanceUntilIdle()
+            model.onDraftChange("/steer Change course")
+            model.send(); model.send(); advanceUntilIdle()
+            assertEquals(1, steer.calls.get())
+            assertEquals("Change course", steer.text)
+            assertTrue(model.state.value.steerQueued)
+            assertTrue(model.state.value.turnActive)
+            assertEquals("", model.state.value.draft)
+        }
 
     @Test
     fun stopDoubleTapStartsExactlyOneRequest() = withModel { model, chat, stop, _, _ ->

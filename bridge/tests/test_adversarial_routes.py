@@ -214,7 +214,9 @@ class AdversarialRoutesTest(unittest.IsolatedAsyncioTestCase):
         token = cred["device_key"]
         before = self._counters()
         bad_bodies = [
-            {"title": "x"},
+            {"title": ""},
+            {"title": "x" * 513},
+            {"title": "x\u0085y"},
             {"pinned": True},
             {"hidden": True},
             {"unread": True},
@@ -232,7 +234,7 @@ class AdversarialRoutesTest(unittest.IsolatedAsyncioTestCase):
             resp = await self._send("PATCH", "/api/sessions/s1", token, body)
             self.assertEqual(resp.status, 400, body)
             self.assertEqual((await resp.json())["error"]["code"] in {
-                "invalid_fields", "invalid_archived", "invalid_json"}, True, body)
+                "invalid_fields", "invalid_archived", "invalid_title", "invalid_json"}, True, body)
         # JSON numbers that overflow to infinity, and JSON's bare NaN, never coerce.
         for raw in (b'{"archived":1e309}', b'{"archived":-1e309}', b'{"archived":NaN}',
                     b'{"archived":Infinity}'):

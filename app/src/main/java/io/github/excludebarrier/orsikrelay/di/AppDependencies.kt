@@ -67,6 +67,10 @@ import io.github.excludebarrier.orsikrelay.platform.notification.AndroidNotifica
 import io.github.excludebarrier.orsikrelay.platform.notification.AppForegroundTracker
 import io.github.excludebarrier.orsikrelay.platform.run.AndroidRunForegroundServiceStarter
 import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCredentialStore
+import io.github.excludebarrier.orsikrelay.data.chat.SlashCommandRepository
+import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 
 /**
  * The single production dependency graph for the whole app: exactly one
@@ -91,6 +95,9 @@ internal data class AppDependencies(
     val sessionPageSource: SessionPageSource,
     val sessionCreator: SessionCreator,
     val sessionManager: SessionManager,
+    val slashCommands: SlashCommandSource,
+    val slashExecutor: ExecuteSlashCommand,
+    val slashModels: ModelOptionsSource,
     /** Live host values for the Home card (`GET /v1/host/metrics`). */
     val hostMetricsSource: HostMetricsSource,
     /** The bridge's server shell (`GET /v1/terminal`), when the operator enabled it. */
@@ -267,6 +274,7 @@ internal fun buildAppDependencies(
             profileAdmin.listProfiles().any { it.id == lease.profileId }
         }
     )
+    val slashRepository = SlashCommandRepository(profileRepository, credentialStore)
     return AppDependencies(
         profileAdmin = profileAdmin,
         coordinator = ProfileConnectionCoordinator(
@@ -296,6 +304,9 @@ internal fun buildAppDependencies(
             profileRepository = profileRepository,
             credentialStore = credentialStore
         ),
+        slashCommands = slashRepository,
+        slashExecutor = ExecuteSlashCommand(slashRepository),
+        slashModels = slashRepository,
         hostMetricsSource = HostMetricsRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore

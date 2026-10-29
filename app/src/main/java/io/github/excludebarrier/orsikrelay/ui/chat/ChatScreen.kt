@@ -145,6 +145,15 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsResult
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
+import io.github.excludebarrier.orsikrelay.domain.chat.SessionModelOption
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashInput
+import io.github.excludebarrier.orsikrelay.ui.components.ComposerSuggestion
+import io.github.excludebarrier.orsikrelay.ui.components.SendButton
 
 /**
  * Chat screen with the live turn slice — thin presentation
@@ -187,7 +196,13 @@ fun ChatScreen(
     sessionTitle: String? = null,
     serverName: String? = null,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    slashSource: SlashCommandSource =
+        SlashCommandSource { emptySet() },
+    slashExecutor: ExecuteSlashCommand? = null,
+    onOpenSession: (String) -> Unit = {},
+    modelOptionsSource: ModelOptionsSource =
+        ModelOptionsSource { ModelOptionsResult.Failed }
 ) {
     val chatTextScale = (chatTextSizeController?.size ?: ChatTextSize.DEFAULT).scale
     // The tool-activity labels are resolved here (localized UI strings) and
@@ -225,7 +240,11 @@ fun ChatScreen(
             sessionId = sessionId,
             onBack = onBack,
             toolActivityLabel = toolActivityLabel,
-            namedToolActivityLabel = namedToolActivityLabel
+            namedToolActivityLabel = namedToolActivityLabel,
+            slashSource = slashSource,
+            slashExecutor = slashExecutor,
+            onOpenSession = onOpenSession,
+            modelOptionsSource = modelOptionsSource
         )
     }
 
@@ -242,6 +261,7 @@ fun ChatScreen(
     LaunchedEffect(viewModel) {
         viewModel.loadHistory()
         viewModel.restoreDraft()
+        viewModel.loadSlashCommands()
     }
 
     val state by viewModel.state.collectAsState()
@@ -357,7 +377,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 .padding(horizontal = 16.dp)
         ) {
         ChatHeader(
-            title = sessionTitle?.takeIf { it.isNotBlank() }
+            title = (state.slashTitle ?: sessionTitle)?.takeIf { it.isNotBlank() }
                 ?: stringResource(R.string.chat_title),
             subtitle = serverName?.takeIf { it.isNotBlank() }
                 ?.let { stringResource(R.string.chat_header_subtitle, it) },
@@ -686,9 +706,22 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     modifier = Modifier.bleed(16.dp),
                     draft = state.draft,
                     onDraftChange = { viewModel.onDraftChange(it) },
-                    sendEnabled = state.sendEnabled,
+                    sendEnabled = state.sendEnabled && !state.slashBusy,
                     onSend = { viewModel.send() },
                     turnActive = state.turnActive,
+                    slashCommands = state.slashCommands,
+                    slashError = state.slashError,
+                    slashBusy = state.slashBusy,
+                    slashFailed = state.slashFailed,
+                    slashDone = state.slashDone,
+                    modelOptions = state.modelOptions,
+                    modelNotice = if (!state.draft.startsWith("/model ")) null else when {
+                        state.modelsLoading -> stringResource(R.string.slash_models_loading)
+                        state.modelsFailed -> stringResource(R.string.slash_models_failed)
+                        state.modelsLoaded && state.modelOptions.isEmpty() -> stringResource(R.string.slash_models_empty)
+                        else -> null
+                    },
+                    onSlashSelected = viewModel::selectSlashCommand,
                     attachment = state.attachment,
                     attachmentThumbnail = attachmentThumbnail,
                     attachmentBusy = state.attachmentBusy,
@@ -835,7 +868,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
     }
     if (confirmDelete) {
         DeleteSessionDialog(
-            title = sessionTitle?.takeIf { it.isNotBlank() } ?: stringResource(R.string.session_fallback_title),
+            title = (state.slashTitle ?: sessionTitle)?.takeIf { it.isNotBlank() } ?: stringResource(R.string.session_fallback_title),
             onConfirm = {
                 confirmDelete = false
                 manage({ it.delete(profileId, sessionId) }) { viewModel.handleBack() }
@@ -1388,17 +1421,28 @@ internal fun ComposerBar(
     runControls: RunComposerControls? = null,
     conflictNotice: Boolean = false,
     uncertainNotice: Boolean = false,
-    compactRunControls: (@Composable RowScope.() -> Unit)? = null
+    compactRunControls: (@Composable RowScope.() -> Unit)? = null,
+    slashCommands: Set<SlashCommand> = emptySet(),
+    slashError: Boolean = false,
+    slashBusy: Boolean = false,
+    slashFailed: Boolean = false,
+    slashDone: Boolean = false,
+    modelOptions: List<SessionModelOption> = emptyList(),
+    modelNotice: String? = null,
+    onSlashSelected: (SlashCommand) -> Unit = {}
 ) {
     // The tag wraps the whole bar including its own bottom padding, so
     // tests can compare the bar's bottom edge with the content area.
-    if (compact) {
+    if (compact && slashCommands.isEmpty()) {
         Column(
             modifier = modifier
                 .testTag(TAG_COMPOSER_BAR)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
+            if (slashError) Text(stringResource(R.string.slash_error), color = MaterialTheme.colorScheme.error)
+            if (slashFailed) Text(stringResource(R.string.slash_failed), color = MaterialTheme.colorScheme.error)
+            if (slashDone) Text(stringResource(R.string.slash_done))
             CompactComposerContent(
                 draft = draft,
                 onDraftChange = onDraftChange,
@@ -1424,8 +1468,12 @@ internal fun ComposerBar(
     BottomDockArea(
         modifier = modifier
             .testTag(TAG_COMPOSER_BAR)
-            .padding(top = 8.dp)
+            .padding(top = if (compact) 0.dp else 8.dp)
     ) {
+        if (slashError) Text(stringResource(R.string.slash_error), color = MaterialTheme.colorScheme.error)
+        if (slashFailed) Text(stringResource(R.string.slash_failed), color = MaterialTheme.colorScheme.error)
+        if (slashDone) Text(stringResource(R.string.slash_done))
+        if (modelNotice != null) Text(modelNotice)
         // Compact attachment chip above the input row. Local-only data:
         // the file name and size the provider reported, plus a bounded decoded
         // thumbnail; no path, no URI and no provider text is ever rendered.
@@ -1502,27 +1550,52 @@ internal fun ComposerBar(
         // While a run is bound, the run row below replaces it; the disabled
         // draft row stays only when it holds text (e.g. a recovered steer
         // moved into the composer), so that text never disappears.
-        if (runControls == null || draft.isNotBlank()) {
+        if (runControls == null || draft.isNotBlank() || slashCommands.isNotEmpty()) {
             AgentComposerDock(
                 draft = draft,
                 onDraftChange = onDraftChange,
                 hint = stringResource(R.string.chat_input_label),
-                enabled = !turnActive,
+                enabled = (!turnActive || slashCommands.isNotEmpty()) && !slashBusy,
                 canSend = sendEnabled,
                 sending = false,
                 onSend = onSend,
                 agentSelector = false,
-                attachEnabled = !turnActive && !attachmentBusy,
+                attachEnabled = !turnActive && !attachmentBusy && !slashBusy,
                 onAttach = onPickAttachment,
                 attachLabel = attachmentAddLabel,
                 sendLabel = stringResource(R.string.chat_send),
-                maxLines = Int.MAX_VALUE,
+                maxLines = if (compact) 1 else Int.MAX_VALUE,
                 inputTestTag = TAG_COMPOSER_FIELD,
                 sendTestTag = TAG_COMPOSER_SEND,
-                attachTestTag = TAG_ATTACHMENT_ADD
+                attachTestTag = TAG_ATTACHMENT_ADD,
+                suggestionMaxHeight = if (compact) 48.dp else 192.dp,
+                trailing = if (compact && runControls != null) {
+                    {
+                        SendButton(
+                            enabled = sendEnabled, sending = slashBusy,
+                            label = stringResource(R.string.chat_send), testTag = TAG_COMPOSER_SEND, onClick = onSend)
+                        if (compactRunControls != null) compactRunControls()
+                        else StopButton(runControls.stopInFlight, stringResource(R.string.chat_stop), runControls.onStop)
+                    }
+                } else null,
+                suggestions = io.github.excludebarrier.orsikrelay.domain.chat.slashSuggestions(draft, slashCommands).map {
+                    val enabled = !slashBusy && if (it.needsRun) runControls != null else !turnActive
+                    ComposerSuggestion(
+                        "/${it.word}", enabled,
+                        if (enabled) null else stringResource(if (it.needsRun && runControls == null) R.string.slash_no_run else R.string.slash_busy)
+                    )
+                } + io.github.excludebarrier.orsikrelay.domain.chat.modelSuggestions(draft, modelOptions).map {
+                    ComposerSuggestion("/model ${it.qualified}", !turnActive && !slashBusy)
+                },
+                onSuggestion = { text ->
+                    val input = SlashInput.parse(text)
+                    if (input?.command == SlashCommand.MODEL && input.argument.isNotEmpty()) {
+                        onDraftChange("$text ")
+                    } else input?.command?.let(onSlashSelected)
+                }
             )
         }
-        if (runControls != null) {
+        if (runControls != null && !compact) {
             RunComposerRow(runControls, modifier = Modifier.padding(top = if (draft.isNotBlank()) 8.dp else 0.dp))
         }
     }

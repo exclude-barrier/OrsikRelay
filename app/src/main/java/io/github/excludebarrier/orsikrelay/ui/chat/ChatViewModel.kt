@@ -11,6 +11,11 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatMessageValidator
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatStreamError
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatTurnEvent
+import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandResult
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashInput
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsResult
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryPaging
@@ -48,6 +53,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
+import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 
 /**
  * View model owning the chat screen's turn state machine.
@@ -98,7 +105,12 @@ internal class ChatViewModel(
     private val toolActivityLabel: String,
     private val namedToolActivityLabel: String,
     dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val slashSource: SlashCommandSource =
+        SlashCommandSource { emptySet() },
+    private val slashExecutor: ExecuteSlashCommand? = null,
+    private val onOpenSession: (String) -> Unit = {},
+    private val modelOptionsSource: ModelOptionsSource = ModelOptionsSource { ModelOptionsResult.Failed }
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val _state = MutableStateFlow(ChatUiState())
@@ -466,13 +478,47 @@ internal class ChatViewModel(
     /**
      * Records one ordinary-draft change from the composer and schedules its
      * debounced, latest-value persist for the active key.
-     * Ignored while a turn is active (the composer is disabled then).
+     * During a run, capability-backed slash input remains editable. Sending
+     * ordinary chat text is still guarded separately by [send].
      */
     fun onDraftChange(value: String) {
-        if (_state.value.turnActive) return
-        _state.update { it.copy(draft = value) }
+        if (_state.value.slashBusy) return
+        if (_state.value.turnActive && _state.value.slashCommands.isEmpty()) return
+        _state.update { it.copy(draft = value, slashError = false, slashFailed = false, slashDone = false) }
         draftGeneration += 1
         chatDraftRepository.persistDraft(profileId, sessionId, value)
+        loadModelOptionsIfNeeded()
+    }
+
+    fun loadSlashCommands() {
+        scope.launch {
+            val commands = withContext(ioDispatcher) { slashSource.available(profileId) }
+            _state.update { it.copy(slashCommands = commands) }
+            loadModelOptionsIfNeeded()
+        }
+    }
+
+    private fun loadModelOptionsIfNeeded() {
+        val current = _state.value
+        if (!current.draft.startsWith("/model ") || current.modelsLoaded || current.modelsLoading ||
+            SlashCommand.MODEL !in current.slashCommands) return
+        _state.update { it.copy(modelsLoading = true) }
+        scope.launch {
+            val result = try {
+                withContext(ioDispatcher) { modelOptionsSource.loadModels(profileId) }
+            } catch (error: CancellationException) { throw error }
+            catch (_: Exception) { ModelOptionsResult.Failed }
+            _state.update { it.copy(modelsLoading = false, modelsLoaded = true,
+                modelsFailed = result is ModelOptionsResult.Failed,
+                modelOptions = (result as? ModelOptionsResult.Loaded)?.options.orEmpty()) }
+        }
+    }
+
+    fun selectSlashCommand(command: SlashCommand) {
+        val current = _state.value
+        if (command !in current.slashCommands || (command.needsRun && !current.controlsVisible)) return
+        if (current.turnActive && !command.needsRun) return
+        onDraftChange(command.insertion)
     }
 
     /**
@@ -786,7 +832,7 @@ internal class ChatViewModel(
      */
     fun onAttachmentPicked(contentUri: String) {
         val current = _state.value
-        if (current.turnActive || current.attachmentBusy) return
+        if (current.turnActive || current.attachmentBusy || current.slashBusy) return
         if (contentUri.isBlank()) {
             _state.update { it.copy(attachmentError = ChatAttachmentError.Unreadable) }
             return
@@ -833,8 +879,77 @@ internal class ChatViewModel(
         _state.update { it.copy(attachment = null, attachmentError = null) }
     }
 
+    private fun sendSlash(input: SlashInput) {
+        val current = _state.value
+        val command = input.command
+        val executor = slashExecutor
+        val executionInput = if (command == SlashCommand.MODEL) {
+            val option = current.modelOptions.singleOrNull { it.qualified == input.argument || it.model == input.argument }
+            option?.let { SlashInput.parse("/model ${it.qualified}") }
+        } else input
+        if (command == null || executionInput == null || !ExecuteSlashCommand.isValid(executionInput) || command !in current.slashCommands ||
+            current.turnUncertain || current.attachment != null || current.attachmentBusy) {
+            _state.update { it.copy(slashError = true) }
+            return
+        }
+        if (command == SlashCommand.STOP) {
+            if (!current.controlsVisible || current.stopInFlight) {
+                _state.update { it.copy(slashError = true) }
+                return
+            }
+            clearDraftState()
+            stop()
+            return
+        }
+        if (command == SlashCommand.STEER) {
+            if (!current.controlsVisible || current.steerInFlight || current.steerDraft.isNotBlank()) {
+                _state.update { it.copy(slashError = true) }
+                return
+            }
+            clearDraftState()
+            onSteerDraftChange(input.argument)
+            steer()
+            return
+        }
+        if (current.turnActive || executor == null) {
+            _state.update { it.copy(slashError = true) }
+            return
+        }
+        _state.update { it.copy(slashBusy = true, slashError = false, slashFailed = false, slashDone = false) }
+        scope.launch {
+            val result = try {
+                withContext(ioDispatcher) { executor(profileId, sessionId, executionInput) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                SlashCommandResult.Failed
+            }
+            when (result) {
+                is SlashCommandResult.OpenSession -> {
+                    clearDraftState()
+                    _state.update { it.copy(slashBusy = false) }
+                    onOpenSession(result.sessionId)
+                }
+                SlashCommandResult.Done -> {
+                    clearDraftState()
+                    _state.update { it.copy(slashBusy = false, slashDone = true,
+                        slashTitle = if (command == SlashCommand.TITLE)
+                            input.argument else it.slashTitle) }
+                }
+                SlashCommandResult.Failed -> _state.update { it.copy(slashBusy = false, slashFailed = true) }
+            }
+        }
+    }
+
     fun send() {
         val current = _state.value
+        if (current.slashBusy) return
+        // A leading slash NEVER reaches a model, even when unsupported.
+        val slash = SlashInput.parse(current.draft)
+        if (slash != null) {
+            sendSlash(slash)
+            return
+        }
         if (current.turnActive) return
         if (current.history !is MessageHistoryState.Ready) return
         // A failure before the confirmed start does not block a new,
