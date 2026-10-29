@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Base64
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -48,6 +49,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -278,6 +280,9 @@ private fun TerminalTopBar(
 /** What "An Hermes" carries: a selection or the last output. */
 private data class AskContext(val text: String, val selection: Boolean)
 
+// WEB_MESSAGE_LISTENER is checked once in TerminalRoute before this screen
+// exists; lint cannot see that guard across the call.
+@SuppressLint("RequiresFeature")
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TerminalScreen(
@@ -367,6 +372,10 @@ private fun TerminalScreen(
                         onFontSize = { next ->
                             fontSize = next.coerceIn(MIN_FONT, MAX_FONT)
                             fontStore.setFontSize(fontSize)
+                        },
+                        onRendererGone = {
+                            page = null
+                            webView = null
                         }
                     )
                     when (state) {
@@ -967,6 +976,9 @@ internal const val MAX_FONT = 24
 private const val ASSET_ORIGIN = "https://appassets.androidplatform.net"
 private const val PAGE_URL = "$ASSET_ORIGIN/assets/terminal/index.html"
 
+// WEB_MESSAGE_LISTENER is checked once in TerminalRoute before this screen
+// exists; lint cannot see that guard across the call.
+@SuppressLint("RequiresFeature")
 @Composable
 private fun TerminalConsole(
     controller: TerminalController,
@@ -979,7 +991,8 @@ private fun TerminalConsole(
     onModifier: (String) -> Unit,
     onSelection: (String) -> Unit,
     onLastOutput: (String) -> Unit,
-    onFontSize: (Int) -> Unit
+    onFontSize: (Int) -> Unit,
+    onRendererGone: () -> Unit
 ) {
     val theme = remember(palette, fontSize) {
         JSONObject()
@@ -999,31 +1012,39 @@ private fun TerminalConsole(
         }
     }
     val description = stringResource(R.string.terminal_view_description)
-    AndroidView(
-        modifier = Modifier
-            .fillMaxSize()
-            .semantics { contentDescription = description }
-            .testTag(TerminalTags.VIEW),
-        factory = { context ->
-            createTerminalWebView(context) { message, proxy ->
-                when {
-                    message == "r:" -> onPage(proxy)
-                    message.startsWith("d:") -> controller.input(message.substring(2).toByteArray(Charsets.UTF_8))
-                    message.startsWith("b:") -> runCatching { Base64.decode(message.substring(2), Base64.NO_WRAP) }
-                        .getOrNull()?.let(controller::input)
-                    message.startsWith("s:") -> parseSize(message.substring(2))?.let { (columns, rows) ->
-                        onSize(columns to rows)
-                        controller.resize(columns, rows)
+    // A new key drops the dead WebView (onRelease destroys it) and loads a
+    // fresh page; the server connection stays open.
+    var renderer by remember { mutableIntStateOf(0) }
+    key(renderer) {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics { contentDescription = description }
+                .testTag(TerminalTags.VIEW),
+            factory = { context ->
+                createTerminalWebView(context, onRendererGone = {
+                    onRendererGone()
+                    renderer++
+                }) { message, proxy ->
+                    when {
+                        message == "r:" -> onPage(proxy)
+                        message.startsWith("d:") -> controller.input(message.substring(2).toByteArray(Charsets.UTF_8))
+                        message.startsWith("b:") -> runCatching { Base64.decode(message.substring(2), Base64.NO_WRAP) }
+                            .getOrNull()?.let(controller::input)
+                        message.startsWith("s:") -> parseSize(message.substring(2))?.let { (columns, rows) ->
+                            onSize(columns to rows)
+                            controller.resize(columns, rows)
+                        }
+                        message.startsWith("m:") -> onModifier(message.substring(2))
+                        message.startsWith("S:") -> onSelection(message.substring(2).take(MAX_CONTEXT_CHARS))
+                        message.startsWith("L:") -> onLastOutput(message.substring(2).takeLast(MAX_CONTEXT_CHARS))
+                        message.startsWith("z:") -> message.substring(2).toIntOrNull()?.let(onFontSize)
                     }
-                    message.startsWith("m:") -> onModifier(message.substring(2))
-                    message.startsWith("S:") -> onSelection(message.substring(2).take(MAX_CONTEXT_CHARS))
-                    message.startsWith("L:") -> onLastOutput(message.substring(2).takeLast(MAX_CONTEXT_CHARS))
-                    message.startsWith("z:") -> message.substring(2).toIntOrNull()?.let(onFontSize)
-                }
-            }.also(onWebView)
-        },
-        onRelease = { it.destroy() }
-    )
+                }.also(onWebView)
+            },
+            onRelease = { it.destroy() }
+        )
+    }
 }
 
 /** Text handed to Hermes from the terminal is bounded (the chat message limit is larger). */
@@ -1046,9 +1067,12 @@ private fun css(color: Color): String = String.format("#%06X", color.toArgb() an
  * talks to the app only through a message listener bound to the asset
  * origin.
  */
-@SuppressLint("SetJavaScriptEnabled")
+// WEB_MESSAGE_LISTENER is checked once in TerminalRoute before this screen
+// exists; lint cannot see that guard across the call.
+@SuppressLint("SetJavaScriptEnabled", "RequiresFeature")
 private fun createTerminalWebView(
     context: Context,
+    onRendererGone: () -> Unit,
     onMessage: (String, JavaScriptReplyProxy) -> Unit
 ): WebView {
     val loader = WebViewAssetLoader.Builder()
@@ -1066,19 +1090,38 @@ private fun createTerminalWebView(
         settings.domStorageEnabled = false
         settings.setSupportZoom(false)
         settings.setGeolocationEnabled(false)
-        webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse =
-                loader.shouldInterceptRequest(request.url)
-                    ?: WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), null)
-
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
-        }
+        webViewClient = TerminalWebViewClient(loader, onRendererGone)
         WebViewCompat.addWebMessageListener(this, "OrsikTerminal", setOf(ASSET_ORIGIN)) {
                 _, message, sourceOrigin, isMainFrame, replyProxy ->
             val text = message.data
             if (isMainFrame && sourceOrigin == Uri.parse(ASSET_ORIGIN) && text != null) onMessage(text, replyProxy)
         }
         loadUrl(PAGE_URL)
+    }
+}
+
+/**
+ * Serves only the bundled assets, never navigates, and survives a renderer
+ * crash (TerminalScreenUiTest crashes it on purpose).
+ */
+// webkit 1.17.1 lint also flags the superclass constructor call itself, even
+// though onRenderProcessGone is overridden below.
+@SuppressLint("MissingOnRenderProcessGone")
+private class TerminalWebViewClient(
+    private val loader: WebViewAssetLoader,
+    private val onRendererGone: () -> Unit
+) : WebViewClient() {
+    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse =
+        loader.shouldInterceptRequest(request.url)
+            ?: WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), null)
+
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
+
+    // Without this a crashed or killed renderer takes the whole app down.
+    // The dead view must not be used again; the caller replaces it.
+    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+        onRendererGone()
+        return true
     }
 }
 
