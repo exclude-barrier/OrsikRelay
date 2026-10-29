@@ -148,7 +148,7 @@ _COPY.update({
 _COPY['update_description'] = ('Bridge über den vorhandenen Installer aktualisieren.', 'Update the bridge using the installed bootstrap installer.')
 
 _COPY.update({
-    'apply_restart': ('Übernehmen und neu starten', 'Apply and restart bridge'),
+    'apply_restart': ('Bridge neu starten', 'Restart bridge'),
     'apply_restart_help': ('Gespeicherte Servereinstellungen durch einen Dienstneustart übernehmen. Sprachänderungen benötigen keinen Neustart.', 'Apply saved server settings by restarting the service. Language changes do not require a restart.'),
     'restart_action': ('Neu starten', 'Restart'),
     'restart_confirm': ('Bridge jetzt neu starten? Aktive Verbindungen werden unterbrochen. Laufende Shell-Aufgaben werden dadurch nicht zuverlässig beendet.', 'Restart the bridge now? Active connections will be interrupted. This does not reliably terminate running shell tasks.'),
@@ -159,9 +159,11 @@ _COPY.update({
 
 _COPY.update({
     'update_current': ('Bereits aktuell. Kein Update verfügbar:', 'Bridge is already up to date. No update available:'),
-    'update_unknown': ('Installierter Stand unbekannt. Ein bestätigtes Update erfasst ihn für künftige Prüfungen.', 'Installed version is unknown. A confirmed update records it for future checks.'),
+    'update_unknown': ('Der installierte Release lässt sich nicht eindeutig zuordnen. Ein bestätigtes Update vervollständigt den Versionsnachweis.', 'The installed release could not be identified reliably. A confirmed update completes its version record.'),
     'update_check_failed': ('Update-Prüfung fehlgeschlagen. Netzwerk und Git prüfen; nichts installiert.', 'Update check failed. Check the network and Git; nothing was installed.'),
 })
+
+_COPY['update_record_failed'] = ('Update erfolgreich. Der Versionsnachweis konnte nicht gespeichert werden; Dateirechte prüfen.', 'Update succeeded. The version record could not be saved; check file permissions.')
 
 TEXT = {language: {key: pair[index] for key, pair in _COPY.items()}
         for index, language in enumerate(('de', 'en'))}

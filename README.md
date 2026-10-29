@@ -232,7 +232,7 @@ English or German for both `omb setup` and `omb update`. A language-only change
 needs no service restart. `--language en` or `--language de` overrides the saved
 language for one invocation.
 
-Terminal and file settings remain drafts until saved. Use **Apply and restart
+Terminal and file settings remain drafts until saved. Use **Restart
 bridge** to apply saved server settings, with a separate confirmation. Device
 terminal grants have their own confirmation and apply immediately. See the
 [installation guide](docs/bridge-installation.md#5a-interactive-local-settings).
@@ -242,8 +242,8 @@ terminal grants have their own confirmation and apply immediately. See the
 - **Bridge, quickest:** run `omb update` as the bridge account. It checks the
   latest release first and reports when already up to date. A confirmed update
   backs up the device store, preserves settings and restarts the bridge. Older
-  installations without a version marker need one successful update before
-  they can report an exact match. See the [update guide](docs/bridge-installation.md#6-update--rollback--backup--restore--uninstall).
+  installations without a version marker are checked against the release
+  files before an update is offered. See the [update guide](docs/bridge-installation.md#6-update--rollback--backup--restore--uninstall).
 - **App:** install the new APK over the old one. It is signed with the same
   key, so your servers and pairing are kept. [Obtainium](https://github.com/ImranR98/Obtainium)
   can watch the GitHub releases and tell you about new versions.

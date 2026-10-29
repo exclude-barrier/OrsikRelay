@@ -203,5 +203,10 @@ class SetupLanguageTest(unittest.TestCase):
         self.assertEqual(setup_i18n.detect_language({'LC_MESSAGES': 'de_AT.UTF-8', 'LANG': 'en_US.UTF-8'}), 'en')
         self.assertEqual(setup_i18n.detect_language({'LANG': 'C.UTF-8'}), 'en')
 
+    def test_restart_labels_fit_navigation_with_selection_prefix(self):
+        from prompt_toolkit.utils import get_cwidth
+        for language in ('en', 'de'):
+            self.assertLessEqual(get_cwidth(' ▸ ' + setup_i18n.text(language, 'apply_restart')), 26)
+
     def test_external_labels_cannot_inject_terminal_controls(self):
         self.assertEqual(setup_tui.safe_text('Büro\x1b[2J\n'), 'Büro[2J')

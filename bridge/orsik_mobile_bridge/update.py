@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import io
+import tarfile
 import os
 from pathlib import Path
 import stat
@@ -61,6 +63,47 @@ def _installed_commit(home: Path) -> str | None:
         return None
 
 
+def _matches_release(source: Path, commit: str, bootstrap: bytes) -> bool:
+    """Recognize legacy installs by exact package and bundled installer bytes."""
+    try:
+        archive = subprocess.check_output(
+            ['git', '-C', str(source), 'archive', commit,
+             'bridge/orsik_mobile_bridge', 'bridge/install-bridge.sh'],
+            timeout=30, stderr=subprocess.DEVNULL)
+        with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
+            expected = {}
+            installer = None
+            for member in bundle.getmembers():
+                if not member.isfile():
+                    continue
+                if member.name == 'bridge/install-bridge.sh':
+                    installer = bundle.extractfile(member).read()
+                elif member.name.startswith('bridge/orsik_mobile_bridge/'):
+                    name = member.name.removeprefix('bridge/orsik_mobile_bridge/')
+                    expected[name] = bundle.extractfile(member).read()
+        package = Path(__file__).parent
+        installed = {p.relative_to(package).as_posix(): p.read_bytes()
+                     for p in package.rglob('*') if p.is_file()
+                     and '__pycache__' not in p.parts and p.suffix != '.pyc'}
+        return bool(expected) and expected == installed and installer == bootstrap
+    except (OSError, subprocess.SubprocessError, tarfile.TarError):
+        raise SetupError('update_check_failed') from None
+
+
+def _record_commit(home: Path, commit: str) -> None:
+    temporary = None
+    try:
+        fd, temporary = tempfile.mkstemp(prefix='.installed-commit.', dir=home)
+        with os.fdopen(fd, 'w') as handle:
+            handle.write(commit + '\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, home / 'installed-commit')
+    finally:
+        if temporary is not None:
+            Path(temporary).unlink(missing_ok=True)
+
+
 def main(argv: list[str]) -> int:
     language = command_language(argv)
     def t(key):
@@ -90,10 +133,11 @@ def main(argv: list[str]) -> int:
         with tempfile.TemporaryDirectory(prefix="omb-update-") as temporary:
             root = Path(temporary)
             tag, commit = _latest_release(root / 'source')
-            if _installed_commit(home) == commit:
+            installed = _installed_commit(home)
+            if installed == commit or (installed is None and _matches_release(root / 'source', commit, bootstrap)):
                 print(t('update_current') + ' ' + tag)
                 return 0
-            if _installed_commit(home) is None:
+            if installed is None:
                 print(t('update_unknown'))
             print(t('update_confirm_title') + ' ' + tag)
             print(t('update_confirm_store'))
@@ -112,6 +156,11 @@ def main(argv: list[str]) -> int:
             result = subprocess.run(command, env=env, check=False)
             if result.returncode:
                 print(t('update_failed'))
+            else:
+                try:
+                    _record_commit(home, commit)
+                except OSError:
+                    print(t('update_record_failed'))
             return result.returncode
     except EOFError:
         print(t('update_cancelled'))

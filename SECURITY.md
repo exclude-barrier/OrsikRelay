@@ -76,7 +76,7 @@ concurrent edit. Secrets and unrelated configuration lines are preserved.
 English is the default; a saved English/German preference applies to setup and
 update. Language changes do not change permissions or require a service restart.
 
-Saving settings does not restart the service. **Apply and restart bridge** has
+Saving settings does not restart the service. **Restart bridge** has
 its own confirmation and interrupts active connections. Device terminal grants
 are separately confirmed and take effect immediately. A granted terminal is a
 full shell as the bridge user, bypasses Hermes approvals and is not a project
@@ -85,7 +85,8 @@ sandbox. Revocation disconnects access but does not terminate existing shell job
 `omb update` checks the official repository before confirmation and pins the
 installer to the resolved release commit. A matching private `installed-commit`
 marker avoids installation and restart. Missing or invalid markers are reported
-as unknown; network failures do not start an installation. This marker is a
+as unverified unless an exact comparison of package and installer files matches
+the release; network failures do not start an installation. This marker is a
 local operational record, not a cryptographic attestation. Only successful
 installation/checks record it. Updates back up the device store, preserve
 settings, and have no automatic write retries. `--yes` explicitly authorizes a
