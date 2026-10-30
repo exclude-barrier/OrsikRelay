@@ -152,6 +152,8 @@ import io.github.excludebarrier.orsikrelay.domain.chat.SessionModelOption
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashInput
+import io.github.excludebarrier.orsikrelay.domain.chat.modelSuggestions
+import io.github.excludebarrier.orsikrelay.domain.chat.slashSuggestions
 import io.github.excludebarrier.orsikrelay.ui.components.ComposerSuggestion
 import io.github.excludebarrier.orsikrelay.ui.components.SendButton
 
@@ -1568,7 +1570,7 @@ internal fun ComposerBar(
                 inputTestTag = TAG_COMPOSER_FIELD,
                 sendTestTag = TAG_COMPOSER_SEND,
                 attachTestTag = TAG_ATTACHMENT_ADD,
-                suggestionMaxHeight = if (compact) 48.dp else 192.dp,
+                suggestionMaxHeight = if (compact) 56.dp else 224.dp,
                 trailing = if (compact && runControls != null) {
                     {
                         SendButton(
@@ -1578,14 +1580,24 @@ internal fun ComposerBar(
                         else StopButton(runControls.stopInFlight, stringResource(R.string.chat_stop), runControls.onStop)
                     }
                 } else null,
-                suggestions = io.github.excludebarrier.orsikrelay.domain.chat.slashSuggestions(draft, slashCommands).map {
+                suggestions = slashSuggestions(draft, slashCommands).map {
                     val enabled = !slashBusy && if (it.needsRun) runControls != null else !turnActive
                     ComposerSuggestion(
-                        "/${it.word}", enabled,
-                        if (enabled) null else stringResource(if (it.needsRun && runControls == null) R.string.slash_no_run else R.string.slash_busy)
+                        text = "/${it.word}",
+                        enabled = enabled,
+                        detail = when {
+                            enabled -> stringResource(it.descriptionRes())
+                            it.needsRun && runControls == null -> stringResource(R.string.slash_no_run)
+                            else -> stringResource(R.string.slash_busy)
+                        }
                     )
-                } + io.github.excludebarrier.orsikrelay.domain.chat.modelSuggestions(draft, modelOptions).map {
-                    ComposerSuggestion("/model ${it.qualified}", !turnActive && !slashBusy)
+                } + modelSuggestions(draft, modelOptions).map {
+                    ComposerSuggestion(
+                        text = "/model ${it.qualified}",
+                        enabled = !turnActive && !slashBusy,
+                        label = it.model,
+                        detail = it.provider
+                    )
                 },
                 onSuggestion = { text ->
                     val input = SlashInput.parse(text)
@@ -2347,4 +2359,13 @@ internal object NoOpNotificationPermissionStore : NotificationPermissionStore {
         get() = true
 
     override fun markRequested() = Unit
+}
+
+private fun SlashCommand.descriptionRes(): Int = when (this) {
+    SlashCommand.NEW -> R.string.slash_desc_new
+    SlashCommand.TITLE -> R.string.slash_desc_title
+    SlashCommand.STOP -> R.string.slash_desc_stop
+    SlashCommand.STEER -> R.string.slash_desc_steer
+    SlashCommand.BRANCH -> R.string.slash_desc_branch
+    SlashCommand.MODEL -> R.string.slash_desc_model
 }

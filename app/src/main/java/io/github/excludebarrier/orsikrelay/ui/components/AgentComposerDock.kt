@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -66,7 +67,13 @@ object ComposerDockTags {
 }
 
 /** Presentation-only suggestions. Selecting inserts text, never submits it. */
-data class ComposerSuggestion(val text: String, val enabled: Boolean = true, val reason: String? = null)
+/** [text] is inserted on selection; [label] and [detail] are only shown. */
+data class ComposerSuggestion(
+    val text: String,
+    val enabled: Boolean = true,
+    val label: String = text,
+    val detail: String? = null
+)
 
 /**
  * The fixed bottom area of design v2: card surface with a hairline on top
@@ -144,13 +151,7 @@ fun AgentComposerDock(
         if (suggestions.isNotEmpty()) {
             Column(Modifier.heightIn(max = suggestionMaxHeight).verticalScroll(rememberScrollState()).testTag("slash_menu")) {
                 suggestions.forEach { suggestion ->
-                    androidx.compose.material3.TextButton(
-                        enabled = suggestion.enabled,
-                        onClick = { onSuggestion(suggestion.text); focusRequester.requestFocus() },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("slash:${suggestion.text}")
-                    ) {
-                        Text(suggestion.text + (suggestion.reason?.let { " — $it" } ?: ""))
-                    }
+                    SuggestionRow(suggestion) { onSuggestion(suggestion.text); focusRequester.requestFocus() }
                 }
             }
         }
@@ -284,6 +285,39 @@ fun SendButton(enabled: Boolean, sending: Boolean, label: String, testTag: Strin
             CircularProgressIndicator(strokeWidth = 2.dp, color = content, modifier = Modifier.size(20.dp))
         } else {
             Icon(OrsikIcons.ArrowUp, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+@Composable
+private fun SuggestionRow(suggestion: ComposerSuggestion, onClick: () -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(OrsikShapes.dock)
+            .clickable(enabled = suggestion.enabled, role = Role.Button, onClick = onClick)
+            .alpha(if (suggestion.enabled) 1f else 0.5f)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .testTag("slash:${suggestion.text}")
+    ) {
+        Text(
+            suggestion.label,
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        suggestion.detail?.let {
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

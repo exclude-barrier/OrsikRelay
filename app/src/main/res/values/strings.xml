@@ -6,6 +6,12 @@
     <string name="slash_failed">Command failed or its outcome is unknown. Check the session before trying again.</string>
     <string name="slash_done">Session command applied.</string>
     <string name="slash_error">Command unavailable or invalid. Nothing was sent to the model.</string>
+    <string name="slash_desc_new">Start a new chat</string>
+    <string name="slash_desc_title">Rename this chat: /title name</string>
+    <string name="slash_desc_stop">Stop the current run</string>
+    <string name="slash_desc_steer">Guide the running agent: /steer text</string>
+    <string name="slash_desc_branch">Continue in a copy of this chat</string>
+    <string name="slash_desc_model">Choose the model for this chat</string>
     <string name="slash_no_run">No active run</string>
     <string name="slash_busy">Wait for the current operation</string>
     <string name="app_name">Orsik Relay</string>
