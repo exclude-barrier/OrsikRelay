@@ -6,6 +6,12 @@
     <string name="slash_failed">Befehl fehlgeschlagen oder Ergebnis unbekannt. Vor erneutem Senden die Session prüfen.</string>
     <string name="slash_done">Session-Befehl übernommen.</string>
     <string name="slash_error">Befehl nicht verfügbar oder ungültig. Nichts wurde an das Modell gesendet.</string>
+    <string name="slash_desc_new">Neuen Chat starten</string>
+    <string name="slash_desc_title">Chat umbenennen: /title Name</string>
+    <string name="slash_desc_stop">Laufenden Run stoppen</string>
+    <string name="slash_desc_steer">Laufenden Agenten lenken: /steer Text</string>
+    <string name="slash_desc_branch">In einer Kopie dieses Chats weitermachen</string>
+    <string name="slash_desc_model">Modell für diesen Chat wählen</string>
     <string name="slash_no_run">Kein laufender Run</string>
     <string name="slash_busy">Aktuelle Aktion abwarten</string>
     <string name="app_name">Orsik Relay</string>

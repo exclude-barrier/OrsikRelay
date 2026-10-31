@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import io.github.excludebarrier.orsikrelay.domain.chat.*
 import io.github.excludebarrier.orsikrelay.ui.components.*
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_FIELD
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -58,10 +59,16 @@ class SlashComposerUiTest {
                 )
             }
         }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         compose.onNodeWithTag("slash:/stop").assertIsNotEnabled()
+            .assertTextContains(context.getString(R.string.slash_no_run))
+        compose.onNodeWithTag("slash:/title").assertIsEnabled()
+            .assertTextContains(context.getString(R.string.slash_desc_title))
         compose.onNodeWithTag("slash:/model").performScrollTo().performClick()
         compose.onNodeWithTag(TAG_COMPOSER_FIELD).performTextReplacement("/model org/")
         compose.onNodeWithTag("slash:/model provider::other").assertDoesNotExist()
+        compose.onNodeWithTag("slash:/model provider::org/model")
+            .assertTextContains("org/model").assertTextContains("provider")
         compose.onNodeWithTag("slash:/model provider::org/model").performClick()
         compose.onNodeWithTag(TAG_COMPOSER_FIELD).assertIsFocused()
         compose.onNodeWithTag(TAG_COMPOSER_FIELD).assertIsDisplayed()
