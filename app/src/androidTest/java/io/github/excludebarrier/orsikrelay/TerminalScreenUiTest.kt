@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
+import android.os.SystemClock
 import io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalFontStore
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
@@ -353,7 +354,15 @@ class TerminalScreenUiTest {
         // A new page reports its size again; the old WebView is gone.
         composeRule.waitUntil(15_000) { source.sizes.size > sizesBefore && terminalWebView().let { it != null && it !== crashed } }
         assertEquals(1, source.opens)
-        key("enter"); awaitSent("\r")
+        // The page may report its size before it reports ready (it waits for
+        // the font), and a key before ready is dropped, so press until it lands.
+        val deadline = SystemClock.uptimeMillis() + 15_000
+        while ("\r" !in source.sent) {
+            assertTrue("Enter never reached the new page", SystemClock.uptimeMillis() < deadline)
+            key("enter")
+            composeRule.waitForIdle()
+            Thread.sleep(200)
+        }
     }
 
     private fun terminalWebView(): WebView? {
