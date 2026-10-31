@@ -173,6 +173,11 @@ sha256sum app/build/outputs/bundle/release/app-release.aab \
   app/build/outputs/apk/release/app-release.apk
 ```
 
+## Device Check
+
+Before publishing, the signed APK is checked on a real phone against the
+real bridge: [release device check](release-device-check.md).
+
 ## CI Release Job
 
 The `release` job in `.github/workflows/android.yml` is named
