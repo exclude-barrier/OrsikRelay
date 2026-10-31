@@ -67,6 +67,23 @@ class ChatDesignUiTest {
     }
 
     @Test
+    fun headerReadsTheTitleWhenNoneWasPassed() {
+        // A notification tap or /branch opens the chat without a title.
+        setScreen(titleLookup = { "Vom Server" })
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Vom Server").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @Test
+    fun passedTitleIsNotReadAgain() {
+        setScreen(sessionTitle = "Projekt Alpha", titleLookup = { throw AssertionError("no lookup") })
+
+        composeRule.onNodeWithText("Projekt Alpha").assertIsDisplayed()
+    }
+
+    @Test
     fun backIconInvokesTheBackAction() {
         val invoked = AtomicBoolean(false)
         setScreen(onBack = { invoked.set(true) })
@@ -120,7 +137,8 @@ class ChatDesignUiTest {
     private fun setScreen(
         sessionTitle: String? = null,
         darkTheme: Boolean = false,
-        onBack: () -> Unit = {}
+        onBack: () -> Unit = {},
+        titleLookup: (suspend () -> String?)? = null
     ) {
         composeRule.setContent {
             HermesTheme(darkTheme = darkTheme) {
@@ -141,6 +159,7 @@ class ChatDesignUiTest {
                     profileId = "fixture-profile-id",
                     sessionId = "fixture-session-id",
                     sessionTitle = sessionTitle,
+                    sessionTitleLookup = titleLookup,
                     onBack = onBack
                 )
             }

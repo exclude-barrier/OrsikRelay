@@ -127,6 +127,7 @@ import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
 import io.github.excludebarrier.orsikrelay.ui.settings.ChatTextSizeController
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import io.github.excludebarrier.orsikrelay.platform.attachment.ChatAttachmentThumbnails
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentError
@@ -193,9 +194,11 @@ fun ChatScreen(
     sessionId: String,
     // Session title and server name are presentation-only metadata. The
     // navigation host forwards the title it already received from the
-    // session list; when neither is available (notification tap, process
-    // recreation) the header falls back to the generic chat title.
+    // session list. Without one (notification tap, /branch, a new chat)
+    // [sessionTitleLookup] reads it from the server; until then, or when
+    // that fails, the header shows the generic chat title.
     sessionTitle: String? = null,
+    sessionTitleLookup: (suspend () -> String?)? = null,
     serverName: String? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -267,6 +270,23 @@ fun ChatScreen(
     }
 
     val state by viewModel.state.collectAsState()
+    // Read on open and again after each turn: Hermes names a new chat only
+    // after its first answer, a moment after the turn ends.
+    var readTitle by remember(profileId, sessionId) { mutableStateOf<String?>(null) }
+    var titleReads by remember(profileId, sessionId) { mutableIntStateOf(0) }
+    LaunchedEffect(viewModel, state.turnActive) {
+        val lookup = sessionTitleLookup ?: return@LaunchedEffect
+        if (state.turnActive || !sessionTitle.isNullOrBlank() || !readTitle.isNullOrBlank()) return@LaunchedEffect
+        if (titleReads++ > 0) delay(TITLE_READ_DELAY_MS)
+        readTitle = try {
+            lookup()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val shownTitle = (state.slashTitle ?: sessionTitle ?: readTitle)?.takeIf { it.isNotBlank() }
     // Start of the active turn on the monotonic clock, for the elapsed time
     // of the activity row. Survives a configuration change; a re-opened
     // screen counts from when it attached to the running turn.
@@ -379,8 +399,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 .padding(horizontal = 16.dp)
         ) {
         ChatHeader(
-            title = (state.slashTitle ?: sessionTitle)?.takeIf { it.isNotBlank() }
-                ?: stringResource(R.string.chat_title),
+            title = shownTitle ?: stringResource(R.string.chat_title),
             subtitle = serverName?.takeIf { it.isNotBlank() }
                 ?.let { stringResource(R.string.chat_header_subtitle, it) },
             onBack = { viewModel.handleBack() },
@@ -870,7 +889,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
     }
     if (confirmDelete) {
         DeleteSessionDialog(
-            title = (state.slashTitle ?: sessionTitle)?.takeIf { it.isNotBlank() } ?: stringResource(R.string.session_fallback_title),
+            title = shownTitle ?: stringResource(R.string.session_fallback_title),
             onConfirm = {
                 confirmDelete = false
                 manage({ it.delete(profileId, sessionId) }) { viewModel.handleBack() }
@@ -2012,6 +2031,9 @@ private fun LazyListLayoutInfo.isAtTail(thresholdPx: Int): Boolean {
  * index jump is skipped and only the remaining distance is scrolled;
  * otherwise (initial open, a new row) the last item is requested first.
  */
+/** Wait after a turn before reading the title Hermes generates for it. */
+private const val TITLE_READ_DELAY_MS = 3_000L
+
 private suspend fun LazyListState.scrollToTail() {
     val info = layoutInfo
     val lastIndex = info.totalItemsCount - 1
