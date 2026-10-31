@@ -1,11 +1,13 @@
 package io.github.excludebarrier.orsikrelay.ui.components
 
+import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -16,8 +18,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
@@ -25,6 +33,9 @@ import kotlin.math.min
 import kotlin.math.sin
 
 internal const val TAG_WORKING_GLYPH = "orsik_working_glyph"
+
+/** Smallest size at which the three runners stay apart. */
+internal val MIN_GLYPH_SIZE = 16.dp
 
 /** Glow of a runner without the baton. */
 internal const val REST_GLOW = 0.3f
@@ -103,15 +114,22 @@ internal fun relayFrame(timeMs: Long, phase: RelayPhase, still: Boolean = false)
  * passed from runner to runner along a short arc. [phase] sets the pace:
  * calm while Hermes thinks, quick while a tool runs. With "Remove
  * animations" the runners rest, one of them lit.
+ *
+ * It is the app's only loading indicator: lists, screens and buttons that
+ * wait use it too ([color] follows a button's content colour there). It
+ * reports itself as an indeterminate progress, with [contentDescription]
+ * when one is given. Below [MIN_GLYPH_SIZE] the runners would blur, so
+ * smaller sizes are raised to it.
  */
 @Composable
 fun WorkingGlyph(
     modifier: Modifier = Modifier,
     phase: RelayPhase = RelayPhase.Working,
-    size: Dp = 28.dp
+    size: Dp = 28.dp,
+    color: Color = MaterialTheme.colorScheme.primary,
+    contentDescription: String? = null
 ) {
     val reducedMotion = rememberReducedMotion()
-    val color = MaterialTheme.colorScheme.primary
     val timeMs by produceState(0L, reducedMotion) {
         if (reducedMotion) return@produceState
         val start = withFrameMillis { it }
@@ -119,7 +137,15 @@ fun WorkingGlyph(
             withFrameMillis { value = it - start }
         }
     }
-    Canvas(modifier = modifier.size(size).testTag(TAG_WORKING_GLYPH)) {
+    Canvas(
+        modifier = modifier
+            .size(size.coerceAtLeast(MIN_GLYPH_SIZE))
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                if (contentDescription != null) this.contentDescription = contentDescription
+            }
+            .testTag(TAG_WORKING_GLYPH)
+    ) {
         drawRelay(relayFrame(timeMs, phase, still = reducedMotion), phase, color)
     }
 }
@@ -164,4 +190,13 @@ private fun softStar(center: Offset, radius: Float): Path {
     }
     path.close()
     return path
+}
+
+/** True when the user switched off animations in the system settings. */
+@Composable
+internal fun rememberReducedMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    return remember(resolver) {
+        Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
 }

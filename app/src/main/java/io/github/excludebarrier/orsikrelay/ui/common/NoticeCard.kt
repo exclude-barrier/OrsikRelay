@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 
 /**
  * Severity of a [NoticeCard]. Errors use the warning icon in the error color,
@@ -36,6 +38,8 @@ internal data class NoticeAction(
     val label: String,
     val onClick: () -> Unit,
     val enabled: Boolean = true,
+    /** Shows a small relay glyph before the label while the action runs. */
+    val loading: Boolean = false,
     val testTag: String? = null
 )
 
@@ -137,6 +141,13 @@ internal fun NoticeCard(
                                         }
                                     )
                             ) {
+                                if (action.loading) {
+                                    WorkingGlyph(
+                                        size = 18.dp,
+                                        color = LocalContentColor.current,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                }
                                 Text(action.label)
                             }
                         }

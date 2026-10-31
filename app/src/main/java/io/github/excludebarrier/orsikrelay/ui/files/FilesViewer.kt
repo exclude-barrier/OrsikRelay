@@ -84,7 +84,7 @@ import io.github.excludebarrier.orsikrelay.domain.files.serverPath
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 import io.github.excludebarrier.orsikrelay.ui.components.ConnectedButtonGroup
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
-import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikMono
 import java.text.NumberFormat
 import kotlinx.coroutines.CoroutineDispatcher
@@ -173,7 +173,7 @@ internal fun FileViewer(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val result = content) {
-                    null -> OrsikLoadingIndicator(Modifier.align(Alignment.Center))
+                    null -> WorkingGlyph(Modifier.align(Alignment.Center), size = 40.dp)
                     is FilesResult.Ready -> when (result.value.kind) {
                         FileContentKind.Text -> TextPreview(name, result.value.bytes)
                         FileContentKind.Image -> ImagePreview(result.value.bytes)
