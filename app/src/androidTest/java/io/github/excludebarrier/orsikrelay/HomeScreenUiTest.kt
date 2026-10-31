@@ -33,7 +33,7 @@ import io.github.excludebarrier.orsikrelay.ui.home.HomeRunItem
 import io.github.excludebarrier.orsikrelay.ui.home.HomeScreen
 import io.github.excludebarrier.orsikrelay.ui.home.HomeTags
 import io.github.excludebarrier.orsikrelay.ui.home.HomeUiState
-import io.github.excludebarrier.orsikrelay.ui.components.TAG_LOADING_INDICATOR
+import io.github.excludebarrier.orsikrelay.ui.components.TAG_WORKING_GLYPH
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -317,11 +317,11 @@ class HomeScreenUiTest {
     }
 
     @Test
-    fun aRunningTaskShowsTheLoadingStar() {
+    fun aRunningTaskShowsTheRelayGlyph() {
         show(connected(runs = listOf(HomeRunItem("s7", "Check backup", awaitingApproval = false, uncertain = false))))
 
         composeRule.onNode(
-            hasTestTag(TAG_LOADING_INDICATOR) and hasAnyAncestor(hasTestTag(HomeTags.RUN_ROW)),
+            hasTestTag(TAG_WORKING_GLYPH) and hasAnyAncestor(hasTestTag(HomeTags.RUN_ROW)),
             useUnmergedTree = true
         ).assertExists()
     }

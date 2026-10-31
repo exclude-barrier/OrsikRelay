@@ -19,11 +19,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.ui.components.ConnectedButtonGroup
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikFields
@@ -518,10 +519,7 @@ fun OnboardingScreen(
                     .testTag("onboardingSubmitButton")
             ) {
                 if (isConnecting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
-                    )
+                    WorkingGlyph(size = 20.dp, color = LocalContentColor.current)
                     Text(
                         text = stringResource(R.string.onboarding_connecting),
                         modifier = Modifier.padding(start = 8.dp)

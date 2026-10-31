@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -771,6 +770,13 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                                     enabled = !state.resolveInFlight,
                                     modifier = Modifier.testTag(TAG_RUN_RESOLVE_LOST)
                                 ) {
+                                    if (state.resolveInFlight) {
+                                        WorkingGlyph(
+                                            size = 18.dp,
+                                            color = LocalContentColor.current,
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                    }
                                     Text(
                                         if (state.resolveInFlight) {
                                             stringResource(R.string.chat_run_lost_resolving)
@@ -1114,7 +1120,7 @@ private fun LoadOlderRow(loading: Boolean, failed: Boolean, onLoadOlder: () -> U
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            WorkingGlyph(size = 24.dp)
         } else {
             if (failed) {
                 Text(
@@ -1257,6 +1263,7 @@ internal fun RunUncertainBlock(
                     },
                     onClick = onResolve,
                     enabled = !resolving,
+                    loading = resolving,
                     testTag = TAG_RUN_RESOLVE_LOST
                 )
             )
@@ -1659,7 +1666,7 @@ private fun StopButton(stopInFlight: Boolean, label: String, onStop: () -> Unit)
             .testTag(TAG_RUN_STOP)
     ) {
         if (stopInFlight) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            WorkingGlyph(size = 18.dp, color = LocalContentColor.current)
         } else {
             Box(
                 modifier = Modifier

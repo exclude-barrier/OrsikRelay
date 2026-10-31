@@ -29,7 +29,7 @@ import io.github.excludebarrier.orsikrelay.ui.components.GroupedListItem
 import io.github.excludebarrier.orsikrelay.ui.components.ListIconBox
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
-import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewNote
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewTile
 import io.github.excludebarrier.orsikrelay.ui.components.StatusChip
@@ -64,7 +64,7 @@ class ComponentShotsTest {
             OrsikLargeHeader(title = "Agenten")
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OrsikLoadingIndicator()
+                    WorkingGlyph(size = 40.dp)
                     StatusChip("Erreichbar", StatusKind.Ok)
                     StatusChip("Nicht verbunden", StatusKind.Neutral)
                 }
