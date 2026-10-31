@@ -23,7 +23,7 @@ include = ["orsik_mobile_bridge*"]
 "share/orsik-mobile-bridge" = ["install-bridge.sh"]
 
 [dependency-groups]
-dev = ["coverage==7.16.2"]
+dev = ["coverage==7.17.0"]
 
 [tool.coverage.run]
 source = ["orsik_mobile_bridge"]
