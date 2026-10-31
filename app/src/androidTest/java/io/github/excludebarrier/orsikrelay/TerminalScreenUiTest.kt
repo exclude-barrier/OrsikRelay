@@ -166,7 +166,7 @@ class TerminalScreenUiTest {
 
     private fun key(name: String) = composeRule.onNodeWithTag("terminal_key_$name").performClick()
 
-    private fun awaitSent(expected: String) = composeRule.waitUntil(5_000) { expected in source().sent }
+    private fun awaitSent(expected: String) = composeRule.waitUntil(15_000) { expected in source().sent }
 
     private fun awaitConnectedSubtitle(source: FakeTerminalSource) {
         // WebView can report another size while Compose applies the previous

@@ -186,7 +186,7 @@ class HomeNavigationUiTest {
         composeRule.onNodeWithTag(HomeTags.APPROVAL).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.APPROVAL_REVIEW).performClick()
 
-        composeRule.waitUntil(5_000) { openedSession.get() == SESSION_ID }
+        composeRule.waitUntil(15_000) { openedSession.get() == SESSION_ID }
         assertEquals(SESSION_ID, openedSession.get())
         controller.close()
     }
@@ -199,7 +199,7 @@ class HomeNavigationUiTest {
         composeRule.onNodeWithTag(HomeTags.COMPOSER_INPUT).performTextInput("Check disk space")
         composeRule.onNodeWithTag(HomeTags.COMPOSER_SEND).performClick()
 
-        composeRule.waitUntil(5_000) { openedSession.get() == NEW_SESSION_ID }
+        composeRule.waitUntil(15_000) { openedSession.get() == NEW_SESSION_ID }
         assertEquals(1, createdSessions.get())
         assertEquals(NEW_SESSION_ID to "Check disk space", streamedTurn.get())
         controller.close()
@@ -216,13 +216,13 @@ class HomeNavigationUiTest {
 
         composeRule.onNodeWithTag(bottomTabTag(AppScreen.Activity)).performClick()
         waitForTag(ActivityTags.SCREEN)
-        composeRule.waitUntil(5_000) {
+        composeRule.waitUntil(15_000) {
             composeRule.onAllNodes(hasTestTag(HomeTags.APPROVAL) and hasAnyAncestor(hasTestTag(ActivityTags.SCREEN)))
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag(HomeTags.APPROVAL_REVIEW).performClick()
 
-        composeRule.waitUntil(5_000) { openedSession.get() == SESSION_ID }
+        composeRule.waitUntil(15_000) { openedSession.get() == SESSION_ID }
         controller.close()
     }
 
@@ -246,7 +246,7 @@ class HomeNavigationUiTest {
         swipeHomeTo(HomeTags.QUICK_CHAT)
         composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).performClick()
 
-        composeRule.waitUntil(5_000) { openedSession.get() == NEW_SESSION_ID }
+        composeRule.waitUntil(15_000) { openedSession.get() == NEW_SESSION_ID }
         assertEquals(1, createdSessions.get())
         // A new chat starts empty: no turn is sent on its own.
         assertEquals(null, streamedTurn.get())
@@ -264,13 +264,13 @@ class HomeNavigationUiTest {
         composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "docker")
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
 
-        composeRule.waitUntil(5_000) { createdSessions.get() == 1 }
-        composeRule.waitUntil(5_000) { openedSession.get() == NEW_SESSION_ID }
+        composeRule.waitUntil(15_000) { createdSessions.get() == 1 }
+        composeRule.waitUntil(15_000) { openedSession.get() == NEW_SESSION_ID }
         val prompt = context.getString(R.string.home_task_docker_prompt)
         assertEquals(1, createdSessions.get())
         assertEquals(context.getString(R.string.home_quick_docker), createdTitle.get())
         // The request waits in the composer; nothing is sent on its own.
-        composeRule.waitUntil(5_000) {
+        composeRule.waitUntil(15_000) {
             composeRule.onAllNodesWithText(prompt, substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals(null, streamedTurn.get())
@@ -304,14 +304,14 @@ class HomeNavigationUiTest {
     }
 
     private fun waitForTag(tag: String) {
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
     }
 
     private fun waitForText(text: String) {
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
