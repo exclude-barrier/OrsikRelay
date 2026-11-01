@@ -16,6 +16,13 @@ import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandResult
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashInput
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsResult
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelMemory
+import io.github.excludebarrier.orsikrelay.domain.chat.NoModelMemory
+import io.github.excludebarrier.orsikrelay.domain.chat.SessionModelOption
+import io.github.excludebarrier.orsikrelay.domain.chat.items
+import io.github.excludebarrier.orsikrelay.domain.chat.modelPickerQuery
+import io.github.excludebarrier.orsikrelay.domain.chat.modelPickerRows
+import io.github.excludebarrier.orsikrelay.domain.chat.slashSuggestions
 import io.github.excludebarrier.orsikrelay.domain.message.HermesChatMessage
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryError
 import io.github.excludebarrier.orsikrelay.domain.message.MessageHistoryPaging
@@ -110,7 +117,10 @@ internal class ChatViewModel(
         SlashCommandSource { emptySet() },
     private val slashExecutor: ExecuteSlashCommand? = null,
     private val onOpenSession: (String) -> Unit = {},
-    private val modelOptionsSource: ModelOptionsSource = ModelOptionsSource { ModelOptionsResult.Failed }
+    private val modelOptionsSource: ModelOptionsSource = ModelOptionsSource { ModelOptionsResult.Failed },
+    private val modelMemory: ModelMemory = NoModelMemory,
+    /** Format of the local line after a lock; `%1$s` is "old → new" or the new model. */
+    private val modelChangedLabel: String = "Model: %1\$s"
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val _state = MutableStateFlow(ChatUiState())
@@ -122,6 +132,7 @@ internal class ChatViewModel(
     // the active turn (dropped on a pre-`RunStarted` failure) and the
     // `pending_steer` carried by the active turn's terminal event.
     private var localKeyCounter = 0
+    private var modelChangeCounter = 0
     private var draftGeneration = 0
     private var activeUserLineKey: String? = null
     // Key of the user line REHYDRATED from the controller after a
@@ -484,7 +495,12 @@ internal class ChatViewModel(
     fun onDraftChange(value: String) {
         if (_state.value.slashBusy) return
         if (_state.value.turnActive && _state.value.slashCommands.isEmpty()) return
-        _state.update { it.copy(draft = value, slashError = false, slashFailed = false, slashDone = false) }
+        _state.update {
+            it.copy(
+                draft = value, slashError = false, slashFailed = false, slashDone = false,
+                modelHighlight = if (modelPickerQuery(value) == modelPickerQuery(it.draft)) it.modelHighlight else 0
+            )
+        }
         draftGeneration += 1
         chatDraftRepository.persistDraft(profileId, sessionId, value)
         loadModelOptionsIfNeeded()
@@ -493,7 +509,12 @@ internal class ChatViewModel(
     fun loadSlashCommands() {
         scope.launch {
             val commands = withContext(ioDispatcher) { slashSource.available(profileId) }
-            _state.update { it.copy(slashCommands = commands) }
+            val (current, recent) = if (SlashCommand.MODEL in commands) {
+                withContext(ioDispatcher) { modelMemory.current(profileId, sessionId) to modelMemory.recent(profileId) }
+            } else {
+                null to emptyList()
+            }
+            _state.update { it.copy(slashCommands = commands, modelCurrent = current, modelRecent = recent) }
             loadModelOptionsIfNeeded()
         }
     }
@@ -511,6 +532,91 @@ internal class ChatViewModel(
             _state.update { it.copy(modelsLoading = false, modelsLoaded = true,
                 modelsFailed = result is ModelOptionsResult.Failed,
                 modelOptions = (result as? ModelOptionsResult.Loaded)?.options.orEmpty()) }
+        }
+    }
+
+    /** The selectable models of the open `/model` list, in display order. */
+    private fun pickerItems(current: ChatUiState): List<SessionModelOption> =
+        modelPickerQuery(current.draft)
+            ?.let { modelPickerRows(it, current.modelOptions, current.modelCurrent, current.modelRecent).items() }
+            .orEmpty()
+            .map { it.option }
+
+    /** Moves the keyboard mark of the `/model` list by [delta] rows. */
+    fun moveModelHighlight(delta: Int) {
+        val count = pickerItems(_state.value).size
+        if (count == 0) return
+        _state.update { it.copy(modelHighlight = (it.modelHighlight + delta).coerceIn(0, count - 1)) }
+    }
+
+    /** Closes the `/model` list (Esc, the chip's ✕, Backspace in the empty filter). */
+    fun closeModelPicker() {
+        if (modelPickerQuery(_state.value.draft) != null) clearDraftState()
+    }
+
+    /** Locks [option] at once; there is no extra confirmation step. */
+    fun chooseModel(option: SessionModelOption) = lockModel(option, undo = false)
+
+    /** Locks the model [change] replaced again; only when that model is known. */
+    fun undoModelChange(change: ModelChange) {
+        val from = change.from?.split("::", limit = 2)?.takeIf { it.size == 2 } ?: return
+        lockModel(SessionModelOption(from[0], from[1]), undo = true)
+    }
+
+    /** The snackbar showed [change]. */
+    fun consumeModelChange(change: ModelChange) {
+        _state.update { if (it.modelChange?.id == change.id) it.copy(modelChange = null) else it }
+    }
+
+    private fun lockModel(option: SessionModelOption, undo: Boolean) {
+        val current = _state.value
+        val executor = slashExecutor
+        val input = SlashInput.parse("/model ${option.qualified}")
+        if (SlashCommand.MODEL !in current.slashCommands || executor == null || input == null ||
+            !option.isValid() || current.turnActive || current.slashBusy || current.turnUncertain ||
+            current.attachment != null || current.attachmentBusy
+        ) {
+            _state.update { it.copy(slashError = true) }
+            return
+        }
+        _state.update { it.copy(slashBusy = true, slashError = false, slashFailed = false, slashDone = false) }
+        scope.launch {
+            // One request; a failure is reported, never repeated.
+            val result = try {
+                withContext(ioDispatcher) { executor(profileId, sessionId, input) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                SlashCommandResult.Failed
+            }
+            if (result != SlashCommandResult.Done) {
+                _state.update { it.copy(slashBusy = false, slashFailed = true) }
+                return@launch
+            }
+            val from = _state.value.modelCurrent
+            val recent = withContext(ioDispatcher) {
+                modelMemory.remember(profileId, sessionId, option.qualified)
+                modelMemory.recent(profileId)
+            }
+            if (!undo) clearDraftState()
+            val change = from?.takeIf { it != option.qualified }
+                ?.let { "${it.substringAfter("::")} → ${option.model}" }
+                ?: option.model
+            modelChangeCounter += 1
+            _state.update {
+                it.copy(
+                    slashBusy = false,
+                    modelCurrent = option.qualified,
+                    modelRecent = recent,
+                    modelHighlight = 0,
+                    modelChange = ModelChange(modelChangeCounter, from, option.qualified, undo),
+                    localLines = it.localLines + TimelineRow(
+                        key = nextLocalKey(),
+                        role = MessageRole.SYSTEM,
+                        content = modelChangedLabel.format(change)
+                    )
+                )
+            }
         }
     }
 
@@ -944,8 +1050,23 @@ internal class ChatViewModel(
     fun send() {
         val current = _state.value
         if (current.slashBusy) return
+        // The open `/model` list: Enter locks the exact or the marked model.
+        val query = modelPickerQuery(current.draft)
+        if (query != null && SlashCommand.MODEL in current.slashCommands) {
+            val exact = current.modelOptions.singleOrNull { it.qualified == query.trim() || it.model == query.trim() }
+            val pick = exact ?: pickerItems(current).getOrNull(current.modelHighlight)
+            if (pick != null) chooseModel(pick) else _state.update { it.copy(slashError = true) }
+            return
+        }
         // A leading slash NEVER reaches a model, even when unsupported.
         val slash = SlashInput.parse(current.draft)
+        // "/mo" + Enter opens the model list like choosing "/model".
+        if (slash != null && slash.command == null && current.draft.none { it.isWhitespace() } &&
+            slashSuggestions(current.draft, current.slashCommands) == listOf(SlashCommand.MODEL)
+        ) {
+            selectSlashCommand(SlashCommand.MODEL)
+            return
+        }
         if (slash != null) {
             sendSlash(slash)
             return

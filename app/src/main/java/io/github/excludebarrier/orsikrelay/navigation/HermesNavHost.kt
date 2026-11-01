@@ -780,6 +780,7 @@ fun HermesNavHost(
                     slashSource = productionDependencies.value.slashCommands,
                     slashExecutor = productionDependencies.value.slashExecutor,
                     modelOptionsSource = productionDependencies.value.slashModels,
+                    modelMemory = productionDependencies.value.modelMemory,
                     onOpenSession = { openChat(it, null) },
                     // The terminal still asks for the device credential; the
                     // command lands in its input and is never run.

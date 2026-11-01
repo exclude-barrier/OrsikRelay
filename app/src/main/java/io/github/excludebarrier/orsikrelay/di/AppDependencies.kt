@@ -70,6 +70,8 @@ import io.github.excludebarrier.orsikrelay.security.credential.AndroidKeystoreCr
 import io.github.excludebarrier.orsikrelay.data.chat.SlashCommandRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelMemory
+import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesModelMemory
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 
 /**
@@ -98,6 +100,8 @@ internal data class AppDependencies(
     val slashCommands: SlashCommandSource,
     val slashExecutor: ExecuteSlashCommand,
     val slashModels: ModelOptionsSource,
+    /** Last locked and recent models per server (ids only), for `/model`. */
+    val modelMemory: ModelMemory,
     /** Live host values for the Home card (`GET /v1/host/metrics`). */
     val hostMetricsSource: HostMetricsSource,
     /** The bridge's server shell (`GET /v1/terminal`), when the operator enabled it. */
@@ -307,6 +311,7 @@ internal fun buildAppDependencies(
         slashCommands = slashRepository,
         slashExecutor = ExecuteSlashCommand(slashRepository),
         slashModels = slashRepository,
+        modelMemory = SharedPreferencesModelMemory(applicationContext),
         hostMetricsSource = HostMetricsRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore
