@@ -67,15 +67,17 @@ fun GroupedListItem(
     onLongClick: (() -> Unit)? = null,
     onLongClickLabel: String? = null,
     leading: (@Composable () -> Unit)? = null,
-    trailing: (@Composable RowScope.() -> Unit)? = null
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    /** Dense list rows (about 54 dp): title and supporting line stay on one line each. */
+    compact: Boolean = false
 ) {
     val shape = position.shape()
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 14.dp),
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 68.dp)
+            .heightIn(min = if (compact) 54.dp else 68.dp)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .then(
@@ -90,7 +92,7 @@ fun GroupedListItem(
                     else -> Modifier
                 }
             )
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = if (compact) 12.dp else 14.dp, vertical = if (compact) 7.dp else 10.dp)
     ) {
         leading?.invoke()
         Column(Modifier.weight(1f)) {
@@ -107,7 +109,9 @@ fun GroupedListItem(
                 Text(
                     text = supporting,
                     style = OrsikType.meta,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (compact) 1 else Int.MAX_VALUE,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -121,15 +125,17 @@ fun ListIconBox(
     icon: ImageVector,
     modifier: Modifier = Modifier,
     container: Color = MaterialTheme.colorScheme.surfaceContainer,
-    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    /** 40 dp by default; dense lists use 32 dp with a 10 dp radius. */
+    small: Boolean = false
 ) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(40.dp)
-            .clip(OrsikShapes.iconContainer)
+            .size(if (small) 32.dp else 40.dp)
+            .clip(if (small) RoundedCornerShape(10.dp) else OrsikShapes.iconContainer)
             .background(container)
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(if (small) 18.dp else 20.dp))
     }
 }
