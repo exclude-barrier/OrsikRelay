@@ -61,7 +61,7 @@ import io.github.excludebarrier.orsikrelay.ui.components.ComposerDockTags
 import io.github.excludebarrier.orsikrelay.ui.components.ExpressiveShape
 import io.github.excludebarrier.orsikrelay.ui.components.GroupPosition
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
-import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewNote
 import io.github.excludebarrier.orsikrelay.ui.components.PreviewTile
 import io.github.excludebarrier.orsikrelay.ui.components.dashedBorder
@@ -410,7 +410,7 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
                 )
             }
         } else {
-            OrsikLoadingIndicator(contentDescription = status)
+            WorkingGlyph(size = 40.dp, contentDescription = status)
         }
         Column(Modifier.weight(1f)) {
             Text(

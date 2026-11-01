@@ -17,7 +17,7 @@ import io.github.excludebarrier.orsikrelay.ui.components.GroupPosition
 import io.github.excludebarrier.orsikrelay.ui.components.GroupedListItem
 import io.github.excludebarrier.orsikrelay.ui.components.ListIconBox
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
-import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import java.time.ZoneId
 import java.util.Locale
 
@@ -66,7 +66,7 @@ internal fun SessionListItem(
         modifier = modifier,
         leading = {
             if (running) {
-                OrsikLoadingIndicator(size = 40.dp, contentDescription = runningLabel)
+                WorkingGlyph(size = 40.dp, contentDescription = runningLabel)
             } else {
                 ListIconBox(source.icon())
             }
