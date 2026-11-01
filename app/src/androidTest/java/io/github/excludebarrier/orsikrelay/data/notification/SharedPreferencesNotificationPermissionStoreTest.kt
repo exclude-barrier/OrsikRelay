@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -24,8 +25,17 @@ class SharedPreferencesNotificationPermissionStoreTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val preferencesName = "notification-permission-test"
 
+    // deleteSharedPreferences removes the file but not the process-wide
+    // cached instance, and a pending apply() can write the file again. Clear
+    // the cached instance synchronously first, so no old flag survives.
+    @Before
+    fun setUp() {
+        context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
     @After
     fun tearDown() {
+        context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit().clear().commit()
         context.deleteSharedPreferences(preferencesName)
     }
 
