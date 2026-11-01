@@ -1,10 +1,20 @@
 package io.github.excludebarrier.orsikrelay.ui.sessions
 
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -28,8 +38,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +49,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -142,6 +149,8 @@ fun SessionsScreen(
     onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
     onSessionCreated: (sessionId: String) -> Unit = {},
     runningSessionId: String? = null,
+    /** The running session waits for an approval decision. */
+    runningAwaitsApproval: Boolean = false,
     manager: SessionManager? = null,
     clock: Clock = Clock.systemDefaultZone()
 ) {
@@ -334,52 +343,10 @@ fun SessionsScreen(
         val searchable = searchQuery.isNotEmpty() ||
             (hadSessions && state !is SessionListState.Failed)
         if (searchable) {
-            TextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("sessionsSearchField"),
-                placeholder = { Text(text = stringResource(R.string.sessions_search_placeholder), fontSize = 16.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = OrsikIcons.Search,
-                        contentDescription = null,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                },
-                trailingIcon = if (searchQuery.isNotEmpty()) {
-                    {
-                        IconButton(
-                            onClick = { searchQuery = "" },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .testTag("sessionsClearSearch")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Clear,
-                                contentDescription = stringResource(R.string.sessions_search_clear)
-                            )
-                        }
-                    }
-                } else {
-                    null
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(percent = 50),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    errorIndicatorColor = Color.Transparent
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = { focusManager.clearFocus() }
-                )
+            SearchPill(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                onSearch = { focusManager.clearFocus() }
             )
         }
         AgentFilterChips(modifier = Modifier.padding(top = 12.dp))
@@ -537,6 +504,7 @@ fun SessionsScreen(
                                             onSessionSelected(session.id, session.title)
                                         },
                                         running = session.id == runningSessionId,
+                                        awaitingApproval = runningAwaitsApproval && session.id == runningSessionId,
                                         showPin = true,
                                         onLongClick = if (canManage && session.id != runningSessionId) {
                                             { actionsFor = session.id }
@@ -711,7 +679,9 @@ private fun AgentFilterChips(modifier: Modifier = Modifier) {
                 selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
             ),
             border = null,
-            modifier = Modifier.testTag(AGENT_FILTER_HERMES_TAG)
+            modifier = Modifier
+                .height(30.dp)
+                .testTag(AGENT_FILTER_HERMES_TAG)
         )
         PreviewHarnesses.forEach { harness ->
             val key = harness.key
@@ -720,7 +690,7 @@ private fun AgentFilterChips(modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
-                    .heightIn(min = 34.dp)
+                    .heightIn(min = 30.dp)
                     .dashedBorder(MaterialTheme.colorScheme.outlineVariant, 10.dp)
                     .padding(horizontal = 12.dp)
                     .semantics(mergeDescendants = true) {
@@ -791,3 +761,58 @@ internal const val SESSION_ARCHIVE_TAG = "sessionArchive"
 internal const val SESSION_DELETE_TAG = "sessionDelete"
 internal const val SESSION_DELETE_DIALOG_TAG = "sessionDeleteDialog"
 internal const val SESSION_DELETE_CONFIRM_TAG = "sessionDeleteConfirm"
+
+/**
+ * The 44 dp search pill of the Agents list (a Material TextField is at
+ * least 56 dp high).
+ */
+@Composable
+private fun SearchPill(query: String, onQueryChange: (String) -> Unit, onSearch: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val placeholder = stringResource(R.string.sessions_search_placeholder)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(colors.surfaceContainer)
+            .padding(start = 14.dp, end = 4.dp)
+    ) {
+        Icon(OrsikIcons.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = TextStyle(fontSize = 16.sp, color = colors.onSurface),
+            cursorBrush = SolidColor(colors.primary),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+            // The placeholder sits inside the field, so it is the field's
+            // label for TalkBack as with a Material TextField.
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) Text(placeholder, fontSize = 16.sp, color = colors.onSurfaceVariant)
+                    inner()
+                }
+            },
+            modifier = Modifier
+                .weight(1f)
+                .testTag("sessionsSearchField")
+        )
+        if (query.isNotEmpty()) {
+            // Drawn inside the 44 dp pill, but still a 48 dp touch target.
+            Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier
+                        .requiredSize(48.dp)
+                        .testTag("sessionsClearSearch")
+                ) {
+                    Icon(imageVector = Icons.Filled.Clear, contentDescription = stringResource(R.string.sessions_search_clear))
+                }
+            }
+        }
+    }
+}

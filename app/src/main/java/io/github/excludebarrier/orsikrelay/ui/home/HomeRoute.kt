@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import android.os.SystemClock
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -79,12 +80,12 @@ fun HomeRoute(
     chatDraftRepository: ChatDraftRepository,
     onOpenChat: (sessionId: String, title: String?) -> Unit,
     onOpenAllSessions: () -> Unit,
-    /** The bottom bar's Server tab (quick access "Server"). */
-    onOpenServer: () -> Unit,
     onSwitchServer: () -> Unit,
     onOpenSettings: () -> Unit,
     /** Opens the own screen of a tool without a prepared request. */
     onOpenTool: (QuickTask) -> Unit,
+    /** The monitoring page (the server card). */
+    onOpenMonitoring: () -> Unit = {},
     /** No server is saved at all (e.g. the last one was deleted). */
     onNoServer: () -> Unit = {},
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
@@ -96,6 +97,7 @@ fun HomeRoute(
     }.toMap()
     var serverName by remember(profileId) { mutableStateOf<String?>(null) }
     var hostMetrics by remember(profileId) { mutableStateOf<HostMetricsResult?>(null) }
+    var hostMetricsUpdatedAt by remember(profileId) { mutableStateOf<Long?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(profileId) {
         val profiles = try {
@@ -155,6 +157,7 @@ fun HomeRoute(
                 } catch (_: Exception) {
                     HostMetricsResult.Failed
                 }
+                if (hostMetrics is HostMetricsResult.Ready) hostMetricsUpdatedAt = SystemClock.elapsedRealtime()
                 delay(HOST_METRICS_INTERVAL_MS)
             }
         }
@@ -320,6 +323,7 @@ fun HomeRoute(
     HomeScreen(
         state = HomeUiState(
             hostMetrics = hostMetrics,
+            hostMetricsUpdatedAt = hostMetricsUpdatedAt,
             serverName = serverName,
             connection = connection,
             runs = runs,
@@ -347,7 +351,7 @@ fun HomeRoute(
             val texts = taskTexts[task]
             if (texts == null) onOpenTool(task) else newChat(title = texts.first, prompt = texts.second)
         },
-        onOpenServer = onOpenServer,
+        onOpenMonitoring = onOpenMonitoring,
         onSwitchServer = onSwitchServer,
         onOpenSettings = onOpenSettings,
         onRetry = { retryCount += 1 }

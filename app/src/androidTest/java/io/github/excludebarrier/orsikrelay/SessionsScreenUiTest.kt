@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertHasClickAction
 import io.github.excludebarrier.orsikrelay.ui.components.EMPTY_STATE_ICON_TAG
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
 import io.github.excludebarrier.orsikrelay.ui.components.TAG_WORKING_GLYPH
+import io.github.excludebarrier.orsikrelay.ui.sessions.SESSION_APPROVAL_CHIP_TAG
+import io.github.excludebarrier.orsikrelay.ui.sessions.SESSION_RUNNING_CHIP_TAG
 import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_PREVIEW_PREFIX
 import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_HERMES_TAG
 import androidx.compose.ui.test.assertHasNoClickAction
@@ -214,7 +216,8 @@ class SessionsScreenUiTest {
         waitForText("Telegram-Session")
         val row = composeRule.onNode(hasText("Telegram-Session") and hasClickAction())
         row.assertIsDisplayed()
-        row.assertHeightIsAtLeast(64.dp)
+        // Dense rows as in the design, still well above the 48 dp touch minimum.
+        row.assertHeightIsAtLeast(54.dp)
         val sourceLabel = context.getString(R.string.session_source_telegram)
         val messageCount = context.resources.getQuantityString(
             R.plurals.session_message_count,
@@ -536,7 +539,7 @@ class SessionsScreenUiTest {
     }
 
     @Test
-    fun theRunningSessionShowsTheLoadingStarAndRunningLabel() {
+    fun theRunningSessionShowsTheRunningChip() {
         setScreen(
             SessionPageSource { _, _, _ ->
                 success(listOf(session(id = "fixture-run", title = "Fixture Run"), session(id = "fixture-idle", title = "Fixture Idle")), false)
@@ -547,7 +550,21 @@ class SessionsScreenUiTest {
 
         composeRule.onNodeWithText("Fixture Run").assert(hasText(context.getString(R.string.sessions_running), substring = true))
         composeRule.onNodeWithText("Fixture Idle").assert(hasText(context.getString(R.string.sessions_running), substring = true).not())
-        composeRule.onAllNodesWithTag(TAG_WORKING_GLYPH, useUnmergedTree = true).assertCountEquals(1)
+        // The row keeps its source icon; the chip with the breathing dot says it runs.
+        composeRule.onAllNodesWithTag(SESSION_RUNNING_CHIP_TAG, useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun aRunWaitingForApprovalShowsTheApprovalChip() {
+        setScreen(
+            SessionPageSource { _, _, _ -> success(listOf(session(id = "fixture-run", title = "Fixture Run")), false) },
+            runningSessionId = "fixture-run",
+            runningAwaitsApproval = true
+        )
+        waitForText("Fixture Run")
+
+        composeRule.onAllNodesWithTag(SESSION_APPROVAL_CHIP_TAG, useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodesWithTag(SESSION_RUNNING_CHIP_TAG, useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test
@@ -584,7 +601,8 @@ class SessionsScreenUiTest {
         onSessionSelected: (sessionId: String, title: String?) -> Unit = { _, _ -> },
         clock: Clock = Clock.systemDefaultZone(),
         creator: SessionCreator? = null,
-        runningSessionId: String? = null
+        runningSessionId: String? = null,
+        runningAwaitsApproval: Boolean = false
     ) {
         composeRule.setContent {
             HermesTheme {
@@ -594,6 +612,7 @@ class SessionsScreenUiTest {
                     creator = creator,
                     onSessionSelected = onSessionSelected,
                     runningSessionId = runningSessionId,
+                    runningAwaitsApproval = runningAwaitsApproval,
                     clock = clock
                 )
             }

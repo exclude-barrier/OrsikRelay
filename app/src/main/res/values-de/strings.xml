@@ -3,6 +3,24 @@
     <string name="slash_models_loading">Modelloptionen für die Session werden geladen…</string>
     <string name="slash_models_failed">Modelloptionen konnten nicht geladen werden.</string>
     <string name="slash_models_empty">Der Server bietet keine Modelloptionen an.</string>
+    <string name="slash_model_search_hint">Modell suchen …</string>
+    <string name="slash_model_close">Modellliste schließen</string>
+    <plurals name="slash_models_count_models">
+        <item quantity="one">%1$d Modell</item>
+        <item quantity="other">%1$d Modelle</item>
+    </plurals>
+    <plurals name="slash_models_count_providers">
+        <item quantity="one">%1$d Anbieter</item>
+        <item quantity="other">%1$d Anbietern</item>
+    </plurals>
+    <string name="slash_models_header">%1$s von %2$s · tippen zum Filtern</string>
+    <string name="slash_models_recent">Aktuell &amp; zuletzt</string>
+    <string name="slash_models_no_match">Kein Modell passt zu „%1$s“</string>
+    <string name="slash_models_locked_run">Während Hermes arbeitet nicht änderbar</string>
+    <string name="slash_model_changed">Modell: %1$s</string>
+    <string name="slash_model_current">Aktuell: %1$s</string>
+    <string name="slash_model_current_marker">Aktuelles Modell</string>
+    <string name="chat_header_subtitle_model">Hermes · %1$s · %2$s</string>
     <string name="slash_failed">Befehl fehlgeschlagen oder Ergebnis unbekannt. Vor erneutem Senden die Session prüfen.</string>
     <string name="slash_done">Session-Befehl übernommen.</string>
     <string name="slash_error">Befehl nicht verfügbar oder ungültig. Nichts wurde an das Modell gesendet.</string>
@@ -308,7 +326,6 @@
     <string name="home_soon_badge">Bald</string>
     <string name="home_section_quick">Schnellzugriff</string>
     <string name="home_quick_chat">KI-Chat</string>
-    <string name="home_quick_server">Server</string>
     <string name="home_quick_terminal">Terminal</string>
     <string name="home_quick_files">Dateien</string>
     <string name="home_quick_docker">Docker</string>
@@ -347,6 +364,7 @@
     <string name="nav_activity">Aktivität</string>
     <string name="nav_activity_approval">Aktivität, Freigabe erforderlich</string>
     <string name="sessions_running">läuft</string>
+    <string name="sessions_awaiting_approval">Freigabe</string>
     <string name="sessions_pinned">Angeheftet</string>
     <string name="chat_header_subtitle">Hermes · %1$s</string>
     <string name="chat_tool_done">fertig</string>
@@ -408,7 +426,6 @@
     <string name="chat_input_lost_hint">Erst den Lauf abschließen</string>
     <string name="home_server_gpu_none">keine</string>
     <string name="home_server_unreadable">Die Werte sind gerade nicht lesbar.</string>
-    <string name="home_server_services_down">nicht aktiv: %1$s</string>
     <string name="home_task_docker_prompt">Liste alle Docker-Container auf dem Server mit Name, Image, Status und Ports auf.</string>
     <string name="chat_run_lost_no_key">Hermes meldet diesen Lauf als verloren, liefert aber nichts, womit die App ihn abschließen kann. Prüfe den Lauf bitte auf dem Server.</string>
     <string name="chat_run_release">In der App freigeben</string>
@@ -476,6 +493,29 @@
     <string name="projects_changed">geändert</string>
     <string name="projects_clean">sauber</string>
     <string name="projects_open_label">Projektordner öffnen</string>
+    <plurals name="projects_count"><item quantity="one">%1$d Git-Projekt</item><item quantity="other">%1$d Git-Projekte</item></plurals>
+    <string name="projects_changed_count">%1$d mit Änderungen</string>
+    <string name="projects_search">Projekt suchen</string>
+    <string name="projects_sort_recent">Zuletzt geändert</string>
+    <string name="projects_sort_name">Name</string>
+    <string name="projects_only_changed">Nur geänderte (%1$d)</string>
+    <string name="projects_no_commit">Noch keine Commits lesbar</string>
+    <plurals name="projects_age_minutes"><item quantity="one">vor %1$d Min.</item><item quantity="other">vor %1$d Min.</item></plurals>
+    <plurals name="projects_age_hours"><item quantity="one">vor %1$d Std.</item><item quantity="other">vor %1$d Std.</item></plurals>
+    <string name="projects_age_yesterday">gestern</string>
+    <plurals name="projects_age_days"><item quantity="one">vor %1$d Tag</item><item quantity="other">vor %1$d Tagen</item></plurals>
+    <string name="projects_age_date">%1$02d.%2$02d.</string>
+    <string name="projects_actions">Aktionen für %1$s</string>
+    <string name="projects_action_files">In Dateien öffnen</string>
+    <string name="projects_action_ask">Hermes fragen: Was hat sich geändert?</string>
+    <string name="projects_action_terminal">Im Terminal öffnen</string>
+    <string name="projects_ask_question">Was hat sich in diesem Projekt geändert? Fasse git status und die letzten Commits zusammen.</string>
+    <string name="projects_ask_question_branch">Was hat sich in diesem Projekt geändert (Branch %1$s)? Fasse git status und die letzten Commits zusammen.</string>
+    <string name="projects_loading">Suche Git-Projekte …</string>
+    <string name="projects_empty_depth">Gesucht wird bis 3 Ebenen tief.</string>
+    <string name="projects_failed">Projekte nicht lesbar</string>
+    <string name="projects_no_match">Kein Projekt passt zu „%1$s“</string>
+    <string name="projects_footer">Tippen öffnet den Ordner in Dateien. ⋮ für Hermes, Terminal und Pfad. Nur lesen – Git-Befehle laufen über Hermes oder das Terminal.</string>
     <string name="files_back">Zurück</string>
     <string name="files_more_folder">Aktionen für diesen Ordner</string>
     <string name="files_root_crumb">/</string>
@@ -567,4 +607,35 @@
     <string name="terminal_output_badge">AUSGABE</string>
     <string name="terminal_ask_dismiss">Nicht an Hermes senden</string>
     <string name="terminal_ask_hint">Was soll Hermes damit tun?</string>
+    <!-- Monitoring-Seite (nur GET /v1/host/metrics) -->
+    <string name="monitoring_title">Monitoring</string>
+    <string name="monitoring_refresh">Aktualisieren</string>
+    <string name="monitoring_updated_now">Gerade aktualisiert</string>
+    <string name="monitoring_updated_seconds">Stand: vor %1$d s</string>
+    <string name="monitoring_updated_minutes">Stand: vor %1$d min</string>
+    <string name="monitoring_memory">Arbeitsspeicher</string>
+    <string name="monitoring_memory_detail">%1$s GB von %2$s GB</string>
+    <string name="monitoring_gpu_load">Auslastung</string>
+    <string name="monitoring_vram">VRAM</string>
+    <string name="monitoring_gpu_none">Keine NVIDIA-GPU gefunden</string>
+    <string name="monitoring_service_running">läuft</string>
+    <string name="monitoring_service_stopped">gestoppt</string>
+    <string name="monitoring_service_unknown">unbekannt</string>
+    <string name="monitoring_ask_hermes">Hermes fragen</string>
+    <string name="monitoring_service_prompt">Der Dienst `%1$s` auf dem Server ist gestoppt. Prüfe mit `journalctl --user -u %1$s -n 50`, warum, und schlage eine Lösung vor. Starte nichts neu, ohne mich zu fragen.</string>
+    <string name="monitoring_services_footnote">systemd --user · Liste per BRIDGE_HOST_SERVICES (max. 8)</string>
+    <string name="monitoring_via_hermes">Über Hermes</string>
+    <string name="monitoring_task_docker">Docker-Status</string>
+    <string name="monitoring_task_storage_prompt">Prüfe den freien Speicherplatz auf dem Server (`df -h`) und nenne die größten Verzeichnisse. Lösche nichts.</string>
+    <string name="monitoring_soon">Datenträger, Verlauf über Tage, Logs und Dienst-Neustart</string>
+    <string name="monitoring_history_hint">Verlauf entsteht, solange die Seite offen ist</string>
+    <string name="monitoring_failed">Werte nicht lesbar</string>
+    <string name="monitoring_failed_hint">Die letzten Werte bleiben sichtbar, bis wieder ein Abruf klappt.</string>
+    <string name="monitoring_retry">Erneut</string>
+    <string name="monitoring_unsupported">Diese Bridge kennt /v1/host/metrics noch nicht. Aktualisiere die Bridge auf dem Server (omb update), um Live-Werte zu sehen.</string>
+    <string name="monitoring_loading">Lese Werte …</string>
+    <plurals name="home_server_stopped">
+        <item quantity="one">%1$d Dienst gestoppt</item>
+        <item quantity="other">%1$d Dienste gestoppt</item>
+    </plurals>
 </resources>

@@ -51,6 +51,7 @@ object OrsikIcons {
     val Folder by lazy { stroke("Folder", 1.9f, "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z") }
     val Container by lazy { stroke("Container", 1.9f, "m12 3 8 4.5v9L12 21l-8-4.5v-9z", "m4 7.5 8 4.5 8-4.5M12 12v9") }
     val Code by lazy { stroke("Code", 1.9f, "m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14") }
+    val Branch by lazy { stroke("Branch", 1.9f, circle(6f, 5f, 2f), circle(6f, 19f, 2f), circle(18f, 7f, 2f), "M6 7v10", "M18 9c0 5-6 4-11.2 8.4") }
     val Send by lazy { stroke("Send", 2f, "M4 12 20 4l-4 16-4-7z", "m12 13 8-9") }
     val Calendar by lazy { stroke("Calendar", 2f, rect(3f, 5f, 18f, 16f, 2f), "M3 10h18M8 3v4M16 3v4") }
     val Search by lazy { stroke("Search", 1.9f, circle(11f, 11f, 6.5f), "m20 20-4.2-4.2") }
