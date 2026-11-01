@@ -102,10 +102,11 @@ class HomeScreenUiTest {
         assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_reachable)).fetchSemanticsNodes().size)
         scrollTo(HomeTags.QUICK_CHAT)
         composeRule.onNodeWithTag(HomeTags.QUICK_CHAT).assertIsEnabled().assertHasClickAction()
-        // Every quick tile works: Server opens the Server tab, the tool tiles
-        // start a chat with a prepared request.
-        composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "server").assertIsEnabled().assertHasClickAction()
-        listOf("terminal", "files", "docker", "projects").forEach { key ->
+        // Every quick tile works: Terminal, Files and Projects open their
+        // screens, Docker starts a chat with a prepared request. The server
+        // has its own tab, so there is no Server tile.
+        assertEquals(0, composeRule.onAllNodesWithTag(HomeTags.QUICK_TILE_PREFIX + "server").fetchSemanticsNodes().size)
+        listOf("terminal", "files", "projects", "docker").forEach { key ->
             scrollTo(HomeTags.QUICK_TILE_PREFIX + key)
             composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + key).assertIsEnabled().assertHasClickAction()
         }

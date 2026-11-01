@@ -698,9 +698,9 @@ private fun ProfileRow(
 }
 
 /**
- * "Verwaltung" of the active server: Monitoring opens Home's live values,
- * Terminal the server shell, Docker/Dateien start the same prepared Hermes
- * requests as Home's tiles. Without the callbacks (no active server) the
+ * "Verwaltung" of the active server: Terminal, Dateien and Projekte open
+ * their screens, Monitoring the live values, Docker starts the same prepared
+ * Hermes request as Home's row. Without the callbacks (no active server) the
  * tiles stay previews.
  */
 @Composable
@@ -729,9 +729,13 @@ private fun Management(
             )
             if (!live) PreviewBadge()
         }
+        // Terminal, Files / Monitoring, Projects, then the prepared Docker
+        // request on its own row.
         val tiles: List<Triple<String, Int, Pair<ImageVector, (() -> Unit)?>>> = listOf(
+            tool(QuickTask.Terminal, onOpenTool),
+            tool(QuickTask.Files, onOpenTool),
             Triple("monitoring", R.string.profiles_tile_monitoring, OrsikIcons.Activity to onOpenMonitoring),
-            tool(QuickTask.Terminal, onOpenTool)
+            tool(QuickTask.Projects, onOpenTool)
         ) + tasks.map { task ->
             Triple(task.key, task.labelRes, task.icon to startTask?.let { start ->
                 {
@@ -758,8 +762,7 @@ private fun Management(
                 }
             })
         }
-        val allTiles = tiles + tool(QuickTask.Files, onOpenTool)
-        allTiles.chunked(2).forEach { row ->
+        tiles.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { (key, label, iconAndAction) ->
                     val (icon, action) = iconAndAction
@@ -771,7 +774,7 @@ private fun Management(
                             stringResource(label), icon, filled = false, onClick = action, modifier = tileModifier,
                             onClickLabel = when (key) {
                                 "monitoring" -> stringResource(R.string.profiles_monitoring_click_label)
-                                QuickTask.Terminal.key, QuickTask.Files.key -> null
+                                QuickTask.Terminal.key, QuickTask.Files.key, QuickTask.Projects.key -> null
                                 else -> stringResource(R.string.home_task_click_label)
                             }
                         )

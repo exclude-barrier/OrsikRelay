@@ -327,7 +327,6 @@
     <string name="home_soon_badge">Soon</string>
     <string name="home_section_quick">Quick access</string>
     <string name="home_quick_chat">AI chat</string>
-    <string name="home_quick_server">Server</string>
     <string name="home_quick_terminal">Terminal</string>
     <string name="home_quick_files">Files</string>
     <string name="home_quick_docker">Docker</string>
@@ -494,6 +493,29 @@
     <string name="projects_changed">changed</string>
     <string name="projects_clean">clean</string>
     <string name="projects_open_label">Open the project folder</string>
+    <plurals name="projects_count"><item quantity="one">%1$d Git project</item><item quantity="other">%1$d Git projects</item></plurals>
+    <string name="projects_changed_count">%1$d with changes</string>
+    <string name="projects_search">Search projects</string>
+    <string name="projects_sort_recent">Recently changed</string>
+    <string name="projects_sort_name">Name</string>
+    <string name="projects_only_changed">Only changed (%1$d)</string>
+    <string name="projects_no_commit">No commits readable yet</string>
+    <plurals name="projects_age_minutes"><item quantity="one">%1$d min ago</item><item quantity="other">%1$d min ago</item></plurals>
+    <plurals name="projects_age_hours"><item quantity="one">%1$d h ago</item><item quantity="other">%1$d h ago</item></plurals>
+    <string name="projects_age_yesterday">yesterday</string>
+    <plurals name="projects_age_days"><item quantity="one">%1$d day ago</item><item quantity="other">%1$d days ago</item></plurals>
+    <string name="projects_age_date">%2$d/%1$d</string>
+    <string name="projects_actions">Actions for %1$s</string>
+    <string name="projects_action_files">Open in Files</string>
+    <string name="projects_action_ask">Ask Hermes: what changed?</string>
+    <string name="projects_action_terminal">Open in terminal</string>
+    <string name="projects_ask_question">What changed in this project? Summarise git status and the latest commits.</string>
+    <string name="projects_ask_question_branch">What changed in this project (branch %1$s)? Summarise git status and the latest commits.</string>
+    <string name="projects_loading">Looking for Git projects …</string>
+    <string name="projects_empty_depth">The search goes up to 3 levels deep.</string>
+    <string name="projects_failed">Projects could not be read</string>
+    <string name="projects_no_match">No project matches “%1$s”</string>
+    <string name="projects_footer">Tap opens the folder in Files. ⋮ for Hermes, terminal and path. Read only – Git commands run through Hermes or the terminal.</string>
     <string name="files_back">Back</string>
     <string name="files_more_folder">Actions for this folder</string>
     <string name="files_root_crumb">/</string>
