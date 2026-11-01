@@ -294,9 +294,8 @@ class FilesScreenUiTest {
             }
         }
         composeRule.onNodeWithText("demo-app").assertIsDisplayed()
-        composeRule.onNodeWithText(
-            "main · ${context.getString(R.string.projects_changed)}", substring = true
-        ).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.projects_changed)).assertIsDisplayed()
+        composeRule.onNodeWithText("main").assertIsDisplayed()
         composeRule.onNodeWithText("Erster Stand", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag(ProjectsTags.PROJECT_PREFIX + "code/demo-app").performClick()
         composeRule.runOnIdle { assertEquals(listOf("code/demo-app"), opened.toList()) }

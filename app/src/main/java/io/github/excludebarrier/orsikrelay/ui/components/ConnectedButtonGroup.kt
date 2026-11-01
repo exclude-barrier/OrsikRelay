@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,7 +43,9 @@ fun <T> ConnectedButtonGroup(
     label: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
-    testTag: (T) -> String? = { null }
+    testTag: (T) -> String? = { null },
+    /** 48 dp by default; dense settings rows use 38 dp. */
+    minHeight: Dp = 48.dp
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -69,7 +72,7 @@ fun <T> ConnectedButtonGroup(
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 48.dp)
+                    .heightIn(min = minHeight)
                     .clip(shape)
                     .background(container)
                     .selectable(selected = isSelected, role = Role.RadioButton, onClick = { onSelect(option) })

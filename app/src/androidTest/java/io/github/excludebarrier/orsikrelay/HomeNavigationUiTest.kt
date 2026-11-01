@@ -278,15 +278,15 @@ class HomeNavigationUiTest {
     }
 
     @Test
-    fun quickAccessServerOpensTheServerTab() {
+    fun quickAccessProjectsOpensTheProjectsScreen() {
         show()
         waitForText(context.getString(R.string.home_status_connected))
 
-        swipeHomeTo(HomeTags.QUICK_TILE_PREFIX + "server")
-        composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "server").performClick()
+        swipeHomeTo(HomeTags.QUICK_TILE_PREFIX + "projects")
+        composeRule.onNodeWithTag(HomeTags.QUICK_TILE_PREFIX + "projects")
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
 
-        waitForTag(PROFILES_SCREEN_TAG)
-        composeRule.onNodeWithTag(bottomTabTag(AppScreen.Server)).assertIsSelected()
+        waitForTag(io.github.excludebarrier.orsikrelay.ui.files.ProjectsTags.SCREEN)
         controller.close()
     }
 

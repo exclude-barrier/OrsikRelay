@@ -373,7 +373,7 @@ class ProfilesScreenUiTest {
         setContent(admin, activeProfileId = PAIRED_ID)
         composeRule.waitUntil(5_000) { count("Paired") > 0 }
 
-        listOf("monitoring", "docker", "terminal", "files").forEach { key ->
+        listOf("monitoring", "docker", "terminal", "files", "projects").forEach { key ->
             composeRule.onNodeWithTag(MANAGEMENT_TILE_PREFIX + key)
                 .performScrollTo()
                 .assertIsNotEnabled()
