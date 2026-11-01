@@ -6,17 +6,24 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentDraft
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatAttachmentKind
 import io.github.excludebarrier.orsikrelay.ui.chat.ComposerBar
+import io.github.excludebarrier.orsikrelay.ui.chat.ComposerNotice
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_ADD
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_REMOVE
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_PREVIEW
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_ATTACHMENT_THUMBNAIL
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_FIELD
+import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_NOTICE
 import io.github.excludebarrier.orsikrelay.ui.chat.TAG_COMPOSER_SEND
+import io.github.excludebarrier.orsikrelay.ui.components.TAG_WORKING_GLYPH
 import io.github.excludebarrier.orsikrelay.ui.theme.HermesTheme
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -52,7 +59,9 @@ class ChatComposerBarStateTest {
         turnActive: Boolean = false,
         dark: Boolean = false,
         compact: Boolean = false,
-        conflictNotice: Boolean = false
+        conflictNotice: Boolean = false,
+        lockedHint: String? = null,
+        onDismissNotice: () -> Unit = {}
     ) {
         composeRule.setContent {
             HermesTheme(darkTheme = dark) {
@@ -72,7 +81,10 @@ class ChatComposerBarStateTest {
                     onPickAttachment = {},
                     onRemoveAttachment = {},
                     compact = compact,
-                    conflictNotice = conflictNotice
+                    conflictNotice = conflictNotice,
+                    // The screen turns a rejected pick into the dismissible notice.
+                    notice = errorLabel?.let { ComposerNotice(title = null, text = it, onDismiss = onDismissNotice) },
+                    lockedHint = lockedHint
                 )
             }
         }
@@ -117,6 +129,41 @@ class ChatComposerBarStateTest {
         composeRule.onNodeWithText(UNREADABLE_LABEL).assertIsDisplayed()
         composeRule.onNodeWithTag(TAG_ATTACHMENT_REMOVE).assertDoesNotExist()
         composeRule.onNodeWithTag(TAG_ATTACHMENT_ADD).assertIsEnabled()
+    }
+
+    @Test
+    fun theErrorNoticeCanBeDismissed() {
+        var dismissed = false
+        setBar(errorLabel = UNREADABLE_LABEL, onDismissNotice = { dismissed = true })
+
+        composeRule.onNodeWithTag(TAG_COMPOSER_NOTICE).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.chat_notice_dismiss)).performClick()
+        assertTrue(dismissed)
+    }
+
+    @Test
+    fun aLockedComposerShowsWhyAndTakesNoInput() {
+        setBar(lockedHint = "Erst den Lauf abschließen")
+
+        composeRule.onNodeWithText("Erst den Lauf abschließen").assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_COMPOSER_FIELD).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_ATTACHMENT_ADD).assertIsNotEnabled()
+    }
+
+    @Test
+    fun theAttachmentPreviewShowsNameSizeAndRemove() {
+        setBar(attachment = attachment("holiday.png"))
+
+        composeRule.onNodeWithTag(TAG_ATTACHMENT_PREVIEW).assertIsDisplayed()
+        composeRule.onNodeWithText("holiday.png").assertIsDisplayed()
+        composeRule.onNodeWithText(REMOVE_LABEL).assertIsDisplayed()
+    }
+
+    @Test
+    fun theBusyPickShowsTheRelayGlyph() {
+        setBar(busy = true)
+
+        composeRule.onNodeWithTag(TAG_WORKING_GLYPH).assertIsDisplayed()
     }
 
     @Test

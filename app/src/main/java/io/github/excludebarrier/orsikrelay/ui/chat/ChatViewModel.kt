@@ -979,6 +979,16 @@ internal class ChatViewModel(
     }
 
     /** Drops the picked attachment (and its process-scoped rehydration entry). */
+    /** Hides a "not sent" notice; the draft stays. A failure after the run started stays. */
+    fun dismissTurnFailure() {
+        _state.update { if (it.runStarted) it else it.copy(turnFailure = null) }
+    }
+
+    /** Hides the attachment error notice; nothing else changes. */
+    fun dismissAttachmentError() {
+        _state.update { it.copy(attachmentError = null) }
+    }
+
     fun removeAttachment() {
         if (_state.value.attachment == null) return
         ChatAttachmentDraftHolder.clear(profileId, sessionId)

@@ -203,6 +203,8 @@
     <string name="chat_refresh_history">Refresh history</string>
     <string name="chat_turn_failure_refresh_hint">The answer may still have finished on the server. Refresh history loads the current state; if that does not help, open the chat again later.</string>
     <string name="chat_turn_failure_draft_kept">Your message was not sent and is still in the message field.</string>
+    <string name="chat_turn_failure_not_sent">Not sent.</string>
+    <string name="chat_notice_dismiss">Dismiss notice</string>
     <string name="chat_stop">Stop</string>
     <string name="chat_stopping">Stopping…</string>
     <string name="error_run_stop_generic">The running run could not be stopped.</string>
@@ -421,6 +423,8 @@
     <string name="chat_run_lost">Hermes lost this run, for example after a server restart. The chat stays blocked until you close the run as cancelled. It is not run again.</string>
     <string name="chat_run_lost_resolve">Close as cancelled</string>
     <string name="chat_run_lost_resolving">Closing…</string>
+    <string name="chat_run_lost_title">Run lost</string>
+    <string name="chat_input_lost_hint">Close the run first</string>
     <string name="home_server_gpu_none">none</string>
     <string name="home_server_unreadable">The values cannot be read right now.</string>
     <string name="home_server_services_down">not running: %1$s</string>

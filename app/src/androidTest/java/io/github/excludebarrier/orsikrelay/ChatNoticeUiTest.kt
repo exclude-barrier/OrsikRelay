@@ -196,6 +196,7 @@ class ChatNoticeUiTest {
             )
         }
 
+        composeRule.onNodeWithText(context.getString(R.string.chat_run_lost_title)).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.chat_run_lost)).assertIsDisplayed()
         composeRule.onAllNodesWithTag(TAG_RUN_RECONCILE).assertCountEquals(0)
         composeRule.onNodeWithTag(TAG_RUN_RESOLVE_LOST)
