@@ -67,6 +67,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionManager
+import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
 import io.github.excludebarrier.orsikrelay.domain.session.SessionPageSource
 import io.github.excludebarrier.orsikrelay.platform.locale.AppLocale
 import io.github.excludebarrier.orsikrelay.security.applock.AndroidAppAuthenticator
@@ -786,6 +787,16 @@ fun HermesNavHost(
                     sessionId = decodedSessionId,
                     sessionTitle = activeSessionTitle
                         .takeIf { activeSessionTitleSessionId == decodedSessionId },
+                    // Idempotent read of the newest list page; a chat opened
+                    // without a title is recent (notification, /branch, new).
+                    sessionTitleLookup = {
+                        val source = sessionPageSource ?: productionDependencies.value.sessionPageSource
+                        val profileId = activeProfileId.orEmpty()
+                        withContext(Dispatchers.IO) {
+                            (source.fetchPage(profileId, TITLE_LOOKUP_PAGE, 0) as? SessionListResult.Success)
+                                ?.page?.sessions?.firstOrNull { it.id == decodedSessionId }?.title
+                        }
+                    },
                     onBack = {
                         // Guard against popping the back stack empty: a double
                         // back event (fast double-tap on "Zurück" or a spurious
@@ -830,6 +841,9 @@ internal const val FILES_ROUTE = "files?$FILES_PATH_ARGUMENT={$FILES_PATH_ARGUME
 
 internal const val CHAT_ARGUMENT = "sessionId"
 internal const val CHAT_ROUTE = "chat/{$CHAT_ARGUMENT}"
+
+/** Newest sessions searched for the title of a chat opened without one. */
+private const val TITLE_LOOKUP_PAGE = 50
 
 internal fun encodeRouteArgument(value: String): String =
     Base64.getUrlEncoder().withoutPadding()
