@@ -404,7 +404,6 @@
     <string name="chat_run_lost_resolving">Wird abgeschlossen …</string>
     <string name="home_server_gpu_none">keine</string>
     <string name="home_server_unreadable">Die Werte sind gerade nicht lesbar.</string>
-    <string name="home_server_services_down">nicht aktiv: %1$s</string>
     <string name="home_task_docker_prompt">Liste alle Docker-Container auf dem Server mit Name, Image, Status und Ports auf.</string>
     <string name="chat_run_lost_no_key">Hermes meldet diesen Lauf als verloren, liefert aber nichts, womit die App ihn abschließen kann. Prüfe den Lauf bitte auf dem Server.</string>
     <string name="chat_run_release">In der App freigeben</string>
@@ -563,4 +562,35 @@
     <string name="terminal_output_badge">AUSGABE</string>
     <string name="terminal_ask_dismiss">Nicht an Hermes senden</string>
     <string name="terminal_ask_hint">Was soll Hermes damit tun?</string>
+    <!-- Monitoring-Seite (nur GET /v1/host/metrics) -->
+    <string name="monitoring_title">Monitoring</string>
+    <string name="monitoring_refresh">Aktualisieren</string>
+    <string name="monitoring_updated_now">Gerade aktualisiert</string>
+    <string name="monitoring_updated_seconds">Stand: vor %1$d s</string>
+    <string name="monitoring_updated_minutes">Stand: vor %1$d min</string>
+    <string name="monitoring_memory">Arbeitsspeicher</string>
+    <string name="monitoring_memory_detail">%1$s GB von %2$s GB</string>
+    <string name="monitoring_gpu_load">Auslastung</string>
+    <string name="monitoring_vram">VRAM</string>
+    <string name="monitoring_gpu_none">Keine NVIDIA-GPU gefunden</string>
+    <string name="monitoring_service_running">läuft</string>
+    <string name="monitoring_service_stopped">gestoppt</string>
+    <string name="monitoring_service_unknown">unbekannt</string>
+    <string name="monitoring_ask_hermes">Hermes fragen</string>
+    <string name="monitoring_service_prompt">Der Dienst `%1$s` auf dem Server ist gestoppt. Prüfe mit `journalctl --user -u %1$s -n 50`, warum, und schlage eine Lösung vor. Starte nichts neu, ohne mich zu fragen.</string>
+    <string name="monitoring_services_footnote">systemd --user · Liste per BRIDGE_HOST_SERVICES (max. 8)</string>
+    <string name="monitoring_via_hermes">Über Hermes</string>
+    <string name="monitoring_task_docker">Docker-Status</string>
+    <string name="monitoring_task_storage_prompt">Prüfe den freien Speicherplatz auf dem Server (`df -h`) und nenne die größten Verzeichnisse. Lösche nichts.</string>
+    <string name="monitoring_soon">Datenträger, Verlauf über Tage, Logs und Dienst-Neustart</string>
+    <string name="monitoring_history_hint">Verlauf entsteht, solange die Seite offen ist</string>
+    <string name="monitoring_failed">Werte nicht lesbar</string>
+    <string name="monitoring_failed_hint">Die letzten Werte bleiben sichtbar, bis wieder ein Abruf klappt.</string>
+    <string name="monitoring_retry">Erneut</string>
+    <string name="monitoring_unsupported">Diese Bridge kennt /v1/host/metrics noch nicht. Aktualisiere die Bridge auf dem Server (omb update), um Live-Werte zu sehen.</string>
+    <string name="monitoring_loading">Lese Werte …</string>
+    <plurals name="home_server_stopped">
+        <item quantity="one">%1$d Dienst gestoppt</item>
+        <item quantity="other">%1$d Dienste gestoppt</item>
+    </plurals>
 </resources>
