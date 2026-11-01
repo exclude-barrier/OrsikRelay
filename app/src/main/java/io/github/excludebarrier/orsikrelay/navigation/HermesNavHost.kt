@@ -486,7 +486,6 @@ fun HermesNavHost(
                     chatDraftRepository = chatDraftRepository ?: dependencies.value.chatDraftRepository,
                     onOpenChat = ::openChat,
                     onOpenAllSessions = { openTab(AppScreen.Sessions) },
-                    onOpenServer = { openTab(AppScreen.Server) },
                     onSwitchServer = { navController.navigate(routeOf(AppScreen.Profiles)) },
                     onOpenSettings = {
                         navController.navigate(routeOf(AppScreen.Settings)) {
@@ -707,6 +706,13 @@ fun HermesNavHost(
                     profileId = activeProfileId.orEmpty(),
                     source = filesSource ?: productionDependencies.value.filesSource,
                     onOpenProject = { path -> navController.navigate(routeOf(AppScreen.Files(path))) },
+                    hermes = filesHermes(activeProfileId.orEmpty()),
+                    // The terminal still asks for the device credential; the
+                    // command lands in its input and is never run.
+                    onOpenTerminal = { command ->
+                        TerminalPrefill.set(command)
+                        openTool(QuickTask.Terminal)
+                    },
                     onBack = {
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()

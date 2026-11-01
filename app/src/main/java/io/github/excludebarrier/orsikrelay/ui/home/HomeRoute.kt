@@ -79,8 +79,6 @@ fun HomeRoute(
     chatDraftRepository: ChatDraftRepository,
     onOpenChat: (sessionId: String, title: String?) -> Unit,
     onOpenAllSessions: () -> Unit,
-    /** The bottom bar's Server tab (quick access "Server"). */
-    onOpenServer: () -> Unit,
     onSwitchServer: () -> Unit,
     onOpenSettings: () -> Unit,
     /** Opens the own screen of a tool without a prepared request. */
@@ -347,7 +345,6 @@ fun HomeRoute(
             val texts = taskTexts[task]
             if (texts == null) onOpenTool(task) else newChat(title = texts.first, prompt = texts.second)
         },
-        onOpenServer = onOpenServer,
         onSwitchServer = onSwitchServer,
         onOpenSettings = onOpenSettings,
         onRetry = { retryCount += 1 }

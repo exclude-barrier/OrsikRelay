@@ -72,8 +72,7 @@ fun HomeScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     onNewChat: () -> Unit = {},
-    onQuickTask: (QuickTask) -> Unit = {},
-    onOpenServer: () -> Unit = {}
+    onQuickTask: (QuickTask) -> Unit = {}
 ) {
     var pickerOpen by rememberSaveable { mutableStateOf(false) }
     val serverName = state.serverName ?: stringResource(R.string.home_no_server_name)
@@ -139,7 +138,7 @@ fun HomeScreen(
                         item(key = "quick_title") {
                             SectionTitle(stringResource(R.string.home_section_quick), Modifier.gutter())
                         }
-                        item(key = "quick") { QuickActionGrid(onNewChat = onNewChat, onOpenServer = onOpenServer, onQuickTask = onQuickTask, modifier = Modifier.gutter()) }
+                        item(key = "quick") { QuickActionGrid(onNewChat = onNewChat, onQuickTask = onQuickTask, modifier = Modifier.gutter()) }
                         item(key = "recent_title") {
                             SectionTitle(stringResource(R.string.home_section_recent), Modifier.gutter()) {
                                 TextButton(

@@ -586,21 +586,20 @@ private fun HostTileView(tile: HostTile, modifier: Modifier) {
 @Composable
 fun QuickActionGrid(
     onNewChat: () -> Unit,
-    onOpenServer: () -> Unit,
     onQuickTask: (QuickTask) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // KI-Chat starts a new chat, Server opens the Server tab; the four tool
-    // tiles start a new chat with a prepared request in the composer (sent
-    // only when the user sends it, so Hermes' approvals apply as usual).
+    // One row: KI-Chat starts a new chat, Terminal, Files and Projects open
+    // their screens. Below it, the tasks that only prepare a request for
+    // Hermes (Docker) as a slim row; nothing is sent until the user sends
+    // it, so Hermes' approvals apply as usual. The server has its own tab.
     val cells = listOf(
-        QuickTile("chat", R.string.home_quick_chat, OrsikIcons.Chat, onClick = onNewChat, filled = true),
-        QuickTile("server", R.string.home_quick_server, OrsikIcons.Server, onClick = onOpenServer)
-    ) + QuickTask.entries.map { task ->
-        QuickTile(task.key, task.labelRes, task.icon, onClick = { onQuickTask(task) }, prepared = task.promptRes != null)
+        QuickTile("chat", R.string.home_quick_chat, OrsikIcons.Chat, onClick = onNewChat, filled = true)
+    ) + QuickTask.entries.filter { it.promptRes == null }.map { task ->
+        QuickTile(task.key, task.labelRes, task.icon, onClick = { onQuickTask(task) })
     }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        cells.chunked(3).forEach { row ->
+        cells.chunked(4).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { tile ->
                     val tileModifier = Modifier
@@ -608,16 +607,40 @@ fun QuickActionGrid(
                         .testTag(HomeTags.QUICK_TILE_PREFIX + tile.key)
                     val onClick = tile.onClick
                     if (onClick != null) {
-                        LiveTile(
-                            stringResource(tile.labelRes), tile.icon, tile.filled, onClick, tileModifier,
-                            onClickLabel = if (tile.prepared) stringResource(R.string.home_task_click_label) else null
-                        )
+                        LiveTile(stringResource(tile.labelRes), tile.icon, tile.filled, onClick, tileModifier)
                     } else {
                         PreviewTile(label = stringResource(tile.labelRes), icon = tile.icon, modifier = tileModifier)
                     }
                 }
             }
         }
+        QuickTask.entries.filter { it.promptRes != null }.forEach { task ->
+            PreparedTaskRow(
+                label = stringResource(task.labelRes),
+                icon = task.icon,
+                onClick = { onQuickTask(task) },
+                modifier = Modifier.testTag(HomeTags.QUICK_TILE_PREFIX + task.key)
+            )
+        }
+    }
+}
+
+/** A slim quick-access row for a task that prepares a request for Hermes. */
+@Composable
+private fun PreparedTaskRow(label: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .clip(OrsikShapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .clickable(onClickLabel = stringResource(R.string.home_task_click_label), onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -640,9 +663,7 @@ private class QuickTile(
     val labelRes: Int,
     val icon: ImageVector,
     val onClick: (() -> Unit)? = null,
-    val filled: Boolean = false,
-    /** Starts a chat with a prepared request (named for TalkBack). */
-    val prepared: Boolean = false
+    val filled: Boolean = false
 )
 
 /**
