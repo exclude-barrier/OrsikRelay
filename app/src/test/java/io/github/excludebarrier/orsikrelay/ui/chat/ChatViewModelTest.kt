@@ -856,6 +856,35 @@ class ChatViewModelTest {
         assertTrue(model.state.value.localLines.any { it.role == MessageRole.USER })
     }
 
+    @Test
+    fun dismissingANotSentNoticeKeepsTheDraft() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        chat.enqueue(ChatTurnEvent.TurnFailed(ChatStreamError.Http))
+        chat.complete()
+        testScheduler.advanceUntilIdle()
+        assertEquals(ChatStreamError.Http, model.state.value.turnFailure)
+
+        model.dismissTurnFailure()
+
+        assertNull(model.state.value.turnFailure)
+        assertEquals("hi", model.state.value.draft)
+    }
+
+    @Test
+    fun aFailureAfterTheRunStartedCannotBeDismissed() = withModel { model, chat, _, _, _ ->
+        model.onDraftChange("hi")
+        model.send()
+        chat.enqueue(ChatTurnEvent.RunStarted(runId), ChatTurnEvent.TurnFailed(ChatStreamError.Network))
+        chat.complete()
+        testScheduler.advanceUntilIdle()
+
+        model.dismissTurnFailure()
+
+        // The "answer aborted" card stays; only a history refresh clears it.
+        assertEquals(ChatStreamError.Network, model.state.value.turnFailure)
+    }
+
     // ------------------------------------------------------------------
     // Transient stream re-attach (StreamReconnecting)
     // ------------------------------------------------------------------
@@ -1715,6 +1744,24 @@ class ChatViewModelTest {
                 // The pick is staged for recreation rehydration.
                 assertEquals(attachment, ChatAttachmentDraftHolder.get(profileId, sessionId))
             }
+        }
+    }
+
+    @Test
+    fun dismissingTheAttachmentErrorClearsOnlyTheError() {
+        val source = FakeAttachmentSource().apply {
+            metadata = mapOf("content://doc/pdf" to ChatAttachmentMetadata("doc.pdf", "application/pdf", 10L))
+        }
+        withModel(attachmentSource = source) { model, _, _, _, _ ->
+            model.onDraftChange("hi")
+            model.onAttachmentPicked("content://doc/pdf")
+            testScheduler.advanceUntilIdle()
+            assertEquals(ChatAttachmentError.UnsupportedType, model.state.value.attachmentError)
+
+            model.dismissAttachmentError()
+
+            assertNull(model.state.value.attachmentError)
+            assertEquals("hi", model.state.value.draft)
         }
     }
 
