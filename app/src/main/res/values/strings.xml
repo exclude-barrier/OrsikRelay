@@ -365,6 +365,7 @@
     <string name="nav_activity">Activity</string>
     <string name="nav_activity_approval">Activity, approval required</string>
     <string name="sessions_running">running</string>
+    <string name="sessions_awaiting_approval">Approval</string>
     <string name="sessions_pinned">Pinned</string>
     <string name="chat_header_subtitle">Hermes · %1$s</string>
     <string name="chat_tool_done">done</string>

@@ -642,6 +642,7 @@ fun HermesNavHost(
                     .activeRun.collectAsState()
                 SessionsScreen(
                     runningSessionId = activeRun?.takeIf { it.profileId == activeProfileId }?.sessionId,
+                    runningAwaitsApproval = activeRun?.takeIf { it.profileId == activeProfileId }?.pendingApproval != null,
                     pageSource = sessionPageSource
                         ?: productionDependencies.value.sessionPageSource,
                     profileId = activeProfileId.orEmpty(),

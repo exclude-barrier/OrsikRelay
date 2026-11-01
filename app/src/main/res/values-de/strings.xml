@@ -364,6 +364,7 @@
     <string name="nav_activity">Aktivität</string>
     <string name="nav_activity_approval">Aktivität, Freigabe erforderlich</string>
     <string name="sessions_running">läuft</string>
+    <string name="sessions_awaiting_approval">Freigabe</string>
     <string name="sessions_pinned">Angeheftet</string>
     <string name="chat_header_subtitle">Hermes · %1$s</string>
     <string name="chat_tool_done">fertig</string>

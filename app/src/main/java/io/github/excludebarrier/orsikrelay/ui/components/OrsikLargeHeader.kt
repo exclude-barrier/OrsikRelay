@@ -55,7 +55,7 @@ fun OrsikLargeHeader(
         ) {
             Text(
                 text = title,
-                style = OrsikType.screenTitle,
+                style = OrsikType.pageTitle,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
