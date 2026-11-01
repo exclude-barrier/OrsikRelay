@@ -1,5 +1,17 @@
 package io.github.excludebarrier.orsikrelay.ui.home
 
+import android.os.SystemClock
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
+import io.github.excludebarrier.orsikrelay.ui.common.criticalContainerColor
+import io.github.excludebarrier.orsikrelay.ui.monitoring.freshness
+import io.github.excludebarrier.orsikrelay.ui.monitoring.freshnessText
+import io.github.excludebarrier.orsikrelay.ui.monitoring.stoppedServices
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.pluralStringResource
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -87,6 +99,7 @@ object HomeTags {
     const val APPROVAL = "home_approval"
     const val APPROVAL_REVIEW = "home_approval_review"
     const val RUN_ROW = "home_run_row"
+    const val SERVER_HEAD = "home_server_head"
     const val SERVER_STRIP = "home_server_strip"
     const val SERVER_SERVICES_DOWN = "home_server_services_down"
     const val QUICK_CHAT = "home_quick_chat"
@@ -427,51 +440,97 @@ fun ActiveRunRow(item: HomeRunItem, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-fun ServerStatusStrip(metrics: HostMetricsResult?, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        // No status chip here: the server card above already says whether
-        // the server is connected.
-        SectionTitle(text = stringResource(R.string.home_section_server))
-        Column(
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(OrsikShapes.card)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .padding(16.dp)
-                .testTag(HomeTags.SERVER_STRIP)
-        ) {
-            val ready = (metrics as? HostMetricsResult.Ready)?.metrics
-            // From 1.3x font four columns no longer fit: two rows of two.
-            val columns = if (LocalDensity.current.fontScale >= LARGE_FONT_SCALE) 2 else 4
-            hostTiles(ready).chunked(columns).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    row.forEach { tile -> HostTileView(tile, Modifier.weight(1f)) }
-                }
-            }
-            when (metrics) {
-                is HostMetricsResult.Ready -> {
-                    val down = metrics.metrics.services.filter { it.active == false }.map { it.name }
-                    if (down.isNotEmpty()) {
-                        Text(
-                            text = stringResource(R.string.home_server_services_down, down.joinToString(", ")),
-                            style = OrsikType.meta,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.testTag(HomeTags.SERVER_SERVICES_DOWN)
-                        )
+fun ServerStatusStrip(
+    metrics: HostMetricsResult?,
+    modifier: Modifier = Modifier,
+    serverName: String? = null,
+    updatedAt: Long? = null,
+    onOpen: (() -> Unit)? = null
+) {
+    // The whole card opens the monitoring page; its head says which server
+    // and how fresh the values are.
+    val now by produceState(SystemClock.elapsedRealtime(), updatedAt) {
+        while (true) {
+            value = SystemClock.elapsedRealtime()
+            delay(1_000)
+        }
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(OrsikShapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .then(
+                if (onOpen != null) {
+                    Modifier.clickable(
+                        role = Role.Button,
+                        onClickLabel = stringResource(R.string.profiles_monitoring_click_label),
+                        onClick = onOpen
+                    )
+                } else Modifier
+            )
+            .padding(16.dp)
+            .testTag(HomeTags.SERVER_STRIP)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) {
+                        append(serverName ?: stringResource(R.string.home_section_server))
                     }
-                }
-                // A failed read is not a "preview": plain text, no badge.
-                HostMetricsResult.Failed -> Text(
-                    text = stringResource(R.string.home_server_unreadable),
-                    style = OrsikType.meta,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                // An older bridge: the card keeps its preview.
-                HostMetricsResult.Unsupported -> PreviewNote(stringResource(R.string.home_server_preview_text))
-                // Not read yet (or the server is unreachable): placeholders only.
-                null -> Unit
+                    if (updatedAt != null && metrics is HostMetricsResult.Ready) {
+                        append(" · ")
+                        append(freshnessText(freshness(updatedAt, now)))
+                    }
+                },
+                style = OrsikType.meta,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(HomeTags.SERVER_HEAD)
+            )
+            if (onOpen != null) {
+                Icon(OrsikIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
+        }
+        val ready = (metrics as? HostMetricsResult.Ready)?.metrics
+        // From 1.3x font four columns no longer fit: two rows of two.
+        val columns = if (LocalDensity.current.fontScale >= LARGE_FONT_SCALE) 2 else 4
+        hostTiles(ready).chunked(columns).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { tile -> HostTileView(tile, Modifier.weight(1f)) }
+            }
+        }
+        when (metrics) {
+            is HostMetricsResult.Ready -> {
+                val down = stoppedServices(metrics.metrics)
+                if (down.isNotEmpty()) {
+                    Text(
+                        text = pluralStringResource(R.plurals.home_server_stopped, down.size, down.size),
+                        style = OrsikType.meta,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .clip(OrsikShapes.pill)
+                            .background(criticalContainerColor())
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .testTag(HomeTags.SERVER_SERVICES_DOWN)
+                    )
+                }
+            }
+            // A failed read is not a "preview": plain text, no badge.
+            HostMetricsResult.Failed -> Text(
+                text = stringResource(R.string.home_server_unreadable),
+                style = OrsikType.meta,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // An older bridge: the card keeps its preview.
+            HostMetricsResult.Unsupported -> PreviewNote(stringResource(R.string.home_server_preview_text))
+            // Not read yet (or the server is unreachable): placeholders only.
+            null -> Unit
         }
     }
 }
