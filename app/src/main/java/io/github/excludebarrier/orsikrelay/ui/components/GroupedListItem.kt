@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -72,6 +73,9 @@ fun GroupedListItem(
     compact: Boolean = false
 ) {
     val shape = position.shape()
+    // Dense rows keep one line per text, but never at a large font: there the
+    // text must stay fully readable, so it wraps again.
+    val oneLine = compact && LocalDensity.current.fontScale < 1.3f
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 14.dp),
@@ -110,7 +114,7 @@ fun GroupedListItem(
                     text = supporting,
                     style = OrsikType.meta,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (compact) 1 else Int.MAX_VALUE,
+                    maxLines = if (oneLine) 1 else Int.MAX_VALUE,
                     overflow = TextOverflow.Ellipsis
                 )
             }
