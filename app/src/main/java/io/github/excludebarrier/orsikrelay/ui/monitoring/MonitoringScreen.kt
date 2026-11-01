@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -200,12 +201,9 @@ internal fun MonitoringScreen(
     val listState = rememberLazyListState()
     val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     val title = stringResource(R.string.monitoring_title)
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .testTag(MonitoringTags.SCREEN)
-    ) {
+    // A Surface, so text and icons take the theme's content colour.
+    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize().testTag(MonitoringTags.SCREEN)) {
+    Column(Modifier.fillMaxSize()) {
         // The bar keeps the page background; its title and divider appear
         // once the large title has scrolled away.
         Row(
@@ -263,6 +261,7 @@ internal fun MonitoringScreen(
             item(key = "hermes") { HermesTasks(startTask) }
             item(key = "soon") { PreviewNote(stringResource(R.string.monitoring_soon), Modifier.padding(top = 4.dp)) }
         }
+    }
     }
 }
 
@@ -482,7 +481,12 @@ private fun ServicesCard(services: List<ServiceState>, startTask: (String, Strin
                         modifier = Modifier.testTag(MonitoringTags.ASK_PREFIX + service.name)
                     ) { Text(ask) }
                 } else {
-                    Text(label, style = OrsikType.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        label,
+                        style = OrsikType.meta,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
                 }
             }
         }
