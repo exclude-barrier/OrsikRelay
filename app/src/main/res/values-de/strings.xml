@@ -184,6 +184,8 @@
     <string name="chat_refresh_history">Verlauf aktualisieren</string>
     <string name="chat_turn_failure_refresh_hint">Die Antwort kann auf dem Server trotzdem fertig geworden sein. „Verlauf aktualisieren“ lädt den aktuellen Stand; hilft das nicht, öffne den Chat später erneut.</string>
     <string name="chat_turn_failure_draft_kept">Deine Nachricht wurde nicht gesendet und steht noch im Eingabefeld.</string>
+    <string name="chat_turn_failure_not_sent">Nicht gesendet.</string>
+    <string name="chat_notice_dismiss">Hinweis schließen</string>
     <string name="chat_stop">Stoppen</string>
     <string name="chat_stopping">Wird gestoppt …</string>
     <string name="error_run_stop_generic">Der laufende Run konnte nicht gestoppt werden.</string>
@@ -402,6 +404,8 @@
     <string name="chat_run_lost">Hermes hat diesen Lauf verloren, zum Beispiel nach einem Neustart des Servers. Der Chat bleibt blockiert, bis du den Lauf als abgebrochen abschließt. Er wird dabei nicht erneut ausgeführt.</string>
     <string name="chat_run_lost_resolve">Als abgebrochen abschließen</string>
     <string name="chat_run_lost_resolving">Wird abgeschlossen …</string>
+    <string name="chat_run_lost_title">Lauf verloren</string>
+    <string name="chat_input_lost_hint">Erst den Lauf abschließen</string>
     <string name="home_server_gpu_none">keine</string>
     <string name="home_server_unreadable">Die Werte sind gerade nicht lesbar.</string>
     <string name="home_task_docker_prompt">Liste alle Docker-Container auf dem Server mit Name, Image, Status und Ports auf.</string>
