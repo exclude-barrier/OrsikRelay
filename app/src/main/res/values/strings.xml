@@ -3,6 +3,24 @@
     <string name="slash_models_loading">Loading session model options…</string>
     <string name="slash_models_failed">Model options could not be loaded.</string>
     <string name="slash_models_empty">The server offered no model options.</string>
+    <string name="slash_model_search_hint">Search models …</string>
+    <string name="slash_model_close">Close model list</string>
+    <plurals name="slash_models_count_models">
+        <item quantity="one">%1$d model</item>
+        <item quantity="other">%1$d models</item>
+    </plurals>
+    <plurals name="slash_models_count_providers">
+        <item quantity="one">%1$d provider</item>
+        <item quantity="other">%1$d providers</item>
+    </plurals>
+    <string name="slash_models_header">%1$s from %2$s · type to filter</string>
+    <string name="slash_models_recent">Current &amp; recent</string>
+    <string name="slash_models_no_match">No model matches “%1$s”</string>
+    <string name="slash_models_locked_run">Can’t be changed while Hermes is working</string>
+    <string name="slash_model_changed">Model: %1$s</string>
+    <string name="slash_model_current">Current: %1$s</string>
+    <string name="slash_model_current_marker">Current model</string>
+    <string name="chat_header_subtitle_model">Hermes · %1$s · %2$s</string>
     <string name="slash_failed">Command failed or its outcome is unknown. Check the session before trying again.</string>
     <string name="slash_done">Session command applied.</string>
     <string name="slash_error">Command unavailable or invalid. Nothing was sent to the model.</string>
