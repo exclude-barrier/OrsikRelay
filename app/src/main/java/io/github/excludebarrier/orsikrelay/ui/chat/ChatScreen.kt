@@ -30,7 +30,10 @@ import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -64,7 +67,11 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
@@ -120,6 +127,7 @@ import io.github.excludebarrier.orsikrelay.platform.notification.NotificationPer
 import io.github.excludebarrier.orsikrelay.ui.chat.markdown.AssistantMarkdownMessage
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeAction
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeCard
+import io.github.excludebarrier.orsikrelay.ui.common.criticalContainerColor
 import io.github.excludebarrier.orsikrelay.ui.common.NoticeTone
 import io.github.excludebarrier.orsikrelay.ui.settings.ChatTextSizeController
 import kotlinx.coroutines.withContext
@@ -666,7 +674,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                         resolving = state.resolveInFlight,
                         onResolve = { viewModel.resolveLostRun() }
                     )
-                } else if (failure != null) {
+                } else if (failure != null && state.runStarted) {
                     TurnFailureBlock(
                         error = failure,
                         showRefreshHistory = state.runStarted,
@@ -722,7 +730,22 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 // Transient re-attach status while the stream is
                 // being re-attached to the still-running server run.
                 if (state.reconnecting) {
-                    StatusText(stringResource(R.string.chat_stream_reconnecting))
+                    // The relay keeps going while the stream re-attaches.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .testTag(TAG_RECONNECTING)
+                    ) {
+                        WorkingGlyph()
+                        Text(
+                            text = stringResource(R.string.chat_stream_reconnecting),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 10.dp)
+                        )
+                    }
                 }
                 }
                 } else {
@@ -764,6 +787,24 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     attachmentBusyLabel = attachmentBusyLabel,
                     onPickAttachment = pickImage,
                     onRemoveAttachment = { viewModel.removeAttachment() },
+                    notice = when {
+                        state.turnFailure != null && !state.runStarted && !state.turnUncertain -> ComposerNotice(
+                            title = stringResource(R.string.chat_turn_failure_not_sent),
+                            text = stringResource(R.string.chat_turn_failure_draft_kept),
+                            onDismiss = { viewModel.dismissTurnFailure() }
+                        )
+                        state.attachmentError != null -> ComposerNotice(
+                            title = null,
+                            text = when (state.attachmentError) {
+                                ChatAttachmentError.UnsupportedType -> attachmentTypeErrorLabel
+                                ChatAttachmentError.TooLarge -> attachmentSizeErrorLabel
+                                else -> attachmentUnreadableErrorLabel
+                            },
+                            onDismiss = { viewModel.dismissAttachmentError() }
+                        )
+                        else -> null
+                    },
+                    lockedHint = if (state.lostRun != null) stringResource(R.string.chat_input_lost_hint) else null,
                     compact = compactComposer,
                     runControls = if (state.controlsVisible) {
                         RunComposerControls(
@@ -1239,7 +1280,9 @@ internal fun TurnFailureBlock(
             listOf(
                 NoticeAction(
                     label = stringResource(R.string.chat_refresh_history),
-                    onClick = onRefreshHistory
+                    onClick = onRefreshHistory,
+                    primary = true,
+                    icon = Icons.Filled.Refresh
                 )
             )
         } else {
@@ -1290,8 +1333,8 @@ internal fun RunUncertainBlock(
     onRelease: () -> Unit = {}
 ) {
     NoticeCard(
-        tone = NoticeTone.Error,
-        title = stringResource(R.string.chat_run_uncertain_title),
+        tone = if (lost) NoticeTone.Critical else NoticeTone.Error,
+        title = stringResource(if (lost) R.string.chat_run_lost_title else R.string.chat_run_uncertain_title),
         text = when {
             lost -> stringResource(R.string.chat_run_lost)
             lostWithoutKey -> stringResource(R.string.chat_run_lost_no_key)
@@ -1310,6 +1353,7 @@ internal fun RunUncertainBlock(
                     },
                     onClick = onResolve,
                     enabled = !resolving,
+                    primary = true,
                     loading = resolving,
                     testTag = TAG_RUN_RESOLVE_LOST
                 )
@@ -1456,6 +1500,109 @@ internal fun SteerRecoveryBlock(
     )
 }
 
+/** A dismissible notice above the composer field (see [ComposerBar]). */
+internal data class ComposerNotice(val title: String?, val text: String, val onDismiss: () -> Unit)
+
+@Composable
+private fun ComposerNoticeBanner(notice: ComposerNotice) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(criticalContainerColor())
+            .padding(start = 14.dp, top = 8.dp, bottom = 8.dp)
+            .testTag(TAG_COMPOSER_NOTICE)
+    ) {
+        Text(
+            text = buildAnnotatedString {
+                if (notice.title != null) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(notice.title) }
+                    append(' ')
+                }
+                append(notice.text)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = notice.onDismiss, modifier = Modifier.testTag(TAG_COMPOSER_NOTICE_DISMISS)) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = stringResource(R.string.chat_notice_dismiss),
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttachmentPreview(
+    attachment: ChatAttachmentDraft,
+    thumbnail: ImageBitmap?,
+    removeLabel: String,
+    removeEnabled: Boolean,
+    onRemove: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.surfaceContainerHigh)
+            .padding(start = 10.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)
+            .testTag(TAG_ATTACHMENT_PREVIEW)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(colors.surfaceContainerHighest)
+        ) {
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag(TAG_ATTACHMENT_THUMBNAIL)
+                )
+            } else {
+                Icon(OrsikIcons.Image, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        val sizeLabel = formatAttachmentSize(attachment.sizeBytes)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = attachment.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (sizeLabel.isNotEmpty()) {
+                Text(text = sizeLabel, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            }
+        }
+        TextButton(
+            onClick = onRemove,
+            enabled = removeEnabled,
+            modifier = Modifier.testTag(TAG_ATTACHMENT_REMOVE)
+        ) {
+            Text(removeLabel)
+        }
+    }
+}
+
 @Composable
 internal fun ComposerBar(
     draft: String,
@@ -1485,7 +1632,9 @@ internal fun ComposerBar(
     slashDone: Boolean = false,
     modelOptions: List<SessionModelOption> = emptyList(),
     modelNotice: String? = null,
-    onSlashSelected: (SlashCommand) -> Unit = {}
+    onSlashSelected: (SlashCommand) -> Unit = {},
+    notice: ComposerNotice? = null,
+    lockedHint: String? = null
 ) {
     // The tag wraps the whole bar including its own bottom padding, so
     // tests can compare the bar's bottom edge with the content area.
@@ -1530,74 +1679,35 @@ internal fun ComposerBar(
         if (slashFailed) Text(stringResource(R.string.slash_failed), color = MaterialTheme.colorScheme.error)
         if (slashDone) Text(stringResource(R.string.slash_done))
         if (modelNotice != null) Text(modelNotice)
-        // Compact attachment chip above the input row. Local-only data:
-        // the file name and size the provider reported, plus a bounded decoded
+        // Red, dismissible notice right above the field: a message that was
+        // not sent (its draft stays in the field) or a rejected attachment.
+        if (notice != null) ComposerNoticeBanner(notice)
+        // Attachment preview above the input row. Local-only data: the file
+        // name and size the provider reported, plus a bounded decoded
         // thumbnail; no path, no URI and no provider text is ever rendered.
-        if (attachmentErrorLabel != null && attachment != null) {
-            Text(
-                text = attachmentErrorLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
-        if (attachment != null || attachmentErrorLabel != null || attachmentBusy) {
+        if (attachmentBusy) {
             Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(bottom = 6.dp)
             ) {
-                when {
-                    attachmentBusy -> {
-                        Text(
-                            text = attachmentBusyLabel,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    attachment != null -> {
-                        attachmentThumbnail?.let { bitmap ->
-                            Image(
-                                bitmap = bitmap,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .padding(end = 8.dp)
-                                    .testTag(TAG_ATTACHMENT_THUMBNAIL)
-                            )
-                        }
-                        val sizeLabel = formatAttachmentSize(attachment.sizeBytes)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = attachment.displayName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (sizeLabel.isNotEmpty()) {
-                                Text(
-                                    text = sizeLabel,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                        TextButton(
-                            onClick = onRemoveAttachment,
-                            enabled = !turnActive,
-                            modifier = Modifier.testTag(TAG_ATTACHMENT_REMOVE)
-                        ) {
-                            Text(attachmentRemoveLabel)
-                        }
-                    }
-                    else -> {
-                        Text(
-                            text = attachmentErrorLabel.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
+                WorkingGlyph(size = 20.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = attachmentBusyLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
+        } else if (attachment != null) {
+            AttachmentPreview(
+                attachment = attachment,
+                thumbnail = attachmentThumbnail,
+                removeLabel = attachmentRemoveLabel,
+                removeEnabled = !turnActive,
+                onRemove = onRemoveAttachment
+            )
         }
         // One rounded, filled input bar: the attachment action on the left,
         // the pill-shaped message field in the middle, and a round filled
@@ -1610,13 +1720,13 @@ internal fun ComposerBar(
             AgentComposerDock(
                 draft = draft,
                 onDraftChange = onDraftChange,
-                hint = stringResource(R.string.chat_input_label),
-                enabled = (!turnActive || slashCommands.isNotEmpty()) && !slashBusy,
+                hint = lockedHint ?: stringResource(R.string.chat_input_label),
+                enabled = lockedHint == null && (!turnActive || slashCommands.isNotEmpty()) && !slashBusy,
                 canSend = sendEnabled,
                 sending = false,
                 onSend = onSend,
                 agentSelector = false,
-                attachEnabled = !turnActive && !attachmentBusy && !slashBusy,
+                attachEnabled = lockedHint == null && !turnActive && !attachmentBusy && !slashBusy,
                 onAttach = onPickAttachment,
                 attachLabel = attachmentAddLabel,
                 sendLabel = stringResource(R.string.chat_send),
@@ -2088,6 +2198,10 @@ private suspend fun LazyListState.scrollToTail() {
 }
 
 internal const val TAG_CHAT_TITLE = "chat_header_title"
+internal const val TAG_COMPOSER_NOTICE = "chat_composer_notice"
+internal const val TAG_COMPOSER_NOTICE_DISMISS = "chat_composer_notice_dismiss"
+internal const val TAG_ATTACHMENT_PREVIEW = "chat_attachment_preview"
+internal const val TAG_RECONNECTING = "chat_reconnecting"
 internal const val TAG_RUN_STOP = "composer_run_stop"
 internal const val TAG_RUN_RESOLVE_LOST = "chat_run_resolve_lost"
 internal const val TAG_RUN_RELEASE = "chat_run_release"

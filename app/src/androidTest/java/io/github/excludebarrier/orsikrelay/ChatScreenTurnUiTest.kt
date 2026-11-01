@@ -426,8 +426,10 @@ class ChatScreenTurnUiTest {
         source.complete()
         waitForFlowCompletion(source)
 
-        waitForText(context.getString(R.string.error_connection_http))
-        composeRule.onNodeWithText(context.getString(R.string.chat_turn_failure_draft_kept))
+        // The notice sits right above the field: "Not sent." plus the
+        // draft-kept sentence, dismissible.
+        waitForText(context.getString(R.string.chat_turn_failure_draft_kept), substring = true)
+        composeRule.onNodeWithText(context.getString(R.string.chat_turn_failure_not_sent), substring = true)
             .assertIsDisplayed()
         assertTrue(
             "no confirmed run: no history refresh action",
@@ -1056,9 +1058,9 @@ class ChatScreenTurnUiTest {
         composeRule.waitForIdle()
     }
 
-    private fun waitForText(text: String) {
+    private fun waitForText(text: String, substring: Boolean = false) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
     }
