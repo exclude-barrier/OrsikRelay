@@ -241,6 +241,27 @@ class TerminalControllerTest {
     }
 
     @Test
+    fun aHandedOverCommandIsTypedOnceWithoutALineEnd() = runTest {
+        val source = FakeSource()
+        val connection = FakeConnection()
+        source.openResult = connection
+        val controller = newController(source, mutableListOf())
+
+        controller.typeOnConnect("docker compose pull\r\n")
+        controller.connect()
+        advanceUntilIdle()
+
+        assertEquals(listOf("docker compose pull"), connection.sent.map { it.toString(Charsets.UTF_8) })
+
+        // A reconnect in the same visit does not type it again.
+        controller.connect()
+        advanceUntilIdle()
+        assertEquals(1, connection.sent.size)
+
+        controller.dispose()
+    }
+
+    @Test
     fun aResizeBeforeTheConnectionOpensIsSentOnceWhenItOpens() = runTest {
         val source = FakeSource()
         val connection = FakeConnection()

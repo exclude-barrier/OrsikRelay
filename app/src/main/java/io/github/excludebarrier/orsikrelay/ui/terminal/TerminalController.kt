@@ -65,6 +65,12 @@ internal class TerminalController(
 
     private var connection: TerminalConnection? = null
     private var size: Pair<Int, Int>? = null
+    private var typeOnConnect: String? = null
+
+    /** Types [text] (no line end) into the first shell this visit opens; it is never run. */
+    fun typeOnConnect(text: String) {
+        typeOnConnect = text.filterNot { it.isISOControl() }.takeIf { it.isNotBlank() }
+    }
 
     @Volatile
     private var generation = 0
@@ -117,6 +123,10 @@ internal class TerminalController(
             }
             connection = opened
             size?.let { (columns, rows) -> opened.resize(columns, rows) }
+            typeOnConnect?.let { text ->
+                typeOnConnect = null
+                input(text.toByteArray(Charsets.UTF_8))
+            }
         }
     }
 

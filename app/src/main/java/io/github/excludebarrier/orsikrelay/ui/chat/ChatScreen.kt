@@ -93,12 +93,10 @@ import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.ui.components.AgentComposerDock
-import io.github.excludebarrier.orsikrelay.ui.components.AgentMark
 import io.github.excludebarrier.orsikrelay.ui.components.BottomDockArea
 import io.github.excludebarrier.orsikrelay.ui.components.ExpressiveShape
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
@@ -203,6 +201,8 @@ fun ChatScreen(
         SlashCommandSource { emptySet() },
     slashExecutor: ExecuteSlashCommand? = null,
     onOpenSession: (String) -> Unit = {},
+    // Opens the terminal with a shell code block's command in its input (never run).
+    onPasteToTerminal: ((String) -> Unit)? = null,
     modelOptionsSource: ModelOptionsSource =
         ModelOptionsSource { ModelOptionsResult.Failed }
 ) {
@@ -381,8 +381,14 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
         ChatHeader(
             title = (state.slashTitle ?: sessionTitle)?.takeIf { it.isNotBlank() }
                 ?: stringResource(R.string.chat_title),
-            subtitle = serverName?.takeIf { it.isNotBlank() }
-                ?.let { stringResource(R.string.chat_header_subtitle, it) },
+            subtitle = when (chatHeaderStatus(state.turnActive, state.reconnecting, state.lostRun != null)) {
+                ChatHeaderStatus.Lost -> stringResource(R.string.chat_header_lost)
+                ChatHeaderStatus.Reconnecting -> stringResource(R.string.chat_stream_reconnecting)
+                ChatHeaderStatus.Working -> stringResource(R.string.chat_header_working)
+                ChatHeaderStatus.Idle -> serverName?.takeIf { it.isNotBlank() }
+                    ?.let { stringResource(R.string.chat_header_subtitle, it) }
+            },
+            working = state.turnActive && state.lostRun == null,
             onBack = { viewModel.handleBack() },
             compact = compactComposer,
             modifier = Modifier.bleed(16.dp),
@@ -595,7 +601,7 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                                 LocalChatTextScale provides chatTextScale
                             ) {
                                 when (item) {
-                                    is TimelineItem.Single -> MessageRow(item.row)
+                                    is TimelineItem.Single -> MessageRow(item.row, onPasteToTerminal)
                                     is TimelineItem.ToolGroup -> ToolGroupRow(
                                         group = item,
                                         // Only the newest live group can still grow.
@@ -904,6 +910,7 @@ internal fun ChatHeader(
     compact: Boolean,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    working: Boolean = false,
     actions: (@Composable () -> Unit)? = null
 ) {
     val line = MaterialTheme.colorScheme.outlineVariant
@@ -939,18 +946,39 @@ internal fun ChatHeader(
                     .testTag(TAG_CHAT_TITLE)
             )
             if (subtitle != null && !compact) {
-                Text(
-                    text = subtitle,
-                    fontSize = 12.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.testTag(TAG_CHAT_SUBTITLE)
+                ) {
+                    if (working) {
+                        WorkingGlyph(size = 16.dp)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = subtitle,
+                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
         actions?.invoke()
     }
 }
+
+/** What the header's second line says, most urgent first. */
+internal enum class ChatHeaderStatus { Lost, Reconnecting, Working, Idle }
+
+internal fun chatHeaderStatus(turnActive: Boolean, reconnecting: Boolean, lost: Boolean): ChatHeaderStatus = when {
+    lost -> ChatHeaderStatus.Lost
+    reconnecting -> ChatHeaderStatus.Reconnecting
+    turnActive -> ChatHeaderStatus.Working
+    else -> ChatHeaderStatus.Idle
+}
+
+internal const val TAG_CHAT_SUBTITLE = "chat_header_subtitle"
 
 /**
  * The chat's overflow menu: archive and delete this chat, offered only when
@@ -2087,7 +2115,7 @@ private val NEUTRAL_BUBBLE_SHAPE = RoundedCornerShape(
  * "Hermes: …").
  */
 @Composable
-private fun MessageRow(message: TimelineRow) {
+private fun MessageRow(message: TimelineRow, onPasteToTerminal: ((String) -> Unit)? = null) {
     val role = when (message.role) {
         MessageRole.USER -> stringResource(R.string.chat_role_user)
         MessageRole.ASSISTANT -> stringResource(R.string.chat_role_assistant)
@@ -2160,24 +2188,21 @@ private fun MessageRow(message: TimelineRow) {
                     label = message.content,
                     modifier = Modifier.testTag("chatToolChip:${message.key}")
                 )
-                isAssistant -> Row(modifier = Modifier.fillMaxWidth()) {
-                    // Hermes' sunny "H" marks the answer; the Markdown body
-                    // itself has no bubble and reads like a document.
-                    AgentMark(size = 30, modifier = Modifier.clearAndSetSemantics {})
-                    Spacer(Modifier.width(10.dp))
-                    ChatTextScaledContent(chatTextScale) {
-                        Box(
+                // The answer has no avatar and no bubble: the Markdown body
+                // takes the full width and reads like a document.
+                isAssistant -> ChatTextScaledContent(chatTextScale) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("chatAssistantBody:${message.key}")
+                    ) {
+                        AssistantMarkdownMessage(
+                            content = message.content,
+                            onPasteToTerminal = onPasteToTerminal,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("chatAssistantBody:${message.key}")
-                        ) {
-                            AssistantMarkdownMessage(
-                                content = message.content,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("chatMessageText:${message.key}")
-                            )
-                        }
+                                .testTag("chatMessageText:${message.key}")
+                        )
                     }
                 }
                 else -> ChatTextScaledContent(chatTextScale) {
