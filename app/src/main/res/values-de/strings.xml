@@ -246,6 +246,17 @@
     <string name="chat_code_language_fallback">CODE</string>
     <string name="chat_code_copy">Kopieren</string>
     <string name="chat_code_copied">Kopiert</string>
+    <string name="chat_code_paste_terminal">Im Terminal einfügen</string>
+    <plurals name="chat_code_show_all">
+        <item quantity="one">%1$d Zeile anzeigen</item>
+        <item quantity="other">Alle %1$d Zeilen anzeigen</item>
+    </plurals>
+    <string name="chat_code_collapse">Einklappen</string>
+    <string name="chat_link_blocked">blockiert</string>
+    <string name="chat_link_blocked_hint">Nur https-Links werden geöffnet. Dieser Link bleibt zu.</string>
+    <string name="chat_markdown_warning">Achtung</string>
+    <string name="chat_header_lost">Lauf verloren · Chat blockiert</string>
+    <string name="chat_header_working">Hermes arbeitet …</string>
     <string name="notification_channel_name">Orsik Relay</string>
     <string name="notification_fallback_title">Orsik Relay</string>
     <string name="notification_approval_body">Hermes wartet auf deine Freigabe.</string>

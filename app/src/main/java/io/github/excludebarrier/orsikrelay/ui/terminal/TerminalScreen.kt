@@ -97,6 +97,7 @@ import io.github.excludebarrier.orsikrelay.ui.files.sensitivePlainText
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikMono
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikTheme
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -136,6 +137,17 @@ internal object TerminalUnlockCarry {
     private val carried = AtomicBoolean(false)
     fun carry() = carried.set(true)
     fun take(): Boolean = carried.getAndSet(false)
+}
+
+/**
+ * A command from a chat code block ("paste into terminal"): typed into the
+ * next connected shell exactly once, without a line end, so the user still
+ * decides with Enter. The next terminal visit takes it.
+ */
+internal object TerminalPrefill {
+    private val pending = AtomicReference<String?>(null)
+    fun set(command: String) = pending.set(command.filterNot { it.isISOControl() }.takeIf { it.isNotBlank() })
+    fun take(): String? = pending.getAndSet(null)
 }
 
 /** Hands terminal text to Hermes: a new session whose first message holds it as a code block. */
@@ -195,7 +207,12 @@ internal fun TerminalRoute(
             controller.dispose()
         }
     }
-    LaunchedEffect(controller) { controller.check() }
+    LaunchedEffect(controller) {
+        // A command handed over from a chat goes to this visit's first
+        // connection, which only opens after the unlock.
+        TerminalPrefill.take()?.let(controller::typeOnConnect)
+        controller.check()
+    }
 
     fun unlock() {
         when {

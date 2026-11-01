@@ -1,7 +1,6 @@
 package io.github.excludebarrier.orsikrelay
 
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
@@ -89,13 +88,11 @@ class ChatBubbleUiTest {
         val row = bounds("chatTimelineRow:server:2")
         val body = bounds("chatAssistantBody:server:2")
         // No assistant bubble exists: the body is plain content on the
-        // surface. Design v2 puts Hermes' 30 dp avatar and a 10 dp gap in
-        // front of it; the body takes all the remaining width.
+        // surface, without an avatar in front: the body takes the full width.
         composeRule.onAllNodesWithTag("chatBubble:server:2").assertCountEquals(0)
-        val avatarPx = with(composeRule.density) { HERMES_AVATAR_INDENT.toPx() }
         assertTrue(
-            "Hermes body must start after the avatar, gap was ${body.left - row.left} px",
-            abs(body.left - row.left - avatarPx) <= 1f
+            "Hermes body must start on the content edge, gap was ${body.left - row.left} px",
+            abs(body.left - row.left) <= 1f
         )
         assertTrue(
             "Hermes body must end on the content edge, gap was ${row.right - body.right} px",
@@ -212,10 +209,9 @@ class ChatBubbleUiTest {
         )
         val hermesRow = bounds("chatTimelineRow:server:2")
         val hermesBody = bounds("chatAssistantBody:server:2")
-        val avatarPx = with(composeRule.density) { HERMES_AVATAR_INDENT.toPx() }
         assertTrue(
-            "Hermes body width ${hermesBody.width} px must fill the row width ${hermesRow.width} px after the avatar",
-            abs(hermesBody.width - (hermesRow.width - avatarPx)) <= 1f
+            "Hermes body width ${hermesBody.width} px must fill the row width ${hermesRow.width} px",
+            abs(hermesBody.width - hermesRow.width) <= 1f
         )
     }
 
@@ -316,6 +312,3 @@ class ChatBubbleUiTest {
             "Eine längere Antwort von Hermes, die ebenfalls über mehrere Zeilen umbrechen muss, damit die Blase ihre Höchstbreite erreicht und linksbündig beginnt."
     }
 }
-
-/** Hermes' avatar (30 dp) plus the gap (10 dp) in front of every answer. */
-private val HERMES_AVATAR_INDENT = 40.dp

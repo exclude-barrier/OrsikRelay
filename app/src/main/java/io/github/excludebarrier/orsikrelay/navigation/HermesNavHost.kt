@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
+import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalPrefill
 import androidx.compose.ui.platform.LocalResources
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
 import io.github.excludebarrier.orsikrelay.ui.files.FilesAskResult
@@ -780,6 +781,12 @@ fun HermesNavHost(
                     slashExecutor = productionDependencies.value.slashExecutor,
                     modelOptionsSource = productionDependencies.value.slashModels,
                     onOpenSession = { openChat(it, null) },
+                    // The terminal still asks for the device credential; the
+                    // command lands in its input and is never run.
+                    onPasteToTerminal = { command ->
+                        TerminalPrefill.set(command)
+                        openTool(QuickTask.Terminal)
+                    },
                     notificationPermissionStore = productionDependencies.value.notificationPermissionStore,
                     attachmentSource = productionDependencies.value.chatAttachmentSource,
                     chatTextSizeController = resolvedChatTextSizeController,
