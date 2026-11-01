@@ -1,6 +1,7 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
+import io.github.excludebarrier.orsikrelay.ui.monitoring.MonitoringRoute
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalPrefill
 import androidx.compose.ui.platform.LocalResources
 import io.github.excludebarrier.orsikrelay.domain.chat.ChatOutboundMessage
@@ -66,6 +67,7 @@ import io.github.excludebarrier.orsikrelay.domain.run.RunStatusRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunStopRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSteerRequester
 import io.github.excludebarrier.orsikrelay.domain.run.RunSessionController
+import io.github.excludebarrier.orsikrelay.domain.host.HostMetricsSource
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreator
 import io.github.excludebarrier.orsikrelay.domain.session.SessionManager
 import io.github.excludebarrier.orsikrelay.domain.session.SessionListResult
@@ -125,6 +127,7 @@ fun HermesNavHost(
     appAuthenticator: AppAuthenticator? = null,
     terminalSource: TerminalSource? = null,
     filesSource: FilesSource? = null,
+    hostMetricsSource: HostMetricsSource? = null,
     startupProfileResolver: (suspend () -> StartupProfile)? = null,
     selectionStore: ActiveServerSelectionStore? = null,
     capabilityStore: RunApprovalCapabilityStore? = null,
@@ -369,6 +372,24 @@ fun HermesNavHost(
         )
     }
 
+    fun openMonitoring() {
+        navController.navigate(routeOf(AppScreen.Monitoring)) { launchSingleTop = true }
+    }
+
+    // A new chat whose field holds [prompt]; the user still sends it.
+    fun startPreparedTask(profileId: String, title: String, prompt: String) {
+        navHostCoroutineScope.launch {
+            val created = withContext(Dispatchers.IO) {
+                createPreparedChat(
+                    sessionCreator ?: productionDependencies.value.sessionCreator,
+                    chatDraftRepository ?: productionDependencies.value.chatDraftRepository,
+                    profileId, title, prompt
+                )
+            }
+            (created as? SessionCreateResult.Success)?.let { openChat(it.sessionId, it.title ?: title) }
+        }
+    }
+
     fun openTool(task: QuickTask) {
         val screen = when (task) {
             QuickTask.Terminal -> AppScreen.Terminal
@@ -422,7 +443,7 @@ fun HermesNavHost(
                 productionDependencies.value.deviceDisconnectCoordinator
                     .disconnect(profileId)
             },
-            onOpenMonitoring = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openTab(AppScreen.Home) } },
+            onOpenMonitoring = activeProfileId?.takeIf { it.isNotBlank() }?.let { { openMonitoring() } },
             onOpenTool = activeProfileId?.takeIf { it.isNotBlank() }?.let { { task: QuickTask -> openTool(task) } },
             startTask = activeProfileId?.takeIf { it.isNotBlank() }?.let { profileId ->
                 { title: String, prompt: String ->
@@ -482,10 +503,11 @@ fun HermesNavHost(
                     runController = runController ?: dependencies.value.runController,
                     runStatusRequester = runStatusRequester ?: dependencies.value.runStatusRequester,
                     attachmentSource = dependencies.value.chatAttachmentSource,
-                    hostMetricsSource = dependencies.value.hostMetricsSource,
+                    hostMetricsSource = hostMetricsSource ?: dependencies.value.hostMetricsSource,
                     chatDraftRepository = chatDraftRepository ?: dependencies.value.chatDraftRepository,
                     onOpenChat = ::openChat,
                     onOpenAllSessions = { openTab(AppScreen.Sessions) },
+                    onOpenMonitoring = ::openMonitoring,
                     onSwitchServer = { navController.navigate(routeOf(AppScreen.Profiles)) },
                     onOpenSettings = {
                         navController.navigate(routeOf(AppScreen.Settings)) {
@@ -720,6 +742,33 @@ fun HermesNavHost(
                     }
                 )
             }
+            composable(routeOf(AppScreen.Monitoring)) {
+                val profileId = activeProfileId.orEmpty()
+                // Presentation only: the server name in the status line.
+                val serverName by produceState<String?>(null, profileId) {
+                    value = try {
+                        withContext(Dispatchers.IO) {
+                            (profileAdmin ?: productionDependencies.value.profileAdmin)
+                                .listProfiles().firstOrNull { it.id == profileId }?.profileName
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                MonitoringRoute(
+                    profileId = profileId,
+                    serverName = serverName,
+                    source = hostMetricsSource ?: productionDependencies.value.hostMetricsSource,
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    },
+                    startTask = { title, prompt -> startPreparedTask(profileId, title, prompt) }
+                )
+            }
             composable(routeOf(AppScreen.About)) {
                 AboutScreen(
                     versionName = BuildConfig.VERSION_NAME,
@@ -786,6 +835,7 @@ fun HermesNavHost(
                     slashSource = productionDependencies.value.slashCommands,
                     slashExecutor = productionDependencies.value.slashExecutor,
                     modelOptionsSource = productionDependencies.value.slashModels,
+                    modelMemory = productionDependencies.value.modelMemory,
                     onOpenSession = { openChat(it, null) },
                     // The terminal still asks for the device credential; the
                     // command lands in its input and is never run.
@@ -847,6 +897,7 @@ internal fun routeOf(screen: AppScreen): String = when (screen) {
     AppScreen.Terminal -> "terminal"
     is AppScreen.Files -> "files?$FILES_PATH_ARGUMENT=${encodeRouteArgument(screen.path)}"
     AppScreen.Projects -> "projects"
+    AppScreen.Monitoring -> "monitoring"
 }
 
 internal const val FILES_PATH_ARGUMENT = "path"

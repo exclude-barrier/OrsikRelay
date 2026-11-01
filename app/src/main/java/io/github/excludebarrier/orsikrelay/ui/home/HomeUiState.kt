@@ -61,7 +61,9 @@ data class HomeUiState(
     val sending: Boolean = false,
     val notice: HomeNotice? = null,
     /** Live server values; `null` until the first read. */
-    val hostMetrics: HostMetricsResult? = null
+    val hostMetrics: HostMetricsResult? = null,
+    /** `elapsedRealtime` of the last good read, for "Stand: vor N s". */
+    val hostMetricsUpdatedAt: Long? = null
 ) {
     /** The dock sends only to a reachable server and never twice. */
     val canSend: Boolean

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasAnyAncestor
@@ -51,6 +52,8 @@ class HomeScreenUiTest {
     private var retries = 0
     private var switches = 0
 
+    private var monitoringOpened = 0
+
     private fun show(state: HomeUiState, fontScale: Float = 1f) {
         composeRule.setContent {
             val density = LocalDensity.current
@@ -67,7 +70,8 @@ class HomeScreenUiTest {
                         onOpenAllSessions = {},
                         onSwitchServer = { switches += 1 },
                         onOpenSettings = {},
-                        onRetry = { retries += 1 }
+                        onRetry = { retries += 1 },
+                        onOpenMonitoring = { monitoringOpened += 1 }
                     )
                 }
             }
@@ -90,7 +94,7 @@ class HomeScreenUiTest {
     fun connectedShowsHeaderServerQuickAccessAndRecent() {
         show(connected())
 
-        composeRule.onNodeWithText("hp-server").assertIsDisplayed()
+        composeRule.onAllNodesWithText("hp-server").onFirst().assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.home_status_connected)).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.SERVER_STRIP).assertIsDisplayed()
         // The connection is stated once, in the server card (no second
@@ -198,9 +202,26 @@ class HomeScreenUiTest {
             "${context.getString(R.string.home_server_gpu)}, ${context.getString(R.string.home_server_gpu_none)}"
         ).assertExists()
         composeRule.onNodeWithContentDescription("${context.getString(R.string.home_server_services)}, 1/2").assertExists()
-        composeRule.onNodeWithTag(HomeTags.SERVER_SERVICES_DOWN)
-            .assertTextEquals(context.getString(R.string.home_server_services_down, "orsik-mobile-bridge"))
+        composeRule.onNodeWithTag(HomeTags.SERVER_SERVICES_DOWN, useUnmergedTree = true)
+            .assertTextEquals(context.resources.getQuantityString(R.plurals.home_server_stopped, 1, 1))
         assertEquals(0, composeRule.onAllNodesWithText(context.getString(R.string.home_server_preview_text)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun theServerCardNamesTheServerAndOpensMonitoring() {
+        show(
+            connected().copy(
+                serverName = "Heimserver",
+                hostMetrics = HostMetricsResult.Ready(HostMetrics(10.0, 2, 1, 2, null, emptyList())),
+                hostMetricsUpdatedAt = android.os.SystemClock.elapsedRealtime()
+            )
+        )
+
+        composeRule.onNodeWithTag(HomeTags.SERVER_HEAD, useUnmergedTree = true).assertTextEquals(
+            "Heimserver · ${context.getString(R.string.monitoring_updated_now)}"
+        )
+        composeRule.onNodeWithTag(HomeTags.SERVER_STRIP).performClick()
+        assertEquals(1, monitoringOpened)
     }
 
     @Test
@@ -234,10 +255,12 @@ class HomeScreenUiTest {
             fontScale = 2f
         )
         val cpu = composeRule.onNodeWithContentDescription(
-            "${context.getString(R.string.home_server_cpu)}, 23 %, " + context.resources.getQuantityString(R.plurals.home_server_cores, 6, 6)
+            "${context.getString(R.string.home_server_cpu)}, 23 %, " + context.resources.getQuantityString(R.plurals.home_server_cores, 6, 6),
+            useUnmergedTree = true
         ).fetchSemanticsNode().positionInRoot
         val gpu = composeRule.onNodeWithContentDescription(
-            "${context.getString(R.string.home_server_gpu)}, ${context.getString(R.string.home_server_gpu_none)}"
+            "${context.getString(R.string.home_server_gpu)}, ${context.getString(R.string.home_server_gpu_none)}",
+            useUnmergedTree = true
         ).fetchSemanticsNode().positionInRoot
         assertTrue("GPU must sit in the second row at 2x font", gpu.y > cpu.y)
     }
@@ -278,7 +301,7 @@ class HomeScreenUiTest {
     fun largeFontsKeepTheHeaderAndTheDockUsable() {
         show(connected(), fontScale = 2f)
 
-        composeRule.onNodeWithText("hp-server").assertIsDisplayed()
+        composeRule.onAllNodesWithText("hp-server").onFirst().assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.COMPOSER_INPUT).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeTags.COMPOSER_SEND).assertIsDisplayed()
     }

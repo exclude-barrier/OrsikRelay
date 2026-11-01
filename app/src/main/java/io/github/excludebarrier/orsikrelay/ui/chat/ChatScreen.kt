@@ -154,11 +154,18 @@ import androidx.compose.animation.core.tween
 import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsResult
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
-import io.github.excludebarrier.orsikrelay.domain.chat.SessionModelOption
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashInput
-import io.github.excludebarrier.orsikrelay.domain.chat.modelSuggestions
+import io.github.excludebarrier.orsikrelay.domain.chat.MODEL_PREFIX
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelMemory
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelPickerRow
+import io.github.excludebarrier.orsikrelay.domain.chat.NoModelMemory
+import io.github.excludebarrier.orsikrelay.domain.chat.modelPickerQuery
+import io.github.excludebarrier.orsikrelay.domain.chat.modelPickerRows
+import io.github.excludebarrier.orsikrelay.ui.components.ComposerPrefix
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.zIndex
 import io.github.excludebarrier.orsikrelay.domain.chat.slashSuggestions
 import io.github.excludebarrier.orsikrelay.ui.components.ComposerSuggestion
 import io.github.excludebarrier.orsikrelay.ui.components.SendButton
@@ -214,7 +221,8 @@ fun ChatScreen(
     // Opens the terminal with a shell code block's command in its input (never run).
     onPasteToTerminal: ((String) -> Unit)? = null,
     modelOptionsSource: ModelOptionsSource =
-        ModelOptionsSource { ModelOptionsResult.Failed }
+        ModelOptionsSource { ModelOptionsResult.Failed },
+    modelMemory: ModelMemory = NoModelMemory
 ) {
     val chatTextScale = (chatTextSizeController?.size ?: ChatTextSize.DEFAULT).scale
     // The tool-activity labels are resolved here (localized UI strings) and
@@ -237,6 +245,7 @@ fun ChatScreen(
     val attachmentTypeErrorLabel = stringResource(R.string.chat_attachment_error_type)
     val attachmentSizeErrorLabel = stringResource(R.string.chat_attachment_error_size)
     val attachmentUnreadableErrorLabel = stringResource(R.string.chat_attachment_error_unreadable)
+    val modelChangedLabel = stringResource(R.string.slash_model_changed)
 
     val viewModel = remember(profileId, sessionId) {
         ChatViewModel(
@@ -256,7 +265,9 @@ fun ChatScreen(
             slashSource = slashSource,
             slashExecutor = slashExecutor,
             onOpenSession = onOpenSession,
-            modelOptionsSource = modelOptionsSource
+            modelOptionsSource = modelOptionsSource,
+            modelMemory = modelMemory,
+            modelChangedLabel = modelChangedLabel
         )
     }
 
@@ -379,6 +390,19 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
         }
     }
 
+    // A confirmed lock: "Model: X", with undo when the replaced model is known.
+    val undoModelLabel = stringResource(R.string.sessions_undo)
+    LaunchedEffect(state.modelChange?.id) {
+        val change = state.modelChange ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = modelChangedLabel.format(change.to.substringAfter("::")),
+            actionLabel = undoModelLabel.takeIf { !change.undo && change.from != null && change.from != change.to },
+            duration = SnackbarDuration.Long
+        )
+        viewModel.consumeModelChange(change)
+        if (result == SnackbarResult.ActionPerformed) viewModel.undoModelChange(change)
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // Adaptive composer (landscape + keyboard): with the soft keyboard open
         // on a phone in landscape the chat root can shrink to roughly the
@@ -390,6 +414,10 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
         // decision uses the AVAILABLE height (never the orientation), so it
         // also covers split screen, freeform windows and a taller keyboard.
         val compactComposer = maxHeight < COMPACT_COMPOSER_MAX_HEIGHT
+        // The model list may use what the keyboard leaves, minus header and
+        // input row, so the field never drops out of view; at most 380 dp.
+        val imeHeight = with(LocalDensity.current) { WindowInsets.ime.getBottom(this).toDp() }
+        val modelListMaxHeight = (maxHeight - imeHeight - MODEL_LIST_RESERVED).coerceIn(MODEL_LIST_MIN, MODEL_LIST_MAX)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -411,8 +439,12 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                 ChatHeaderStatus.Lost -> stringResource(R.string.chat_header_lost)
                 ChatHeaderStatus.Reconnecting -> stringResource(R.string.chat_stream_reconnecting)
                 ChatHeaderStatus.Working -> stringResource(R.string.chat_header_working)
-                ChatHeaderStatus.Idle -> serverName?.takeIf { it.isNotBlank() }
-                    ?.let { stringResource(R.string.chat_header_subtitle, it) }
+                ChatHeaderStatus.Idle -> serverName?.takeIf { it.isNotBlank() }?.let { server ->
+                    // Only the model this app locked; Hermes does not report it.
+                    state.modelCurrent?.substringAfter("::")
+                        ?.let { stringResource(R.string.chat_header_subtitle_model, server, it) }
+                        ?: stringResource(R.string.chat_header_subtitle, server)
+                }
             },
             working = state.turnActive && state.lostRun == null,
             onBack = { viewModel.handleBack() },
@@ -752,7 +784,10 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     Spacer(modifier = Modifier.weight(1f))
                 }
                 ComposerBar(
-                    modifier = Modifier.bleed(16.dp),
+                    // Command list, model list and steer input draw above
+                    // the timeline (a table's fixed column would else
+                    // paint over them).
+                    modifier = Modifier.bleed(16.dp).zIndex(1f),
                     draft = state.draft,
                     onDraftChange = { viewModel.onDraftChange(it) },
                     sendEnabled = state.sendEnabled && !state.slashBusy,
@@ -763,13 +798,27 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                     slashBusy = state.slashBusy,
                     slashFailed = state.slashFailed,
                     slashDone = state.slashDone,
-                    modelOptions = state.modelOptions,
-                    modelNotice = if (!state.draft.startsWith("/model ")) null else when {
-                        state.modelsLoading -> stringResource(R.string.slash_models_loading)
-                        state.modelsFailed -> stringResource(R.string.slash_models_failed)
-                        state.modelsLoaded && state.modelOptions.isEmpty() -> stringResource(R.string.slash_models_empty)
-                        else -> null
-                    },
+                    modelPicker = modelPickerQuery(state.draft)
+                        ?.takeIf { SlashCommand.MODEL in state.slashCommands }
+                        ?.let { query ->
+                            ModelPickerUi(
+                                query = query,
+                                rows = modelPickerRows(query, state.modelOptions, state.modelCurrent, state.modelRecent),
+                                highlight = state.modelHighlight,
+                                loading = state.modelsLoading,
+                                failed = state.modelsFailed,
+                                loaded = state.modelsLoaded,
+                                total = state.modelOptions.size,
+                                providers = state.modelOptions.map { it.provider }.distinct().size,
+                                turnActive = state.turnActive,
+                                busy = state.slashBusy
+                            )
+                        },
+                    modelCurrentName = state.modelCurrent?.substringAfter("::"),
+                    modelListMaxHeight = modelListMaxHeight,
+                    onModelPick = { viewModel.chooseModel(it.option) },
+                    onModelMove = viewModel::moveModelHighlight,
+                    onModelClose = viewModel::closeModelPicker,
                     onSlashSelected = viewModel::selectSlashCommand,
                     attachment = state.attachment,
                     attachmentThumbnail = attachmentThumbnail,
@@ -1630,8 +1679,12 @@ internal fun ComposerBar(
     slashBusy: Boolean = false,
     slashFailed: Boolean = false,
     slashDone: Boolean = false,
-    modelOptions: List<SessionModelOption> = emptyList(),
-    modelNotice: String? = null,
+    modelPicker: ModelPickerUi? = null,
+    modelCurrentName: String? = null,
+    modelListMaxHeight: Dp = MODEL_LIST_MAX,
+    onModelPick: (ModelPickerRow.Item) -> Unit = {},
+    onModelMove: (Int) -> Unit = {},
+    onModelClose: () -> Unit = {},
     onSlashSelected: (SlashCommand) -> Unit = {},
     notice: ComposerNotice? = null,
     lockedHint: String? = null
@@ -1678,7 +1731,6 @@ internal fun ComposerBar(
         if (slashError) Text(stringResource(R.string.slash_error), color = MaterialTheme.colorScheme.error)
         if (slashFailed) Text(stringResource(R.string.slash_failed), color = MaterialTheme.colorScheme.error)
         if (slashDone) Text(stringResource(R.string.slash_done))
-        if (modelNotice != null) Text(modelNotice)
         // Red, dismissible notice right above the field: a message that was
         // not sent (its draft stays in the field) or a rejected attachment.
         if (notice != null) ComposerNoticeBanner(notice)
@@ -1750,18 +1802,36 @@ internal fun ComposerBar(
                         text = "/${it.word}",
                         enabled = enabled,
                         detail = when {
+                            enabled && it == SlashCommand.MODEL && modelCurrentName != null ->
+                                stringResource(R.string.slash_model_current, modelCurrentName)
                             enabled -> stringResource(it.descriptionRes())
                             it.needsRun && runControls == null -> stringResource(R.string.slash_no_run)
                             else -> stringResource(R.string.slash_busy)
                         }
                     )
-                } + modelSuggestions(draft, modelOptions).map {
-                    ComposerSuggestion(
-                        text = "/model ${it.qualified}",
-                        enabled = !turnActive && !slashBusy,
-                        label = it.model,
-                        detail = it.provider
+                },
+                above = modelPicker?.let { picker ->
+                    { ModelPickerPanel(picker, maxHeight = modelListMaxHeight, onPick = onModelPick) }
+                },
+                prefix = modelPicker?.let {
+                    ComposerPrefix(
+                        text = MODEL_PREFIX,
+                        label = "/model",
+                        hint = stringResource(R.string.slash_model_search_hint),
+                        dismissLabel = stringResource(R.string.slash_model_close),
+                        onDismiss = onModelClose
                     )
+                },
+                onKey = modelPicker?.let {
+                    { key ->
+                        when (key) {
+                            Key.DirectionUp -> { onModelMove(-1); true }
+                            Key.DirectionDown -> { onModelMove(1); true }
+                            Key.Enter, Key.NumPadEnter -> { onSend(); true }
+                            Key.Escape -> { onModelClose(); true }
+                            else -> false
+                        }
+                    }
                 },
                 onSuggestion = { text ->
                     val input = SlashInput.parse(text)
@@ -2215,6 +2285,13 @@ internal const val TAG_RUN_UNCERTAIN = "chat_run_uncertain"
 internal const val TAG_RUN_RECONCILE = "chat_run_reconcile"
 internal const val TAG_COMPOSER_SEND = "composer_send"
 internal const val TAG_COMPOSER_FIELD = "composer_field"
+
+/** Height of the `/model` list: at most [MODEL_LIST_MAX], never below [MODEL_LIST_MIN]. */
+private val MODEL_LIST_MAX = 380.dp
+private val MODEL_LIST_MIN = 96.dp
+
+/** Header, count line, input row and paddings the list must leave room for. */
+private val MODEL_LIST_RESERVED = 240.dp
 
 @Composable
 private fun StatusText(text: String) {

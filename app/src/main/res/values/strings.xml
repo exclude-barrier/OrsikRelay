@@ -3,6 +3,24 @@
     <string name="slash_models_loading">Loading session model options…</string>
     <string name="slash_models_failed">Model options could not be loaded.</string>
     <string name="slash_models_empty">The server offered no model options.</string>
+    <string name="slash_model_search_hint">Search models …</string>
+    <string name="slash_model_close">Close model list</string>
+    <plurals name="slash_models_count_models">
+        <item quantity="one">%1$d model</item>
+        <item quantity="other">%1$d models</item>
+    </plurals>
+    <plurals name="slash_models_count_providers">
+        <item quantity="one">%1$d provider</item>
+        <item quantity="other">%1$d providers</item>
+    </plurals>
+    <string name="slash_models_header">%1$s from %2$s · type to filter</string>
+    <string name="slash_models_recent">Current &amp; recent</string>
+    <string name="slash_models_no_match">No model matches “%1$s”</string>
+    <string name="slash_models_locked_run">Can’t be changed while Hermes is working</string>
+    <string name="slash_model_changed">Model: %1$s</string>
+    <string name="slash_model_current">Current: %1$s</string>
+    <string name="slash_model_current_marker">Current model</string>
+    <string name="chat_header_subtitle_model">Hermes · %1$s · %2$s</string>
     <string name="slash_failed">Command failed or its outcome is unknown. Check the session before trying again.</string>
     <string name="slash_done">Session command applied.</string>
     <string name="slash_error">Command unavailable or invalid. Nothing was sent to the model.</string>
@@ -408,7 +426,6 @@
     <string name="chat_input_lost_hint">Close the run first</string>
     <string name="home_server_gpu_none">none</string>
     <string name="home_server_unreadable">The values cannot be read right now.</string>
-    <string name="home_server_services_down">not running: %1$s</string>
     <string name="home_task_docker_prompt">List all Docker containers on the server with name, image, status and ports.</string>
     <string name="chat_run_lost_no_key">Hermes reports this run as lost but gives the app nothing to close it with. Please check the run on the server.</string>
     <string name="chat_run_release">Release in the app</string>
@@ -590,4 +607,35 @@
     <string name="terminal_output_badge">OUTPUT</string>
     <string name="terminal_ask_dismiss">Do not send to Hermes</string>
     <string name="terminal_ask_hint">What should Hermes do with it?</string>
+    <!-- Monitoring page (GET /v1/host/metrics only) -->
+    <string name="monitoring_title">Monitoring</string>
+    <string name="monitoring_refresh">Refresh</string>
+    <string name="monitoring_updated_now">Just updated</string>
+    <string name="monitoring_updated_seconds">As of %1$d s ago</string>
+    <string name="monitoring_updated_minutes">As of %1$d min ago</string>
+    <string name="monitoring_memory">Memory</string>
+    <string name="monitoring_memory_detail">%1$s GB of %2$s GB</string>
+    <string name="monitoring_gpu_load">Utilization</string>
+    <string name="monitoring_vram">VRAM</string>
+    <string name="monitoring_gpu_none">No NVIDIA GPU found</string>
+    <string name="monitoring_service_running">running</string>
+    <string name="monitoring_service_stopped">stopped</string>
+    <string name="monitoring_service_unknown">unknown</string>
+    <string name="monitoring_ask_hermes">Ask Hermes</string>
+    <string name="monitoring_service_prompt">The service `%1$s` on the server is stopped. Check why with `journalctl --user -u %1$s -n 50` and suggest how to fix it. Do not restart anything without asking me.</string>
+    <string name="monitoring_services_footnote">systemd --user · list via BRIDGE_HOST_SERVICES (max. 8)</string>
+    <string name="monitoring_via_hermes">Via Hermes</string>
+    <string name="monitoring_task_docker">Docker status</string>
+    <string name="monitoring_task_storage_prompt">Check the free disk space on the server (`df -h`) and name the largest directories. Do not delete anything.</string>
+    <string name="monitoring_soon">Disks, history over days, logs and service restarts</string>
+    <string name="monitoring_history_hint">History builds up while this page is open</string>
+    <string name="monitoring_failed">Values not readable</string>
+    <string name="monitoring_failed_hint">The last values stay visible until a read works again.</string>
+    <string name="monitoring_retry">Retry</string>
+    <string name="monitoring_unsupported">This bridge does not know /v1/host/metrics yet. Update the bridge on the server (omb update) to see live values.</string>
+    <string name="monitoring_loading">Reading values …</string>
+    <plurals name="home_server_stopped">
+        <item quantity="one">%1$d service stopped</item>
+        <item quantity="other">%1$d services stopped</item>
+    </plurals>
 </resources>
