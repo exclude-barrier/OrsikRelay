@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -199,7 +198,7 @@ fun AgentComposerDock(
                     modifier = Modifier.testTag(attachTestTag)
                 ) {
                     if (attachBusy) {
-                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        WorkingGlyph(size = 20.dp)
                     } else {
                         Icon(
                             OrsikIcons.Plus,
@@ -282,7 +281,7 @@ fun SendButton(enabled: Boolean, sending: Boolean, label: String, testTag: Strin
             .testTag(testTag)
     ) {
         if (sending) {
-            CircularProgressIndicator(strokeWidth = 2.dp, color = content, modifier = Modifier.size(20.dp))
+            WorkingGlyph(size = 20.dp, color = content)
         } else {
             Icon(OrsikIcons.ArrowUp, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
         }

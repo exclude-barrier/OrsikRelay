@@ -3,7 +3,7 @@ package io.github.excludebarrier.orsikrelay
 import androidx.compose.ui.test.assertHasClickAction
 import io.github.excludebarrier.orsikrelay.ui.components.EMPTY_STATE_ICON_TAG
 import io.github.excludebarrier.orsikrelay.domain.session.SessionCreateError
-import io.github.excludebarrier.orsikrelay.ui.components.TAG_LOADING_INDICATOR
+import io.github.excludebarrier.orsikrelay.ui.components.TAG_WORKING_GLYPH
 import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_PREVIEW_PREFIX
 import io.github.excludebarrier.orsikrelay.ui.sessions.AGENT_FILTER_HERMES_TAG
 import androidx.compose.ui.test.assertHasNoClickAction
@@ -547,11 +547,11 @@ class SessionsScreenUiTest {
 
         composeRule.onNodeWithText("Fixture Run").assert(hasText(context.getString(R.string.sessions_running), substring = true))
         composeRule.onNodeWithText("Fixture Idle").assert(hasText(context.getString(R.string.sessions_running), substring = true).not())
-        composeRule.onAllNodesWithTag(TAG_LOADING_INDICATOR, useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodesWithTag(TAG_WORKING_GLYPH, useUnmergedTree = true).assertCountEquals(1)
     }
 
     @Test
-    fun loadingShowsTheLoadingStarAndAnEmptyListOffersAHint() {
+    fun loadingShowsTheRelayGlyphAndAnEmptyListOffersAHint() {
         val release = CountDownLatch(1)
         setScreen(
             SessionPageSource { _, _, _ ->
@@ -561,7 +561,7 @@ class SessionsScreenUiTest {
             creator = SessionCreator { _, _ -> SessionCreateResult.Failure(SessionCreateError.Network) }
         )
         composeRule.waitUntil(3_000) {
-            composeRule.onAllNodesWithTag(TAG_LOADING_INDICATOR, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(TAG_WORKING_GLYPH, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         release.countDown()
         waitForText(context.getString(R.string.sessions_empty))

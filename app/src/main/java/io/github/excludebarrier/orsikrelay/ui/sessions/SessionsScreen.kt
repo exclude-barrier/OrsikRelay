@@ -74,7 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.ui.components.GroupGap
 import io.github.excludebarrier.orsikrelay.ui.components.EmptyState
-import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikShapes
 import androidx.compose.material.icons.filled.Warning
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
@@ -400,7 +400,7 @@ fun SessionsScreen(
                     ) {
                         EmptyState(
                             title = stringResource(R.string.sessions_loading),
-                            leading = { OrsikLoadingIndicator(size = 56.dp) },
+                            leading = { WorkingGlyph(size = 56.dp) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 48.dp)

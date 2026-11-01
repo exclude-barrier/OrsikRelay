@@ -31,7 +31,7 @@ import io.github.excludebarrier.orsikrelay.ui.components.GroupedListItem
 import io.github.excludebarrier.orsikrelay.ui.components.ListIconBox
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
-import io.github.excludebarrier.orsikrelay.ui.components.OrsikLoadingIndicator
+import io.github.excludebarrier.orsikrelay.ui.components.WorkingGlyph
 import io.github.excludebarrier.orsikrelay.ui.components.groupPosition
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -63,7 +63,7 @@ internal fun ProjectsRoute(
         OrsikLargeHeader(title = stringResource(R.string.projects_title), onBack = onBack, backTestTag = "projects_back")
         Box(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
             when (val result = listing) {
-                null -> OrsikLoadingIndicator(Modifier.align(Alignment.Center))
+                null -> WorkingGlyph(Modifier.align(Alignment.Center), size = 40.dp)
                 is FilesResult.Ready -> ProjectList(result.value, onOpenProject)
                 else -> FilesProblem(result, onRetry = { reload++ })
             }
