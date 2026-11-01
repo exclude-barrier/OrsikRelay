@@ -69,10 +69,9 @@ class SettingsNavigationUiTest {
         composeRule.onNodeWithTag("settings_notifications").assertExists()
         composeRule.onNodeWithText(context.getString(R.string.settings_privacy_section))
             .assertExists()
-        composeRule.onNodeWithText(context.getString(R.string.settings_version_label))
-            .assertDoesNotExist()
-        composeRule.onNodeWithText(context.getString(R.string.settings_license_label))
-            .assertDoesNotExist()
+        // The Info group lists about (with the version), license, source
+        // and bug report, as in the design.
+        composeRule.onNodeWithTag("settings_license").assertExists()
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.settings_back)).performClick()
 

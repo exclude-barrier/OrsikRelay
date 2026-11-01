@@ -5,6 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -113,10 +118,8 @@ class SettingsScreenUiTest {
     }
 
     @Test
-    fun languageDropdownOffersSystemAndEverySupportedLanguage() {
+    fun languageSegmentsOfferSystemAndEverySupportedLanguage() {
         setSettings()
-
-        openLanguageMenu()
 
         composeRule.onNodeWithTag("settings_language_system").assertIsDisplayed()
         composeRule.onNodeWithTag("settings_language_en").assertIsDisplayed()
@@ -126,16 +129,59 @@ class SettingsScreenUiTest {
     }
 
     @Test
-    fun languageFieldShowsTheCurrentSelection() {
+    fun languageSegmentsShowTheCurrentSelection() {
         setSettings()
 
-        composeRule.onNodeWithTag("settings_language_field")
-            .assertTextContains(context.getString(R.string.settings_language_system))
+        composeRule.onNodeWithTag("settings_language_system").assertIsSelected()
 
         selectLanguage("settings_language_de")
 
-        composeRule.onNodeWithTag("settings_language_field")
-            .assertTextContains("Deutsch")
+        composeRule.onNodeWithTag("settings_language_de").assertIsSelected()
+        composeRule.onNodeWithTag("settings_language_system").assertIsNotSelected()
+    }
+
+    @Test
+    fun groupsKeepTheirOrder() {
+        setSettings()
+
+        val labels = listOf(
+            R.string.settings_group_general,
+            R.string.settings_appearance_section,
+            R.string.settings_chat_section,
+            R.string.settings_notifications_label,
+            R.string.settings_privacy_section,
+            R.string.settings_info_section
+        ).map { context.getString(it) }
+        // The screen scrolls as one column, so every label is composed; its
+        // (unclipped) position tells the document order.
+        val tops = labels.map { label -> composeRule.onNodeWithText(label).fetchSemanticsNode().positionInRoot.y }
+        assertEquals(tops.sorted(), tops)
+        assertEquals(labels.size, tops.toSet().size)
+    }
+
+    @Test
+    fun rowsAreDenseButReachableAndSegmentsAre38Dp() {
+        setSettings()
+
+        composeRule.onNodeWithTag("settings_notifications").performScrollTo().assertHeightIsAtLeast(52.dp)
+        composeRule.onNodeWithTag("settings_theme_Light").assertHeightIsEqualTo(38.dp)
+        composeRule.onNodeWithTag("settings_chat_text_normal").assertHeightIsEqualTo(38.dp)
+        composeRule.onNodeWithTag("settings_language_de").assertHeightIsEqualTo(38.dp)
+    }
+
+    @Test
+    fun theInfoGroupShowsVersionLicenseSourceAndBugReport() {
+        val opened = mutableListOf<String>()
+        setSettings(onAllowedLinkOpen = { opened += it })
+
+        composeRule.onNodeWithTag("settings_about").performScrollTo().assertTextContains("9.9.9-test")
+        composeRule.onNodeWithTag("settings_license").performScrollTo()
+        composeRule.onNodeWithText(context.getString(R.string.settings_license_value)).assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_source_code").performScrollTo().performClick()
+        composeRule.onNodeWithTag("settings_report_bug").performScrollTo().performClick()
+
+        assertEquals("https://github.com/exclude-barrier/OrsikRelay", opened[0])
+        assertTrue(opened[1].startsWith("https://github.com/exclude-barrier/OrsikRelay/issues/new"))
     }
 
     @Test
@@ -284,17 +330,7 @@ class SettingsScreenUiTest {
         assertTrue(back)
     }
 
-    private fun openLanguageMenu() {
-        composeRule.onNodeWithTag("settings_language_field").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("settings_language_system")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.waitForIdle()
-    }
-
     private fun selectLanguage(tag: String) {
-        openLanguageMenu()
         composeRule.onNodeWithTag(tag).performClick()
         composeRule.waitForIdle()
     }
@@ -302,7 +338,8 @@ class SettingsScreenUiTest {
     private fun setSettings(
         onBack: () -> Unit = {},
         sdkInt: Int = 31,
-        openNotificationSettings: ((Context) -> Unit)? = null
+        openNotificationSettings: ((Context) -> Unit)? = null,
+        onAllowedLinkOpen: ((String) -> Unit)? = null
     ) {
         val opener: (Context) -> Unit = openNotificationSettings
             ?: { ctx -> openAppNotificationSettings(ctx) }
@@ -328,7 +365,9 @@ class SettingsScreenUiTest {
                     onBack = onBack,
                     onOpenAbout = {},
                     sdkInt = sdkInt,
-                    openNotificationSettings = opener
+                    openNotificationSettings = opener,
+                    versionName = "9.9.9-test",
+                    onAllowedLinkOpen = onAllowedLinkOpen
                 )
             }
         }

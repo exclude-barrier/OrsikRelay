@@ -1,5 +1,12 @@
 package io.github.excludebarrier.orsikrelay.ui.settings
 
+import io.github.excludebarrier.orsikrelay.BuildConfig
+import io.github.excludebarrier.orsikrelay.domain.crash.CrashReport
+import io.github.excludebarrier.orsikrelay.platform.crash.CrashReporter
+import io.github.excludebarrier.orsikrelay.ui.chat.markdown.rememberSecureUriHandler
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.text.style.TextOverflow
 import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.clickable
@@ -20,7 +27,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,20 +47,17 @@ import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.sp
 import io.github.excludebarrier.orsikrelay.ui.components.ConnectedButtonGroup
 import io.github.excludebarrier.orsikrelay.ui.components.GroupGap
 import io.github.excludebarrier.orsikrelay.ui.components.GroupPosition
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
-import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
 import io.github.excludebarrier.orsikrelay.ui.components.shape
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 import io.github.excludebarrier.orsikrelay.domain.language.SupportedLanguages
@@ -92,14 +95,18 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     modifier: Modifier = Modifier,
     sdkInt: Int = Build.VERSION.SDK_INT,
-    openNotificationSettings: (Context) -> Unit = { openAppNotificationSettings(it) }
+    openNotificationSettings: (Context) -> Unit = { openAppNotificationSettings(it) },
+    versionName: String = BuildConfig.VERSION_NAME,
+    /** Test seam: receives an allowed (https) URL instead of an intent. */
+    onAllowedLinkOpen: ((String) -> Unit)? = null
 ) {
+    val uriHandler = rememberSecureUriHandler(context = LocalContext.current, onAllowedLinkOpen = onAllowedLinkOpen)
     Column(
         modifier = modifier
             .fillMaxSize()
             .testTag("settings_screen")
     ) {
-        OrsikLargeHeader(title = stringResource(R.string.settings_title), onBack = onBack)
+        SettingsHeader(title = stringResource(R.string.settings_title), onBack = onBack)
         Column(
             verticalArrangement = Arrangement.spacedBy(GroupGap),
             modifier = Modifier
@@ -122,7 +129,8 @@ fun SettingsScreen(
                     selected = themeController.mode,
                     label = { themeModeLabel(it) },
                     onSelect = { themeController.select(it) },
-                    testTag = { "settings_theme_${it.name}" }
+                    testTag = { "settings_theme_${it.name}" },
+                    minHeight = SEGMENT_HEIGHT
                 )
             }
             if (materialYouAvailable) {
@@ -154,7 +162,8 @@ fun SettingsScreen(
                     selected = chatTextSizeController.size,
                     label = { chatTextSizeLabel(it) },
                     onSelect = { chatTextSizeController.select(it) },
-                    testTag = { "settings_chat_text_${it.name.lowercase()}" }
+                    testTag = { "settings_chat_text_${it.name.lowercase()}" },
+                    minHeight = SEGMENT_HEIGHT
                 )
             }
 
@@ -246,23 +255,103 @@ fun SettingsScreen(
 
             GroupLabel(stringResource(R.string.settings_info_section))
             SettingsBlock(
-                position = GroupPosition.Single,
+                position = GroupPosition.First,
                 icon = OrsikIcons.Relay,
                 title = stringResource(R.string.settings_about_section),
                 modifier = Modifier
                     .testTag("settings_about")
-                    .clickable(onClick = onOpenAbout),
-                trailing = {
-                    Icon(
-                        OrsikIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                    .clickable(role = Role.Button, onClick = onOpenAbout),
+                trailing = { TrailingValue(versionName, chevron = true) }
+            )
+            SettingsBlock(
+                position = GroupPosition.Middle,
+                icon = OrsikIcons.FileText,
+                title = stringResource(R.string.settings_license_label),
+                modifier = Modifier.testTag("settings_license"),
+                trailing = { TrailingValue(stringResource(R.string.settings_license_value)) }
+            )
+            SettingsBlock(
+                position = GroupPosition.Middle,
+                icon = OrsikIcons.Code,
+                title = stringResource(R.string.settings_source_label),
+                description = PROJECT_SOURCE_URL.removePrefix("https://"),
+                modifier = Modifier
+                    .testTag("settings_source_code")
+                    .clickable(role = Role.Button, onClick = { uriHandler.openUri(PROJECT_SOURCE_URL) }),
+                trailing = { TrailingValue(null, chevron = true) }
+            )
+            SettingsBlock(
+                position = GroupPosition.Last,
+                icon = Icons.Outlined.Warning,
+                title = stringResource(R.string.settings_report_bug_label),
+                modifier = Modifier
+                    .testTag("settings_report_bug")
+                    .clickable(
+                        role = Role.Button,
+                        onClick = {
+                            uriHandler.openUri(
+                                CrashReport.issueUrl(projectUrl = PROJECT_SOURCE_URL, title = "", report = CrashReporter.environment())
+                            )
+                        }
+                    ),
+                trailing = { TrailingValue(null, chevron = true) }
             )
         }
     }
 }
+
+/**
+ * Back arrow and the 28 sp page title. Local until the shared header carries
+ * the page size, so this screen does not depend on that change.
+ */
+@Composable
+private fun SettingsHeader(title: String, onBack: () -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .padding(start = 4.dp, top = 6.dp)
+                .testTag("settings_back")
+        ) {
+            Icon(OrsikIcons.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+        }
+        Text(
+            text = title,
+            fontSize = 28.sp,
+            lineHeight = 34.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .padding(start = 20.dp, end = 16.dp, bottom = 4.dp)
+                .semantics { heading() }
+        )
+    }
+}
+
+/** A value and/or chevron at the end of a settings row. */
+@Composable
+private fun TrailingValue(value: String?, chevron: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (value != null) {
+            Text(text = value, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (chevron) {
+            Icon(
+                imageVector = OrsikIcons.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(start = 2.dp)
+                    .size(18.dp)
+            )
+        }
+    }
+}
+
+/** Height of the segmented choices (design, text size, language). */
+private val SEGMENT_HEIGHT = 38.dp
 
 /** A 13 sp primary group label above a block of settings. */
 @Composable
@@ -305,14 +394,14 @@ private fun SettingsBlock(
             verticalAlignment = Alignment.CenterVertically,
             modifier = modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = if (content != null) 6.dp else 14.dp)
+                .heightIn(min = 52.dp)
+                .padding(start = 16.dp, end = 14.dp, top = 9.dp, bottom = if (content != null) 4.dp else 9.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(22.dp)
             )
             Column(
                 modifier = Modifier
@@ -327,67 +416,34 @@ private fun SettingsBlock(
             trailing?.invoke()
         }
         if (content != null) {
-            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 14.dp), content = content)
+            Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp), content = content)
         }
     }
 }
 
 /**
- * The language row: shows the current choice and opens the list of
- * [SupportedLanguages] with "System" first.
+ * The language choice as segments: "System" (the device language) first,
+ * then every entry of [SupportedLanguages] by name.
  */
 @Composable
 private fun LanguageRow(languageController: LanguageController) {
-    var expanded by remember { mutableStateOf(false) }
     val systemLabel = stringResource(R.string.settings_language_system)
-    val currentLabel = languageController.selectedTag
-        ?.let { tag -> SupportedLanguages.all.firstOrNull { it.tag == tag }?.displayName }
-        ?: systemLabel
+    val options: List<String?> = listOf<String?>(null) + SupportedLanguages.all.sortedBy { it.displayName }.map { it.tag }
     Box(modifier = Modifier.testTag("settings_language_box")) {
         SettingsBlock(
             position = GroupPosition.Single,
             icon = OrsikIcons.Globe,
             title = stringResource(R.string.settings_language_field),
-            modifier = Modifier
-                .testTag("settings_language_field")
-                .clickable(role = Role.DropdownList) { expanded = true },
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = currentLabel, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Icon(
-                        imageVector = OrsikIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .padding(start = 2.dp)
-                            .size(18.dp)
-                    )
-                }
-            }
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset(x = 16.dp, y = 0.dp)
+            modifier = Modifier.testTag("settings_language_field")
         ) {
-            DropdownMenuItem(
-                text = { Text(systemLabel) },
-                onClick = {
-                    expanded = false
-                    languageController.select(null)
-                },
-                modifier = Modifier.testTag("settings_language_system")
+            ConnectedButtonGroup(
+                options = options,
+                selected = languageController.selectedTag?.takeIf { tag -> SupportedLanguages.all.any { it.tag == tag } },
+                label = { tag -> tag?.let { t -> SupportedLanguages.all.first { it.tag == t }.displayName } ?: systemLabel },
+                onSelect = { languageController.select(it) },
+                testTag = { tag -> "settings_language_${tag ?: "system"}" },
+                minHeight = SEGMENT_HEIGHT
             )
-            SupportedLanguages.all.forEach { language ->
-                DropdownMenuItem(
-                    text = { Text(language.displayName) },
-                    onClick = {
-                        expanded = false
-                        languageController.select(language.tag)
-                    },
-                    modifier = Modifier.testTag("settings_language_${language.tag}")
-                )
-            }
         }
     }
 }
