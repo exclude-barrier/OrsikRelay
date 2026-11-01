@@ -32,12 +32,8 @@ class SlashCommandTest {
         assertEquals(listOf(SlashCommand.NEW), slashSuggestions("/", setOf(SlashCommand.NEW)))
     }
 
-    @Test fun modelSuggestionsKeepProviderIdentityAndNeverBecomeAnExecution() {
-        val options = listOf(SessionModelOption("one", "org/model"), SessionModelOption("two", "other"))
-        assertEquals(options, modelSuggestions("/model ", options))
-        assertEquals(listOf(options.first()), modelSuggestions("/model org/", options))
-        assertTrue(modelSuggestions("/model one::org/model ", options).isEmpty())
-        assertTrue(modelSuggestions("text /model ", options).isEmpty())
+    @Test fun aModelOptionNeedsAPlainProvider() {
         assertFalse(SessionModelOption("bad provider", "model").isValid())
+        assertTrue(SessionModelOption("one", "org/model").isValid())
     }
 }

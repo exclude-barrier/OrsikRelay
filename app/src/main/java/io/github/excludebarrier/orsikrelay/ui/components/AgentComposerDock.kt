@@ -52,6 +52,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import io.github.excludebarrier.orsikrelay.R
@@ -63,6 +68,7 @@ object ComposerDockTags {
     const val SEND = "home_composer_send"
     const val ATTACH = "home_composer_attach"
     const val AGENT = "home_composer_agent"
+    const val PREFIX = "composer_prefix"
 }
 
 /** Presentation-only suggestions. Selecting inserts text, never submits it. */
@@ -72,6 +78,20 @@ data class ComposerSuggestion(
     val enabled: Boolean = true,
     val label: String = text,
     val detail: String? = null
+)
+
+/**
+ * A command the field holds as a chip instead of text: the draft starts
+ * with [text] (e.g. "/model "), the chip shows [label] with a ✕, and the
+ * field only edits the rest, with [hint] as its placeholder. The ✕ and
+ * Backspace in the empty field call [onDismiss].
+ */
+data class ComposerPrefix(
+    val text: String,
+    val label: String,
+    val hint: String,
+    val dismissLabel: String,
+    val onDismiss: () -> Unit
 )
 
 /**
@@ -130,13 +150,19 @@ fun AgentComposerDock(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     suggestions: List<ComposerSuggestion> = emptyList(),
     onSuggestion: (String) -> Unit = {},
-    suggestionMaxHeight: Dp = 192.dp
+    suggestionMaxHeight: Dp = 192.dp,
+    prefix: ComposerPrefix? = null,
+    /** Hardware keys of the field (key down only); true when handled. */
+    onKey: ((Key) -> Boolean)? = null
 ) {
     val focusRequester = remember { FocusRequester() }
-    var fieldValue by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
+    val activePrefix = prefix?.takeIf { draft.startsWith(it.text) }
+    // The field edits only what follows an active prefix chip.
+    val shown = activePrefix?.let { draft.removePrefix(it.text) } ?: draft
+    var fieldValue by remember { mutableStateOf(TextFieldValue(shown, TextRange(shown.length))) }
     // External replacements (command selection, restore, clear) put the cursor
     // at the end. Ordinary typing/selection retains the IME's exact state.
-    val displayedValue = if (fieldValue.text == draft) fieldValue else TextFieldValue(draft, TextRange(draft.length))
+    val displayedValue = if (fieldValue.text == shown) fieldValue else TextFieldValue(shown, TextRange(shown.length))
     SideEffect { fieldValue = displayedValue }
     Column(
         modifier = modifier
@@ -158,12 +184,22 @@ fun AgentComposerDock(
             if (agentSelector) {
                 AgentAvatar(enabled = enabled, onClick = onOpenAgentPicker, modifier = Modifier.testTag(ComposerDockTags.AGENT))
             }
+            if (activePrefix != null) {
+                PrefixChip(activePrefix, enabled)
+            }
             val textColor = MaterialTheme.colorScheme.onSurface
             BasicTextField(
                 value = displayedValue,
                 onValueChange = { value ->
+                    // The soft keyboard's Enter in a chip filter acts like
+                    // the hardware Enter instead of adding a line.
+                    if (activePrefix != null && '\n' in value.text && onKey != null) {
+                        onKey(Key.Enter)
+                        return@BasicTextField
+                    }
                     fieldValue = value
-                    if (value.text != draft) onDraftChange(value.text)
+                    val next = (activePrefix?.text ?: "") + value.text
+                    if (next != draft) onDraftChange(next)
                 },
                 enabled = enabled,
                 maxLines = maxLines,
@@ -175,12 +211,12 @@ fun AgentComposerDock(
                         // text) so it keeps labelling the field for screen
                         // readers, like a Material text-field label.
                         Text(
-                            text = hint,
+                            text = activePrefix?.hint ?: hint,
                             fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.alpha(if (draft.isEmpty()) 1f else 0f)
+                            modifier = Modifier.alpha(if (shown.isEmpty()) 1f else 0f)
                         )
                         inner()
                     }
@@ -188,7 +224,15 @@ fun AgentComposerDock(
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(focusRequester)
-                    .padding(horizontal = if (agentSelector) 8.dp else 14.dp)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (activePrefix != null && event.key == Key.Backspace && shown.isEmpty()) {
+                            activePrefix.onDismiss()
+                            return@onPreviewKeyEvent true
+                        }
+                        onKey?.invoke(event.key) ?: false
+                    }
+                    .padding(horizontal = if (agentSelector || activePrefix != null) 8.dp else 14.dp)
                     .testTag(inputTestTag)
             )
             if (onAttach != null) {
@@ -215,6 +259,38 @@ fun AgentComposerDock(
                 SendButton(enabled = canSend, sending = sending, label = sendLabel, testTag = sendTestTag, onClick = onSend)
             }
         }
+    }
+}
+
+/** The command chip at the start of the field, e.g. "/model ✕". */
+@Composable
+private fun PrefixChip(prefix: ComposerPrefix, enabled: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(start = 6.dp)
+            .heightIn(min = 32.dp)
+            .clip(OrsikShapes.pill)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(enabled = enabled, role = Role.Button, onClick = prefix.onDismiss)
+            .semantics { contentDescription = prefix.dismissLabel }
+            .padding(start = 10.dp, end = 6.dp)
+            .testTag(ComposerDockTags.PREFIX)
+    ) {
+        Text(
+            text = prefix.label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+        Icon(
+            OrsikIcons.Close,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier
+                .padding(start = 4.dp)
+                .size(16.dp)
+        )
     }
 }
 
