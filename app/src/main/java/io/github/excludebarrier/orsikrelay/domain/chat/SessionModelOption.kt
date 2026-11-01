@@ -16,10 +16,3 @@ sealed interface ModelOptionsResult {
 fun interface ModelOptionsSource {
     fun loadModels(profileId: String): ModelOptionsResult
 }
-
-fun modelSuggestions(text: String, options: List<SessionModelOption>): List<SessionModelOption> {
-    if (!text.startsWith("/model ")) return emptyList()
-    val argument = text.removePrefix("/model ").trim()
-    if (argument.isNotEmpty() && text.last().isWhitespace()) return emptyList()
-    return options.filter { it.qualified.contains(argument, ignoreCase = true) }.take(40)
-}

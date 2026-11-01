@@ -100,6 +100,14 @@ internal data class ChatUiState(
     val modelsLoaded: Boolean = false,
     val modelsLoading: Boolean = false,
     val modelsFailed: Boolean = false,
+    /** The model this app last locked for the chat (qualified id), or null. */
+    val modelCurrent: String? = null,
+    /** Models this app locked recently on this server, newest first. */
+    val modelRecent: List<String> = emptyList(),
+    /** Index of the keyboard-marked model in the `/model` list. */
+    val modelHighlight: Int = 0,
+    /** The last confirmed lock, for the snackbar; cleared once shown. */
+    val modelChange: ModelChange? = null,
     /**
      * The attachment the user picked but has not sent yet, or `null`.
      * Local-only: the picker's content URI never reaches the server, the
@@ -237,3 +245,10 @@ internal data class ChatUiState(
 
 /** Progress shown at the end of the timeline, see [ChatUiState.turnActivity]. */
 internal enum class TurnActivity { Working, Thinking, Tool }
+
+/**
+ * One confirmed model lock: [from] is the model this app had locked before
+ * (null when unknown), [to] the new one; [undo] marks a lock that undid
+ * the previous change. [id] tells two equal changes apart.
+ */
+internal data class ModelChange(val id: Int, val from: String?, val to: String, val undo: Boolean)

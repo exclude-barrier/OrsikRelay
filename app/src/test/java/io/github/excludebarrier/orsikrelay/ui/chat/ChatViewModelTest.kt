@@ -65,6 +65,8 @@ import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsResult
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
 import io.github.excludebarrier.orsikrelay.domain.chat.SessionModelOption
+import io.github.excludebarrier.orsikrelay.domain.chat.ModelMemory
+import io.github.excludebarrier.orsikrelay.domain.chat.NoModelMemory
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandResult
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
@@ -137,6 +139,7 @@ class ChatViewModelTest {
         onOpenSession: (String) -> Unit = {},
         modelOptionsSource: ModelOptionsSource =
             ModelOptionsSource { ModelOptionsResult.Failed },
+        modelMemory: ModelMemory = NoModelMemory,
         // An EXISTING controller simulates a re-created screen that
         // re-attaches to the same app-level run.
         controller: RunSessionController? = null,
@@ -170,7 +173,9 @@ class ChatViewModelTest {
             slashSource = slashSource,
             slashExecutor = slashExecutor,
             onOpenSession = onOpenSession,
-            modelOptionsSource = modelOptionsSource
+            modelOptionsSource = modelOptionsSource,
+            modelMemory = modelMemory,
+            modelChangedLabel = "Modell: %1\$s"
         )
     }
 
@@ -275,8 +280,186 @@ class ChatViewModelTest {
             assertTrue(model.state.value.slashError); assertTrue(writes.isEmpty())
             model.onDraftChange("/model org/model"); model.send(); model.send(); advanceUntilIdle()
             assertEquals(listOf("provider::org/model"), writes)
-            assertTrue(model.state.value.slashDone)
+            assertEquals("provider::org/model", model.state.value.modelChange?.to)
             assertEquals(1, reads)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    /** A [ModelMemory] in a map, to check what the picker remembers. */
+    private class FakeModelMemory(
+        var currentModel: String? = null,
+        var recentModels: List<String> = emptyList()
+    ) : ModelMemory {
+        val remembered = mutableListOf<String>()
+        override fun current(profileId: String, sessionId: String) = currentModel
+        override fun recent(profileId: String) = recentModels
+        override fun remember(profileId: String, sessionId: String, qualified: String) {
+            remembered += qualified
+            currentModel = qualified
+            recentModels = listOf(qualified) + recentModels.filter { it != qualified }
+        }
+    }
+
+    private val pickerOptions = listOf(
+        SessionModelOption("anthropic", "claude-sonnet"),
+        SessionModelOption("openai", "gpt-5.5"),
+        SessionModelOption("deepseek", "deepseek-flash")
+    )
+
+    private fun kotlinx.coroutines.test.TestScope.pickerModel(
+        memory: ModelMemory = FakeModelMemory(),
+        writes: MutableList<String> = mutableListOf(),
+        result: () -> SlashCommandResult = { SlashCommandResult.Done },
+        history: MessageHistorySource = readyHistory(),
+        chat: StreamingChatSource = FakeTurnSource()
+    ): ChatViewModel = build(
+        testScheduler,
+        history = history,
+        chat = chat,
+        slashSource = { setOf(SlashCommand.MODEL) },
+        modelOptionsSource = { ModelOptionsResult.Loaded(pickerOptions) },
+        slashExecutor = ExecuteSlashCommand { _, _, cmd, arg ->
+            assertEquals(SlashCommand.MODEL, cmd); writes += arg
+            result()
+        },
+        modelMemory = memory
+    )
+
+    @Test fun choosingAModelLocksItAtOnceAndRemembersIt() = runTest {
+        val memory = FakeModelMemory(currentModel = "openai::gpt-5.5")
+        val writes = mutableListOf<String>()
+        val model = pickerModel(memory, writes)
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            assertEquals("openai::gpt-5.5", model.state.value.modelCurrent)
+            model.selectSlashCommand(SlashCommand.MODEL); advanceUntilIdle()
+            assertEquals("/model ", model.state.value.draft)
+
+            model.chooseModel(pickerOptions[0]); advanceUntilIdle()
+
+            // One request, no confirmation step.
+            assertEquals(listOf("anthropic::claude-sonnet"), writes)
+            assertEquals(listOf("anthropic::claude-sonnet"), memory.remembered)
+            val state = model.state.value
+            assertEquals("", state.draft)
+            assertEquals("anthropic::claude-sonnet", state.modelCurrent)
+            assertEquals(ModelChange(1, "openai::gpt-5.5", "anthropic::claude-sonnet", undo = false), state.modelChange)
+            assertEquals(MessageRole.SYSTEM, state.localLines.last().role)
+            assertEquals("Modell: gpt-5.5 → claude-sonnet", state.localLines.last().content)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun undoLocksThePreviousModelAgainOnce() = runTest {
+        val writes = mutableListOf<String>()
+        val model = pickerModel(FakeModelMemory(currentModel = "openai::gpt-5.5"), writes)
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.chooseModel(pickerOptions[2]); advanceUntilIdle()
+            val change = model.state.value.modelChange!!
+            model.consumeModelChange(change)
+            assertNull(model.state.value.modelChange)
+
+            model.undoModelChange(change); advanceUntilIdle()
+
+            assertEquals(listOf("deepseek::deepseek-flash", "openai::gpt-5.5"), writes)
+            assertEquals("openai::gpt-5.5", model.state.value.modelCurrent)
+            assertTrue(model.state.value.modelChange!!.undo)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun withoutAKnownPreviousModelThereIsNothingToUndo() = runTest {
+        val writes = mutableListOf<String>()
+        val model = pickerModel(writes = writes)
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.chooseModel(pickerOptions[1]); advanceUntilIdle()
+            val change = model.state.value.modelChange!!
+            assertNull(change.from)
+            assertEquals("Modell: gpt-5.5", model.state.value.localLines.last().content)
+            model.undoModelChange(change); advanceUntilIdle()
+            assertEquals(listOf("openai::gpt-5.5"), writes)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun aFailedLockIsReportedAndNeverRepeated() = runTest {
+        val memory = FakeModelMemory()
+        val writes = mutableListOf<String>()
+        val model = pickerModel(memory, writes, result = { SlashCommandResult.Failed })
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.selectSlashCommand(SlashCommand.MODEL); advanceUntilIdle()
+            model.chooseModel(pickerOptions[1]); advanceUntilIdle()
+            assertEquals(1, writes.size)
+            assertTrue(model.state.value.slashFailed)
+            assertTrue(memory.remembered.isEmpty())
+            assertNull(model.state.value.modelChange)
+            assertEquals("/model ", model.state.value.draft)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun arrowsMoveTheMarkAndEnterLocksTheMarkedModel() = runTest {
+        val writes = mutableListOf<String>()
+        val model = pickerModel(writes = writes)
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.onDraftChange("/model "); advanceUntilIdle()
+            model.moveModelHighlight(1); model.moveModelHighlight(5)
+            assertEquals(2, model.state.value.modelHighlight)
+            model.moveModelHighlight(-1)
+            model.send(); advanceUntilIdle()
+            assertEquals(listOf("openai::gpt-5.5"), writes)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun typingFiltersAndResetsTheMark() = runTest {
+        val writes = mutableListOf<String>()
+        val model = pickerModel(writes = writes)
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.onDraftChange("/model "); advanceUntilIdle()
+            model.moveModelHighlight(2)
+            model.onDraftChange("/model fla")
+            assertEquals(0, model.state.value.modelHighlight)
+            model.send(); advanceUntilIdle()
+            assertEquals(listOf("deepseek::deepseek-flash"), writes)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun aShortModelPrefixWithEnterOpensTheList() = runTest {
+        val writes = mutableListOf<String>()
+        val model = pickerModel(writes = writes)
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.onDraftChange("/mo"); model.send(); advanceUntilIdle()
+            assertEquals("/model ", model.state.value.draft)
+            assertTrue(writes.isEmpty())
+            assertFalse(model.state.value.slashError)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun closingTheListClearsTheDraft() = runTest {
+        val model = pickerModel()
+        try {
+            model.loadSlashCommands(); advanceUntilIdle()
+            model.onDraftChange("/model son")
+            model.closeModelPicker()
+            assertEquals("", model.state.value.draft)
+            model.onDraftChange("hello")
+            model.closeModelPicker()
+            assertEquals("hello", model.state.value.draft)
+        } finally { model.close(); lastController?.close() }
+    }
+
+    @Test fun noModelIsLockedWhileHermesWorks() = runTest {
+        val writes = mutableListOf<String>()
+        val model = pickerModel(writes = writes)
+        try {
+            model.loadHistory(); model.loadSlashCommands(); advanceUntilIdle()
+            model.onDraftChange("hello"); model.send(); advanceUntilIdle()
+            assertTrue(model.state.value.turnActive)
+            model.chooseModel(pickerOptions[0]); advanceUntilIdle()
+            assertTrue(writes.isEmpty())
+            assertTrue(model.state.value.slashError)
         } finally { model.close(); lastController?.close() }
     }
 

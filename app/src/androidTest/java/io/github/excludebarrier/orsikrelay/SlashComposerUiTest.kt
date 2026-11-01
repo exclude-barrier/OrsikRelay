@@ -43,7 +43,7 @@ class SlashComposerUiTest {
         compose.runOnIdle { assertEquals(0, sends) }
     }
 
-    @Test fun productionComposerShowsDisabledRunCommandsAndInsertsFilteredModelChoice() {
+    @Test fun productionComposerShowsDisabledRunCommandsAndOpensTheModelList() {
         var sends = 0
         compose.setContent {
             var text by remember { mutableStateOf("/") }
@@ -55,7 +55,7 @@ class SlashComposerUiTest {
                     attachmentBusyLabel = "Loading", onPickAttachment = {}, onRemoveAttachment = {},
                     compact = true,
                     slashCommands = SlashCommand.entries.toSet(), onSlashSelected = { text = it.insertion },
-                    modelOptions = listOf(SessionModelOption("provider", "org/model"), SessionModelOption("provider", "other"))
+                    modelCurrentName = "org/model"
                 )
             }
         }
@@ -64,15 +64,13 @@ class SlashComposerUiTest {
             .assertTextContains(context.getString(R.string.slash_no_run))
         compose.onNodeWithTag("slash:/title").assertIsEnabled()
             .assertTextContains(context.getString(R.string.slash_desc_title))
-        compose.onNodeWithTag("slash:/model").performScrollTo().performClick()
-        compose.onNodeWithTag(TAG_COMPOSER_FIELD).performTextReplacement("/model org/")
-        compose.onNodeWithTag("slash:/model provider::other").assertDoesNotExist()
-        compose.onNodeWithTag("slash:/model provider::org/model")
-            .assertTextContains("org/model").assertTextContains("provider")
-        compose.onNodeWithTag("slash:/model provider::org/model").performClick()
+        compose.onNodeWithTag("slash:/model").performScrollTo()
+            .assertTextContains(context.getString(R.string.slash_model_current, "org/model"))
+            .performClick()
         compose.onNodeWithTag(TAG_COMPOSER_FIELD).assertIsFocused()
         compose.onNodeWithTag(TAG_COMPOSER_FIELD).assertIsDisplayed()
-        assertEquals("/model provider::org/model ", compose.onNodeWithTag(TAG_COMPOSER_FIELD)
+        // Selecting inserts the command only; the list itself is ModelPickerUiTest's.
+        assertEquals("/model ", compose.onNodeWithTag(TAG_COMPOSER_FIELD)
             .fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
         compose.runOnIdle { assertEquals(0, sends) }
     }
