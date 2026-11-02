@@ -3055,4 +3055,14 @@ class ChatViewModelTest {
 
         fun stored(profileId: String, sessionId: String): String? = map[key(profileId, sessionId)]
     }
+
+    @Test
+    fun aSoftEnterAfterSlashModOpensTheModelList() {
+        assertTrue(opensModelPicker("/mo\n"))
+        assertTrue(opensModelPicker("/model\n"))
+        assertFalse(opensModelPicker("/m\n"))
+        assertFalse(opensModelPicker("/model"))
+        assertFalse(opensModelPicker("/mode x\n"))
+        assertFalse(opensModelPicker("/new\n"))
+    }
 }
