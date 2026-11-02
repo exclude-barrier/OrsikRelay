@@ -9,7 +9,7 @@ import org.junit.Test
 
 class PreferenceModelMemoryTest {
     private val stored = mutableMapOf<String, String>()
-    private val memory = PreferenceModelMemory(read = { stored[it] }, write = { stored.putAll(it) })
+    private val memory = PreferenceModelMemory(read = { stored[it] }, write = { values -> values.forEach { (k, v) -> if (v == null) stored.remove(k) else stored[k] = v } })
 
     @Test fun rememberSetsTheChatsModelAndPutsItFirstInTheRecentList() {
         memory.remember("p1", "s1", "a::one")
@@ -40,5 +40,17 @@ class PreferenceModelMemoryTest {
         assertTrue(stored.isEmpty())
         stored["recent_v1:p1"] = "bad value\na::one"
         assertEquals(listOf("a::one"), memory.recent("p1"))
+    }
+
+    @Test
+    fun forgettingAProfileDropsOnlyItsModels() {
+        memory.remember("p1", "s1", "anthropic::claude-sonnet")
+        memory.remember("p2", "s2", "openai::gpt-5.5")
+
+        memory.forget("p1")
+
+        assertEquals(null, memory.current("p1", "s1"))
+        assertEquals(emptyList<String>(), memory.recent("p1"))
+        assertEquals("openai::gpt-5.5", memory.current("p2", "s2"))
     }
 }

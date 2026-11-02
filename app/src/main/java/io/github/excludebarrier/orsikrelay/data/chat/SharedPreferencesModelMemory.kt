@@ -29,7 +29,8 @@ class SharedPreferencesModelMemory(
         },
         write = { values ->
             val editor = preferences.edit()
-            values.forEach { (key, value) -> editor.putString(key, value) }
+            // A null value removes the key.
+            values.forEach { (key, value) -> if (value == null) editor.remove(key) else editor.putString(key, value) }
             editor.apply()
         }
     )
@@ -38,6 +39,7 @@ class SharedPreferencesModelMemory(
     override fun recent(profileId: String): List<String> = delegate.recent(profileId)
     override fun remember(profileId: String, sessionId: String, qualified: String) =
         delegate.remember(profileId, sessionId, qualified)
+    override fun forget(profileId: String) = delegate.forget(profileId)
 
     companion object {
         internal const val PREFERENCES_NAME = "orsik_relay_model_memory"
@@ -51,7 +53,7 @@ class SharedPreferencesModelMemory(
  */
 internal class PreferenceModelMemory(
     private val read: (String) -> String?,
-    private val write: (Map<String, String>) -> Unit
+    private val write: (Map<String, String?>) -> Unit
 ) : ModelMemory {
 
     override fun current(profileId: String, sessionId: String): String? =
@@ -71,6 +73,11 @@ internal class PreferenceModelMemory(
                 SESSIONS_KEY + profileId to sessions.joinToString("\n") { "${it.first}\t${it.second}" }
             )
         )
+    }
+
+    @Synchronized
+    override fun forget(profileId: String) {
+        write(mapOf(RECENT_KEY + profileId to null, SESSIONS_KEY + profileId to null))
     }
 
     private fun sessions(profileId: String): List<Pair<String, String>> =
