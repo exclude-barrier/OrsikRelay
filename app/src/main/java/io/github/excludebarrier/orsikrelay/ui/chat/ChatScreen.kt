@@ -934,23 +934,28 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
                                     label = if (state.stopInFlight) stoppingLabel else stopLabel,
                                     onStop = { viewModel.stop() }
                                 )
-                                ChatInputField(
-                                    draft = state.steerDraft,
-                                    onDraftChange = { viewModel.onSteerDraftChange(it) },
-                                    label = steerInputLabel,
-                                    enabled = !state.steerInFlight,
-                                    maxLines = COMPACT_DRAFT_MAX_LINES,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 8.dp)
-                                        .testTag("chatSteerInput")
-                                )
-                                IconButton(
-                                    onClick = { viewModel.steer() },
-                                    enabled = !state.steerInFlight,
-                                    modifier = Modifier.testTag("chatSteerSend")
-                                ) {
-                                    Icon(OrsikIcons.ArrowUp, contentDescription = steerLabel)
+                                // With /steer the message field steers; the
+                                // separate steer input is only for a bridge
+                                // without it.
+                                if (SlashCommand.STEER !in state.slashCommands) {
+                                    ChatInputField(
+                                        draft = state.steerDraft,
+                                        onDraftChange = { viewModel.onSteerDraftChange(it) },
+                                        label = steerInputLabel,
+                                        enabled = !state.steerInFlight,
+                                        maxLines = COMPACT_DRAFT_MAX_LINES,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 8.dp)
+                                            .testTag("chatSteerInput")
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.steer() },
+                                        enabled = !state.steerInFlight,
+                                        modifier = Modifier.testTag("chatSteerSend")
+                                    ) {
+                                        Icon(OrsikIcons.ArrowUp, contentDescription = steerLabel)
+                                    }
                                 }
                             }
                         }
@@ -1795,7 +1800,10 @@ internal fun ComposerBar(
                         SendButton(
                             enabled = sendEnabled, sending = slashBusy,
                             label = stringResource(R.string.chat_send), testTag = TAG_COMPOSER_SEND, onClick = onSend)
-                        if (compactRunControls != null) compactRunControls()
+                        // The compact row's own run controls (resolve, release,
+                        // check status) only belong here in the compact regime;
+                        // otherwise the timeline shows them and stop is enough.
+                        if (compact && compactRunControls != null) compactRunControls()
                         else StopButton(runControls.stopInFlight, stringResource(R.string.chat_stop), runControls.onStop)
                     }
                 } else null,
