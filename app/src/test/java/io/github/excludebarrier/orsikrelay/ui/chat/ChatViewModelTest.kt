@@ -298,6 +298,7 @@ class ChatViewModelTest {
             currentModel = qualified
             recentModels = listOf(qualified) + recentModels.filter { it != qualified }
         }
+        override fun forget(profileId: String) = Unit
     }
 
     private val pickerOptions = listOf(

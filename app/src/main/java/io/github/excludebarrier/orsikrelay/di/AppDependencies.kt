@@ -71,6 +71,7 @@ import io.github.excludebarrier.orsikrelay.data.chat.SlashCommandRepository
 import io.github.excludebarrier.orsikrelay.domain.chat.ExecuteSlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelOptionsSource
 import io.github.excludebarrier.orsikrelay.domain.chat.ModelMemory
+import io.github.excludebarrier.orsikrelay.data.profile.ProfileDraftClearer
 import io.github.excludebarrier.orsikrelay.data.chat.SharedPreferencesModelMemory
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 
@@ -209,6 +210,7 @@ internal fun buildAppDependencies(
     // screen and the profile repository: profile
     // deletion clears the drafts through this same instance, so no
     // second, independent store is created.
+    val modelMemory = SharedPreferencesModelMemory(applicationContext)
     val chatDraftRepository = SharedPreferencesChatDraftRepository(
         store = SharedPreferencesChatDraftStore(applicationContext)
     )
@@ -231,7 +233,11 @@ internal fun buildAppDependencies(
     val profileRepository = ServerProfileRepository(
         metadataStore = metadataStore,
         credentialStore = credentialStore,
-        profileDraftClearer = chatDraftRepository,
+        // A deleted profile takes its drafts and remembered models with it.
+        profileDraftClearer = ProfileDraftClearer { profileId ->
+            chatDraftRepository.clearProfile(profileId)
+            modelMemory.forget(profileId)
+        },
         selectionStore = resolvedSelectionStore,
         deviceCredentialSaver = deviceCredentialSaver,
         deviceCredentialMetadataStore = deviceMetadataStore,
@@ -311,7 +317,7 @@ internal fun buildAppDependencies(
         slashCommands = slashRepository,
         slashExecutor = ExecuteSlashCommand(slashRepository),
         slashModels = slashRepository,
-        modelMemory = SharedPreferencesModelMemory(applicationContext),
+        modelMemory = modelMemory,
         hostMetricsSource = HostMetricsRepository(
             profileRepository = profileRepository,
             credentialStore = credentialStore

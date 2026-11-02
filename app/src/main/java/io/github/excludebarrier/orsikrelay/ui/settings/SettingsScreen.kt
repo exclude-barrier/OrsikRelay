@@ -58,6 +58,7 @@ import io.github.excludebarrier.orsikrelay.ui.components.ConnectedButtonGroup
 import io.github.excludebarrier.orsikrelay.ui.components.GroupGap
 import io.github.excludebarrier.orsikrelay.ui.components.GroupPosition
 import io.github.excludebarrier.orsikrelay.ui.components.OrsikIcons
+import io.github.excludebarrier.orsikrelay.ui.components.OrsikLargeHeader
 import io.github.excludebarrier.orsikrelay.ui.components.shape
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikType
 import io.github.excludebarrier.orsikrelay.domain.language.SupportedLanguages
@@ -106,7 +107,7 @@ fun SettingsScreen(
             .fillMaxSize()
             .testTag("settings_screen")
     ) {
-        SettingsHeader(title = stringResource(R.string.settings_title), onBack = onBack)
+        OrsikLargeHeader(title = stringResource(R.string.settings_title), onBack = onBack)
         Column(
             verticalArrangement = Arrangement.spacedBy(GroupGap),
             modifier = Modifier
@@ -304,32 +305,6 @@ fun SettingsScreen(
  * Back arrow and the 28 sp page title. Local until the shared header carries
  * the page size, so this screen does not depend on that change.
  */
-@Composable
-private fun SettingsHeader(title: String, onBack: () -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .padding(start = 4.dp, top = 6.dp)
-                .testTag("settings_back")
-        ) {
-            Icon(OrsikIcons.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-        }
-        Text(
-            text = title,
-            fontSize = 28.sp,
-            lineHeight = 34.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .padding(start = 20.dp, end = 16.dp, bottom = 4.dp)
-                .semantics { heading() }
-        )
-    }
-}
-
 /** A value and/or chevron at the end of a settings row. */
 @Composable
 private fun TrailingValue(value: String?, chevron: Boolean = false) {

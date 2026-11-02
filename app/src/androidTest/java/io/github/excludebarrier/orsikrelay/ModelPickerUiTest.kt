@@ -81,6 +81,7 @@ class ModelPickerUiTest {
         override fun remember(profileId: String, sessionId: String, qualified: String) {
             current = qualified
         }
+        override fun forget(profileId: String) = Unit
     }
 
     private fun show(

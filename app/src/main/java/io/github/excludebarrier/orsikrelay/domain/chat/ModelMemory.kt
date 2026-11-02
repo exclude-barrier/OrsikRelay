@@ -13,6 +13,9 @@ interface ModelMemory {
     fun current(profileId: String, sessionId: String): String?
     fun recent(profileId: String): List<String>
     fun remember(profileId: String, sessionId: String, qualified: String)
+
+    /** Drops everything kept for [profileId] (the server profile was deleted). */
+    fun forget(profileId: String)
 }
 
 /** Remembers nothing (tests and previews). */
@@ -20,6 +23,7 @@ object NoModelMemory : ModelMemory {
     override fun current(profileId: String, sessionId: String): String? = null
     override fun recent(profileId: String): List<String> = emptyList()
     override fun remember(profileId: String, sessionId: String, qualified: String) = Unit
+    override fun forget(profileId: String) = Unit
 }
 
 /** Recent models kept per server. */
