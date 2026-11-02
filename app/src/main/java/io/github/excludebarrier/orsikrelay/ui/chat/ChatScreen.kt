@@ -1765,14 +1765,17 @@ internal fun ComposerBar(
         // the pill-shaped message field in the middle, and a round filled
         // send action on the right. Every action keeps at least a 48 dp touch
         // target; the labels remain available as content descriptions.
-        // While a run is bound, the run row below replaces it; the disabled
-        // draft row stays only when it holds text (e.g. a recovered steer
-        // moved into the composer), so that text never disappears.
-        if (runControls == null || draft.isNotBlank() || slashCommands.isNotEmpty()) {
+        // While a run is bound, this field takes /steer and /stop and the stop
+        // action sits next to send. Only a bridge without /steer keeps the
+        // separate steer row below (and then this field only while it holds
+        // text, e.g. a recovered steer moved into the composer).
+        val steerBySlash = SlashCommand.STEER in slashCommands
+        val runningHint = if (runControls != null && steerBySlash) stringResource(R.string.chat_input_running_hint) else null
+        if (runControls == null || steerBySlash || draft.isNotBlank() || slashCommands.isNotEmpty()) {
             AgentComposerDock(
                 draft = draft,
                 onDraftChange = onDraftChange,
-                hint = lockedHint ?: stringResource(R.string.chat_input_label),
+                hint = lockedHint ?: runningHint ?: stringResource(R.string.chat_input_label),
                 enabled = lockedHint == null && (!turnActive || slashCommands.isNotEmpty()) && !slashBusy,
                 canSend = sendEnabled,
                 sending = false,
@@ -1787,7 +1790,7 @@ internal fun ComposerBar(
                 sendTestTag = TAG_COMPOSER_SEND,
                 attachTestTag = TAG_ATTACHMENT_ADD,
                 suggestionMaxHeight = if (compact) 56.dp else 224.dp,
-                trailing = if (compact && runControls != null) {
+                trailing = if (runControls != null && (compact || steerBySlash)) {
                     {
                         SendButton(
                             enabled = sendEnabled, sending = slashBusy,
@@ -1841,7 +1844,7 @@ internal fun ComposerBar(
                 }
             )
         }
-        if (runControls != null && !compact) {
+        if (runControls != null && !compact && !steerBySlash) {
             RunComposerRow(runControls, modifier = Modifier.padding(top = if (draft.isNotBlank()) 8.dp else 0.dp))
         }
     }

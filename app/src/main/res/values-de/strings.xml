@@ -197,6 +197,7 @@
     <string name="chat_attachment_error_unreadable">Der Anhang konnte nicht gelesen werden.</string>
     <string name="chat_send">Senden</string>
     <string name="chat_input_label">Nachricht an Hermes</string>
+    <string name="chat_input_running_hint">Hermes arbeitet · /steer zum Lenken</string>
     <string name="chat_tool_activity">Tool ist aktiv…</string>
     <string name="chat_tool_activity_named">Tool aktiv: %1$s</string>
     <string name="chat_refresh_history">Verlauf aktualisieren</string>

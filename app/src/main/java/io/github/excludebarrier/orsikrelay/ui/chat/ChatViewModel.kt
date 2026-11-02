@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.excludebarrier.orsikrelay.domain.chat.MODEL_PREFIX
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommand
 import io.github.excludebarrier.orsikrelay.domain.chat.SlashCommandSource
 
@@ -492,9 +493,12 @@ internal class ChatViewModel(
      * During a run, capability-backed slash input remains editable. Sending
      * ordinary chat text is still guarded separately by [send].
      */
-    fun onDraftChange(value: String) {
+    fun onDraftChange(input: String) {
         if (_state.value.slashBusy) return
         if (_state.value.turnActive && _state.value.slashCommands.isEmpty()) return
+        // A soft keyboard's Enter arrives as a line break: "/mo" + Enter
+        // opens the model list like a hardware Enter does.
+        val value = if (opensModelPicker(input) && SlashCommand.MODEL in _state.value.slashCommands) MODEL_PREFIX else input
         _state.update {
             it.copy(
                 draft = value, slashError = false, slashFailed = false, slashDone = false,
@@ -1757,3 +1761,10 @@ internal val NoOpNotificationCoordinator: NotificationCoordinator =
         serverNameProvider = { "" },
         fallbackTitle = ""
     )
+
+/** "/mo", "/mod" … "/model" followed by the keyboard's line break. */
+internal fun opensModelPicker(input: String): Boolean {
+    if (!input.endsWith('\n')) return false
+    val word = input.dropLast(1)
+    return word.length >= 3 && "/model".startsWith(word)
+}

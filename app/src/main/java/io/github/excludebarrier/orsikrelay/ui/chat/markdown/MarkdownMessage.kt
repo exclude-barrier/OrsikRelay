@@ -476,6 +476,23 @@ private fun OrsikTable(content: String, node: ASTNode) {
             .testTag(TAG_MARKDOWN_TABLE)
     ) {
         val firstMax = maxWidth * 0.45f
+        // The header tint and its rule span the whole container, also where
+        // narrow columns leave space on the right.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(headerHeight)
+                .background(colors.surfaceContainerHigh)
+        )
+        if (rows.size > 1) {
+            Box(
+                Modifier
+                    .padding(top = headerHeight)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(line)
+            )
+        }
         Row(Modifier.height(IntrinsicSize.Min)) {
             Column(
                 modifier = Modifier
