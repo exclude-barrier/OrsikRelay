@@ -87,6 +87,36 @@ fn main() {
             .unwrap_or("9842"),
     )
     .unwrap_or_else(|r| refuse(r));
+    // Optional second loopback listener for the public mTLS reverse proxy.
+    let public_port = match env
+        .get("BRIDGE_PUBLIC_PORT")
+        .filter(|v| !v.trim().is_empty())
+    {
+        Some(raw) => {
+            let public = config::validate_port(raw).unwrap_or_else(|_| {
+                refuse(Refusal(
+                    "BRIDGE_PUBLIC_PORT must be a number between 1 and 65535".into(),
+                ))
+            });
+            if public == port {
+                refuse(Refusal(
+                    "BRIDGE_PUBLIC_PORT must differ from BRIDGE_PORT".into(),
+                ));
+            }
+            Some(public)
+        }
+        None => None,
+    };
+    // The public listener may sit on a Docker bridge address so a proxy
+    // container (Nginx Proxy Manager) can reach it; default: BRIDGE_BIND.
+    let public_bind = match env
+        .get("BRIDGE_PUBLIC_BIND")
+        .filter(|v| !v.trim().is_empty())
+    {
+        Some(raw) => config::validate_public_bind(raw, &config::local_interfaces())
+            .unwrap_or_else(|r| refuse(r)),
+        None => bind,
+    };
 
     let state = Arc::new(server::AppState {
         upstream: upstream.clone(),
@@ -121,14 +151,38 @@ fn main() {
         );
         let app = axum::Router::new()
             .fallback(server::dispatch)
-            .with_state(state);
-        axum::serve(
+            .with_state(state.clone());
+        let private = axum::serve(
             listener,
             app.into_make_service_with_connect_info::<SocketAddr>(),
         )
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .ok();
+        .with_graceful_shutdown(shutdown_signal());
+        let Some(public_port) = public_port else {
+            private.await.ok();
+            return;
+        };
+        let public_address = SocketAddr::new(public_bind, public_port);
+        let public_listener = tokio::net::TcpListener::bind(public_address)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("could not listen on {public_address}: {e}");
+                std::process::exit(1);
+            });
+        tracing::info!("Public ingress (chat, sessions, runs only) on http://{public_address}");
+        let public_app = axum::Router::new()
+            .fallback(server::dispatch)
+            .layer(axum::Extension(server::Ingress::Public))
+            .with_state(state);
+        let public = axum::serve(
+            public_listener,
+            public_app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal());
+        // Either listener ending (a signal) ends the bridge.
+        tokio::select! {
+            _ = private => {}
+            _ = public => {}
+        }
     });
 }
 
@@ -144,7 +198,26 @@ fn check_config() -> i32 {
                 .unwrap_or(default.into())
         };
         config::validate_bind(&value("BRIDGE_BIND", "127.0.0.1"))?;
-        config::validate_port(&value("BRIDGE_PORT", "9842"))?;
+        let port = config::validate_port(&value("BRIDGE_PORT", "9842"))?;
+        if let Some(raw) = env
+            .get("BRIDGE_PUBLIC_PORT")
+            .filter(|v| !v.trim().is_empty())
+        {
+            let public = config::validate_port(raw).map_err(|_| {
+                Refusal("BRIDGE_PUBLIC_PORT must be a number between 1 and 65535".into())
+            })?;
+            if public == port {
+                return Err(Refusal(
+                    "BRIDGE_PUBLIC_PORT must differ from BRIDGE_PORT".into(),
+                ));
+            }
+        }
+        if let Some(raw) = env
+            .get("BRIDGE_PUBLIC_BIND")
+            .filter(|v| !v.trim().is_empty())
+        {
+            config::validate_public_bind(raw, &config::local_interfaces())?;
+        }
         config::validate_upstream(
             env.get("BRIDGE_UPSTREAM")
                 .map(String::as_str)

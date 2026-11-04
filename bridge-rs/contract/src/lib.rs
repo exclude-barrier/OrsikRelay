@@ -242,7 +242,7 @@ fn bridge_command() -> (String, Vec<String>) {
 
 /// A free loopback port never handed out twice in this test process, so two
 /// bridges started in parallel cannot race for the same one.
-fn free_port() -> u16 {
+pub fn free_port() -> u16 {
     static GIVEN: Mutex<Vec<u16>> = Mutex::new(Vec::new());
     loop {
         let port = StdListener::bind("127.0.0.1:0")
