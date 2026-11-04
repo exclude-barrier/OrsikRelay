@@ -88,3 +88,21 @@ jobs:
         run: |
           cargo build --locked -p orsik-mobile-bridge
           BRIDGE_CMD="$PWD/target/debug/orsik-mobile-bridge" cargo test --locked -p orsik-bridge-contract
+
+  caddy-example:
+    name: Public ingress example validates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: caddy validate (official image, throw-away client CA)
+        run: |
+          WORK="$RUNNER_TEMP/caddy"
+          mkdir -p "$WORK/logs"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+            -keyout "$WORK/ca.key" -out "$WORK/orsik-client-ca.pem" -days 1 -subj "/CN=ci only"
+          docker run --rm \
+            -v "$PWD/deploy/caddy/Caddyfile.example:/etc/caddy/Caddyfile:ro" \
+            -v "$WORK/orsik-client-ca.pem:/etc/caddy/orsik-client-ca.pem:ro" \
+            -v "$WORK/logs:/var/log/caddy" \
+            caddy:2.11.8 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
