@@ -126,3 +126,24 @@ async fn an_invalid_public_port_is_refused() {
         exit.stderr
     );
 }
+
+#[tokio::test]
+async fn a_public_bind_outside_loopback_and_docker_bridges_is_refused() {
+    if !rust_bridge_under_test() {
+        return;
+    }
+    for bind in ["0.0.0.0", "8.8.8.8", "localhost"] {
+        let hermes = FakeHermes::start().await;
+        let home = tempfile::tempdir().unwrap();
+        let config = BridgeConfig::new(&hermes, home.path())
+            .set("BRIDGE_PUBLIC_PORT", &free_port().to_string())
+            .set("BRIDGE_PUBLIC_BIND", bind);
+        let exit = start_expecting_refusal(&config).await;
+        assert_eq!(exit.code, Some(1), "{bind}");
+        assert!(
+            exit.stderr.contains("BRIDGE_PUBLIC_BIND must be"),
+            "{bind}: {}",
+            exit.stderr
+        );
+    }
+}

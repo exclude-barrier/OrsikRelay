@@ -34,6 +34,7 @@ the master key replaced by `[redacted]`).
 | `BRIDGE_TRUST_TAILSCALE_IDENTITY` | `1`: the pairing rate limit keys on `Tailscale-User-Login` from loopback. |
 | `BRIDGE_PUBLIC_BASE_URL` | default base URL of the pairing deep link. |
 | `BRIDGE_PUBLIC_PORT` | Rust bridge only, optional: a second listener on the same loopback address for the public mTLS reverse proxy (see "Public ingress"); 1–65535 and not `BRIDGE_PORT`, else refused. |
+| `BRIDGE_PUBLIC_BIND` | Rust bridge only, optional address of that listener (default `BRIDGE_BIND`): a loopback IP, or the private IPv4 address of a local Docker bridge interface (`docker*`, `br-*`) so a proxy container can reach it; any other address (LAN, public, wildcard) is refused. |
 
 Files the bridge creates are never group/world accessible (umask 077).
 

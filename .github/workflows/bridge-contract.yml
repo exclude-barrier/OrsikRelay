@@ -106,3 +106,23 @@ jobs:
             -v "$WORK/orsik-client-ca.pem:/etc/caddy/orsik-client-ca.pem:ro" \
             -v "$WORK/logs:/var/log/caddy" \
             caddy:2.11.8 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  npm-example:
+    name: Nginx Proxy Manager example validates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: nginx -t (official image, the example inside an NPM-like server block)
+        run: |
+          WORK="$RUNNER_TEMP/npm"
+          mkdir -p "$WORK/custom_ssl"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+            -keyout "$WORK/server.key" -out "$WORK/server.pem" -days 1 -subj "/CN=ci only"
+          cp "$WORK/server.pem" "$WORK/custom_ssl/orsik-client-ca.pem"
+          sed 's/BRIDGE_PUBLIC_ADDRESS/172.18.0.1:9843/' deploy/npm/advanced.conf.example > "$WORK/advanced.conf"
+          printf '%s\n' 'events {}' 'http {' '  server {' '    listen 443 ssl;' \
+            '    ssl_certificate /etc/npm/server.pem;' '    ssl_certificate_key /etc/npm/server.key;' \
+            '    include /etc/npm/advanced.conf;' '  }' '}' > "$WORK/nginx.conf"
+          docker run --rm -v "$WORK:/etc/npm:ro" -v "$WORK/custom_ssl:/data/custom_ssl:ro" \
+            nginx:1.31 nginx -t -c /etc/npm/nginx.conf
