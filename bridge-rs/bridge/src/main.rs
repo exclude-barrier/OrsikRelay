@@ -7,10 +7,16 @@
 mod admin;
 mod config;
 mod core;
+mod files;
+mod history;
+mod host;
 mod pairing;
 mod routes;
+mod runhub;
 mod server;
+mod sse;
 mod store;
+mod terminal;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -86,6 +92,10 @@ fn main() {
         host_services,
         terminal_command,
         files_root,
+        runhub: runhub::RunHub::default(),
+        active_terminals: Default::default(),
+        host_metrics: Default::default(),
+        projects: Default::default(),
     });
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async move {

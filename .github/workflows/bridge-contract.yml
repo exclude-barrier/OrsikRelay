@@ -45,7 +45,7 @@ jobs:
         run: cargo test --locked -p orsik-bridge-contract
 
   contract-rust:
-    name: Rust bridge (unit tests and the ported part of the contract)
+    name: Contract suite against the Rust bridge
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -71,19 +71,16 @@ jobs:
       - name: Format
         working-directory: bridge-rs
         run: cargo fmt --all --check
-      # dead_code is allowed until the routes that use every validator are
-      # ported (PR C of the migration).
       - name: Clippy
         working-directory: bridge-rs
-        run: cargo clippy --locked --all-targets -- -D warnings -A dead_code
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Unit tests
         working-directory: bridge-rs
         run: cargo test --locked -p orsik-mobile-bridge
-      - name: Contract suite against the Rust bridge (ported part)
+      - name: Contract suite against the Rust bridge
         working-directory: bridge-rs
         env:
           BRIDGE_PY: ${{ github.workspace }}/bridge/.venv/bin/python
         run: |
           cargo build --locked -p orsik-mobile-bridge
-          BRIDGE_CMD="$PWD/target/debug/orsik-mobile-bridge" \
-            cargo test --locked -p orsik-bridge-contract --test startup_health --test pairing_devices --test store_compat
+          BRIDGE_CMD="$PWD/target/debug/orsik-mobile-bridge" cargo test --locked -p orsik-bridge-contract
