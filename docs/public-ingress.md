@@ -132,7 +132,7 @@ Only one of them can own port 443. Copy `deploy/caddy/Caddyfile.example` to `/et
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
-CI validates the example with the official `caddy:2.11.8` image. Caddy gets
+CI validates the example with the official `caddy:2.11.7` image. Caddy gets
 its server certificate through ACME and needs the domain's DNS record
 pointing at the host. The example also:
 

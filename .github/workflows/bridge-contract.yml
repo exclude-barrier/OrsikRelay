@@ -105,7 +105,7 @@ jobs:
             -v "$PWD/deploy/caddy/Caddyfile.example:/etc/caddy/Caddyfile:ro" \
             -v "$WORK/orsik-client-ca.pem:/etc/caddy/orsik-client-ca.pem:ro" \
             -v "$WORK/logs:/var/log/caddy" \
-            caddy:2.11.8 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+            caddy:2.11.7 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
   npm-example:
     name: Nginx Proxy Manager example validates
