@@ -220,9 +220,18 @@ async fn fake_handler(State(state): State<Arc<Mutex<FakeState>>>, request: Reque
     }
 }
 
+/// The Python bridge, whatever bridge is under test (store compatibility).
+fn python_command() -> (String, Vec<String>) {
+    let python = std::env::var("BRIDGE_PY").unwrap_or_else(|_| "python3".into());
+    (python, vec!["-m".into(), "orsik_mobile_bridge".into()])
+}
+
 /// How to start the bridge under test.
 fn bridge_command() -> (String, Vec<String>) {
-    if let Ok(cmd) = std::env::var("BRIDGE_CMD") {
+    if let Some(cmd) = std::env::var("BRIDGE_CMD")
+        .ok()
+        .filter(|c| !c.trim().is_empty())
+    {
         let mut parts = cmd.split_whitespace().map(str::to_string);
         let program = parts.next().expect("BRIDGE_CMD is empty");
         return (program, parts.collect());
@@ -253,6 +262,8 @@ fn free_port() -> u16 {
 #[derive(Clone)]
 pub struct BridgeConfig {
     pub env: HashMap<String, String>,
+    /// Start the Python bridge even when another one is under test.
+    pub python: bool,
 }
 
 impl BridgeConfig {
@@ -269,7 +280,13 @@ impl BridgeConfig {
         // Fixed, harmless unit names so the host metrics never ask for
         // services of the machine running the suite by surprise.
         env.insert("BRIDGE_HOST_SERVICES".into(), "contract-test-unit".into());
-        BridgeConfig { env }
+        BridgeConfig { env, python: false }
+    }
+
+    /// The same settings for the Python bridge (store compatibility checks).
+    pub fn python(mut self) -> Self {
+        self.python = true;
+        self
     }
 
     pub fn set(mut self, key: &str, value: &str) -> Self {
@@ -284,7 +301,11 @@ impl BridgeConfig {
 }
 
 fn base_command(config: &BridgeConfig) -> Command {
-    let (program, args) = bridge_command();
+    let (program, args) = if config.python {
+        python_command()
+    } else {
+        bridge_command()
+    };
     let mut command = Command::new(program);
     command.args(args);
     command.env_clear();
