@@ -531,7 +531,8 @@ async fn self_revoke(state: &State, request: Request) -> Handled {
             audit("revoke", &record.device_id, &[("status", "413".into())]);
             return Ok(closed(413, "body_too_large"));
         }
-        Err(BodyError::Broken) => false,
+        // A cut-off request revokes nothing.
+        Err(BodyError::Broken) => return Ok(closed(400, "body_incomplete")),
     };
     if has_body {
         if lookup(state, &parts.headers).await?.is_none() {

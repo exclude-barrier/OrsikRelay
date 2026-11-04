@@ -193,3 +193,40 @@ before replacement and records success only after checks and requested service
 operations succeed. This does not detect arbitrary local package tampering or
 replace artifact verification. Neither settings nor updates confirm Hermes
 approvals, grant terminal access implicitly or change TLS/loopback protections.
+
+## 7. Rust bridge review (2026-11-04)
+
+Review of the Rust port (`bridge-rs/`) before the cutover and before any
+public ingress. Method: the black-box contract suite against both bridges,
+a read of every handler for the invariants in §3, and `cargo audit`.
+
+| Check | Result |
+|---|---|
+| Behavioural parity | The full contract suite passes against the Python and the Rust bridge. A phone paired by Python keeps working on Rust (`store_compat`, cutover simulation). |
+| Closed surface | One dispatcher, dedicated routes first, then the allowlist; unknown methods on known paths fall through to `endpoint_out_of_scope`. Paths are matched percent-decoded with an encoded `/` kept, as aiohttp does. |
+| Master key | Only in the upstream `Authorization` header; redirects are never followed (`Policy::none`), no proxy from the environment; reflected keys are redacted in buffered bodies. |
+| Device keys and codes | Stored as SHA-256 only; codes single-use by one atomic `UPDATE`; revocation re-checked every 15 s on open streams and terminals. |
+| Files | Every component opened with `O_NOFOLLOW` from the root; realpath containment; FIFOs refused; 8 MiB and 2000-entry bounds; git with no hooks, filters or fsmonitor and a process-group kill. |
+| Terminal | Off by default, per-device grant, `Origin` refused, minimal child environment, at most 4. |
+| Public ingress | A separate listener with its own allowlist; never the private port; only loopback or a local Docker bridge address. |
+| Dependencies | `cargo audit` (RustSec, 1403 advisories): no known vulnerability in the 247 locked crates. A nightly job repeats it (`bridge-audit.yml`). |
+
+**Fixed in this review:** a request whose body broke off before its announced
+end was forwarded (or acted on) as an empty body: a cut-off chat request
+started a run, a cut-off `DELETE` deleted a session, a cut-off self-revoke
+revoked the device. It is now refused with 400 `body_incomplete` and never
+reaches Hermes; the contract test `a_cut_off_request_body_never_reaches_hermes`
+covers both bridges.
+
+**Residual risks (accepted for the private path, to address before broad
+public use):**
+
+- No connection count or header-read timeout in the bridge itself; on the
+  public path the reverse proxy (NPM/Caddy, `limit_conn`/`limit_req`) must
+  bound them.
+- The file audit line contains the requested path (as in the Python bridge).
+- The server identity (`/v1/server`) proves consistency, not possession of a
+  key: it stops a misconfigured or foreign public host from receiving the
+  device key only together with TLS to a host the user entered.
+- Certificate revocation is not checked by the example proxies; device-key
+  revocation and short certificate lifetimes cover a lost phone.
