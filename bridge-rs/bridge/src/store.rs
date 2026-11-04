@@ -185,6 +185,11 @@ impl Store {
         while version < SCHEMA_VERSION {
             let step = || -> rusqlite::Result<()> {
                 conn.execute_batch("BEGIN IMMEDIATE")?;
+                // Another process may have migrated since the first read.
+                let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+                if current != version {
+                    return conn.execute_batch("COMMIT");
+                }
                 if version == 0 {
                     migrate_v0_to_v1(conn)?
                 } else {
@@ -196,7 +201,9 @@ impl Store {
                 let _ = conn.execute_batch("ROLLBACK");
                 return Err(StoreUnavailable("device store migration failed".into()));
             }
-            version += 1;
+            version = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .map_err(unavailable("device store migration failed"))?;
         }
         Ok(())
     }

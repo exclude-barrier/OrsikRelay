@@ -350,6 +350,17 @@ pub struct Bridge {
 
 impl Bridge {
     pub async fn start(config: BridgeConfig) -> Self {
+        // A port reported free can be taken by another listener before the
+        // bridge binds it; the bridge then exits and a fresh port is tried.
+        for _ in 0..3 {
+            if let Some(bridge) = Self::try_start(config.clone()).await {
+                return bridge;
+            }
+        }
+        panic!("bridge exited at start-up three times");
+    }
+
+    async fn try_start(config: BridgeConfig) -> Option<Self> {
         let port = free_port();
         let mut command = base_command(&config);
         command.env("BRIDGE_PORT", port.to_string());
@@ -367,16 +378,15 @@ impl Bridge {
             client,
         };
         for _ in 0..200 {
-            // Our own process must still run: a port taken by someone else
-            // would otherwise look like a started bridge.
-            if let Ok(Some(status)) = bridge.child.try_wait() {
-                panic!("bridge exited at start-up: {status}");
+            if let Ok(Some(_)) = bridge.child.try_wait() {
+                return None;
             }
-            if tokio::net::TcpStream::connect(("127.0.0.1", port))
-                .await
-                .is_ok()
+            // Only the bridge answers an anonymous capabilities read with its
+            // closed 401 envelope; another listener on the port does not.
+            if let Ok(response) = bridge.get("/v1/capabilities", None).send().await
+                && error_code(response).await == (401, "invalid_credentials".into())
             {
-                return bridge;
+                return Some(bridge);
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
