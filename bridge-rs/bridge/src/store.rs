@@ -404,6 +404,30 @@ impl Store {
         run().map_err(unavailable("device list failed"))
     }
 
+    /// The bridge's stable, random identity (32 hex), created on first use.
+    /// It lives in its own table outside the versioned schema, so an older
+    /// bridge can still open the store (it ignores the table).
+    pub fn server_id(&self) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        let run = || -> rusqlite::Result<String> {
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS bridge_identity (\
+                 id INTEGER PRIMARY KEY CHECK (id = 1), server_id TEXT NOT NULL)",
+            )?;
+            let candidate = uuid::Uuid::new_v4().simple().to_string();
+            conn.execute(
+                "INSERT OR IGNORE INTO bridge_identity (id, server_id) VALUES (1, ?)",
+                params![candidate],
+            )?;
+            conn.query_row(
+                "SELECT server_id FROM bridge_identity WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
+        };
+        run().map_err(unavailable("server identity unavailable"))
+    }
+
     /// Atomic 0600 snapshot; an existing destination is never overwritten.
     pub fn backup_to(&self, dest: &Path) -> Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -502,6 +526,24 @@ mod tests {
         assert!(dir.path().join("state.db.pre-v1.bak").exists());
         let record = store.lookup_device(Some("hd_old")).unwrap().unwrap();
         assert!(!record.terminal_allowed);
+    }
+
+    #[test]
+    fn the_server_id_is_stable_and_leaves_the_schema_version() {
+        let (dir, store) = store();
+        let first = store.server_id().unwrap();
+        assert_eq!(first.len(), 32);
+        assert_eq!(store.server_id().unwrap(), first);
+        drop(store);
+        let reopened = Store::open(&dir.path().join("state.db")).unwrap();
+        assert_eq!(reopened.server_id().unwrap(), first);
+        let version: i64 = reopened
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
     }
 
     #[test]

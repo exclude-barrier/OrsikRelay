@@ -392,15 +392,59 @@ pub async fn read_upstream_bounded(
 
 // -- dispatch ----------------------------------------------------------------
 
+/// Which listener a request came in on. The public one (behind the mTLS
+/// reverse proxy) only reaches [public_route_allowed] routes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Ingress {
+    Private,
+    Public,
+}
+
+/// The routes the public ingress may reach: chat, sessions and runs. Pairing,
+/// approvals, terminal, files, projects and host data stay private.
+pub fn public_route_allowed(method: &str, path: &str) -> bool {
+    let get = method == "GET" || method == "HEAD";
+    let segments: Vec<&str> = path.split('/').collect();
+    match segments.as_slice() {
+        ["", "health"] | ["", "v1", "capabilities"] | ["", "v1", "server"] => get,
+        ["", "v1", "devices", "self", "revoke"] => method == "POST",
+        ["", "api", "model", "options"] => get,
+        ["", "api", "sessions"] => get || method == "POST",
+        ["", "api", "sessions", _] => get || method == "PATCH" || method == "DELETE",
+        ["", "api", "sessions", _, "messages"] => get,
+        ["", "api", "sessions", _, "chat", "stream"]
+        | ["", "api", "sessions", _, "fork"]
+        | ["", "api", "sessions", _, "model"] => method == "POST",
+        ["", "api", "sessions", _, "runs", _, "stream"] => get,
+        ["", "v1", "runs", _] => get,
+        ["", "v1", "runs", _, "stop" | "steer" | "resolve-unknown"] => method == "POST",
+        _ => false,
+    }
+}
+
+pub fn ingress(request: &Request) -> Ingress {
+    request
+        .extensions()
+        .get::<Ingress>()
+        .copied()
+        .unwrap_or(Ingress::Private)
+}
+
 pub async fn dispatch(
     axum::extract::State(state): axum::extract::State<State>,
     request: Request,
 ) -> Response {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
+    if ingress(&request) == Ingress::Public
+        && !public_route_allowed(method.as_str(), &crate::routes::decoded_path(&path))
+    {
+        return closed(403, "public_ingress_denied");
+    }
     let handled = match (method.as_str(), path.as_str()) {
         ("GET" | "HEAD", "/health") => health(&state, request).await,
         ("GET" | "HEAD", "/v1/capabilities") => capabilities(&state, request).await,
+        ("GET" | "HEAD", "/v1/server") => server_identity(&state, request).await,
         ("POST", "/v1/devices/pair") => pair(&state, request).await,
         ("POST", "/v1/devices/self/revoke") => self_revoke(&state, request).await,
         _ => crate::routes::dispatch(&state, request).await,
@@ -436,10 +480,26 @@ async fn capabilities(state: &State, request: Request) -> Handled {
     let Some(record) = lookup(state, request.headers()).await? else {
         return Ok(closed(401, "invalid_credentials"));
     };
-    let terminal = state.terminal_command.is_some() && record.terminal_allowed;
+    // The public ingress never offers the terminal or the files.
+    let private = ingress(&request) == Ingress::Private;
+    let terminal = private && state.terminal_command.is_some() && record.terminal_allowed;
+    let files = private && state.files_root.is_some();
     Ok(json_response(
         200,
-        &core::build_capabilities(terminal, state.files_root.is_some()),
+        &core::build_capabilities(terminal, files),
+    ))
+}
+
+/// The bridge's stable identity, without a key: a phone compares it with the
+/// one it pinned at pairing before it sends its key to another endpoint.
+async fn server_identity(state: &State, request: Request) -> Handled {
+    if request.uri().query().is_some_and(|q| !q.is_empty()) {
+        return Ok(closed(403, "query_not_allowed"));
+    }
+    let server_id = db(state, |s| s.server_id()).await?;
+    Ok(json_response(
+        200,
+        &json!({"object": "orsik.server.identity", "server_id": server_id}),
     ))
 }
 
@@ -549,4 +609,45 @@ async fn self_revoke(state: &State, request: Request) -> Handled {
         200,
         &json!({"revoked": !record.already_revoked, "device_id": record.device_id}),
     ))
+}
+
+#[cfg(test)]
+mod ingress_tests {
+    use super::public_route_allowed;
+
+    #[test]
+    fn the_public_ingress_reaches_only_chat_sessions_and_runs() {
+        for (method, path) in [
+            ("GET", "/health"),
+            ("GET", "/v1/capabilities"),
+            ("GET", "/v1/server"),
+            ("POST", "/v1/devices/self/revoke"),
+            ("GET", "/api/sessions"),
+            ("POST", "/api/sessions"),
+            ("PATCH", "/api/sessions/s1"),
+            ("GET", "/api/sessions/s1/messages"),
+            ("POST", "/api/sessions/s1/chat/stream"),
+            ("GET", "/api/sessions/s1/runs/r1/stream"),
+            ("GET", "/v1/runs/r1"),
+            ("POST", "/v1/runs/r1/stop"),
+            ("POST", "/v1/runs/r1/steer"),
+        ] {
+            assert!(public_route_allowed(method, path), "{method} {path}");
+        }
+        for (method, path) in [
+            ("POST", "/v1/devices/pair"),
+            ("POST", "/v1/runs/r1/approval"),
+            ("GET", "/v1/terminal"),
+            ("GET", "/v1/files/list"),
+            ("GET", "/v1/files/content"),
+            ("GET", "/v1/projects"),
+            ("GET", "/v1/host/metrics"),
+            ("POST", "/v1/runs/r1"),
+            ("DELETE", "/api/sessions"),
+            ("GET", "/admin"),
+            ("GET", "/api/sessions/s1/extra/x"),
+        ] {
+            assert!(!public_route_allowed(method, path), "{method} {path}");
+        }
+    }
 }
