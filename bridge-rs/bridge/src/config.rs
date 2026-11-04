@@ -137,6 +137,59 @@ pub fn is_loopback(ip: IpAddr) -> bool {
     }
 }
 
+const PUBLIC_BIND_ERROR: &str = "BRIDGE_PUBLIC_BIND must be a loopback IP or the private address of a local Docker bridge (docker0, br-…)";
+
+/// The local interfaces and their IPv4 addresses (`getifaddrs`).
+pub fn local_interfaces() -> Vec<(String, IpAddr)> {
+    let mut list = Vec::new();
+    let mut head: *mut libc::ifaddrs = std::ptr::null_mut();
+    if unsafe { libc::getifaddrs(&mut head) } != 0 {
+        return list;
+    }
+    let mut cursor = head;
+    while !cursor.is_null() {
+        let entry = unsafe { &*cursor };
+        if !entry.ifa_addr.is_null()
+            && unsafe { (*entry.ifa_addr).sa_family } as i32 == libc::AF_INET
+        {
+            let sin = unsafe { &*(entry.ifa_addr as *const libc::sockaddr_in) };
+            let ip = std::net::Ipv4Addr::from(u32::from_be(sin.sin_addr.s_addr));
+            let name = unsafe { std::ffi::CStr::from_ptr(entry.ifa_name) }
+                .to_string_lossy()
+                .into_owned();
+            list.push((name, IpAddr::V4(ip)));
+        }
+        cursor = entry.ifa_next;
+    }
+    unsafe { libc::freeifaddrs(head) };
+    list
+}
+
+/// The public listener's address: loopback, or (for a reverse proxy in a
+/// Docker network, e.g. Nginx Proxy Manager) the private IPv4 address of a
+/// local Docker bridge interface. Never a LAN, public or wildcard address.
+pub fn validate_public_bind(
+    bind: &str,
+    interfaces: &[(String, IpAddr)],
+) -> Result<IpAddr, Refusal> {
+    let refuse = || Refusal::new(PUBLIC_BIND_ERROR);
+    let ip: IpAddr = bind.trim().parse().map_err(|_| refuse())?;
+    if is_loopback(ip) {
+        return Ok(ip);
+    }
+    let IpAddr::V4(v4) = ip else {
+        return Err(refuse());
+    };
+    let docker_bridge = interfaces
+        .iter()
+        .any(|(name, addr)| *addr == ip && (name.starts_with("docker") || name.starts_with("br-")));
+    if v4.is_private() && docker_bridge {
+        Ok(ip)
+    } else {
+        Err(refuse())
+    }
+}
+
 /// Only literal loopback IPs; a name like `localhost` is refused.
 pub fn validate_bind(bind: &str) -> Result<IpAddr, Refusal> {
     match bind.parse::<IpAddr>() {
@@ -395,6 +448,29 @@ mod tests {
         assert!(validate_bind("::ffff:8.8.8.8").is_err());
         assert!(validate_bind("localhost").is_err());
         assert!(validate_bind("0.0.0.0").is_err());
+    }
+
+    #[test]
+    fn the_public_bind_is_loopback_or_a_docker_bridge() {
+        let interfaces = vec![
+            ("lo".to_string(), "127.0.0.1".parse().unwrap()),
+            ("wlan0".to_string(), "192.168.178.187".parse().unwrap()),
+            ("br-1a2b3c".to_string(), "172.18.0.1".parse().unwrap()),
+            ("docker0".to_string(), "172.17.0.1".parse().unwrap()),
+        ];
+        for ok in ["127.0.0.1", "::1", "172.18.0.1", "172.17.0.1"] {
+            assert!(validate_public_bind(ok, &interfaces).is_ok(), "{ok}");
+        }
+        for bad in [
+            "0.0.0.0",
+            "192.168.178.187",
+            "172.19.0.1",
+            "8.8.8.8",
+            "::",
+            "localhost",
+        ] {
+            assert!(validate_public_bind(bad, &interfaces).is_err(), "{bad}");
+        }
     }
 
     #[test]

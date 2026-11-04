@@ -291,7 +291,8 @@ async fn proxy(state: &State, request: Request, method: &str, path: &str) -> Han
     let body = match read_body(body).await {
         Ok(body) => body,
         Err(BodyError::TooLarge) => return Ok(reject_with(on_status, 413, "body_too_large")),
-        Err(BodyError::Broken) => Bytes::new(),
+        // A body cut off mid-upload is never forwarded as an empty one.
+        Err(BodyError::Broken) => return Ok(reject_with(on_status, 400, "body_incomplete")),
     };
     if method == "GET" && matched.upstream_path.ends_with("/messages") {
         return Ok(forward(
@@ -436,7 +437,9 @@ async fn session_management(
         Err(BodyError::TooLarge) => {
             return Ok(reject_with(Some(hook(action)), 413, "body_too_large"));
         }
-        Err(BodyError::Broken) => Bytes::new(),
+        Err(BodyError::Broken) => {
+            return Ok(reject_with(Some(hook(action)), 400, "body_incomplete"));
+        }
     };
     let body = if method == Method::DELETE {
         if !raw.is_empty() {
@@ -581,7 +584,8 @@ async fn chat_stream(state: &State, request: Request, session_id: String) -> Han
             );
             return Ok(closed(413, "body_too_large"));
         }
-        Err(BodyError::Broken) => Bytes::new(),
+        // Never start a run from a cut-off request body.
+        Err(BodyError::Broken) => return Ok(closed(400, "body_incomplete")),
     };
     let Ok(buffer) = state.runhub.create_pending(&session_id) else {
         let mut response = closed(503, "bridge_busy");

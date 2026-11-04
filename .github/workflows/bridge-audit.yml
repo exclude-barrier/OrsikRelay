@@ -1,0 +1,28 @@
+# RustSec advisory check of the Rust bridge's locked dependencies. Nightly
+# and on demand; not a pull-request check (a new advisory must not block
+# unrelated work, it opens a fix instead).
+name: Bridge dependency audit
+
+on:
+  schedule:
+    - cron: '7 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust toolchain from rust-toolchain.toml
+        working-directory: bridge-rs
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - name: Audit Cargo.lock
+        working-directory: bridge-rs
+        run: cargo audit
