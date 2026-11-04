@@ -21,7 +21,7 @@ URL unchanged.
 - Gives every device token a fixed allowlist: `chat`, `runs`, `approvals`.
 - Persists paired devices in a **SQLite store (0600)** so pairing and revoke
   survive a bridge restart.
-- Proxies **only** a closed set of paths upstream (`core.PROXIED_ROUTES`):
+- Proxies **only** a closed set of paths upstream (`PROXIED_ROUTES` in `bridge-rs/bridge/src/routes.rs`):
   `/api/sessions…` and `/v1/runs…`. No admin, cron, memory, jobs, skills or
   artifact surface.
 - Takes over the session chat stream **server-side** so a lost client
@@ -258,7 +258,7 @@ downstream disconnect (the run is not interrupted). A client re-attaches with
 ### Memory bounds and backpressure
 
 Every accumulator is capped; the limits are module constants in
-`sse.py`/`runhub.py`:
+`bridge-rs/bridge/src/sse.rs` and `runhub.rs`:
 
 - One SSE frame block from upstream may be at most `MAX_FRAME_BYTES` (1 MiB,
   measured after CR/LF normalisation). A larger frame is never relayed and the
@@ -351,12 +351,14 @@ download tool is missing or the release checksum does not match.
 
 ## Tests
 
+The bridge is the Rust workspace in `../bridge-rs` (see `docs/toolchain.md`):
+
 ```sh
-python -m unittest discover -s tests -v         # core + HTTP-layer + store + reconnect
-python tests/acceptance_live.py ./bridge.env    # live end-to-end (needs a bridge)
-python tests/adversarial_live.py ./bridge.env   # live attack probe: auth, scope, bodies, revoke, leaks
-python tests/approval_live.py ./bridge.env 3    # live deny: a denied dangerous command never runs
-python tests/soak_live.py ./bridge.env 6 40     # live soak: parallel devices, disconnects, re-attach
+cd ../bridge-rs
+cargo test --locked -p orsik-mobile-bridge                  # unit tests
+cargo build --locked -p orsik-mobile-bridge
+cargo test --locked -p orsik-bridge-contract                # Mobile-v1 contract, black box
+bash tests/install-scripts.sh target/debug/orsik-mobile-bridge   # installer
 ```
 
 ## Rollback

@@ -53,45 +53,20 @@ as of 2026-10-16, base `main@f1311d1`):
 Thresholds are introduced only after a risk-based assessment, not
 automatically based on this baseline.
 
-## Bridge Coverage (Report, No Gate)
+## Bridge (Rust)
 
-The Python bridge (`bridge/`) measures its test coverage with `coverage`. The
-version is pinned exactly (PEP-735 dependency group `dev` in
-`bridge/pyproject.toml`, `uv.lock`): `coverage==7.16.2`. It is a pure
-development dependency: `install.sh` exports with `--no-dev`
-(`uv export --frozen --no-dev --no-emit-project`), so installing the bridge
-remains unaffected.
-
-Configuration in `bridge/pyproject.toml`:
-
-- `[tool.coverage.run]`: `source = ["orsik_mobile_bridge"]`, `branch = true`
-- `[tool.coverage.report]`: `show_missing = true`, `skip_covered = false`
-- no `fail_under`: the report is deliberately not a gate.
-
-Commands (run from `bridge/`):
+The bridge is the Rust workspace `bridge-rs/` (toolchain pinned in
+`bridge-rs/rust-toolchain.toml`, dependencies in `bridge-rs/Cargo.lock`).
+Every build uses `--locked`.
 
 ```bash
-uv lock --check
-uv sync --locked          # installs the dev group by default
-uv run --locked coverage run -m unittest discover -s tests -v
-uv run --locked coverage report
-uv run --locked coverage xml -o dist/coverage.xml
+cd bridge-rs
+cargo fmt --all --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked -p orsik-mobile-bridge          # unit tests
+cargo build --locked -p orsik-mobile-bridge
+cargo test --locked -p orsik-bridge-contract        # black-box contract suite
+bash tests/install-scripts.sh target/debug/orsik-mobile-bridge
 ```
 
-Measured baseline (date 2026-10-16, base `main@f1311d1`; 137 tests,
-`branch = true`):
-
-| Module | Line | Branch | Combined |
-| --- | --- | --- | --- |
-| `core.py` | 99% (186/187) | 96% (54/56) | 99% |
-| `server.py` | 81% (334/411) | 69% (95/138) | 78% |
-| `store.py` | 79% (154/194) | 90% (27/30) | 81% |
-| `runhub.py` | 91% (169/185) | 74% (49/66) | 87% |
-| `sse.py` | 99% (90/91) | 84% (27/32) | 95% |
-| `pairing.py` | 85% (17/20) | 75% (3/4) | 83% |
-| **Total** | **87% (951/1093)** | **78% (255/328)** | **85%** |
-
-`Combined` is the mixed value reported by `coverage`; `Line` and `Branch`
-are derived from the counters. The CI job (`Bridge CI`) replaces the
-unit test step with `coverage run`, prints the report and uploads
-`dist/coverage.xml` as an artifact.
+`cargo audit` runs nightly (`.github/workflows/bridge-audit.yml`).
