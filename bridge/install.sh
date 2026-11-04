@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
 # Orsik Mobile Bridge installer (no curl|bash, no core patching).
 #
-# Installs the bridge into a DEDICATED virtual environment from a local,
-# reviewed source checkout. It never modifies Hermes core files, never opens a
-# public port, and never overwrites an existing install unless --update is given.
+# Installs the prebuilt bridge binary of one release into BRIDGE_HOME/bin. The
+# binary comes from the GitHub release of the checked-out tag and is verified
+# against the release's checksum file before anything is replaced. It never
+# modifies Hermes core files, never opens a public port, and never overwrites
+# an existing install unless --update is given. No Python is needed.
 #
 # Usage:
 #   ./install.sh [--update] [--systemd] [/path/to/bridge/source]
 #   ./install.sh --check              # report on an install, change nothing
+#   ./install.sh --rollback           # go back to the previous binary
+#
+# Environment: ORSIK_TAG     release tag (default: the tag of the source checkout)
+#              ORSIK_BINARY  install this local binary instead of downloading
+#                            (a build of your own; skips the release download)
 #
 # Rollback / uninstall:
+#   ./install.sh --rollback           # previous binary back, service restarted
 #   ./install.sh --uninstall          # stops+removes the user unit
-#   rm -rf "$BRIDGE_HOME"             # removes the venv + state database
+#   rm -rf "$BRIDGE_HOME"             # removes the binary + state database
 set -euo pipefail
 
 SRC=""
@@ -19,9 +27,11 @@ UPDATE=0
 SYSTEMD=0
 UNINSTALL=0
 CHECK=0
+ROLLBACK=0
 for arg in "$@"; do
   case "$arg" in
     --update) UPDATE=1 ;;
+    --rollback) ROLLBACK=1 ;;
     --systemd) SYSTEMD=1 ;;
     --uninstall) UNINSTALL=1 ;;
     --check) CHECK=1 ;;
@@ -32,6 +42,8 @@ SRC="${SRC:-$(cd "$(dirname "$0")" && pwd)}"
 BRIDGE_HOME="${BRIDGE_HOME:-$HOME/.local/orsik-mobile-bridge}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_NAME="orsik-mobile-bridge.service"
+BIN="$BRIDGE_HOME/bin/orsik-mobile-bridge"
+RELEASES="https://github.com/exclude-barrier/OrsikRelay/releases/download"
 
 # Read an env file exactly like the bridge (_load_env_file / _env_value):
 # `export `, surrounding whitespace, matching outer quotes, an unquoted " #"
@@ -140,31 +152,27 @@ if [ "$CHECK" -eq 1 ]; then
     fi
   fi
 
-  # 3. The installed operator CLI.
-  CLI="$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
-  if [ -x "$CLI" ]; then
-    chk_ok venv
+  # 3. The installed bridge binary (also the operator CLI).
+  if [ -x "$BIN" ]; then
+    chk_ok binary
   else
-    chk_fail venv "venv/bin/orsik-mobile-bridge is not executable"
+    chk_fail binary "bin/orsik-mobile-bridge is not executable"
   fi
 
   # 4. The bind address must stay on loopback (empty = bridge default), with
   # the bridge's own rule: any 127.0.0.0/8 IP literal or a ::1 spelling.
+  # The bridge's own rule (any 127.0.0.0/8 IP literal or a ::1 spelling),
+  # asked from the installed binary; a plain pattern without one.
   BIND_VALUE="$(env_value "$ENV_FILE" BRIDGE_BIND)"
   bind_ok=0
   if [ -z "$BIND_VALUE" ]; then
     bind_ok=1
-  elif [ -x "$BRIDGE_HOME/venv/bin/python" ]; then
-    # Exact same set as server._validate_bind (ipaddress is_loopback).
-    if BIND="$BIND_VALUE" "$BRIDGE_HOME/venv/bin/python" -c '
-import ipaddress, os, sys
-try:
-    ok = ipaddress.ip_address(os.environ.get("BIND", "")).is_loopback
-except ValueError:
-    ok = False
-sys.exit(0 if ok else 1)' 2>/dev/null; then
-      bind_ok=1
-    fi
+  elif [ -x "$BIN" ]; then
+    bind_error="$(env -i PATH="$PATH" HOME="$HOME" BRIDGE_BIND="$BIND_VALUE" "$BIN" check-config 2>&1 || true)"
+    case "$bind_error" in
+      BRIDGE_BIND*) ;;
+      *) bind_ok=1 ;;
+    esac
   else
     case "$BIND_VALUE" in
       ::1) bind_ok=1 ;;
@@ -281,39 +289,11 @@ sys.exit(0 if ok else 1)' 2>/dev/null; then
     fi
   fi
 
-  # 10. The settings the bridge checks at start (state DB path, service list),
-  # validated by the installed bridge itself so both always agree.
-  if [ -x "$BRIDGE_HOME/venv/bin/python" ]; then
-    if cfg_error="$(BRIDGE_STATE_DB="$(env_value "$ENV_FILE" BRIDGE_STATE_DB)" \
-      BRIDGE_HOST_SERVICES="$(env_value "$ENV_FILE" BRIDGE_HOST_SERVICES)" \
-      BRIDGE_TERMINAL="$(env_value "$ENV_FILE" BRIDGE_TERMINAL)" \
-      BRIDGE_FILES="$(env_value "$ENV_FILE" BRIDGE_FILES)" \
-      BRIDGE_FILES_ROOT="$(env_value "$ENV_FILE" BRIDGE_FILES_ROOT)" \
-      BRIDGE_HERMES_ENV="$(env_value "$ENV_FILE" BRIDGE_HERMES_ENV)" \
-      BRIDGE_ENV_FILE="$ENV_FILE" \
-      DEFAULT_DB="$BRIDGE_HOME/state.db" \
-      "$BRIDGE_HOME/venv/bin/python" - 2>&1 <<'PYCHECK'
-import os, sys
-from orsik_mobile_bridge import hostmetrics, server, terminal
-db = os.environ.get("BRIDGE_STATE_DB") or os.environ["DEFAULT_DB"]
-try:
-    hostmetrics.parse_services(os.environ.get("BRIDGE_HOST_SERVICES") or None)
-    if terminal.parse_enabled(os.environ.get("BRIDGE_TERMINAL")):
-        terminal.default_command()
-    server._files_root_from_env({
-        key: os.environ.get(key, "")
-        for key in ("BRIDGE_FILES", "BRIDGE_FILES_ROOT", "BRIDGE_HERMES_ENV", "BRIDGE_ENV_FILE")
-    } | {"BRIDGE_STATE_DB": db})
-except SystemExit as exc:
-    sys.exit(str(exc))
-parent = os.path.dirname(os.path.abspath(os.path.expanduser(db)))
-probe = parent
-while not os.path.exists(probe):
-    probe = os.path.dirname(probe)
-if not os.access(probe, os.W_OK | os.X_OK):
-    sys.exit("BRIDGE_STATE_DB is not writable: " + parent)
-PYCHECK
-)"; then
+  # 10. The settings the bridge checks at start (bind, port, upstream, state
+  # DB, service list, terminal, files), validated by the installed binary
+  # itself so both always agree. The Hermes key is checked above.
+  if [ -x "$BIN" ]; then
+    if cfg_error="$(BRIDGE_ENV_FILE="$ENV_FILE" BRIDGE_HOME="$BRIDGE_HOME" "$BIN" check-config 2>&1)"; then
       chk_ok config
     else
       chk_fail config "$cfg_error"
@@ -334,101 +314,103 @@ if [ "$UNINSTALL" -eq 1 ]; then
   fi
   rm -f "$UNIT_DIR/$UNIT_NAME"
   systemctl --user daemon-reload 2>/dev/null || true
-  echo "Removed the systemd user unit. The venv/state remain under $BRIDGE_HOME;"
+  echo "Removed the systemd user unit. The binary/state remain under $BRIDGE_HOME;"
   echo "delete them with: rm -rf \"$BRIDGE_HOME\""
   exit 0
 fi
 
-if [ ! -f "$SRC/pyproject.toml" ]; then
-  echo "install.sh: $SRC is not a bridge source tree (missing pyproject.toml)" >&2
-  exit 1
+if [ "$ROLLBACK" -eq 1 ]; then
+  [ -x "$BIN.previous" ] || { echo "install.sh: no previous binary at $BIN.previous" >&2; exit 1; }
+  mv -f "$BIN.previous" "$BIN.rollback"
+  [ -x "$BIN" ] && mv -f "$BIN" "$BIN.previous"
+  mv -f "$BIN.rollback" "$BIN"
+  rm -f "$BRIDGE_HOME/installed-commit"
+  if [ -f "$UNIT_DIR/$UNIT_NAME" ]; then
+    systemctl --user restart "$UNIT_NAME"
+  fi
+  echo "Rolled back to the previous binary; the replaced one is $BIN.previous."
+  echo "The device store is unchanged (backups: $BRIDGE_HOME/state.db.bak-*)."
+  exit 0
 fi
 
-# The exact dependency set is frozen in uv.lock; without it the install would
-# silently resolve whatever PyPI serves today.
-if [ ! -f "$SRC/uv.lock" ]; then
-  echo "install.sh: $SRC/uv.lock is missing; refusing an unreproducible install" >&2
+# Do not clobber an existing install unless the operator asked to update it.
+if { [ -e "$BIN" ] || [ -d "$BRIDGE_HOME/venv" ]; } && [ "$UPDATE" -ne 1 ]; then
+  echo "install.sh: $BRIDGE_HOME already exists; re-run with --update to refresh it" >&2
   exit 1
 fi
 
 # Prerequisites are checked before anything is created: a half-installed
 # BRIDGE_HOME is worse than a refusal.
-if ! command -v uv >/dev/null 2>&1; then
-  echo "install.sh: uv is required but not on PATH (see docs/bridge-installation.md)" >&2
-  exit 1
-fi
-
-# Fail early when the requested interpreter is missing; uv would otherwise
-# download one in the middle of the install.
-if ! uv python find "${BRIDGE_PYTHON:-3.14}" >/dev/null 2>&1; then
-  echo "install.sh: no usable Python ${BRIDGE_PYTHON:-3.14} (try: uv python install ${BRIDGE_PYTHON:-3.14})" >&2
-  exit 1
-fi
-
-# Do not clobber an existing install unless the operator asked to update it.
-if [ -d "$BRIDGE_HOME/venv" ] && [ "$UPDATE" -ne 1 ]; then
-  echo "install.sh: $BRIDGE_HOME already exists; re-run with --update to refresh it" >&2
-  exit 1
-fi
-
-mkdir -p "$BRIDGE_HOME"
-chmod 700 "$BRIDGE_HOME"
-
-# A dedicated venv keeps the bridge's dependencies isolated from Hermes.
-# Any interpreter the package supports (>=3.11) works; override with BRIDGE_PYTHON.
-# --update rebuilds the venv from scratch (uv refuses an existing one otherwise);
-# bridge.env and the state database live outside it and are kept.
-VENV_FLAGS=()
-if [ "$UPDATE" -eq 1 ]; then
-  VENV_FLAGS=(--clear)
-  # Keep the working venv until the new one is complete: a failed update
-  # (stale lock, network, disk full) restores it instead of leaving no CLI.
-  rm -rf "$BRIDGE_HOME/venv.previous"
-  if [ -d "$BRIDGE_HOME/venv" ]; then
-    # A failed copy aborts here, before anything touched the working venv.
-    cp -a "$BRIDGE_HOME/venv" "$BRIDGE_HOME/venv.previous"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+if [ -n "${ORSIK_BINARY:-}" ]; then
+  [ -f "$ORSIK_BINARY" ] && [ -x "$ORSIK_BINARY" ] \
+    || { echo "install.sh: ORSIK_BINARY is not an executable file" >&2; exit 1; }
+  cp "$ORSIK_BINARY" "$WORK/orsik-mobile-bridge"
+  echo "Using the local binary $ORSIK_BINARY"
+else
+  for tool in curl sha256sum tar; do
+    command -v "$tool" >/dev/null 2>&1 || { echo "install.sh: $tool is required" >&2; exit 1; }
+  done
+  case "$(uname -m)" in
+    x86_64) ASSET="orsik-mobile-bridge-x86_64-linux.tar.gz" ;;
+    *) echo "install.sh: no prebuilt bridge for $(uname -m); build one (cargo build --release in bridge-rs) and set ORSIK_BINARY" >&2; exit 1 ;;
+  esac
+  TAG="${ORSIK_TAG:-}"
+  if [ -z "$TAG" ]; then
+    TAG="$(git -C "$SRC" describe --tags --exact-match HEAD 2>/dev/null || true)"
   fi
-  restore_venv() {
-    if [ -d "$BRIDGE_HOME/venv.previous" ]; then
-      rm -rf "$BRIDGE_HOME/venv"
-      mv "$BRIDGE_HOME/venv.previous" "$BRIDGE_HOME/venv"
-      echo "install.sh: update failed; the previous venv was restored" >&2
-    fi
-  }
-  # Armed only after the backup is complete; also on Ctrl-C/TERM.
-  trap restore_venv ERR
-  trap 'restore_venv; exit 130' INT TERM
+  [ -n "$TAG" ] || { echo "install.sh: $SRC is not a release checkout; set ORSIK_TAG" >&2; exit 1; }
+  case "$TAG" in
+    *[!A-Za-z0-9._-]*) echo "install.sh: unexpected tag name" >&2; exit 1 ;;
+  esac
+  echo "Downloading the bridge of release $TAG"
+  for file in "$ASSET" "$ASSET.sha256"; do
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 0 --max-time 300 \
+      -o "$WORK/$file" "$RELEASES/$TAG/$file" \
+      || { echo "install.sh: could not download $file of $TAG (is the release published?)" >&2; exit 1; }
+  done
+  # Exactly one line for this asset; any mismatch stops the install.
+  grep -xE "[0-9a-f]{64}  $ASSET" "$WORK/$ASSET.sha256" >"$WORK/checksum" \
+    && [ "$(wc -l <"$WORK/checksum")" -eq 1 ] \
+    || { echo "install.sh: $ASSET.sha256 is malformed" >&2; exit 1; }
+  ( cd "$WORK" && sha256sum --check --quiet --strict checksum ) \
+    || { echo "install.sh: checksum mismatch for $ASSET; nothing was installed" >&2; exit 1; }
+  tar -xzf "$WORK/$ASSET" -C "$WORK" --no-same-owner --no-same-permissions orsik-mobile-bridge
 fi
-uv venv "${VENV_FLAGS[@]}" --python "${BRIDGE_PYTHON:-3.14}" "$BRIDGE_HOME/venv"
+chmod 700 "$WORK/orsik-mobile-bridge"
+# The new binary must run on this host before it replaces anything.
+"$WORK/orsik-mobile-bridge" admin --help >/dev/null 2>&1 \
+  || { echo "install.sh: the new binary does not run on this host; nothing was installed" >&2; exit 1; }
 
-# Dependencies come from the frozen lockfile, verified against its hashes
-# (--require-hashes). The bridge itself is installed last, with --no-deps, so
-# nothing outside the lock can slip in.
-REQ="$(mktemp)"
-trap 'rm -f "$REQ"' EXIT
-uv export --project "$SRC" --frozen --no-dev --no-emit-project --format requirements.txt -o "$REQ"
-uv pip install --python "$BRIDGE_HOME/venv" --require-hashes -r "$REQ"
-uv pip install --python "$BRIDGE_HOME/venv" --no-deps "$SRC"
-# Wheels may preserve a group-writable checkout's mode. The local updater
-# only executes its private, owned copy of the packaged bootstrap.
-chmod 600 "$BRIDGE_HOME/venv/share/orsik-mobile-bridge/install-bridge.sh"
-trap - ERR INT TERM
-rm -rf "$BRIDGE_HOME/venv.previous"
+mkdir -p "$BRIDGE_HOME/bin"
+chmod 700 "$BRIDGE_HOME" "$BRIDGE_HOME/bin"
+# The working binary stays as the rollback target until the next update.
+if [ -x "$BIN" ]; then
+  cp -p "$BIN" "$BIN.previous"
+fi
+cp "$WORK/orsik-mobile-bridge" "$BIN.new"
+chmod 700 "$BIN.new"
+mv -f "$BIN.new" "$BIN"
 
 # BEGIN OMB SHORTCUT
 install_omb_shortcut() {
   local shortcut_dir="$HOME/.local/bin"
   local shortcut="$shortcut_dir/omb"
   if ! mkdir -p "$shortcut_dir"; then
-    echo "Could not create omb shortcut; use $BRIDGE_HOME/venv/bin/omb setup" >&2
+    echo "Could not create omb shortcut; use $BIN setup" >&2
     return 0
   fi
+  # The link of an earlier (Python) install of this BRIDGE_HOME is replaced.
+  if [ -L "$shortcut" ] && [ "$(readlink "$shortcut")" = "$BRIDGE_HOME/venv/bin/omb" ]; then
+    rm -f "$shortcut"
+  fi
   if [ ! -e "$shortcut" ] && [ ! -L "$shortcut" ]; then
-    if ! ln -s "$BRIDGE_HOME/venv/bin/omb" "$shortcut"; then
-      echo "Could not create omb shortcut; use $BRIDGE_HOME/venv/bin/omb setup" >&2
+    if ! ln -s "$BIN" "$shortcut"; then
+      echo "Could not create omb shortcut; use $BIN setup" >&2
     fi
-  elif [ ! -L "$shortcut" ] || [ "$(readlink "$shortcut")" != "$BRIDGE_HOME/venv/bin/omb" ]; then
-    echo "Existing $shortcut kept; use $BRIDGE_HOME/venv/bin/omb setup" >&2
+  elif [ ! -L "$shortcut" ] || [ "$(readlink "$shortcut")" != "$BIN" ]; then
+    echo "Existing $shortcut kept; use $BIN setup" >&2
   fi
 }
 # END OMB SHORTCUT
@@ -505,7 +487,7 @@ After=network-online.target
 [Service]
 Type=simple
 Environment=BRIDGE_ENV_FILE=$ENV
-ExecStart=$BRIDGE_HOME/venv/bin/orsik-mobile-bridge
+ExecStart=$BIN
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
@@ -525,13 +507,17 @@ fi
 
 echo
 echo "Installed into $BRIDGE_HOME."
+if [ -d "$BRIDGE_HOME/venv" ]; then
+  echo "The Python virtual environment $BRIDGE_HOME/venv is no longer used;"
+  echo "remove it once the new bridge runs: rm -rf \"$BRIDGE_HOME/venv\""
+fi
 echo "Next steps:"
 echo "  1. Edit $ENV (Hermes env path, public base URL)."
 install_omb_shortcut
 echo "  Local settings menu: omb setup (ensure \$HOME/.local/bin is on PATH)"
-echo "  Or directly: $BRIDGE_HOME/venv/bin/omb setup"
-echo "  2. Issue a pairing code:  BRIDGE_ENV_FILE=$ENV $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code"
-echo "  3. Start the bridge:      BRIDGE_ENV_FILE=$ENV $BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
+echo "  Or directly: $BIN setup"
+echo "  2. Issue a pairing code:  BRIDGE_ENV_FILE=$ENV $BIN admin pairing-code"
+echo "  3. Start the bridge:      BRIDGE_ENV_FILE=$ENV $BIN"
 echo "     or (with --systemd):   systemctl --user start $UNIT_NAME"
 echo "  4. Verify the setup:     $0 --check"
-echo "Rollback: $0 --uninstall && rm -rf $BRIDGE_HOME"
+echo "Rollback: $0 --rollback (previous binary) or $0 --uninstall && rm -rf $BRIDGE_HOME"

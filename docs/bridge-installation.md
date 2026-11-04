@@ -1,6 +1,6 @@
 # Orsik Mobile Bridge – Installation & Operation
 
-As of: 2026-10-10. Target path: **fresh, unmodified official Hermes installation**
+As of: 2026-11-04 (Rust bridge). Target path: **fresh, unmodified official Hermes installation**
 → install bridge → provide private HTTPS → create pairing → scan QR/deep link
 → use chat. No Hermes fork, no core patches, no public port.
 
@@ -12,7 +12,8 @@ As of: 2026-10-10. Target path: **fresh, unmodified official Hermes installation
   `API_SERVER_KEY` in a 0600 env.
 - A private HTTPS access path to the server (see §4): Tailscale Serve,
   WireGuard+reverse proxy or LAN with a valid certificate.
-- `uv` and a Python ≥ 3.11 (bridge venv separate from the Hermes venv).
+- `git`, `curl`, `sha256sum` and `tar` on an x86_64 Linux host. The bridge is
+  one prebuilt binary; it needs no Python, no `uv` and no compiler.
 - **Approval mode `manual`** in the `config.yaml` of the Hermes home behind the
   bridge (`approvals:` / `mode: manual`). With the core default `smart`, a
   helper LLM approves dangerous commands classified as harmless without
@@ -40,21 +41,33 @@ cd ~/OrsikRelay && git checkout "$(git describe --tags --abbrev=0)"
 bridge/install.sh [--update] [--systemd] [/path/to/bridge/source]
 ```
 
-- Creates `$BRIDGE_HOME` (default `~/.local/orsik-mobile-bridge`, 0700) and a
-  **dedicated venv**; installs the dependencies **hash-pinned** from
-  the checked-in `bridge/uv.lock` (`uv export --frozen` with
-  `--require-hashes`, then the bridge itself with `--no-deps`), **no**
-  `curl | bash`. If `uv.lock` is missing, the installer aborts.
+- Creates `$BRIDGE_HOME` (default `~/.local/orsik-mobile-bridge`, 0700) and
+  installs the **prebuilt binary of the checked-out release tag** as
+  `$BRIDGE_HOME/bin/orsik-mobile-bridge`. It downloads
+  `orsik-mobile-bridge-x86_64-linux.tar.gz` and its `.sha256` from the GitHub
+  release of that tag and aborts before any change when the checksum does not
+  match. The new binary must also run on the host before it replaces the old
+  one.
 - If an installation already exists, `install.sh` aborts without `--update`
-  (existing installations/ports are not overwritten).
+  (existing installations/ports are not overwritten). `--update` keeps the
+  previous binary as `bin/orsik-mobile-bridge.previous` for `--rollback`.
+- `ORSIK_BINARY=/path/to/orsik-mobile-bridge` installs a binary you built
+  yourself (`cargo build --release --locked` in `bridge-rs/`) instead of the
+  release download; other architectures than x86_64 need this.
 - Writes `$BRIDGE_HOME/bridge.env` (0600) as a template.
 
-This makes the installation reproducible: the same source state delivers exactly the same
-dependency versions on any day and on any machine. Dependencies
-change only deliberately — `uv lock --upgrade-package <pkg>` plus review of the
-lock diff (`uv lock --check` in CI fails on an outdated lock). CI
-additionally builds a wheel, `SHA256SUMS` and a CycloneDX SBOM and stores them as
-the artifact `bridge-dist`.
+The release workflow (`.github/workflows/bridge-release.yml`) builds the binary
+from the tag with the locked dependencies (`bridge-rs/Cargo.lock`), runs the
+unit and installer tests, and attaches the archive, its checksum and a GitHub
+build-provenance attestation to the release. To check where a downloaded
+archive came from:
+
+```sh
+gh attestation verify orsik-mobile-bridge-x86_64-linux.tar.gz --repo exclude-barrier/OrsikRelay
+```
+
+Dependencies change only deliberately (`cargo update -p <crate>` plus a review
+of the `Cargo.lock` diff); CI builds with `--locked`.
 
 `bridge.env`:
 
@@ -96,7 +109,7 @@ as soon as one check is FAIL, otherwise 0; at the end `PREFLIGHT: PASS` or
 |---|---|
 | `home_mode` | `$BRIDGE_HOME` exists, mode 700 |
 | `env_mode` | `bridge.env` exists, mode 600 |
-| `venv` | `$BRIDGE_HOME/venv/bin/orsik-mobile-bridge` executable |
+| `binary` | `$BRIDGE_HOME/bin/orsik-mobile-bridge` executable |
 | `bind` | `BRIDGE_BIND` empty or any loopback IP literal (`127.0.0.0/8`, `::1`), like the bridge |
 | `upstream` | `BRIDGE_UPSTREAM` (default `http://127.0.0.1:8642`, the Hermes default port) matches `^http://(127.x.x.x\|[::1]):port$` |
 | `hermes_env` | `BRIDGE_HERMES_ENV` set, file 0600, with `API_SERVER_KEY=…` |
@@ -104,11 +117,11 @@ as soon as one check is FAIL, otherwise 0; at the end `PREFLIGHT: PASS` or
 | `public_base_url` | empty → WARN (no deep link/QR); otherwise it must start with `https://` |
 | `port` | `BRIDGE_PORT` (default 9842): `ss` missing → WARN; listener on loopback/`0.0.0.0` → WARN ("port in use") |
 | `hermes_health` | `curl` to `$UPSTREAM/health` == 200; only if `upstream` was OK, otherwise WARN |
+| `config` | the installed binary runs its own start-up checks (`orsik-mobile-bridge check-config`): bind, port, upstream, service list, terminal tools, files root, writable store directory |
 
-In addition, the normal installation mode checks **before** any change whether `uv`
-is present and `uv python find ${BRIDGE_PYTHON:-3.14}` works; otherwise it
-aborts with a note. After an installation it reminds you of
-`./install.sh --check`.
+In addition, the normal installation mode checks **before** any change that the
+download tools are present and the checksum matches; otherwise it aborts with
+a note. After an installation it reminds you of `./install.sh --check`.
 
 ## 2b. Optional: server terminal
 
@@ -174,7 +187,7 @@ the store are the authorization boundary; devices never get an admin path.
 
 ```sh
 BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
-  $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code \
+  $BRIDGE_HOME/bin/orsik-mobile-bridge admin pairing-code \
   --base-url https://<host>
 # -> "Pairing code: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX  (valid 300s, single-use)"
 # -> "Deep link:    orsik://pair?server=...&code=..."
@@ -209,7 +222,7 @@ checks certificate + contract; it aborts on an invalid certificate.
 Without systemd:
 
 ```sh
-BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/venv/bin/orsik-mobile-bridge
+BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/bin/orsik-mobile-bridge
 ```
 
 With `--systemd` (user unit `orsik-mobile-bridge.service`):
@@ -236,17 +249,16 @@ restart, available through **Restart bridge** with a separate confirmation.
 Use `--language de` or `--language en`, or change the language in the menu.
 German uses proper Unicode umlauts. English is the default. Save a language
 change in setup to persist `OMB_LANGUAGE=de|en` for both setup and update; a
-language-only change takes effect without a service restart. No key material is displayed or edited. The UI uses
-the locked prompt-toolkit dependency for keyboard input and terminal resizing.
+language-only change takes effect without a service restart. No key material is displayed or edited. The
+menu is part of the bridge binary (`omb` is a link to it).
 
 ## 6. Update / Rollback / Backup / Restore / Uninstall
 
 With the local administration CLI installed, run `omb update` and confirm
 the prompt. It first checks the latest tagged release; an already installed
-commit is reported without reinstalling or restarting. Older installations
-without an `installed-commit` marker are compared with the release package and
-installer files. Matching installations are recognized without reinstalling. A failed check does not start an installation.
-It uses the packaged bootstrap installer and a fresh temporary
+commit is reported without reinstalling or restarting. A failed check does not
+start an installation. It uses the bootstrap installer built into the binary
+and a fresh temporary
 checkout of the official release; your working checkout remains untouched.
 The installer backs up the store and preserves `bridge.env` and device grants.
 Use `omb update --no-service` to skip systemd changes, or `--yes` for an
@@ -256,7 +268,7 @@ is required; externally located env files need the manual procedure below.
 The CLI becomes available after an initial update through the regular installer.
 
 - **Update:** back up the store (see below), switch the checkout to the new
-  release and rebuild the venv; `bridge.env` and the store are retained,
+  release and replace the binary; `bridge.env` and the store are retained,
   pairing/tokens survive:
 
   ```sh
@@ -267,9 +279,19 @@ The CLI becomes available after an initial update through the regular installer.
   bridge/install.sh --check
   ```
 
-  `--update` rebuilds the venv from scratch (`uv venv --clear`).
+- **Rollback:** `bridge/install.sh --rollback` puts the previous binary back
+  and restarts the unit; the replaced binary becomes the new `.previous`. The
+  store is not touched. A store that a newer bridge already migrated needs its
+  pre-migration backup as well (see below).
+- **From the Python bridge (up to alpha.19):** `omb update` of the Python
+  bridge installs a binary release like any other update: it backs up the
+  store with the old bridge, installs the binary, points the unit and the
+  `omb` link at it and keeps the old `venv/` untouched. The store and every
+  paired device stay valid (same file, same schema). Once the binary runs,
+  remove the old environment with `rm -rf $BRIDGE_HOME/venv`. To go back
+  before that, run `install.sh` of the old release with `--update`.
 - **Uninstall:** `./install.sh --uninstall` (stop/remove the unit) and
-  `rm -rf $BRIDGE_HOME` (venv + store). Hermes and its models remain untouched.
+  `rm -rf $BRIDGE_HOME` (binary + store). Hermes and its models remain untouched.
 
 ### Backup / Restore
 
@@ -278,7 +300,7 @@ Operator backup of the store (atomic via a temp file + hardlink, target
 
 ```sh
 BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env \
-  $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin backup $BRIDGE_HOME/state.db.bak
+  $BRIDGE_HOME/bin/orsik-mobile-bridge admin backup $BRIDGE_HOME/state.db.bak
 # -> "backup written: /home/USER/.local/orsik-mobile-bridge/state.db.bak"
 # -> on error: "error: ..." on stderr, exit 1
 ```

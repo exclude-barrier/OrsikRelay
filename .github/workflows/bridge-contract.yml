@@ -77,6 +77,10 @@ jobs:
       - name: Unit tests
         working-directory: bridge-rs
         run: cargo test --locked -p orsik-mobile-bridge
+      - name: Installer checks (install, check, update, rollback, checksum)
+        run: |
+          cargo build --locked --manifest-path bridge-rs/Cargo.toml -p orsik-mobile-bridge
+          bash bridge-rs/tests/install-scripts.sh bridge-rs/target/debug/orsik-mobile-bridge
       - name: Contract suite against the Rust bridge
         working-directory: bridge-rs
         env:

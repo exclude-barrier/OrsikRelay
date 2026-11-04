@@ -7,7 +7,8 @@
 # Run it as the user that runs Hermes, NOT as root. It
 #   - checks Hermes (api_server on loopback, API key file, approvals: manual),
 #   - clones (or updates) the latest release into ~/OrsikRelay,
-#   - installs the bridge with bridge/install.sh (hash-pinned dependencies),
+#   - installs the release's prebuilt bridge binary with bridge/install.sh
+#     (verified against the release's checksum; no Python needed),
 #   - writes ~/.local/orsik-mobile-bridge/bridge.env,
 #   - starts the systemd user service,
 #   - and prints the one root command for private HTTPS (tailscale serve).
@@ -17,8 +18,7 @@
 # Options: --pair        print a pairing code at the end
 #          --no-service  install and check only, do not touch systemd (tests)
 # Environment: HERMES_HOME (default ~/.hermes), ORSIK_DIR (default ~/OrsikRelay),
-#              ORSIK_REF (release tag to install, default: the latest tag),
-#              BRIDGE_PYTHON (default: 3.14 if available, else the newest 3.11+).
+#              ORSIK_REF (release tag to install, default: the latest tag).
 set -euo pipefail
 
 REPO_URL="https://github.com/exclude-barrier/OrsikRelay.git"
@@ -100,10 +100,9 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # --- 1. Prerequisites -------------------------------------------------------
 say "Checking prerequisites"
-for tool in git curl; do
+for tool in git curl sha256sum tar; do
   command -v "$tool" >/dev/null || die "$tool is missing; install it first"
 done
-command -v uv >/dev/null || die "uv is missing; install it first, e.g.: sudo apt install pipx && pipx install uv"
 
 HERMES_ENV="$HERMES_HOME/.env"
 [ -f "$HERMES_ENV" ] || die "no Hermes env file at $HERMES_ENV (set HERMES_HOME)"
@@ -123,15 +122,6 @@ if [ -f "$CONFIG" ] && awk '/^approvals:/{f=1;next} f&&/^[^ ]/{f=0} f&&/^ +mode:
 else
   die "set 'approvals: mode: manual' in $CONFIG first (otherwise Hermes may approve dangerous commands without asking)"
 fi
-
-if [ -z "${BRIDGE_PYTHON:-}" ]; then
-  for v in 3.14 3.13 3.12 3.11; do
-    if uv python find "$v" >/dev/null 2>&1; then BRIDGE_PYTHON="$v"; break; fi
-  done
-fi
-[ -n "${BRIDGE_PYTHON:-}" ] || die "no Python 3.11 or newer found (try: uv python install 3.14)"
-export BRIDGE_PYTHON
-echo "Python: $BRIDGE_PYTHON"
 
 if command -v loginctl >/dev/null && [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != yes ]; then
   echo "Note: without lingering the bridge stops when you log out. Fix once with: sudo loginctl enable-linger $USER"
@@ -164,7 +154,14 @@ echo "Release: $REF"
 
 # --- 3. Install or update -----------------------------------------------------
 UPDATE=()
-if [ -x "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" ]; then
+# The binary of this install, or the Python bridge an earlier release left.
+INSTALLED_CLI=""
+if [ -x "$BRIDGE_HOME/bin/orsik-mobile-bridge" ]; then
+  INSTALLED_CLI="$BRIDGE_HOME/bin/orsik-mobile-bridge"
+elif [ -x "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" ]; then
+  INSTALLED_CLI="$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
+fi
+if [ -n "$INSTALLED_CLI" ]; then
   say "Updating the existing install"
   # The backup runs the OLD installed binary, whose env parser may keep quotes
   # and ignore `export`. Resolve BRIDGE_STATE_DB here, with the bridge's rules,
@@ -185,7 +182,7 @@ if [ -x "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" ]; then
       BACKUP="$BRIDGE_HOME/state.db.bak-$(date +%Y%m%d-%H%M%S)"
       if ! BRIDGE_ENV_FILE= BRIDGE_STATE_DB="$STATE_DB" \
         BRIDGE_HERMES_ENV="$BACKUP_HERMES_ENV" \
-        "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin backup "$BACKUP"; then
+        "$INSTALLED_CLI" admin backup "$BACKUP"; then
         die "could not back up the device store at $STATE_DB; aborting the update"
       fi
     else
@@ -200,7 +197,9 @@ SYSTEMD=()
 [ "$SERVICE" -eq 1 ] && SYSTEMD=(--systemd)
 # An interrupted replacement must never leave a stale "already current" marker.
 rm -f "$BRIDGE_HOME/installed-commit"
-bash "$ORSIK_DIR/bridge/install.sh" "${UPDATE[@]}" "${SYSTEMD[@]}"
+ORSIK_TAG="$(git -C "$ORSIK_DIR" describe --tags --exact-match HEAD 2>/dev/null || true)"
+[ -n "$ORSIK_TAG" ] || die "$REF is not a release tag; only releases can be installed"
+ORSIK_TAG="$ORSIK_TAG" bash "$ORSIK_DIR/bridge/install.sh" "${UPDATE[@]}" "${SYSTEMD[@]}"
 
 # --- 4. Configuration ---------------------------------------------------------
 say "Writing $ENV_FILE"
@@ -250,7 +249,12 @@ set_env BRIDGE_HERMES_ENV "$HERMES_ENV"
 set_default BRIDGE_STATE_DB "$BRIDGE_HOME/state.db"
 PUBLIC_URL="$(env_value "$ENV_FILE" BRIDGE_PUBLIC_BASE_URL)"
 if [ -z "$PUBLIC_URL" ] && command -v tailscale >/dev/null; then
-  name="$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
+  # The first DNSName in the status JSON belongs to "Self".
+  name="$(tailscale status --json 2>/dev/null | sed -n 's/^[[:space:]]*"DNSName":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1 || true)"
+  name="${name%.}"
+  case "$name" in
+    *[!A-Za-z0-9.-]*) name="" ;;
+  esac
   [ -n "$name" ] && PUBLIC_URL="https://$name:8443"
 fi
 [ -n "$PUBLIC_URL" ] && set_env BRIDGE_PUBLIC_BASE_URL "$PUBLIC_URL"
@@ -293,9 +297,9 @@ if [[ "$TERMINAL_CFG" =~ ^[[:space:]]*1[[:space:]]*$ ]]; then
   echo
   echo "Terminal access requires a separate local grant for each device, including previously paired devices."
   echo "Review the device list and grant only the intended DEVICE_ID:"
-  printf '  BRIDGE_ENV_FILE=%q %q admin list-devices\n' "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
-  printf '  BRIDGE_ENV_FILE=%q %q admin grant-terminal DEVICE_ID\n' "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
-  printf '  BRIDGE_ENV_FILE=%q %q admin revoke-terminal DEVICE_ID\n' "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge"
+  printf '  BRIDGE_ENV_FILE=%q %q admin list-devices\n' "$ENV_FILE" "$BRIDGE_HOME/bin/orsik-mobile-bridge"
+  printf '  BRIDGE_ENV_FILE=%q %q admin grant-terminal DEVICE_ID\n' "$ENV_FILE" "$BRIDGE_HOME/bin/orsik-mobile-bridge"
+  printf '  BRIDGE_ENV_FILE=%q %q admin revoke-terminal DEVICE_ID\n' "$ENV_FILE" "$BRIDGE_HOME/bin/orsik-mobile-bridge"
 fi
 if [ -n "$PUBLIC_URL" ]; then
   cat <<EOF
@@ -316,10 +320,10 @@ if ! command -v qrencode >/dev/null 2>&1; then
   echo "Install it with: $(qr_install_command)"
 fi
 printf -v PAIR_CMD 'BRIDGE_ENV_FILE=%q %q admin pairing-code --base-url %q' \
-  "$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" "${PUBLIC_URL:-<https-url>}"
+  "$ENV_FILE" "$BRIDGE_HOME/bin/orsik-mobile-bridge" "${PUBLIC_URL:-<https-url>}"
 if [ "$PAIR" -eq 1 ] && [ -n "$PUBLIC_URL" ]; then
   say "Pairing code (works once, for 5 minutes)"
-  BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/venv/bin/orsik-mobile-bridge" admin pairing-code --base-url "$PUBLIC_URL"
+  BRIDGE_ENV_FILE="$ENV_FILE" "$BRIDGE_HOME/bin/orsik-mobile-bridge" admin pairing-code --base-url "$PUBLIC_URL"
 elif [ "$PAIR" -eq 1 ]; then
   echo
   echo "No public HTTPS URL is known yet, so no pairing link or QR was printed."

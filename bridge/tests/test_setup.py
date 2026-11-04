@@ -87,19 +87,6 @@ class SetupTest(unittest.TestCase):
             settings = setup.SettingsFile(setup.config_path(None), {})
             self.assertEqual(settings.values['BRIDGE_HOME'], str(self.home))
 
-    def test_installer_shortcut_does_not_replace_another_command(self):
-        source = (Path(__file__).parent.parent / 'install.sh').read_text()
-        function = source.split('# BEGIN OMB SHORTCUT\n', 1)[1].split('# END OMB SHORTCUT', 1)[0]
-        env = {**os.environ, 'HOME': str(self.root), 'BRIDGE_HOME': str(self.home)}
-        bin_path = self.root / '.local' / 'bin'
-        subprocess.run(['bash', '-c', function + '\ninstall_omb_shortcut'], env=env, check=True, capture_output=True)
-        link = bin_path / 'omb'
-        self.assertEqual(os.readlink(link), str(self.home / 'venv' / 'bin' / 'omb'))
-        link.unlink()
-        link.write_text('foreign command')
-        subprocess.run(['bash', '-c', function + '\ninstall_omb_shortcut'], env=env, check=True, capture_output=True)
-        self.assertEqual(link.read_text(), 'foreign command')
-
     def test_empty_home_override_still_uses_adjacent_installation(self):
         with mock.patch.object(setup.sys, 'prefix', str(self.home / 'venv')):
             settings = setup.SettingsFile(self.path, {'BRIDGE_HOME': ''})

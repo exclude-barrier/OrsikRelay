@@ -127,10 +127,20 @@ pub fn validate_port(raw: &str) -> Result<u16, Refusal> {
     }
 }
 
+/// Python `ipaddress` loopback: 127.0.0.0/8, ::1 and their IPv4-mapped form.
+pub fn is_loopback(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_loopback(),
+        IpAddr::V6(v6) => {
+            v6.is_loopback() || v6.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback())
+        }
+    }
+}
+
 /// Only literal loopback IPs; a name like `localhost` is refused.
 pub fn validate_bind(bind: &str) -> Result<IpAddr, Refusal> {
     match bind.parse::<IpAddr>() {
-        Ok(ip) if ip.is_loopback() => Ok(ip),
+        Ok(ip) if is_loopback(ip) => Ok(ip),
         _ => Err(Refusal::new(BIND_ERROR)),
     }
 }
@@ -152,7 +162,7 @@ pub fn validate_upstream(upstream: &str) -> Result<String, Refusal> {
         rest.rsplit_once(':').ok_or_else(refuse)?
     };
     let ip: IpAddr = host.parse().map_err(|_| refuse())?;
-    if !ip.is_loopback() || port.is_empty() || !port.chars().all(|c| c.is_ascii_digit()) {
+    if !is_loopback(ip) || port.is_empty() || !port.chars().all(|c| c.is_ascii_digit()) {
         return Err(refuse());
     }
     match port.parse::<u32>() {
@@ -380,6 +390,9 @@ mod tests {
     fn the_bind_must_be_a_loopback_literal() {
         assert!(validate_bind("127.0.0.1").is_ok());
         assert!(validate_bind("::1").is_ok());
+        assert!(validate_bind("0000::1").is_ok());
+        assert!(validate_bind("::ffff:127.0.0.1").is_ok());
+        assert!(validate_bind("::ffff:8.8.8.8").is_err());
         assert!(validate_bind("localhost").is_err());
         assert!(validate_bind("0.0.0.0").is_err());
     }

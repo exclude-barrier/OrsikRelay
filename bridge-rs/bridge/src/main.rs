@@ -10,13 +10,17 @@ mod core;
 mod files;
 mod history;
 mod host;
+mod i18n;
 mod pairing;
 mod routes;
 mod runhub;
 mod server;
+mod settings;
 mod sse;
 mod store;
 mod terminal;
+mod tui;
+mod update;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -40,10 +44,15 @@ fn main() {
             args.remove(0);
             std::process::exit(admin::main(args));
         }
-        Some("setup") | Some("update") => {
-            eprintln!("the installer front ends are not part of this build yet");
-            std::process::exit(2);
+        Some("setup") => {
+            args.remove(0);
+            std::process::exit(tui::setup_main(args));
         }
+        Some("update") => {
+            args.remove(0);
+            std::process::exit(update::main(args));
+        }
+        Some("check-config") => std::process::exit(check_config()),
         _ => {}
     }
     tracing_subscriber::fmt()
@@ -121,6 +130,61 @@ fn main() {
         .await
         .ok();
     });
+}
+
+/// The start-up checks without the Hermes key and without listening, plus
+/// a writable store directory (used by `install.sh --check`).
+fn check_config() -> i32 {
+    let checks = || -> Result<(), Refusal> {
+        let env = config::load_env()?;
+        let value = |key: &str, default: &'static str| {
+            env.get(key)
+                .filter(|v| !v.is_empty())
+                .cloned()
+                .unwrap_or(default.into())
+        };
+        config::validate_bind(&value("BRIDGE_BIND", "127.0.0.1"))?;
+        config::validate_port(&value("BRIDGE_PORT", "9842"))?;
+        config::validate_upstream(
+            env.get("BRIDGE_UPSTREAM")
+                .map(String::as_str)
+                .unwrap_or("http://127.0.0.1:8642"),
+        )?;
+        config::parse_services(env.get("BRIDGE_HOST_SERVICES"))?;
+        config::terminal_command(&env)?;
+        config::files_root(&env)?;
+        let db = config::state_db_path(&env);
+        let db = if db.is_absolute() {
+            db
+        } else {
+            settings::expand_user("~").join(db)
+        };
+        let parent = db
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_default();
+        let mut probe = parent.clone();
+        while !probe.exists() {
+            if !probe.pop() {
+                break;
+            }
+        }
+        let c = std::ffi::CString::new(probe.as_os_str().as_encoded_bytes()).unwrap_or_default();
+        if unsafe { libc::access(c.as_ptr(), libc::W_OK | libc::X_OK) } != 0 {
+            return Err(Refusal(format!(
+                "BRIDGE_STATE_DB is not writable: {}",
+                parent.display()
+            )));
+        }
+        Ok(())
+    };
+    match checks() {
+        Ok(()) => 0,
+        Err(Refusal(message)) => {
+            eprintln!("{message}");
+            1
+        }
+    }
 }
 
 /// `http://host:port`, never user info (the upstream is validated without it anyway).

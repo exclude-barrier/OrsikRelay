@@ -230,10 +230,3 @@ class UpdateTest(unittest.TestCase):
             self.invoke(['--help'])
         self.assertEqual(result.exception.code, 0)
 
-    def test_regular_installer_hardens_packaged_bootstrap_mode(self):
-        installer = (Path(__file__).parent.parent / 'install.sh').read_text()
-        command = next(line for line in installer.splitlines()
-                       if line.startswith('chmod 600 ') and '/share/orsik-mobile-bridge/install-bridge.sh' in line)
-        self.script.chmod(0o775)
-        subprocess.run(['bash', '-c', command], env={**os.environ, 'BRIDGE_HOME': str(self.home)}, check=True)
-        self.assertEqual(self.script.stat().st_mode & 0o777, 0o600)

@@ -16,6 +16,7 @@ http-body-util = "0.1.5"
 libc = "0.2.191"
 percent-encoding = "2.3.2"
 rand = "0.10.3"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["stream"] }
 rusqlite = { version = "0.41.1", features = ["bundled", "backup"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
