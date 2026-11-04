@@ -220,9 +220,18 @@ async fn fake_handler(State(state): State<Arc<Mutex<FakeState>>>, request: Reque
     }
 }
 
+/// The Python bridge, whatever bridge is under test (store compatibility).
+fn python_command() -> (String, Vec<String>) {
+    let python = std::env::var("BRIDGE_PY").unwrap_or_else(|_| "python3".into());
+    (python, vec!["-m".into(), "orsik_mobile_bridge".into()])
+}
+
 /// How to start the bridge under test.
 fn bridge_command() -> (String, Vec<String>) {
-    if let Ok(cmd) = std::env::var("BRIDGE_CMD") {
+    if let Some(cmd) = std::env::var("BRIDGE_CMD")
+        .ok()
+        .filter(|c| !c.trim().is_empty())
+    {
         let mut parts = cmd.split_whitespace().map(str::to_string);
         let program = parts.next().expect("BRIDGE_CMD is empty");
         return (program, parts.collect());
@@ -253,6 +262,8 @@ fn free_port() -> u16 {
 #[derive(Clone)]
 pub struct BridgeConfig {
     pub env: HashMap<String, String>,
+    /// Start the Python bridge even when another one is under test.
+    pub python: bool,
 }
 
 impl BridgeConfig {
@@ -269,7 +280,13 @@ impl BridgeConfig {
         // Fixed, harmless unit names so the host metrics never ask for
         // services of the machine running the suite by surprise.
         env.insert("BRIDGE_HOST_SERVICES".into(), "contract-test-unit".into());
-        BridgeConfig { env }
+        BridgeConfig { env, python: false }
+    }
+
+    /// The same settings for the Python bridge (store compatibility checks).
+    pub fn python(mut self) -> Self {
+        self.python = true;
+        self
     }
 
     pub fn set(mut self, key: &str, value: &str) -> Self {
@@ -284,7 +301,11 @@ impl BridgeConfig {
 }
 
 fn base_command(config: &BridgeConfig) -> Command {
-    let (program, args) = bridge_command();
+    let (program, args) = if config.python {
+        python_command()
+    } else {
+        bridge_command()
+    };
     let mut command = Command::new(program);
     command.args(args);
     command.env_clear();
@@ -329,6 +350,17 @@ pub struct Bridge {
 
 impl Bridge {
     pub async fn start(config: BridgeConfig) -> Self {
+        // A port reported free can be taken by another listener before the
+        // bridge binds it; the bridge then exits and a fresh port is tried.
+        for _ in 0..3 {
+            if let Some(bridge) = Self::try_start(config.clone()).await {
+                return bridge;
+            }
+        }
+        panic!("bridge exited at start-up three times");
+    }
+
+    async fn try_start(config: BridgeConfig) -> Option<Self> {
         let port = free_port();
         let mut command = base_command(&config);
         command.env("BRIDGE_PORT", port.to_string());
@@ -346,16 +378,15 @@ impl Bridge {
             client,
         };
         for _ in 0..200 {
-            // Our own process must still run: a port taken by someone else
-            // would otherwise look like a started bridge.
-            if let Ok(Some(status)) = bridge.child.try_wait() {
-                panic!("bridge exited at start-up: {status}");
+            if let Ok(Some(_)) = bridge.child.try_wait() {
+                return None;
             }
-            if tokio::net::TcpStream::connect(("127.0.0.1", port))
-                .await
-                .is_ok()
+            // Only the bridge answers an anonymous capabilities read with its
+            // closed 401 envelope; another listener on the port does not.
+            if let Ok(response) = bridge.get("/v1/capabilities", None).send().await
+                && error_code(response).await == (401, "invalid_credentials".into())
             {
-                return bridge;
+                return Some(bridge);
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
