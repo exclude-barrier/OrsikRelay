@@ -36,7 +36,7 @@ class SessionListRepository(
             return SessionListResult.Failure(SessionListError.MissingProfile)
         }
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         }

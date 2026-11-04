@@ -1,0 +1,71 @@
+# Public ingress for the Orsik Mobile Bridge: HTTPS with mandatory client
+# certificates (mTLS) in front of the bridge's public listener.
+#
+# EXAMPLE ONLY. Nothing here is active until an operator installs Caddy,
+# replaces relay.example.org, issues the client CA (docs/public-ingress.md)
+# and opens port 443 on purpose. Read docs/public-ingress.md first.
+#
+# Two layers enforce the same policy:
+#   1. this allowlist (method + path) at the edge, and
+#   2. the bridge's public listener (BRIDGE_PUBLIC_PORT), which itself refuses
+#      pairing, approvals, terminal, files, projects and host data.
+# Everything else is answered 403 here and never reaches the bridge.
+
+(orsik_bridge) {
+	reverse_proxy 127.0.0.1:9843 {
+		# The bridge trusts Tailscale identity headers only from Tailscale
+		# Serve; a public client must never be able to send them.
+		header_up -Tailscale-User-Login
+		header_up -Tailscale-User-Name
+		header_up -Tailscale-User-Profile-Pic
+		# Server-sent events (chat stream) are relayed without buffering.
+		flush_interval -1
+	}
+}
+
+relay.example.org {
+	tls {
+		client_auth {
+			mode require_and_verify
+			trust_pool file /etc/caddy/orsik-client-ca.pem
+		}
+	}
+
+	# Same bound as the bridge (10 MB request bodies, image turns included).
+	request_body {
+		max_size 10MB
+	}
+
+	@public_read {
+		method GET HEAD
+		path_regexp ^/(health|v1/capabilities|v1/server|api/model/options|api/sessions(/[^/]+(/messages|/runs/[^/]+/stream)?)?|v1/runs/[^/]+)$
+	}
+	@public_write {
+		method POST
+		path_regexp ^/(v1/devices/self/revoke|api/sessions(/[^/]+/(chat/stream|fork|model))?|v1/runs/[^/]+/(stop|steer|resolve-unknown))$
+	}
+	@public_session_change {
+		method PATCH DELETE
+		path_regexp ^/api/sessions/[^/]+$
+	}
+
+	handle @public_read {
+		import orsik_bridge
+	}
+	handle @public_write {
+		import orsik_bridge
+	}
+	handle @public_session_change {
+		import orsik_bridge
+	}
+	handle {
+		respond 403
+	}
+
+	# Access log without credentials (Caddy redacts the Authorization header
+	# unless the global option log_credentials is turned on; keep it off).
+	log {
+		output file /var/log/caddy/orsik-relay.log
+		format json
+	}
+}

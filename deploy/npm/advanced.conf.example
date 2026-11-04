@@ -1,0 +1,39 @@
+# Nginx Proxy Manager: "Advanced" tab of the proxy host for the public
+# Orsik Relay address. EXAMPLE ONLY; see docs/public-ingress.md.
+#
+# Replace BRIDGE_PUBLIC_ADDRESS with BRIDGE_PUBLIC_BIND:BRIDGE_PUBLIC_PORT of
+# the bridge (e.g. 172.18.0.1:9843) and copy the client CA certificate to
+# /data/custom_ssl/orsik-client-ca.pem inside the NPM container.
+#
+# Because this block defines "location /", NPM drops its own default
+# location: everything not listed below is answered 403 here.
+
+# mTLS: only phones with a certificate from your own client CA.
+ssl_client_certificate /data/custom_ssl/orsik-client-ca.pem;
+ssl_verify_client on;
+ssl_verify_depth 1;
+
+# Same bound as the bridge (image turns included).
+client_max_body_size 10m;
+
+location / {
+    return 403;
+}
+
+# The public routes (the bridge enforces the same list and the methods).
+location ~ ^/(health|v1/(capabilities|server|devices/self/revoke|runs/[^/]+(/(stop|steer|resolve-unknown))?)|api/(model/options|sessions(/[^/]+(/(messages|chat/stream|fork|model|runs/[^/]+/stream))?)?))$ {
+    if ($request_method !~ ^(GET|HEAD|POST|PATCH|DELETE)$) {
+        return 403;
+    }
+    # The bridge trusts Tailscale identity headers only from Tailscale Serve.
+    proxy_set_header Tailscale-User-Login "";
+    proxy_set_header Tailscale-User-Name "";
+    proxy_set_header Tailscale-User-Profile-Pic "";
+    proxy_set_header Host $host;
+    proxy_http_version 1.1;
+    # Server-sent events (chat stream) without buffering, long runs.
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 600s;
+    proxy_pass http://BRIDGE_PUBLIC_ADDRESS;
+}

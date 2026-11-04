@@ -2,6 +2,8 @@ package io.github.excludebarrier.orsikrelay.data.profile
 
 import io.github.excludebarrier.orsikrelay.data.device.DeviceCredentialMetadataStore
 import io.github.excludebarrier.orsikrelay.domain.device.DeviceCredential
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionEndpoints
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionSettings
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
@@ -37,7 +39,8 @@ class ServerProfileRepository(
     private val selectionStore: ActiveServerSelectionStore? = null,
     private val deviceCredentialSaver: DeviceCredentialSaver? = null,
     private val deviceCredentialMetadataStore: DeviceCredentialMetadataStore? = null,
-    private val runApprovalCapabilityStore: RunApprovalCapabilityStore? = null
+    private val runApprovalCapabilityStore: RunApprovalCapabilityStore? = null,
+    private val endpoints: () -> ConnectionEndpoints = { ConnectionEndpoints.PAIRED_ONLY }
 ) : VerifiedProfileSaver, PairedProfileSaver {
 
     override fun saveVerified(draft: ProfileDraft): ServerProfile {
@@ -113,6 +116,24 @@ class ServerProfileRepository(
 
     fun get(profileId: String): ServerProfile? = repositoryCall {
         metadataStore.get(profileId)
+    }
+
+    /**
+     * The profile as a network call should use it: its base URL is the
+     * endpoint [ConnectionEndpoints] chose (the paired one, or the verified
+     * public one). Only for building requests, never for saving.
+     */
+    fun forConnection(profileId: String): ServerProfile? {
+        val profile = get(profileId) ?: return null
+        val baseUrl = endpoints().baseUrlFor(profile)
+        if (baseUrl == profile.baseUrl) return profile
+        return repositoryCall { ServerProfile.create(profile.id, profile.profileName, baseUrl) }
+    }
+
+    /** Replaces the connection settings of an existing profile (metadata only). */
+    fun updateConnection(profileId: String, settings: ConnectionSettings) = repositoryCall {
+        val profile = metadataStore.get(profileId) ?: throw ServerProfileRepositoryException()
+        metadataStore.save(profile.withConnection(settings))
     }
 
     fun list(): List<ServerProfile> = repositoryCall {

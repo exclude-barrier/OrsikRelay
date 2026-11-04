@@ -32,7 +32,7 @@ class SessionManageRepository(
     private inline fun <T> withTarget(profileId: String, fallback: T, block: (String, SecretValue) -> T): T {
         if (profileId.isBlank()) return fallback
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         } ?: return fallback

@@ -38,7 +38,7 @@ class FilesRepository(
     private inline fun <T> call(profileId: String, read: (String, SecretValue) -> FilesResult<T>): FilesResult<T> {
         if (profileId.isBlank()) return FilesResult.Failed
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         } ?: return FilesResult.Failed

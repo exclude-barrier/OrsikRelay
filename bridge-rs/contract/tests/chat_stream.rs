@@ -566,3 +566,33 @@ async fn a_revoked_device_loses_an_open_stream() {
         &text[text.len().saturating_sub(200)..]
     );
 }
+
+#[tokio::test]
+async fn a_cut_off_request_body_never_reaches_hermes() {
+    use tokio::io::AsyncWriteExt;
+    let (s, token) = paired().await;
+    s.hermes.reply("POST", STREAM, Reply::sse(&[]));
+    s.hermes
+        .reply("DELETE", "/api/sessions/s1", Reply::json(200, json!({})));
+    for (method, path) in [("POST", STREAM), ("DELETE", "/api/sessions/s1")] {
+        let mut socket = tokio::net::TcpStream::connect(("127.0.0.1", s.bridge.port))
+            .await
+            .unwrap();
+        let head = format!(
+            "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\n\
+             Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{{\"a\":"
+        );
+        socket.write_all(head.as_bytes()).await.unwrap();
+        // The client goes away before the announced 100 bytes arrived.
+        drop(socket);
+    }
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(
+        s.hermes.requests_to(STREAM).is_empty(),
+        "a cut-off chat body started a run"
+    );
+    assert!(
+        s.hermes.requests_to("/api/sessions/s1").is_empty(),
+        "a cut-off DELETE was forwarded"
+    );
+}

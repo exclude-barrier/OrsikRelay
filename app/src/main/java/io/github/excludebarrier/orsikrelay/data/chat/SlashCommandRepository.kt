@@ -26,7 +26,7 @@ class SlashCommandRepository(
 ) : SlashCommandSource, SlashCommandExecutor, ModelOptionsSource {
     override fun loadModels(profileId: String): ModelOptionsResult {
         return try {
-            val profile = profiles.get(profileId) ?: return ModelOptionsResult.Failed
+            val profile = profiles.forConnection(profileId) ?: return ModelOptionsResult.Failed
             val key = credentials.get(profileId) ?: return ModelOptionsResult.Failed
             client.models(profile.baseUrl, key)
         } catch (_: Exception) { ModelOptionsResult.Failed }
@@ -40,21 +40,21 @@ class SlashCommandRepository(
                     is SessionCreateResult.Failure -> SlashCommandResult.Failed
                 }
                 SlashCommand.TITLE -> {
-                    val profile = profiles.get(profileId) ?: return SlashCommandResult.Failed
+                    val profile = profiles.forConnection(profileId) ?: return SlashCommandResult.Failed
                     val key = credentials.get(profileId) ?: return SlashCommandResult.Failed
                     if (titleClient.rename(profile.baseUrl, key, sessionId, argument) ==
                         SessionManageResult.Success)
                         SlashCommandResult.Done else SlashCommandResult.Failed
                 }
                 SlashCommand.BRANCH -> {
-                    val profile = profiles.get(profileId) ?: return SlashCommandResult.Failed
+                    val profile = profiles.forConnection(profileId) ?: return SlashCommandResult.Failed
                     val key = credentials.get(profileId) ?: return SlashCommandResult.Failed
                     client.fork(profile.baseUrl, key, sessionId)
                 }
                 SlashCommand.MODEL -> {
                     val parts = argument.split("::", limit = 2)
                     if (parts.size != 2) return SlashCommandResult.Failed
-                    val profile = profiles.get(profileId) ?: return SlashCommandResult.Failed
+                    val profile = profiles.forConnection(profileId) ?: return SlashCommandResult.Failed
                     val key = credentials.get(profileId) ?: return SlashCommandResult.Failed
                     client.lockModel(profile.baseUrl, key, sessionId, SessionModelOption(parts[0], parts[1]))
                 }
@@ -68,7 +68,7 @@ class SlashCommandRepository(
     override fun available(profileId: String): Set<SlashCommand> {
         if (profileId.isBlank()) return emptySet()
         return try {
-            val profile = profiles.get(profileId) ?: return emptySet()
+            val profile = profiles.forConnection(profileId) ?: return emptySet()
             val key = credentials.get(profileId) ?: return emptySet()
             client.available(profile.baseUrl, key)
         } catch (_: Exception) {

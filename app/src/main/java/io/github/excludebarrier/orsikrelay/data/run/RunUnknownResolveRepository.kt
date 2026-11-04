@@ -28,7 +28,7 @@ class RunUnknownResolveRepository(
             val failed = RunResolveResult.Failure(RunResolveError.Failed)
             if (profileId.isBlank() || runId.isBlank()) return@withContext failed
             val profile = try {
-                profileRepository.get(profileId)
+                profileRepository.forConnection(profileId)
             } catch (_: Exception) {
                 null
             } ?: return@withContext failed
