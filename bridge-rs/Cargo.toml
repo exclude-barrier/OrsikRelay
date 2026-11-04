@@ -6,3 +6,9 @@ members = ["bridge", "contract"]
 edition = "2024"
 license = "Apache-2.0"
 publish = false
+
+# The released bridge: one optimized, stripped binary.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

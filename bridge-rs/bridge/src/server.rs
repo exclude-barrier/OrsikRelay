@@ -449,7 +449,7 @@ fn pairing_client_key(state: &State, request: &Request) -> String {
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0.ip());
-    if state.trust_tailscale_identity && peer.is_some_and(|ip| ip.is_loopback()) {
+    if state.trust_tailscale_identity && peer.is_some_and(crate::config::is_loopback) {
         let logins: Vec<&str> = request
             .headers()
             .get_all("Tailscale-User-Login")

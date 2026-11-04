@@ -148,15 +148,13 @@ step fails, stop and show me the error.
 
 1. Check: the api_server answers on 127.0.0.1 (port = API_SERVER_PORT in
    ~/.hermes/.env, default 8642) with HTTP 200 on /health; ~/.hermes/config.yaml
-   has "approvals: mode: manual" (if not, stop and tell me); git, uv and
-   Python >= 3.11 are installed (if uv is missing, tell me how to install it,
-   e.g. "pipx install uv"); "loginctl show-user $USER -p Linger" says yes (if
+   has "approvals: mode: manual" (if not, stop and tell me); git, curl,
+   sha256sum and tar are installed; "loginctl show-user $USER -p Linger" says yes (if
    not, tell me to run "sudo loginctl enable-linger <user>").
 2. git clone https://github.com/exclude-barrier/OrsikRelay.git ~/OrsikRelay,
    then in ~/OrsikRelay: git checkout "$(git describe --tags --abbrev=0)".
-3. Run ~/OrsikRelay/bridge/install.sh --systemd
-   (if Python 3.14 is not available, prefix it with BRIDGE_PYTHON=<installed
-   version, e.g. 3.12>).
+3. Run ~/OrsikRelay/bridge/install.sh --systemd (it downloads the release's
+   bridge binary and checks its checksum).
 4. In ~/.local/orsik-mobile-bridge/bridge.env set BRIDGE_UPSTREAM to
    http://127.0.0.1:<api port>, BRIDGE_HERMES_ENV to the absolute path of
    ~/.hermes/.env and BRIDGE_STATE_DB to the absolute path of
@@ -170,7 +168,7 @@ step fails, stop and show me the error.
 7. When I send the URL: set BRIDGE_PUBLIC_BASE_URL in bridge.env to it, run
    systemctl --user restart orsik-mobile-bridge.service, then create a pairing
    code with
-   BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin pairing-code --base-url <URL>
+   BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env ~/.local/orsik-mobile-bridge/bin/orsik-mobile-bridge admin pairing-code --base-url <URL>
    and give me the code and the orsik://pair link. The code works once and
    for 5 minutes.
 ```
@@ -180,11 +178,11 @@ step fails, stop and show me the error.
 Run these as the user that runs Hermes, in this order.
 
 ```sh
-# 1. Tools: git, Python >= 3.11 and uv (e.g. "sudo apt install pipx && pipx install uv")
+# 1. Tools: git, curl, sha256sum and tar (the bridge itself is one prebuilt binary)
 git clone https://github.com/exclude-barrier/OrsikRelay.git ~/OrsikRelay
 cd ~/OrsikRelay && git checkout "$(git describe --tags --abbrev=0)"
 
-# 2. Install (add BRIDGE_PYTHON=3.12 in front if Python 3.14 is not available)
+# 2. Install (downloads the release's binary and checks its checksum)
 bridge/install.sh --systemd
 ```
 
@@ -208,7 +206,7 @@ sudo tailscale serve --bg --https=8443 http://127.0.0.1:9842
 
 # 6. Pairing code (works once, for 5 minutes; prints a QR code if qrencode is installed)
 BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env \
-  ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin pairing-code \
+  ~/.local/orsik-mobile-bridge/bin/orsik-mobile-bridge admin pairing-code \
   --base-url https://<server>.<tailnet>.ts.net:8443
 ```
 
@@ -259,7 +257,7 @@ terminal grants have their own confirmation and apply immediately. See the
   ```text
   Please update the Orsik Mobile Bridge on this server. Same rules as for the
   installation. Create a backup first:
-  BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin backup ~/.local/orsik-mobile-bridge/state.db.bak-<date>
+  BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env ~/.local/orsik-mobile-bridge/bin/orsik-mobile-bridge admin backup ~/.local/orsik-mobile-bridge/state.db.bak-<date>
   then in ~/OrsikRelay: git fetch --tags and
   git checkout "$(git describe --tags --abbrev=0 origin/main)", run
   bridge/install.sh --update --systemd, systemctl --user restart
@@ -271,7 +269,7 @@ terminal grants have their own confirmation and apply immediately. See the
 
   ```sh
   BRIDGE_ENV_FILE=~/.local/orsik-mobile-bridge/bridge.env \
-    ~/.local/orsik-mobile-bridge/venv/bin/orsik-mobile-bridge admin backup \
+    ~/.local/orsik-mobile-bridge/bin/orsik-mobile-bridge admin backup \
     ~/.local/orsik-mobile-bridge/state.db.bak-$(date +%F)
   cd ~/OrsikRelay && git fetch --tags
   git checkout "$(git describe --tags --abbrev=0 origin/main)"
@@ -371,7 +369,7 @@ everything else.
 ./gradlew :app:lintDebug              # Android lint
 ./gradlew :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.filter=io.github.excludebarrier.orsikrelay.ManualTestsFilter
-(cd bridge && uv run --locked python -m unittest discover -s tests)
+(cd bridge-rs && cargo test --locked)    # bridge unit + contract tests
 ```
 
 Every pull request runs these checks plus a release build with SBOM and

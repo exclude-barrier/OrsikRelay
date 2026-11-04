@@ -1,0 +1,64 @@
+# Builds the Rust bridge binary of a published release and attaches it with
+# a checksum and a GitHub build-provenance attestation. bridge/install.sh
+# downloads exactly these assets for the tag it installs.
+name: Bridge release binary
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach (e.g. v0.1.0-alpha.20)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  binary:
+    name: Build and attach the bridge binary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      ASSET: orsik-mobile-bridge-x86_64-linux.tar.gz
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+      - name: Rust toolchain from rust-toolchain.toml
+        working-directory: bridge-rs
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Build
+        working-directory: bridge-rs
+        run: cargo build --locked --release -p orsik-mobile-bridge
+      - name: Unit tests
+        working-directory: bridge-rs
+        run: cargo test --locked --release -p orsik-mobile-bridge
+      - name: Installer checks with the release binary
+        run: bash bridge-rs/tests/install-scripts.sh bridge-rs/target/release/orsik-mobile-bridge
+      - name: Package
+        run: |
+          DIST="$RUNNER_TEMP/dist"
+          mkdir -p "$DIST"
+          cp bridge-rs/target/release/orsik-mobile-bridge "$DIST/"
+          cd "$DIST"
+          EPOCH="$(git -C "$GITHUB_WORKSPACE" log -1 --format=%ct)"
+          tar --sort=name --mtime="@$EPOCH" --owner=0 --group=0 --numeric-owner \
+            -cf - orsik-mobile-bridge | gzip -n > "$ASSET"
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          cat "$ASSET.sha256"
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ runner.temp }}/dist/${{ env.ASSET }}
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "$RUNNER_TEMP/dist/$ASSET" "$RUNNER_TEMP/dist/$ASSET.sha256"

@@ -104,7 +104,7 @@ URL unchanged.
   **Restart bridge**, with a separate confirmation. Requires a UTF-8 terminal; noninteractive calls are refused.
 
   `install.sh` installs a non-overwriting `~/.local/bin/omb` shortcut. Ensure
-  that directory is on PATH, or use `~/.local/orsik-mobile-bridge/venv/bin/omb setup`.
+  that directory is on PATH, or use `~/.local/orsik-mobile-bridge/bin/orsik-mobile-bridge setup`.
   A custom installation's shortcut detects its adjacent `bridge.env`; explicit
   `--env-file /path/to/bridge.env` or `BRIDGE_ENV_FILE` overrides that path,
   followed by `BRIDGE_HOME/bridge.env`. Setup requires an existing private,
@@ -119,14 +119,13 @@ URL unchanged.
   changes and device grants need no restart.
 
   **`omb update`** checks the latest release before confirmation. Matching
-  installed commits are reported without reinstalling or restarting. A missing
-  version marker triggers an exact comparison of package and installer files;
-  matching legacy installs are recognized without reinstalling.
+  installed commits are reported without reinstalling or restarting.
   Failed network checks abort without installing. A confirmed update runs the
-  packaged bootstrap installer, pinned to the checked commit.
+  bootstrap installer built into the binary, pinned to the checked commit.
   It clones the official release into a private temporary directory rather
   than switching your working checkout. The existing installer backs up the
-  device store, retains settings and replaces the venv; it also updates/starts
+  device store, retains settings and replaces the binary (keeping the previous
+  one for `install.sh --rollback`); it also updates/starts
   the user service unless `--no-service` is supplied. `--yes` explicitly permits
   noninteractive updates. No automatic retries. Only the standard
   `BRIDGE_HOME/bridge.env` and Hermes `HERMES_HOME/.env` layout is supported;
@@ -306,20 +305,19 @@ Consequences, documented as residual risk:
 
 ## Install / run
 
-Dependencies are pinned, not resolved on install day: `install.sh` exports the
-frozen `uv.lock` (hashes included) and installs it with `--require-hashes`,
-then installs the bridge itself with `--no-deps`. A dependency therefore only
-changes when someone does it on purpose, via
-`uv lock --upgrade-package <pkg>` and a review of the lock diff (`uv lock
---check` in CI fails on a stale lock). CI also builds the wheel, a
-`SHA256SUMS` file and a CycloneDX SBOM and uploads them as the
-`bridge-dist` artifact. See `docs/bridge-installation.md`. Quick start:
+The bridge is one Rust binary (`bridge-rs/`). `install.sh` downloads the
+binary of the checked-out release tag, verifies its checksum before replacing
+anything and keeps the previous binary for `--rollback`; `ORSIK_BINARY` installs
+a binary you built yourself. Dependencies are pinned in `bridge-rs/Cargo.lock`
+and every build uses `--locked`. The release workflow attaches the archive, its
+checksum and a build-provenance attestation to the GitHub release. See
+`docs/bridge-installation.md`. Quick start:
 
 ```sh
 ./install.sh --systemd /path/to/bridge/source
 # edit $BRIDGE_HOME/bridge.env, then:
-BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/venv/bin/orsik-mobile-bridge admin pairing-code
-BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/venv/bin/orsik-mobile-bridge   # serve
+BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/bin/orsik-mobile-bridge admin pairing-code
+BRIDGE_ENV_FILE=$BRIDGE_HOME/bridge.env $BRIDGE_HOME/bin/orsik-mobile-bridge   # serve
 ```
 
 `bridge.env`:
@@ -341,15 +339,15 @@ lines ignored — never sourced, never eval'd) and prints one line per check
 (`OK`/`WARN`/`FAIL`), never a key or token value. Exit code is 1 if anything
 FAILed, with a closing `PREFLIGHT: PASS` or `PREFLIGHT: FAIL (<n> failed)`.
 
-Checks: `home_mode` (0700) · `env_mode` (0600) · `venv` (CLI executable) ·
+Checks: `home_mode` (0700) · `env_mode` (0600) · `binary` (CLI executable) ·
 `bind` (loopback) · `upstream` (loopback plain HTTP with port) ·
 `hermes_env` (set, 0600, non-empty `API_SERVER_KEY`) · `public_base_url`
 (empty is a WARN: no deep link/QR, otherwise `https://`) · `port` (listener on
 loopback/`0.0.0.0` is a WARN: perhaps a running bridge) · `hermes_health`
-(GET `$UPSTREAM/health` == 200).
+(GET `$UPSTREAM/health` == 200) · `config` (the binary's own start-up checks).
 
-The install path refuses to start before touching `$BRIDGE_HOME` when `uv` or a
-usable `uv python find ${BRIDGE_PYTHON:-3.14}` is missing.
+The install path refuses to start before touching `$BRIDGE_HOME` when a
+download tool is missing or the release checksum does not match.
 
 ## Tests
 
@@ -363,5 +361,6 @@ python tests/soak_live.py ./bridge.env 6 40     # live soak: parallel devices, d
 
 ## Rollback
 
+`./install.sh --rollback` puts the previous binary back and restarts the unit.
 `./install.sh --uninstall` stops/removes the user unit; delete `$BRIDGE_HOME`
-(venv + state DB). Hermes is untouched.
+(binary + state DB). Hermes is untouched.
