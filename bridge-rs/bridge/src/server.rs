@@ -25,7 +25,6 @@ pub const MAX_BODY_BYTES: usize = 10_000_000;
 pub const MAX_BUFFERED_BODY_BYTES: usize = 16 * 1024 * 1024;
 /// Bound of a non-SSE upstream error body on the chat stream.
 pub const MAX_UPSTREAM_ERROR_BODY_BYTES: usize = 64 * 1024;
-const PAIR_PER_MINUTE: usize = 60;
 
 pub struct AppState {
     pub upstream: String,
@@ -37,6 +36,11 @@ pub struct AppState {
     pub host_services: Vec<String>,
     pub terminal_command: Option<Vec<String>>,
     pub files_root: Option<PathBuf>,
+    pub runhub: crate::runhub::RunHub,
+    pub active_terminals: std::sync::atomic::AtomicUsize,
+    /// One snapshot serves every request within its max age.
+    pub host_metrics: tokio::sync::Mutex<Option<(std::time::Instant, Value)>>,
+    pub projects: tokio::sync::Mutex<Option<(std::time::Instant, Value)>>,
 }
 
 pub type State = Arc<AppState>;
@@ -395,11 +399,11 @@ pub async fn dispatch(
     let method = request.method().clone();
     let path = request.uri().path().to_string();
     let handled = match (method.as_str(), path.as_str()) {
-        ("GET", "/health") => health(&state, request).await,
-        ("GET", "/v1/capabilities") => capabilities(&state, request).await,
+        ("GET" | "HEAD", "/health") => health(&state, request).await,
+        ("GET" | "HEAD", "/v1/capabilities") => capabilities(&state, request).await,
         ("POST", "/v1/devices/pair") => pair(&state, request).await,
         ("POST", "/v1/devices/self/revoke") => self_revoke(&state, request).await,
-        _ => crate::routes::dispatch_rest(&state, request).await,
+        _ => crate::routes::dispatch(&state, request).await,
     };
     handled.unwrap_or_else(IntoResponse::into_response)
 }
