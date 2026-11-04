@@ -3,6 +3,8 @@ package io.github.excludebarrier.orsikrelay.data.profile
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionMode
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionSettings
 import io.github.excludebarrier.orsikrelay.domain.profile.ProfileDraft
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import io.github.excludebarrier.orsikrelay.domain.profile.ServerProfile
@@ -109,6 +111,46 @@ class SharedPreferencesServerProfileMetadataStoreTest {
         assertNotNull(persisted)
         assertFalse(persisted!!.contains(SYNTHETIC_SECRET))
         assertTrue(credentialStore.value!!.useRaw { it == SYNTHETIC_SECRET })
+    }
+
+    @Test
+    fun connectionSettingsSurviveARecreatedStoreInstance() {
+        val expected = profile(FIRST_ID, "First").withConnection(
+            ConnectionSettings.create(
+                mode = ConnectionMode.AUTOMATIC,
+                publicBaseUrl = "https://relay.example.invalid",
+                clientCertAlias = "Orsik Relay",
+                serverId = "0123456789abcdef0123456789abcdef"
+            )
+        )
+        store.save(expected)
+
+        val recreated = SharedPreferencesServerProfileMetadataStore(context, preferencesName)
+
+        assertEquals(expected, recreated.get(FIRST_ID))
+    }
+
+    @Test
+    fun aVersionOneEnvelopeIsReadAsPrivateOnly() {
+        writeRawPayload(
+            "{\"version\":1,\"profiles\":[{\"id\":\"$FIRST_ID\"," +
+                "\"profile_name\":\"First\",\"base_url\":\"$BASE_URL\"}]}"
+        )
+
+        assertEquals(profile(FIRST_ID, "First"), store.get(FIRST_ID))
+    }
+
+    @Test
+    fun aCorruptConnectionFailsGenerically() {
+        val payload = "{\"version\":2,\"profiles\":[{\"id\":\"$FIRST_ID\"," +
+            "\"profile_name\":\"First\",\"base_url\":\"$BASE_URL\"," +
+            "\"connection\":{\"mode\":\"PUBLIC_ONLY\",\"public_base_url\":null," +
+            "\"client_cert_alias\":null,\"server_id\":null}}]}"
+        writeRawPayload(payload)
+
+        val error = assertMetadataFailure { store.list() }
+
+        assertGeneric(error, listOf(payload, FIRST_ID, SYNTHETIC_SECRET))
     }
 
     @Test

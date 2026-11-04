@@ -42,7 +42,7 @@ class TerminalRepository(
     private fun resolve(profileId: String): Pair<String, SecretValue>? {
         if (profileId.isBlank()) return null
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         } ?: return null

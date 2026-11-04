@@ -47,7 +47,7 @@ class RunApprovalRepository(
             return@withContext RunApprovalResult.Failure(RunApprovalError.InvalidInput)
         }
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         }

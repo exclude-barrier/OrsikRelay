@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notices VPN/Wi-Fi/mobile changes so the private/public endpoint
+         choice of a server profile is decided again. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- QR pairing scanner. The camera is optional: without one (or without
          the runtime permission) the rest of the app is fully functional. -->
     <uses-permission android:name="android.permission.CAMERA" />

@@ -2,7 +2,11 @@ package io.github.excludebarrier.orsikrelay.network
 
 import io.github.excludebarrier.orsikrelay.domain.profile.SecretValue
 import java.io.ByteArrayOutputStream
+import java.security.KeyStore
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import okhttp3.ResponseBody
@@ -23,6 +27,17 @@ private const val CONTENT_TYPE_HEADER = "Content-Type"
 private const val JSON_MEDIA_TYPE = "application/json"
 
 internal object HermesHttp {
+    /** The user identities in the system key store (set once by the app). */
+    @Volatile
+    var identitySource: ClientIdentitySource? = null
+
+    /**
+     * Client certificates (mTLS) per host: only a public endpoint bound by
+     * [ClientCertificateKeyManager.bind] gets one. Server trust stays the
+     * platform default (system CAs and the network security config).
+     */
+    val clientCertificates = ClientCertificateKeyManager { identitySource }
+
     /**
      * Process-wide base client. Every production default derives from it via
      * [OkHttpClient.newBuilder], so all clients share one dispatcher and one
@@ -32,7 +47,17 @@ internal object HermesHttp {
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
+        .apply { withClientCertificates(this) }
         .build()
+
+    private fun withClientCertificates(builder: OkHttpClient.Builder) {
+        val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+        factory.init(null as KeyStore?)
+        val trustManager = factory.trustManagers.single() as X509TrustManager
+        val context = SSLContext.getInstance("TLS")
+        context.init(arrayOf(clientCertificates), arrayOf(trustManager), null)
+        builder.sslSocketFactory(context.socketFactory, trustManager)
+    }
 
     /**
      * One-shot default: connect/write 10 s, read 10 s and a 15 s call

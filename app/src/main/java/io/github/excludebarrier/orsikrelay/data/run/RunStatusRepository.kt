@@ -43,7 +43,7 @@ class RunStatusRepository(
                 return@withContext RunStatusResult.Failure(RunStatusError.InvalidInput)
             }
             val profile = try {
-                profileRepository.get(profileId)
+                profileRepository.forConnection(profileId)
             } catch (_: Exception) {
                 null
             }

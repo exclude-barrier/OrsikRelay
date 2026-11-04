@@ -105,7 +105,7 @@ class StreamingChatRepository(
             return@callbackFlow
         }
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         }

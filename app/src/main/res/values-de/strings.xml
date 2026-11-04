@@ -639,4 +639,20 @@
         <item quantity="one">%1$d Dienst gestoppt</item>
         <item quantity="other">%1$d Dienste gestoppt</item>
     </plurals>
+    <string name="connection_menu">Verbindungswege</string>
+    <string name="connection_title">Verbindungswege</string>
+    <string name="connection_private">Privat (gekoppelt): %1$s</string>
+    <string name="connection_public_url">Öffentliche HTTPS-Adresse (optional)</string>
+    <string name="connection_mode_automatic">Automatisch (VPN bevorzugen)</string>
+    <string name="connection_mode_private">Nur VPN</string>
+    <string name="connection_mode_public">Nur öffentlich</string>
+    <string name="connection_certificate">Clientzertifikat: %1$s</string>
+    <string name="connection_certificate_none">Kein Clientzertifikat ausgewählt</string>
+    <string name="connection_choose_certificate">Zertifikat wählen</string>
+    <string name="connection_note">Die App sendet ihren Schlüssel erst an die öffentliche Adresse, wenn sich die Bridge dort als der gekoppelte Server ausweist. Koppeln, Freigaben, Terminal und Dateien bleiben auf dem privaten Weg.</string>
+    <string name="connection_error_url">Gib eine vollständige https://-Adresse ein, die sich von der privaten unterscheidet.</string>
+    <string name="connection_error_save">Die Verbindungswege konnten nicht gespeichert werden.</string>
+    <string name="connection_save">Speichern</string>
+    <string name="connection_cancel">Abbrechen</string>
+    <string name="connection_route_public">Öffentlich</string>
 </resources>

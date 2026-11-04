@@ -1,5 +1,13 @@
 package io.github.excludebarrier.orsikrelay.di
 
+import android.net.ConnectivityManager
+import android.net.Network
+import io.github.excludebarrier.orsikrelay.data.connection.EndpointResolver
+import io.github.excludebarrier.orsikrelay.data.connection.ServerConnectionAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionAdmin
+import io.github.excludebarrier.orsikrelay.network.HermesHttp
+import io.github.excludebarrier.orsikrelay.network.HermesServerIdentityClient
+import io.github.excludebarrier.orsikrelay.security.clientcert.KeyChainIdentitySource
 import io.github.excludebarrier.orsikrelay.data.files.FilesRepository
 import io.github.excludebarrier.orsikrelay.domain.files.FilesSource
 import io.github.excludebarrier.orsikrelay.data.terminal.TerminalRepository
@@ -126,6 +134,8 @@ internal data class AppDependencies(
     /** Reads a picked attachment's metadata/bytes through the ContentResolver. */
     val chatAttachmentSource: ChatAttachmentSource,
     val selectionStore: ActiveServerSelectionStore,
+    /** A profile's private and public endpoint (mode, mTLS alias, route). */
+    val connectionAdmin: ConnectionAdmin,
     val startupResolver: () -> StartupProfile,
 )
 
@@ -230,6 +240,9 @@ internal fun buildAppDependencies(
     )
     val devicePairTransport = HermesDevicePairClient()
     val deviceSelfRevokeTransport = HermesDeviceSelfRevokeClient()
+    // Chooses the paired or the verified public endpoint per call; created
+    // right after the repository it pins server identities into.
+    lateinit var endpointResolver: EndpointResolver
     val profileRepository = ServerProfileRepository(
         metadataStore = metadataStore,
         credentialStore = credentialStore,
@@ -241,8 +254,25 @@ internal fun buildAppDependencies(
         selectionStore = resolvedSelectionStore,
         deviceCredentialSaver = deviceCredentialSaver,
         deviceCredentialMetadataStore = deviceMetadataStore,
-        runApprovalCapabilityStore = resolvedCapabilityStore
+        runApprovalCapabilityStore = resolvedCapabilityStore,
+        endpoints = { endpointResolver }
     )
+    endpointResolver = EndpointResolver(
+        probe = HermesServerIdentityClient()::probe,
+        pin = { profileId, serverId ->
+            profileRepository.get(profileId)?.let { profile ->
+                profileRepository.updateConnection(profileId, profile.connection.withServerId(serverId))
+            }
+        },
+        bindClientCertificate = HermesHttp.clientCertificates::bind
+    )
+    HermesHttp.identitySource = KeyChainIdentitySource(applicationContext)
+    // A new or lost network (VPN up/down, Wi-Fi to mobile) re-decides the route.
+    applicationContext.getSystemService(ConnectivityManager::class.java)
+        ?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = endpointResolver.invalidate()
+            override fun onLost(network: Network) = endpointResolver.invalidate()
+        })
     val profileAdmin = ServerProfileAdmin(profileRepository)
     // Local notifications. The poster is the single Android adapter;
     // the coordinator applies the pure policy and the duplicate guard.
@@ -287,6 +317,7 @@ internal fun buildAppDependencies(
     val slashRepository = SlashCommandRepository(profileRepository, credentialStore)
     return AppDependencies(
         profileAdmin = profileAdmin,
+        connectionAdmin = ServerConnectionAdmin(profileRepository, endpointResolver),
         coordinator = ProfileConnectionCoordinator(
             connectionProbe = HermesConnectionClient(),
             profileSaver = profileRepository
