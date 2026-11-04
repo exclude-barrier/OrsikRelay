@@ -481,3 +481,22 @@ fully satisfies it in front of an **unmodified** official Hermes (`f86276d2`):
 
 Limits remain: **no** per-device resource isolation (single-owner
 delegation) and **no** session→run discovery endpoint.
+
+## Two endpoints per server (private and public)
+
+A server profile can name a second, public HTTPS address next to the paired
+one (*Server → ⋮ → Connection paths*), with a mode (*Automatic (prefer VPN)*,
+*VPN only*, *Public only*) and a client certificate picked from the Android
+key store for mTLS (the private key never leaves it).
+
+- The app learns the bridge's identity from `GET /v1/server` on the paired
+  endpoint (no key sent) and pins it in the profile metadata.
+- Before the device key goes to the public address, `GET /v1/server` there
+  must report exactly the pinned id. Without a pin, on a mismatch or without
+  an answer, every call stays on the paired endpoint.
+- *Automatic* uses the paired endpoint whenever it answers and decides again
+  after a network change (VPN on/off, Wi-Fi/mobile) or after 60 s.
+- The client certificate is presented only to the public host; the private
+  endpoint never sees it.
+- Pairing, approvals, terminal and files are not offered on the public path
+  (the bridge refuses them there).

@@ -23,7 +23,7 @@ class StoredProfileConnectionCheck(
     override fun check(profileId: String): HermesConnectionResult {
         val invalid = HermesConnectionResult.Failure(ConnectionFailureReason.INVALID_INPUT)
         if (profileId.isBlank()) return invalid
-        val profile = runCatching { profileRepository.get(profileId) }.getOrNull() ?: return invalid
+        val profile = runCatching { profileRepository.forConnection(profileId) }.getOrNull() ?: return invalid
         val credential = runCatching { credentialStore.get(profileId) }.getOrNull() ?: return invalid
         return try {
             probe.probe(ProfileDraft(profile.profileName, profile.baseUrl, credential))

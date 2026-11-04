@@ -420,6 +420,8 @@ fun HermesNavHost(
         }
         ProfilesScreen(
             admin = admin,
+            // Production only: an injected test admin gets no endpoint editor.
+            connectionAdmin = if (profileAdmin == null) productionDependencies.value.connectionAdmin else null,
             activeProfileId = activeProfileId,
             activeReachable = activeReachable,
             onBack = onBack,

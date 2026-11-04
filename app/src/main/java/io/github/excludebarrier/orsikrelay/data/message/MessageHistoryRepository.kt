@@ -50,7 +50,7 @@ class MessageHistoryRepository(
             return MessageHistoryResult.Failure(MessageHistoryError.InvalidInput)
         }
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         }

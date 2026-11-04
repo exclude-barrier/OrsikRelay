@@ -640,4 +640,20 @@
         <item quantity="one">%1$d service stopped</item>
         <item quantity="other">%1$d services stopped</item>
     </plurals>
+    <string name="connection_menu">Connection paths</string>
+    <string name="connection_title">Connection paths</string>
+    <string name="connection_private">Private (paired): %1$s</string>
+    <string name="connection_public_url">Public HTTPS address (optional)</string>
+    <string name="connection_mode_automatic">Automatic (prefer VPN)</string>
+    <string name="connection_mode_private">VPN only</string>
+    <string name="connection_mode_public">Public only</string>
+    <string name="connection_certificate">Client certificate: %1$s</string>
+    <string name="connection_certificate_none">No client certificate selected</string>
+    <string name="connection_choose_certificate">Choose certificate</string>
+    <string name="connection_note">The app sends its key to the public address only after the bridge there proves to be the paired server. Pairing, approvals, terminal and files stay on the private path.</string>
+    <string name="connection_error_url">Enter a complete https:// address that differs from the private one.</string>
+    <string name="connection_error_save">The connection paths could not be saved.</string>
+    <string name="connection_save">Save</string>
+    <string name="connection_cancel">Cancel</string>
+    <string name="connection_route_public">Public</string>
 </resources>

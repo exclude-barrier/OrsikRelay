@@ -24,6 +24,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.collectAsState
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionAdmin
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionRoute
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -140,8 +144,13 @@ fun ProfilesScreen(
     onOpenMonitoring: (() -> Unit)? = null,
     /** Opens Terminal or Files (the tools with an own screen). */
     onOpenTool: ((QuickTask) -> Unit)? = null,
-    startTask: (suspend (title: String, prompt: String) -> Boolean)? = null
+    startTask: (suspend (title: String, prompt: String) -> Boolean)? = null,
+    /** Private/public endpoints per profile; null hides "Verbindungswege". */
+    connectionAdmin: ConnectionAdmin? = null
 ) {
+    var connectionTarget by remember { mutableStateOf<ServerProfile?>(null) }
+    val noRoutes = remember { MutableStateFlow<Map<String, ConnectionRoute>>(emptyMap()) }
+    val routes by (connectionAdmin?.routes ?: noRoutes).collectAsState()
     val coroutineScope = rememberCoroutineScope()
     var profiles by remember { mutableStateOf<List<ServerProfile>?>(null) }
     // A load failure must be reachable and retryable: without this the screen
@@ -413,6 +422,8 @@ fun ProfilesScreen(
                                 }
                             },
                             onUseAsActive = { confirmSelect(profile) },
+                            publicRoute = routes[profile.id] == ConnectionRoute.PUBLIC,
+                            onConnection = connectionAdmin?.let { { connectionTarget = profile } },
                             onDelete = { requestDelete(profile) }
                         )
                     }
@@ -436,6 +447,19 @@ fun ProfilesScreen(
             }
             item(key = "management") { Management(onOpenMonitoring, onOpenTool, startTask) }
         }
+    }
+
+    val connectionProfile = connectionTarget
+    if (connectionProfile != null && connectionAdmin != null) {
+        ConnectionDialog(
+            profile = connectionProfile,
+            admin = connectionAdmin,
+            onDismiss = { connectionTarget = null },
+            onSaved = {
+                connectionTarget = null
+                loadProfiles()
+            }
+        )
     }
 
     val target = deleteTarget
@@ -603,7 +627,9 @@ private fun ProfileRow(
     deviceId: String?,
     onClick: () -> Unit,
     onUseAsActive: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    publicRoute: Boolean = false,
+    onConnection: (() -> Unit)? = null
 ) {
     var menuOpen by remember(profile.id) { mutableStateOf(false) }
     val clipboard = LocalClipboard.current
@@ -618,6 +644,7 @@ private fun ProfileRow(
     val rowEnabled = !isActive && !isSelecting
     val badges = buildList {
         if (isActive) add(ServerBadge(stringResource(R.string.profiles_chip_active), highlighted = true))
+        if (publicRoute) add(ServerBadge(stringResource(R.string.connection_route_public)))
         when (credentialKind) {
             ProfileCredentialKind.DEVICE_CREDENTIAL -> add(ServerBadge(stringResource(R.string.profiles_chip_paired)))
             ProfileCredentialKind.API_KEY -> add(ServerBadge(stringResource(R.string.profiles_chip_api_key)))
@@ -680,6 +707,17 @@ private fun ProfileRow(
                             },
                             enabled = !isSelecting,
                             modifier = Modifier.testTag("selectActiveServer:${profile.id}")
+                        )
+                    }
+                    if (onConnection != null) {
+                        DropdownMenuItem(
+                            text = { Text(text = stringResource(R.string.connection_menu)) },
+                            onClick = {
+                                menuOpen = false
+                                onConnection()
+                            },
+                            enabled = !isSelecting,
+                            modifier = Modifier.testTag("serverConnection:${profile.id}")
                         )
                     }
                     DropdownMenuItem(

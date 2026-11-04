@@ -51,7 +51,7 @@ class ServerProfileAdmin(
             // so a direct coordinator call can never submit an API key to
             // self-revoke.
             if (!profileRepository.hasDeviceCredential(profileId)) return null
-            val profile = profileRepository.get(profileId) ?: return null
+            val profile = profileRepository.forConnection(profileId) ?: return null
             val credential = profileRepository.credentialFor(profileId) ?: return null
             if (!DeviceCredentialKey.isValid(credential)) return null
             DeviceDisconnectTarget(

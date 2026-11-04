@@ -25,7 +25,7 @@ class HostMetricsRepository(
     override fun read(profileId: String): HostMetricsResult {
         if (profileId.isBlank()) return HostMetricsResult.Failed
         val profile = try {
-            profileRepository.get(profileId)
+            profileRepository.forConnection(profileId)
         } catch (_: Exception) {
             null
         } ?: return HostMetricsResult.Failed
