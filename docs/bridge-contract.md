@@ -42,7 +42,9 @@ Files the bridge creates are never group/world accessible (umask 077).
 
 Device key: `Authorization: Bearer hd_…`. Missing or unknown → 401 `invalid_credentials`.
 A store failure on any route → 503 `store_unavailable` (never fail open).
-Request bodies are bounded to 10 000 000 bytes (413).
+Request bodies are bounded to 10 000 000 bytes (413). A body that breaks off before its end is
+never forwarded or acted on as an empty one: 400 `body_incomplete` (Rust
+bridge; the Python bridge ended such a request with an internal error).
 
 | Route | Auth | Rules |
 |---|---|---|
