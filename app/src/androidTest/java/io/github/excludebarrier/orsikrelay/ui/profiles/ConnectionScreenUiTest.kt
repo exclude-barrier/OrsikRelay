@@ -1,6 +1,8 @@
 package io.github.excludebarrier.orsikrelay.ui.profiles
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -58,13 +61,17 @@ class ConnectionScreenUiTest {
 
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
+    // A semantics click: the soft keyboard may still cover the node after
+    // text input, and an injected touch would land on the keyboard.
+    private fun SemanticsNodeInteraction.tap() = performSemanticsAction(SemanticsActions.OnClick)
+
     private fun node(tag: String) = composeRule.onNodeWithTag(tag, useUnmergedTree = true)
 
     @Test
     fun withoutAPublicAddressTheModesAreInactiveAndNothingIsToSave() {
         show(paired)
         node("connectionPrivatePill").assertTextEquals(text(R.string.connection_pill_active))
-        node("connectionMode:AUTOMATIC").performScrollTo().performClick()
+        node("connectionMode:AUTOMATIC").performScrollTo().tap()
         node("connectionSave").assertIsNotEnabled()
         assertTrue(saved.isEmpty())
     }
@@ -74,10 +81,10 @@ class ConnectionScreenUiTest {
         show(paired)
         node("connectionAddPublic").performClick()
         node("connectionPublicUrl").performTextInput("http://relay.example.invalid")
-        node("connectionSave").assertIsEnabled().performClick()
+        node("connectionSave").assertIsEnabled().tap()
         node("connectionError").performScrollTo().assertIsDisplayed()
         node("connectionPublicUrl").performTextReplacement(paired.baseUrl)
-        node("connectionSave").performClick()
+        node("connectionSave").tap()
         node("connectionError").performScrollTo().assertIsDisplayed()
         assertTrue(saved.isEmpty())
     }
@@ -87,10 +94,10 @@ class ConnectionScreenUiTest {
         show(paired.withConnection(ConnectionSettings.create(ConnectionMode.PRIVATE_ONLY, null, null, pinned)))
         node("connectionAddPublic").performClick()
         node("connectionPublicUrl").performTextInput("https://relay.example.invalid")
-        node("connectionMode:PUBLIC_ONLY").performScrollTo().performClick()
+        node("connectionMode:PUBLIC_ONLY").performScrollTo().tap()
         node("connectionPrivatePill").performScrollTo().assertTextEquals(text(R.string.connection_pill_off))
         node("connectionCertWarning").performScrollTo().assertIsDisplayed()
-        node("connectionSave").performClick()
+        node("connectionSave").tap()
         composeRule.waitUntil(5_000) { saved.isNotEmpty() && closed }
         val (id, settings) = saved.single()
         assertEquals("p1", id)
@@ -108,9 +115,9 @@ class ConnectionScreenUiTest {
         )
         node("connectionPrivatePill").assertTextEquals(text(R.string.connection_pill_preferred))
         node("connectionPublicPill").assertTextEquals(text(R.string.connection_pill_fallback))
-        node("connectionRemovePublic").performClick()
+        node("connectionRemovePublic").tap()
         node("connectionAddPublic").assertIsDisplayed()
-        node("connectionSave").performClick()
+        node("connectionSave").tap()
         composeRule.waitUntil(5_000) { saved.isNotEmpty() }
         val settings = saved.single().second
         assertEquals(ConnectionMode.PRIVATE_ONLY, settings.mode)
