@@ -1,19 +1,12 @@
-//! The optional public ingress listener (Rust bridge only): the mTLS reverse
+//! The optional public ingress listener: the mTLS reverse
 //! proxy forwards to it, and the bridge itself allows only chat, sessions and
 //! runs there. Also the key-free server identity a phone pins.
 
 use orsik_bridge_contract::*;
 use serde_json::{Value, json};
 
-fn rust_bridge_under_test() -> bool {
-    std::env::var("BRIDGE_CMD").is_ok_and(|c| !c.trim().is_empty())
-}
-
 #[tokio::test]
 async fn the_public_listener_reaches_only_chat_sessions_and_runs() {
-    if !rust_bridge_under_test() {
-        return;
-    }
     let public_port = free_port();
     let s = Setup::with(|c| c.set("BRIDGE_PUBLIC_PORT", &public_port.to_string())).await;
     let (token, _) = s.bridge.pair().await;
@@ -79,9 +72,6 @@ async fn the_public_listener_reaches_only_chat_sessions_and_runs() {
 
 #[tokio::test]
 async fn the_server_identity_is_stable_and_needs_no_key() {
-    if !rust_bridge_under_test() {
-        return;
-    }
     let s = Setup::new().await;
     let first: Value = s
         .bridge
@@ -112,9 +102,6 @@ async fn the_server_identity_is_stable_and_needs_no_key() {
 
 #[tokio::test]
 async fn an_invalid_public_port_is_refused() {
-    if !rust_bridge_under_test() {
-        return;
-    }
     let hermes = FakeHermes::start().await;
     let home = tempfile::tempdir().unwrap();
     let config = BridgeConfig::new(&hermes, home.path()).set("BRIDGE_PUBLIC_PORT", "70000");
@@ -129,9 +116,6 @@ async fn an_invalid_public_port_is_refused() {
 
 #[tokio::test]
 async fn a_public_bind_outside_loopback_and_docker_bridges_is_refused() {
-    if !rust_bridge_under_test() {
-        return;
-    }
     for bind in ["0.0.0.0", "8.8.8.8", "localhost"] {
         let hermes = FakeHermes::start().await;
         let home = tempfile::tempdir().unwrap();
