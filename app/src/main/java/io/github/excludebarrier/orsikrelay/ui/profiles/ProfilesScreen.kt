@@ -451,7 +451,7 @@ fun ProfilesScreen(
 
     val connectionProfile = connectionTarget
     if (connectionProfile != null && connectionAdmin != null) {
-        ConnectionDialog(
+        ConnectionScreen(
             profile = connectionProfile,
             admin = connectionAdmin,
             onDismiss = { connectionTarget = null },
