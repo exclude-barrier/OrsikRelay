@@ -75,10 +75,10 @@ class ConnectionScreenUiTest {
         node("connectionAddPublic").performClick()
         node("connectionPublicUrl").performTextInput("http://relay.example.invalid")
         node("connectionSave").assertIsEnabled().performClick()
-        node("connectionError").assertIsDisplayed()
+        node("connectionError").performScrollTo().assertIsDisplayed()
         node("connectionPublicUrl").performTextReplacement(paired.baseUrl)
         node("connectionSave").performClick()
-        node("connectionError").assertIsDisplayed()
+        node("connectionError").performScrollTo().assertIsDisplayed()
         assertTrue(saved.isEmpty())
     }
 
