@@ -1,10 +1,10 @@
 //! Black-box contract harness for the Orsik Mobile Bridge.
 //!
 //! The suite never links against a bridge. It starts one as a process
-//! (`BRIDGE_CMD`, default: the Python bridge via `BRIDGE_PY -m
-//! orsik_mobile_bridge`) against a fake Hermes upstream and checks the
-//! Mobile-v1 behaviour over HTTP only, so the same tests hold the Python and
-//! the Rust bridge to one contract.
+//! (`BRIDGE_CMD`, default: the debug build of the Rust bridge in this
+//! workspace) against a fake Hermes upstream and checks the Mobile-v1
+//! behaviour over HTTP only. It froze the Python bridge's behaviour before
+//! the port and now holds the Rust bridge to it.
 
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener as StdListener};
@@ -220,12 +220,6 @@ async fn fake_handler(State(state): State<Arc<Mutex<FakeState>>>, request: Reque
     }
 }
 
-/// The Python bridge, whatever bridge is under test (store compatibility).
-fn python_command() -> (String, Vec<String>) {
-    let python = std::env::var("BRIDGE_PY").unwrap_or_else(|_| "python3".into());
-    (python, vec!["-m".into(), "orsik_mobile_bridge".into()])
-}
-
 /// How to start the bridge under test.
 fn bridge_command() -> (String, Vec<String>) {
     if let Some(cmd) = std::env::var("BRIDGE_CMD")
@@ -236,8 +230,8 @@ fn bridge_command() -> (String, Vec<String>) {
         let program = parts.next().expect("BRIDGE_CMD is empty");
         return (program, parts.collect());
     }
-    let python = std::env::var("BRIDGE_PY").unwrap_or_else(|_| "python3".into());
-    (python, vec!["-m".into(), "orsik_mobile_bridge".into()])
+    let binary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/debug/orsik-mobile-bridge");
+    (binary.display().to_string(), Vec::new())
 }
 
 /// A free loopback port never handed out twice in this test process, so two
@@ -262,8 +256,6 @@ pub fn free_port() -> u16 {
 #[derive(Clone)]
 pub struct BridgeConfig {
     pub env: HashMap<String, String>,
-    /// Start the Python bridge even when another one is under test.
-    pub python: bool,
 }
 
 impl BridgeConfig {
@@ -280,13 +272,7 @@ impl BridgeConfig {
         // Fixed, harmless unit names so the host metrics never ask for
         // services of the machine running the suite by surprise.
         env.insert("BRIDGE_HOST_SERVICES".into(), "contract-test-unit".into());
-        BridgeConfig { env, python: false }
-    }
-
-    /// The same settings for the Python bridge (store compatibility checks).
-    pub fn python(mut self) -> Self {
-        self.python = true;
-        self
+        BridgeConfig { env }
     }
 
     pub fn set(mut self, key: &str, value: &str) -> Self {
@@ -301,15 +287,11 @@ impl BridgeConfig {
 }
 
 fn base_command(config: &BridgeConfig) -> Command {
-    let (program, args) = if config.python {
-        python_command()
-    } else {
-        bridge_command()
-    };
+    let (program, args) = bridge_command();
     let mut command = Command::new(program);
     command.args(args);
     command.env_clear();
-    for key in ["PATH", "HOME", "LANG", "PYTHONPATH"] {
+    for key in ["PATH", "HOME", "LANG"] {
         if let Ok(value) = std::env::var(key) {
             command.env(key, value);
         }

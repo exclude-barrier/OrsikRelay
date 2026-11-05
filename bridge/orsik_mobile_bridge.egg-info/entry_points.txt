@@ -1,0 +1,3 @@
+[console_scripts]
+omb = orsik_mobile_bridge.server:main
+orsik-mobile-bridge = orsik_mobile_bridge.server:main

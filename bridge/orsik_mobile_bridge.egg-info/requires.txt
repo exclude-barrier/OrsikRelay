@@ -1,0 +1,2 @@
+aiohttp<4,>=3.10
+prompt-toolkit==3.0.52

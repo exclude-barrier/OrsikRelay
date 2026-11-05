@@ -3,9 +3,10 @@
 The observable behaviour of the Orsik Mobile Bridge, frozen before the Rust
 port. Every row is checked by the black-box suite in
 [`bridge-rs/contract`](../bridge-rs/contract), which starts a bridge as a
-process against a fake Hermes and talks to it over HTTP only. The suite runs
-against the Python bridge (`BRIDGE_PY`) and, once it exists, against the Rust
-bridge (`BRIDGE_CMD`). A change to this contract changes the tests first.
+process against a fake Hermes and talks to it over HTTP only. The suite froze
+the Python bridge's behaviour before the Rust port (both passed it until the
+cutover); it now runs against the Rust bridge (`BRIDGE_CMD`, default the
+workspace's debug build). A change to this contract changes the tests first.
 
 Security reasoning behind the rules: [`bridge-security.md`](bridge-security.md).
 Wire format the app expects: [`mobile-wire-contract.md`](mobile-wire-contract.md).

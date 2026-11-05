@@ -1,14 +1,12 @@
 name: Bridge CI
 
-# Reproducible gate for the Orsik Mobile Bridge PoC (Python). Mirrors the
-# local `uv lock --check` / `uv sync --locked` / `uv run coverage run -m
-# unittest discover -s tests` flow and publishes the wheel, its checksums, a
-# CycloneDX SBOM and a coverage report (report only, no fail-under gate).
-# No deployment, no secrets.
+# Reproducible gate for the Orsik Mobile Bridge (Rust, bridge-rs/): the
+# locked release build, the unit tests, a checksum and the binary as an
+# artifact. No deployment, no secrets.
 
 # No path filter: the job is a required status check for `main`
 # (docs/release.md "Branch-Governance"), and a path-filtered required check
-# never reports on PRs outside bridge/ and blocks them. The run takes ~30 s.
+# never reports on PRs outside the bridge and blocks them.
 on:
   push:
     branches: [ main ]
@@ -22,34 +20,31 @@ jobs:
   bridge:
     name: Bridge tests and reproducible build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
-        working-directory: bridge
+        working-directory: bridge-rs
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/cache@v6
         with:
-          python-version: '3.14'
-      - name: Install uv
-        run: python -m pip install uv==0.13.1
-      - name: Check lockfile is up to date
-        run: uv lock --check
-      - name: Install from the locked graph
-        run: uv sync --locked
-      - name: Unit tests with coverage
-        run: uv run --locked coverage run -m unittest discover -s tests -v
-      - name: Coverage report
-        run: uv run --locked coverage report
-      - name: Coverage XML
-        run: mkdir -p dist && uv run --locked coverage xml -o dist/coverage.xml
-      - name: Build wheel
-        run: uv build --wheel --out-dir dist
-      - name: CycloneDX SBOM
-        run: uv export --frozen --no-dev --format cyclonedx1.5 -o dist/SBOM.cdx.json
-      - name: Checksums
-        run: cd dist && sha256sum * > SHA256SUMS
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            bridge-rs/target
+          key: bridge-release-${{ runner.os }}-${{ hashFiles('bridge-rs/Cargo.lock', 'bridge-rs/rust-toolchain.toml') }}
+      - name: Unit tests
+        run: cargo test --locked -p orsik-mobile-bridge
+      - name: Release build from the locked graph
+        run: cargo build --locked --release -p orsik-mobile-bridge
+      - name: Checksum
+        run: |
+          mkdir -p dist
+          cp target/release/orsik-mobile-bridge dist/
+          cd dist && sha256sum orsik-mobile-bridge > SHA256SUMS
       - uses: actions/upload-artifact@v7
         with:
           name: bridge-dist
-          path: bridge/dist
+          path: bridge-rs/dist

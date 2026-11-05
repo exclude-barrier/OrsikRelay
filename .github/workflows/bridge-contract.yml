@@ -2,8 +2,8 @@ name: Bridge contract
 
 # Black-box Mobile-v1 contract suite (bridge-rs/contract). It starts the
 # bridge as a process against a fake Hermes and checks the behaviour over
-# HTTP only, so the same tests later hold the Rust bridge to the contract of
-# the Python one. Not a required check until it has proven stable.
+# HTTP only; it froze the Python bridge's behaviour before the Rust port.
+# Plus the installer checks and the two reverse proxy examples.
 on:
   push:
     branches: [ main ]
@@ -14,50 +14,12 @@ permissions:
   contents: read
 
 jobs:
-  contract-python:
-    name: Contract suite against the Python bridge
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-      - name: Install the Python bridge from the locked graph
-        working-directory: bridge
-        run: |
-          python -m pip install uv==0.13.1
-          uv sync --locked --no-dev
-      - name: Rust toolchain from rust-toolchain.toml
-        working-directory: bridge-rs
-        run: rustup show active-toolchain || rustup toolchain install
-      - uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            bridge-rs/target
-          key: bridge-rs-${{ runner.os }}-${{ hashFiles('bridge-rs/Cargo.lock', 'bridge-rs/rust-toolchain.toml') }}
-      - name: Contract suite
-        working-directory: bridge-rs
-        env:
-          BRIDGE_PY: ${{ github.workspace }}/bridge/.venv/bin/python
-        run: cargo test --locked -p orsik-bridge-contract
-
   contract-rust:
     name: Contract suite against the Rust bridge
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-      - name: Install the Python bridge (store compatibility check)
-        working-directory: bridge
-        run: |
-          python -m pip install uv==0.13.1
-          uv sync --locked --no-dev
       - name: Rust toolchain from rust-toolchain.toml
         working-directory: bridge-rs
         run: rustup show active-toolchain || rustup toolchain install
@@ -83,8 +45,6 @@ jobs:
           bash bridge-rs/tests/install-scripts.sh bridge-rs/target/debug/orsik-mobile-bridge
       - name: Contract suite against the Rust bridge
         working-directory: bridge-rs
-        env:
-          BRIDGE_PY: ${{ github.workspace }}/bridge/.venv/bin/python
         run: |
           cargo build --locked -p orsik-mobile-bridge
           BRIDGE_CMD="$PWD/target/debug/orsik-mobile-bridge" cargo test --locked -p orsik-bridge-contract

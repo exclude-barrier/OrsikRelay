@@ -48,7 +48,7 @@ Run `./gradlew :app:testDebugUnitTest` before opening the pull request.
 ## Bridge CLI translations
 
 The bridge CLI defaults to English independently of the system locale. Keep
-English and German entries complete in `bridge/orsik_mobile_bridge/setup_i18n.py`,
+English and German entries complete in `bridge-rs/bridge/src/i18n.rs`,
 including help, errors and confirmation text. Use real German umlauts. Setup
 persists the explicitly saved language as `OMB_LANGUAGE=de|en`; update reuses it.
 Language-only changes must not require a service restart. Test default English,
@@ -60,7 +60,7 @@ Before opening a pull request, please run locally:
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-(cd bridge && uv run --locked python -m unittest discover -s tests)
+(cd bridge-rs && cargo test --locked -p orsik-mobile-bridge && cargo build --locked -p orsik-mobile-bridge && cargo test --locked -p orsik-bridge-contract)
 ```
 
 and, if you changed UI or Android behavior, the instrumented tests on an
@@ -73,8 +73,8 @@ All CI checks must pass before a pull request is merged into `main`:
 - `Release build, SBOM and provenance`
 - `Bridge tests and reproducible build`
 
-Bridge dependencies are locked in `bridge/uv.lock`; change them only with
-`uv lock --upgrade-package <name>` and explain why in the pull request.
+Bridge dependencies are locked in `bridge-rs/Cargo.lock`; change them only with
+`cargo update -p <crate>` and explain why in the pull request.
 
 ## License
 
