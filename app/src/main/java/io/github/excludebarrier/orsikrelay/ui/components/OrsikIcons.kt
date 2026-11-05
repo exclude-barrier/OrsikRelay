@@ -28,6 +28,7 @@ object OrsikIcons {
     val ChevronDown by lazy { stroke("ChevronDown", 2.2f, "m7 10 5 5 5-5") }
     val ChevronRight by lazy { stroke("ChevronRight", 2f, "m9 6 6 6-6 6") }
     val Shield by lazy { stroke("Shield", 2.2f, "M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z", "M12 8v5M12 16.5v.01") }
+    val ShieldCheck by lazy { stroke("ShieldCheck", 2.2f, "M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z", "m9 12 2 2 4-4") }
     val Check by lazy { stroke("Check", 2.6f, "m5 12 5 5 9-10") }
     val Plus by lazy { stroke("Plus", 2f, "M12 5v14M5 12h14") }
     val ArrowUp by lazy { stroke("ArrowUp", 2.4f, "M12 19V5M6 11l6-6 6 6") }
