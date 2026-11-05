@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionAdmin
@@ -118,6 +120,8 @@ internal fun ConnectionDialog(
                     label = { Text(stringResource(R.string.connection_public_url)) },
                     placeholder = { Text("https://relay.example.org") },
                     singleLine = true,
+                    // A URL keyboard: no auto-space after ".", no autocorrect.
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.fillMaxWidth().testTag("connectionPublicUrl")
                 )
                 Column(Modifier.selectableGroup()) {
