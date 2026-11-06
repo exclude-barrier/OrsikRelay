@@ -64,6 +64,17 @@ network for the proxy keeps that circle small. The private listener
 (`BRIDGE_PORT`) always stays on loopback. `install.sh --check` validates both
 values.
 
+If the host runs a firewall such as UFW, it blocks the proxy container from
+reaching the listener by default (the request times out at the proxy). Allow
+only the proxy network to that one port, for example:
+
+```sh
+sudo ufw allow in on br-<network id> from 172.18.0.0/16 to 172.18.0.1 port 9843 proto tcp
+```
+
+The interface is `br-` plus the first 12 characters of
+`docker network inspect <network> -f '{{.Id}}'`.
+
 ## 2. Client CA and one certificate per phone
 
 On an offline or at least trusted machine (keep `orsik-client-ca.key`
@@ -95,6 +106,10 @@ certificate*, then select `pixel.p12`. The private key stays in the Android
 key store. The app later asks you to select this certificate for the public
 endpoint of the server profile (Android `KeyChain`).
 
+The app uses the public address only after it has learned the server ID over
+the private path once. Open the app with Tailscale on after saving the public
+address; from then on it works without the VPN.
+
 **Losing a phone:** run `admin revoke-device <device_id>` on the server.
 The device key is then invalid on every path, even while the certificate is
 still valid. The file-based trust pool in this example does not check
@@ -116,9 +131,9 @@ must be invalidated before it expires.
    `BRIDGE_PUBLIC_ADDRESS` replaced by `172.18.0.1:9843`. It turns on mTLS
    and, because it defines `location /`, replaces NPM's default location: only
    the listed paths reach the bridge, everything else is 403.
-5. Test from outside the tailnet (mobile data): without the certificate the
-   handshake fails; with it `GET /v1/server` answers and `/v1/terminal`
-   answers 403.
+5. Test from outside the tailnet (mobile data): without the certificate NPM
+   answers 400 (`No required SSL certificate was sent`) and forwards nothing;
+   with it `GET /v1/server` answers and `/v1/terminal` answers 403.
 
 CI checks the example with `nginx -t` (official `nginx:1.31` image) inside
 an NPM-like server block.
