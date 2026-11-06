@@ -62,6 +62,54 @@ class ApprovalDialogUiTest {
         io.github.excludebarrier.orsikrelay.ui.chat.AttemptedApprovals.reset()
     }
 
+    /** Icon plus label used to break "Erlauben" mid-word on a phone-width dialog. */
+    @Test
+    fun theAllowLabelStaysOnOneLine() {
+        composeRule.setContent {
+            HermesTheme {
+                ApprovalDialog(REQUEST, PROFILE_ID, fake { _, _, _, _ -> RunApprovalResult.Failure(RunApprovalError.Network) }, onDismiss = {})
+            }
+        }
+        val label = context.getString(io.github.excludebarrier.orsikrelay.R.string.approval_allow)
+        val node = composeRule.onNodeWithText(label, useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = ArrayList<TextLayoutResult>()
+        node.config.getOrNull(SemanticsActions.GetTextLayoutResult)!!.action?.invoke(layouts)
+        assertEquals("'$label' must fit on one line", 1, layouts.single().lineCount)
+    }
+
+    @Test
+    fun onThePublicRouteTheDialogSendsNothingAndOnlyHides() {
+        val calls = AtomicInteger(0)
+        var hidden = false
+        val requester = object : RunApprovalRequester {
+            override suspend fun respond(
+                profileId: String,
+                runId: String,
+                requestId: String,
+                choice: RunApprovalChoice
+            ): RunApprovalResult {
+                calls.incrementAndGet()
+                return RunApprovalResult.Resolved(runId, choice)
+            }
+        }
+        composeRule.setContent {
+            HermesTheme {
+                ApprovalDialog(
+                    REQUEST, PROFILE_ID, requester, onDismiss = {},
+                    privateOnly = true, onHide = { hidden = true }
+                )
+            }
+        }
+        composeRule.onNodeWithTag("approval_private_only").assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ALLOW).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_DENY).fetchSemanticsNodes().size)
+        composeRule.onNodeWithTag("approval_close").performClick()
+        composeRule.runOnIdle {
+            assertTrue(hidden)
+            assertEquals(0, calls.get())
+        }
+    }
+
     @Test
     fun aDecisionSurvivesDialogRecreationWithoutASecondPost() {
         val gate = CompletableDeferred<Unit>()

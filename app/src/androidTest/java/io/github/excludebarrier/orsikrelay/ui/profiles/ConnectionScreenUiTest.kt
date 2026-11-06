@@ -2,6 +2,7 @@ package io.github.excludebarrier.orsikrelay.ui.profiles
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -124,4 +125,17 @@ class ConnectionScreenUiTest {
         assertEquals(null, settings.publicBaseUrl)
         assertEquals(pinned, settings.serverId)
     }
+
+    @Test
+    fun aPublicAddressWithoutPinnedServerIdAsksForOnePrivateConnect() {
+        show(paired.withConnection(ConnectionSettings.create(ConnectionMode.PUBLIC_ONLY, "https://relay.example.invalid", "Orsik Relay", null)))
+        node("connectionNeedsPin").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun aPinnedServerIdNeedsNoHint() {
+        show(paired.withConnection(ConnectionSettings.create(ConnectionMode.PUBLIC_ONLY, "https://relay.example.invalid", "Orsik Relay", pinned)))
+        assertEquals(0, composeRule.onAllNodesWithTag("connectionNeedsPin", useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
 }

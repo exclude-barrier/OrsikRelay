@@ -6,6 +6,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.excludebarrier.orsikrelay.R
 import io.github.excludebarrier.orsikrelay.ui.theme.OrsikDialog
@@ -112,6 +115,15 @@ fun ApprovalDialog(
      * request deliberately stays resolvable.
      */
     onFinished: () -> Unit = {},
+    /**
+     * True while the profile talks to the server over its public address.
+     * The public path refuses approvals by policy, so the dialog sends
+     * nothing and only explains how to answer: a refused POST would mark
+     * the request as failed for good. [onHide] then just hides the dialog;
+     * the request stays pending for the private path.
+     */
+    privateOnly: Boolean = false,
+    onHide: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val attemptKey = request.runId + "/" + request.requestId
@@ -133,7 +145,8 @@ fun ApprovalDialog(
         attempt = AttemptedApprovals.respondOnce(attemptKey, profileId, request, choice, requester)
     }
 
-    val buttonsEnabled = outcome == ApprovalOutcome.Awaiting
+    val blocked = privateOnly && outcome == ApprovalOutcome.Awaiting
+    val buttonsEnabled = outcome == ApprovalOutcome.Awaiting && !blocked
 
     // The content-lambda `AlertDialog` overload is
     // @Deprecated in material3 1.3.2 ("Use BasicAlertDialog instead", proven
@@ -208,64 +221,102 @@ fun ApprovalDialog(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                // Deny first (neutral, safe default), then Allow (risk-marked
-                // in the error colour with a warning icon, the only conscious
-                // approval path). Equal weights make both buttons the same
-                // width; the intrinsic row height keeps them equally tall
-                // even when a label wraps at a large font scale.
-                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-                    OutlinedButton(
-                        onClick = { decide(RunApprovalChoice.DENY) },
-                        enabled = buttonsEnabled,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .testTag(TAG_DENY)
-                    ) {
-                        Text(text = stringResource(R.string.approval_deny))
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Button(
-                        onClick = { decide(RunApprovalChoice.ONCE) },
-                        enabled = buttonsEnabled,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .testTag(TAG_ALLOW)
-                    ) {
-                        // Decorative: the accessible name stays the text.
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
-                            contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.IconSize)
-                        )
-                        Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
-                        Text(text = stringResource(R.string.approval_allow))
-                    }
-                }
-                // After a decided, failed or already-answered request (and
-                // while one is in flight) the decision buttons stay disabled;
-                // this is the way out.
-                if (outcome != ApprovalOutcome.Awaiting) {
+                if (blocked) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.approval_private_only),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.testTag(TAG_PRIVATE_ONLY)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
-                        onClick = onDismiss,
+                        onClick = onHide,
                         modifier = Modifier
                             .align(Alignment.End)
                             .testTag(TAG_CLOSE)
                     ) {
                         Text(text = stringResource(R.string.approval_close))
                     }
+                } else {
+                    DecisionButtons(
+                        outcome = outcome,
+                        buttonsEnabled = buttonsEnabled,
+                        onDecide = ::decide,
+                        onDismiss = onDismiss
+                    )
                 }
             }
+        }
+    }
+}
+
+/** Deny/Allow plus the close action after a decision. */
+@Composable
+private fun ColumnScope.DecisionButtons(
+    outcome: ApprovalOutcome,
+    buttonsEnabled: Boolean,
+    onDecide: (RunApprovalChoice) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Spacer(modifier = Modifier.height(16.dp))
+    // Deny first (neutral, safe default), then Allow (risk-marked
+    // in the error colour with a warning icon, the only conscious
+    // approval path). Equal weights make both buttons the same
+    // width; the intrinsic row height keeps them equally tall
+    // even when a label wraps at a large font scale.
+    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+        OutlinedButton(
+            onClick = { onDecide(RunApprovalChoice.DENY) },
+            enabled = buttonsEnabled,
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .testTag(TAG_DENY)
+        ) {
+            Text(text = stringResource(R.string.approval_deny))
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Button(
+            onClick = { onDecide(RunApprovalChoice.ONCE) },
+            // Less side padding than the default, so icon and
+            // label fit a narrow dialog without breaking the word.
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            enabled = buttonsEnabled,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .testTag(TAG_ALLOW)
+        ) {
+            // Decorative: the accessible name stays the text.
+            Icon(
+                imageVector = Icons.Filled.Warning,
+                contentDescription = null,
+                modifier = Modifier.size(ButtonDefaults.IconSize)
+            )
+            Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
+            Text(text = stringResource(R.string.approval_allow))
+        }
+    }
+    // After a decided, failed or already-answered request (and
+    // while one is in flight) the decision buttons stay disabled;
+    // this is the way out.
+    if (outcome != ApprovalOutcome.Awaiting) {
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .align(Alignment.End)
+                .testTag(TAG_CLOSE)
+        ) {
+            Text(text = stringResource(R.string.approval_close))
         }
     }
 }
@@ -359,6 +410,7 @@ private const val TAG_SURFACE = "approval_surface"
 private const val TAG_DENY = "approval_deny"
 private const val TAG_ALLOW = "approval_allow"
 internal const val TAG_CLOSE = "approval_close"
+internal const val TAG_PRIVATE_ONLY = "approval_private_only"
 
 /**
  * Tapjacking guard for the window it is composed in: touches that arrive
