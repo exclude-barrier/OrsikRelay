@@ -222,7 +222,9 @@ fun ChatScreen(
     onPasteToTerminal: ((String) -> Unit)? = null,
     modelOptionsSource: ModelOptionsSource =
         ModelOptionsSource { ModelOptionsResult.Failed },
-    modelMemory: ModelMemory = NoModelMemory
+    modelMemory: ModelMemory = NoModelMemory,
+    /** True while this profile talks to its server over the public address. */
+    publicRoute: Boolean = false
 ) {
     val chatTextScale = (chatTextSizeController?.size ?: ChatTextSize.DEFAULT).scale
     // The tool-activity labels are resolved here (localized UI strings) and
@@ -1013,7 +1015,8 @@ BackHandler(enabled = true, onBack = { viewModel.handleBack() })
         profileId = profileId,
         requester = runApprovalRequester,
         onDismiss = { viewModel.dismissApproval() },
-        onFinished = { viewModel.finishApproval() }
+        onFinished = { viewModel.finishApproval() },
+        privateOnly = publicRoute
     )
 }
 

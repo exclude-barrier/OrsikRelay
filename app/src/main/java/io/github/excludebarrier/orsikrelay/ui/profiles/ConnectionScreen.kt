@@ -104,6 +104,8 @@ internal fun ConnectionScreen(
     var alias by remember { mutableStateOf(current.clientCertAlias) }
     var error by remember { mutableStateOf<Int?>(null) }
     var saving by remember { mutableStateOf(false) }
+    // KeyChain answers null both for "no keys installed" and "cancelled".
+    var noCertChosen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activity = LocalContext.current.findActivity()
 
@@ -151,7 +153,7 @@ internal fun ConnectionScreen(
         activity?.let { act ->
             KeyChain.choosePrivateKeyAlias(
                 act,
-                { chosen -> act.runOnUiThread { if (chosen != null) alias = chosen } },
+                { chosen -> act.runOnUiThread { if (chosen != null) alias = chosen; noCertChosen = chosen == null && alias == null } },
                 arrayOf("EC", "RSA"),
                 null,
                 host?.host,
@@ -263,12 +265,24 @@ internal fun ConnectionScreen(
                                 modifier = Modifier.testTag("connectionHelp")
                             )
                         }
+                        // The public route needs the server ID, learned
+                        // only over the private path (EndpointResolver).
+                        if (hasUrl && effectiveMode != ConnectionMode.PRIVATE_ONLY && current.serverId == null) {
+                            Text(
+                                text = stringResource(R.string.connection_needs_pin),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp).testTag("connectionNeedsPin")
+                            )
+                        }
 
                         SectionLabel(R.string.connection_section_cert)
                         CertificateCard(
                             alias = alias,
                             enabled = activity != null && !saving,
                             warn = effectiveMode != ConnectionMode.PRIVATE_ONLY && alias == null,
+                            noneFound = noCertChosen,
                             onChoose = ::chooseCertificate
                         )
 
@@ -508,7 +522,7 @@ private fun PublicAddressField(value: String, onValueChange: (String) -> Unit, o
 }
 
 @Composable
-private fun CertificateCard(alias: String?, enabled: Boolean, warn: Boolean, onChoose: () -> Unit) {
+private fun CertificateCard(alias: String?, enabled: Boolean, warn: Boolean, noneFound: Boolean, onChoose: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -536,6 +550,14 @@ private fun CertificateCard(alias: String?, enabled: Boolean, warn: Boolean, onC
                 FilledTonalButton(onClick = onChoose, enabled = enabled, modifier = Modifier.testTag("connectionChooseCertificate")) {
                     Text(stringResource(if (alias == null) R.string.connection_cert_choose else R.string.connection_cert_change), fontWeight = FontWeight.Bold)
                 }
+            }
+            if (noneFound) {
+                Text(
+                    text = stringResource(R.string.connection_cert_none_found),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("connectionCertNoneFound")
+                )
             }
             if (warn) {
                 val status = OrsikTheme.statusColors

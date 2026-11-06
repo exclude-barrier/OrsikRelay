@@ -1,5 +1,6 @@
 package io.github.excludebarrier.orsikrelay.navigation
 
+import io.github.excludebarrier.orsikrelay.domain.profile.ConnectionRoute
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalHermes
 import io.github.excludebarrier.orsikrelay.ui.monitoring.MonitoringRoute
 import io.github.excludebarrier.orsikrelay.ui.terminal.TerminalPrefill
@@ -817,6 +818,7 @@ fun HermesNavHost(
                         null
                     }
                 }
+                val chatRoutes by remember { productionDependencies.value.connectionAdmin.routes }.collectAsState()
                 ChatScreen(
                     serverName = chatServerName,
                     historySource = messageHistorySource
@@ -851,6 +853,10 @@ fun HermesNavHost(
                     chatTextSizeController = resolvedChatTextSizeController,
                     profileId = activeProfileId.orEmpty(),
                     sessionId = decodedSessionId,
+                    // Approvals are private-only; injected test requesters
+                    // keep the plain dialog.
+                    publicRoute = runApprovalRequester == null &&
+                        chatRoutes[activeProfileId] == ConnectionRoute.PUBLIC,
                     sessionTitle = activeSessionTitle
                         .takeIf { activeSessionTitleSessionId == decodedSessionId },
                     // Idempotent read of the newest list page; a chat opened
