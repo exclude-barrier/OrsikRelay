@@ -487,8 +487,9 @@ private fun PublicAddressField(value: String, onValueChange: (String) -> Unit, o
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                // A URL keyboard: no auto-space after ".", no autocorrect.
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                // URL keyboard without autocorrect: Gboard otherwise puts a space
+                // after every "." even on the URL layout.
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = OrsikMono,
                     color = MaterialTheme.colorScheme.onSurface
