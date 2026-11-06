@@ -426,7 +426,7 @@ fun OnboardingScreen(
                         ?.let { code -> { Text(text = stringResource(baseUrlErrorMessage(code))) } },
                     isError = validationError?.baseUrlError != null,
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
                     enabled = !isConnecting,
                     modifier = Modifier
                         .fillMaxWidth()
