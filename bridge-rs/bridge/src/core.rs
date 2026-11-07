@@ -222,7 +222,8 @@ impl DeviceRecord {
     }
 }
 
-pub fn build_capabilities(terminal: bool, files: bool) -> Value {
+/// `host_metrics` is false on the public ingress, which refuses that route.
+pub fn build_capabilities(terminal: bool, files: bool, host_metrics: bool) -> Value {
     let mut caps = json!({
         "object": "hermes.api_server.capabilities",
         "platform": "hermes-agent",
@@ -241,7 +242,7 @@ pub fn build_capabilities(terminal: bool, files: bool) -> Value {
             "run_stop": true,
             "run_steer": true,
             "run_unknown_resolution": true,
-            "host_metrics": true,
+            "host_metrics": host_metrics,
             "terminal": terminal,
             "files": files,
             "projects": files,
@@ -272,7 +273,6 @@ pub fn build_capabilities(terminal: bool, files: bool) -> Value {
             "session_messages": {"method": "GET", "path": "/api/sessions/{session_id}/messages"},
             "session_chat_stream": {"method": "POST", "path": "/api/sessions/{session_id}/chat/stream"},
             "run_unknown_resolution": {"method": "POST", "path": "/v1/runs/{run_id}/resolve-unknown"},
-            "host_metrics": {"method": "GET", "path": "/v1/host/metrics"},
             "session_update": {"method": "PATCH", "path": "/api/sessions/{session_id}"},
             "session_fork": {"method": "POST", "path": "/api/sessions/{session_id}/fork"},
             "session_model_lock": {"method": "POST", "path": "/api/sessions/{session_id}/model"},
@@ -287,6 +287,12 @@ pub fn build_capabilities(terminal: bool, files: bool) -> Value {
         },
     });
     let endpoints = caps["endpoints"].as_object_mut().unwrap();
+    if host_metrics {
+        endpoints.insert(
+            "host_metrics".into(),
+            json!({"method": "GET", "path": "/v1/host/metrics"}),
+        );
+    }
     if terminal {
         endpoints.insert(
             "terminal".into(),
@@ -374,5 +380,15 @@ mod tests {
         assert!(!safe_segment(".."));
         assert!(!safe_segment("a b"));
         assert!(!safe_segment(""));
+    }
+
+    #[test]
+    fn host_metrics_are_offered_only_where_the_route_is_reachable() {
+        let private = build_capabilities(false, false, true);
+        assert_eq!(private["features"]["host_metrics"], json!(true));
+        assert!(private["endpoints"]["host_metrics"].is_object());
+        let public = build_capabilities(false, false, false);
+        assert_eq!(public["features"]["host_metrics"], json!(false));
+        assert!(public["endpoints"].get("host_metrics").is_none());
     }
 }

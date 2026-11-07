@@ -19,11 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Rust toolchain from rust-toolchain.toml
         working-directory: bridge-rs
         run: rustup show active-toolchain || rustup toolchain install
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cargo/registry
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: caddy validate (official image, throw-away client CA)
         run: |
           WORK="$RUNNER_TEMP/caddy"
@@ -72,8 +72,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - name: nginx -t (official image, the example inside an NPM-like server block)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: nginx -t (official image, both examples inside an NPM-like http/server block)
         run: |
           WORK="$RUNNER_TEMP/npm"
           mkdir -p "$WORK/custom_ssl"
@@ -81,7 +81,8 @@ jobs:
             -keyout "$WORK/server.key" -out "$WORK/server.pem" -days 1 -subj "/CN=ci only"
           cp "$WORK/server.pem" "$WORK/custom_ssl/orsik-client-ca.pem"
           sed 's/BRIDGE_PUBLIC_ADDRESS/172.18.0.1:9843/' deploy/npm/advanced.conf.example > "$WORK/advanced.conf"
-          printf '%s\n' 'events {}' 'http {' '  server {' '    listen 443 ssl;' \
+          cp deploy/npm/http_top.conf.example "$WORK/http_top.conf"
+          printf '%s\n' 'events {}' 'http {' '  include /etc/npm/http_top.conf;' '  server {' '    listen 443 ssl;' \
             '    ssl_certificate /etc/npm/server.pem;' '    ssl_certificate_key /etc/npm/server.key;' \
             '    include /etc/npm/advanced.conf;' '  }' '}' > "$WORK/nginx.conf"
           docker run --rm -v "$WORK:/etc/npm:ro" -v "$WORK/custom_ssl:/data/custom_ssl:ro" \

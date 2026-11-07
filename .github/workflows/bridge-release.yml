@@ -28,7 +28,7 @@ jobs:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
       ASSET: orsik-mobile-bridge-x86_64-linux.tar.gz
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/tags/${{ env.TAG }}
       - name: Rust toolchain from rust-toolchain.toml
@@ -53,7 +53,7 @@ jobs:
             -cf - orsik-mobile-bridge | gzip -n > "$ASSET"
           sha256sum "$ASSET" > "$ASSET.sha256"
           cat "$ASSET.sha256"
-      - uses: actions/attest-build-provenance@v4
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: ${{ runner.temp }}/dist/${{ env.ASSET }}
       - name: Attach to the release
