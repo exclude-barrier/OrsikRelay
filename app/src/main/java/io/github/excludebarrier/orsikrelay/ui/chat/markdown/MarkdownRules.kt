@@ -80,7 +80,7 @@ private val TABLE_HEAD = Regex("^[A-Z][A-Z0-9_ ]*[A-Z0-9_]\\s{2,}[A-Z]")
 internal fun looksLikeOutput(line: String): Boolean =
     OUTPUT_PREFIXES.any { line.startsWith(it) } ||
         TABLE_HEAD.containsMatchIn(line) ||
-        line.first().isDigit() ||
+        line.firstOrNull()?.isDigit() == true ||
         line.contains(Regex("\\s{3,}\\S+\\s{3,}"))
 
 /** The host shown after an https link ("github.com"), without `www.`; null when none can be read. */
