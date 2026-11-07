@@ -36,6 +36,8 @@ async fn the_public_listener_reaches_only_chat_sessions_and_runs() {
         .unwrap();
     assert_eq!(caps["features"]["terminal"], false);
     assert_eq!(caps["features"]["files"], false);
+    assert_eq!(caps["features"]["host_metrics"], false);
+    assert!(caps["endpoints"].get("host_metrics").is_none());
 
     for (method, path) in [
         ("POST", "/v1/devices/pair"),

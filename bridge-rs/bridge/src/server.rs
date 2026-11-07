@@ -480,13 +480,13 @@ async fn capabilities(state: &State, request: Request) -> Handled {
     let Some(record) = lookup(state, request.headers()).await? else {
         return Ok(closed(401, "invalid_credentials"));
     };
-    // The public ingress never offers the terminal or the files.
+    // The public ingress never offers the terminal, the files or host data.
     let private = ingress(&request) == Ingress::Private;
     let terminal = private && state.terminal_command.is_some() && record.terminal_allowed;
     let files = private && state.files_root.is_some();
     Ok(json_response(
         200,
-        &core::build_capabilities(terminal, files),
+        &core::build_capabilities(terminal, files, private),
     ))
 }
 

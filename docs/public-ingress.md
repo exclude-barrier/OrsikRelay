@@ -131,7 +131,10 @@ must be invalidated before it expires.
    `BRIDGE_PUBLIC_ADDRESS` replaced by `172.18.0.1:9843`. It turns on mTLS
    and, because it defines `location /`, replaces NPM's default location: only
    the listed paths reach the bridge, everything else is 403.
-5. Test from outside the tailnet (mobile data): without the certificate NPM
+5. Rate limits: copy `deploy/npm/http_top.conf.example` (domain replaced) to
+   `/data/nginx/custom/http_top.conf`, then `nginx -t` and `nginx -s reload`
+   in the container. Other hosts are not affected (empty limit key).
+6. Test from outside the tailnet (mobile data): without the certificate NPM
    answers 400 (`No required SSL certificate was sent`) and forwards nothing;
    with it `GET /v1/server` answers and `/v1/terminal` answers 403.
 
@@ -163,7 +166,7 @@ pointing at the host. The example also:
 - [ ] `BRIDGE_PUBLIC_PORT` set, `install.sh --check` passes, and the public listener answers `public_ingress_denied` for `/v1/terminal` on loopback.
 - [ ] The client CA key is not on the server, and every phone has its own certificate with a short lifetime.
 - [ ] The Android app supports the public endpoint with a client certificate (pairing over the private path).
-- [ ] Rate limits at the edge: `limit_req`/`limit_conn` in NPM's custom http config (`/data/nginx/custom/http_top.conf`), the `caddy-ratelimit` plugin, or firewall connection limits. The bridge itself limits pairing (private only), active runs (16) and terminals.
+- [ ] Rate limits at the edge: `deploy/npm/http_top.conf.example` as NPM's custom http config (`/data/nginx/custom/http_top.conf`), the `caddy-ratelimit` plugin, or firewall connection limits. Zones alone do nothing: the `limit_req`/`limit_conn` lines must be there too. Check with a burst of 40 parallel requests (with the certificate): some must answer 429. The bridge itself limits pairing (private only), active runs (16) and terminals.
 - [ ] The NPM admin interface (port 81) is not reachable from the internet.
 - [ ] Firewall: only 443/tcp open publicly, and nothing else of the host.
 - [ ] Monitoring: watch the proxy access log (403/421 spikes, handshake failures) and the bridge audit log.

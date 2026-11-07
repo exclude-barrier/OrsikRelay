@@ -1,0 +1,24 @@
+# Rate limits for the public Orsik relay host, for Nginx Proxy Manager's
+# custom http config: /data/nginx/custom/http_top.conf (inside the container).
+# Replace relay.example.org with your domain.
+#
+# Every other host gets an empty key, and nginx skips limits with an empty
+# key, so this file affects only the relay host even though it applies at
+# http level. NPM does not regenerate this file (unlike proxy_host/*.conf).
+
+map $host $orsik_req_key {
+    default "";
+    "relay.example.org" $realip_remote_addr;
+}
+map $host $orsik_conn_key {
+    default "";
+    "relay.example.org" $realip_remote_addr;
+}
+
+limit_req_zone $orsik_req_key zone=orsik_relay_req:1m rate=5r/s;
+limit_conn_zone $orsik_conn_key zone=orsik_relay_conn:1m;
+
+limit_req zone=orsik_relay_req burst=20 nodelay;
+limit_conn orsik_relay_conn 10;
+limit_req_status 429;
+limit_conn_status 429;
