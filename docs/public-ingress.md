@@ -170,7 +170,7 @@ pointing at the host. The example also:
 - [ ] The NPM admin interface (port 81) is not reachable from the internet.
 - [ ] Firewall: only 443/tcp open publicly, and nothing else of the host.
 - [ ] Monitoring: watch the proxy access log (403/421 spikes, handshake failures) and the bridge audit log.
-- [ ] Attack tests from outside: no certificate (handshake fails), a foreign certificate (fails), a valid certificate on terminal/files/pair/approval (403), a redirect or traversal attempt (403/404).
+- [ ] Attack tests from outside: no certificate (400), a foreign certificate (400), a TLS connection to another host on the proxy with `Host: relay.example.org` (must be 421, never the bridge), a valid certificate on terminal/files/pair/approval (403), a redirect or traversal attempt (403/404).
 
 Opening the port and the DNS record are operator decisions. Neither the bridge
 installer nor this repository does that.
