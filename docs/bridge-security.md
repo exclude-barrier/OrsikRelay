@@ -23,7 +23,7 @@ permission allowlist `{chat, runs, approvals}`.
 
 | Threat | Measure |
 |---|---|
-| Master key leak to device/log | key only server-side; never in body/response; closed errors; buffered (non-SSE) upstream bodies have the exact master key replaced with `[redacted]` |
+| Master key leak to device/log | key only server-side; never in body/response; closed errors; buffered upstream bodies and every relayed chat-stream frame (also the retained copy for re-attach) have the exact master key replaced with `[redacted]`, so a model that repeats it (a tool read the env file) cannot hand it to the phone |
 | Master key exfiltration through misconfigured `BRIDGE_UPSTREAM` | target is checked at startup: only loopback HTTP **IP** with explicit port (no hostname, no path/query/fragment, no userinfo); otherwise startup aborts without repeating the value |
 | Approval escalation (`session`/`always`) | local validation allows only `once`/`deny`; invalid → `400`, **no** upstream POST |
 | Redirect credential hop | `allow_redirects=False`; `3xx` → `502`, `Location` discarded |
@@ -40,7 +40,7 @@ permission allowlist `{chat, runs, approvals}`.
 | Tool output/commands on the phone | the relay drops fields the app never reads: the turn transcript (`messages`), `usage` and `runtime` on `run.*`, `preview`/`args` on `tool.*`, the reasoning text (`delta`) on `tool.progress` and the text of `assistant.commentary`; this also keeps the terminal frame within the relay bound |
 | Restoring an old store state | backup/restore operator-side only (file system permission); a restore restores the authorization state at the backup time — devices revoked afterwards are valid again and removed terminal grants may return (check `admin list-devices`, revoke affected devices/grants again); pre-migration backup automatic, no down-migrate |
 | Store failure | fail-closed (`503 store_unavailable`), never fail-open |
-| Blocking store access | store calls run serially in a dedicated DB thread and never block the aiohttp event loop |
+| Blocking store access | store calls run serially (one connection behind a lock) on the blocking thread pool and never block the async runtime |
 | Public admin surface | no HTTP admin; codes only via local operator CLI |
 | Run loss/duplicate on disconnect | server-side stream takeover + `after_seq` replay; no second POST |
 | Fabricated run completion | never invented events; not reconstructible → `409`/`404` |
@@ -204,7 +204,7 @@ a read of every handler for the invariants in §3, and `cargo audit`.
 |---|---|
 | Behavioural parity | The full contract suite passes against the Python and the Rust bridge. A phone paired by Python keeps working on Rust (`store_compat`, cutover simulation). |
 | Closed surface | One dispatcher, dedicated routes first, then the allowlist; unknown methods on known paths fall through to `endpoint_out_of_scope`. Paths are matched percent-decoded with an encoded `/` kept, as aiohttp does. |
-| Master key | Only in the upstream `Authorization` header; redirects are never followed (`Policy::none`), no proxy from the environment; reflected keys are redacted in buffered bodies. |
+| Master key | Only in the upstream `Authorization` header; redirects are never followed (`Policy::none`), no proxy from the environment; reflected keys are redacted in buffered bodies and chat-stream frames. |
 | Device keys and codes | Stored as SHA-256 only; codes single-use by one atomic `UPDATE`; revocation re-checked every 15 s on open streams and terminals. |
 | Files | Every component opened with `O_NOFOLLOW` from the root; realpath containment; FIFOs refused; 8 MiB and 2000-entry bounds; git with no hooks, filters or fsmonitor and a process-group kill. |
 | Terminal | Off by default, per-device grant, `Origin` refused, minimal child environment, at most 4. |

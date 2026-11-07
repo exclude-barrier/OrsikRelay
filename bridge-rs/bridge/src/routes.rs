@@ -611,7 +611,10 @@ async fn chat_stream(state: &State, request: Request, session_id: String) -> Han
 }
 
 fn relay_frame(state: &State, buffer: &Arc<RunBuffer>, frame: Frame) -> bool {
-    let frame = sse::strip_unused(sse::normalize_approval(sse::redact_echo(frame)));
+    let mut frame = sse::strip_unused(sse::normalize_approval(sse::redact_echo(frame)));
+    // The model may repeat the master key (a tool read Hermes' env file):
+    // it must not reach the phone or the retained run either.
+    frame.raw = redact_master_key(&state.master_key, frame.raw.into()).to_vec();
     if frame.raw.len() > MAX_FRAME_BYTES {
         return false;
     }

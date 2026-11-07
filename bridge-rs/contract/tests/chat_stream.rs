@@ -165,6 +165,48 @@ async fn approval_requests_are_narrowed_to_mobile_v1() {
 }
 
 #[tokio::test]
+async fn a_master_key_in_a_stream_frame_never_reaches_the_device() {
+    // A tool may read Hermes' env file and the model may repeat it.
+    let (s, token) = paired().await;
+    s.hermes.reply(
+        "POST",
+        STREAM,
+        Reply::sse(&[
+            &frame(
+                "run.started",
+                json!({"session_id": "s1", "run_id": "run_k", "seq": 0}),
+            ),
+            &frame(
+                "assistant.delta",
+                json!({"run_id": "run_k", "seq": 1, "delta": format!("API_SERVER_KEY={MASTER_KEY}")}),
+            ),
+            &frame("done", json!({"run_id": "run_k", "seq": 2})),
+        ]),
+    );
+    let text = read_all(
+        s.bridge
+            .post(STREAM, Some(&token))
+            .json(&json!({}))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(!text.contains(MASTER_KEY), "{text:?}");
+    assert!(text.contains("API_SERVER_KEY=[redacted]"), "{text:?}");
+    // The retained run replays the redacted frame, too.
+    let replay = read_all(
+        s.bridge
+            .get("/api/sessions/s1/runs/run_k/stream", Some(&token))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(!replay.contains(MASTER_KEY), "{replay:?}");
+}
+
+#[tokio::test]
 async fn frames_without_rewrites_are_relayed_byte_for_byte() {
     let (s, token) = paired().await;
     let odd = "id: 7\nevent: assistant.delta\ndata: {\"run_id\":\"run_d\",\"seq\":1,  \"delta\":\"x\"}\n\n";
