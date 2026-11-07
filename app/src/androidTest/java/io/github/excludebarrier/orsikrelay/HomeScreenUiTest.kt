@@ -307,12 +307,14 @@ class HomeScreenUiTest {
     }
 
     /** Enough recent sessions that the list always scrolls, on any display. */
+    // Longer than any phone screen (12 rows fit a 1080x2400 screen, so
+    // nothing scrolled there and the suggestions stayed in view).
     private fun connectedLongList() = connected().copy(
-        recent = HomeRecent.Ready((1..12).map { HermesSession("r$it", "Fixture $it", null, null, it.toLong(), false) })
+        recent = HomeRecent.Ready((1..LONG_LIST).map { HermesSession("r$it", "Fixture $it", null, null, it.toLong(), false) })
     )
 
     private fun scrollToTheEnd() {
-        composeRule.onNodeWithTag(HomeTags.LIST).performScrollToNode(hasText("Fixture 12"))
+        composeRule.onNodeWithTag(HomeTags.LIST).performScrollToNode(hasText("Fixture $LONG_LIST"))
     }
 
     @Test
@@ -381,3 +383,5 @@ class HomeScreenUiTest {
         composeRule.onNodeWithTag(HomeTags.LIST).performScrollToNode(hasTestTag(tag))
     }
 }
+
+private const val LONG_LIST = 40
