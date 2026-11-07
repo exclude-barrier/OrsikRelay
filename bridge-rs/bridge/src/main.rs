@@ -8,6 +8,8 @@ mod admin;
 mod config;
 mod core;
 mod files;
+#[cfg(test)]
+mod fuzz;
 mod history;
 mod host;
 mod i18n;
