@@ -1,7 +1,7 @@
 [versions]
 agp = "9.5.1"
 kotlin = "2.4.21"
-composeBom = "2026.09.00"
+composeBom = "2026.11.01"
 activityCompose = "1.10.1"
 navigationCompose = "2.10.2"
 biometric = "1.1.0"
@@ -19,7 +19,7 @@ json = "20260814"
 coroutines = "1.11.0"
 markdownRenderer = "0.46.0"
 materialIconsCore = "1.7.8"
-camerax = "1.6.2"
+camerax = "1.7.0"
 zxing = "3.5.4"
 cyclonedx = "3.5.1"
 
